@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { ToastProvider } from './components/base';
 import { SoraOrb } from './components/mascot';
 import Home from './screens/Home';
 import SoraChat from './screens/SoraChat';
@@ -44,5 +45,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <BrowserRouter><AppRoutes /></BrowserRouter>;
+  return <BrowserRouter><AppRoutes /><ToastProvider /></BrowserRouter>;
 }
