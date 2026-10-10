@@ -68,7 +68,12 @@ async function scenario(label, fn) {
 async function rootInitial(page) {
   await reset(page);
   assert.equal(await page.getByText('Chats', { exact: true }).count(), 0, 'novo chat não deve listar CHATS');
-  assert.equal(await page.locator('canvas').count(), 0, 'novo chat não deve montar mascote');
+  const heroOrbs = page.locator('.home-screen .hero-orb canvas');
+  assert.equal(await heroOrbs.count(), 1, 'a home deve montar exatamente uma Sora no bloco principal');
+  const heroBox = await heroOrbs.first().boundingBox();
+  assert.ok(heroBox && heroBox.width >= 150 && heroBox.height >= 150, 'a Sora inicial deve ser grande (mínimo 150 px)');
+  // Outros canvases de efeitos só são aceitáveis se não forem uma segunda Sora na hero.
+  assert.equal(await page.locator('.home-screen .hero-orb canvas:visible').count(), 1, 'não deve haver duas Soras visíveis na hero');
   await snap(page, 'a-inicio');
 }
 
