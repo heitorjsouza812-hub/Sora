@@ -6,7 +6,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { PassoTrabalho, Status } from '../types';
 import {
-  COR_SORA, duracaoRoteiro, novoId, planejar, roteiroAvulso, verboPara as verboDe,
+  COR_SORA, duracaoRoteiro, novoId, pedeTrabalho, planejar, respostaConversa, roteiroAvulso, tituloDoChat, verboPara as verboDe,
   type AgenteSora, type EntregaGerada, type PassoRoteiro, type RascunhoAgente, type TarefaGerada,
 } from '../data/planejador';
 
@@ -25,6 +25,8 @@ export interface Execucao {
 
 export interface ProjetoSora {
   id: string;
+  /** 'chat': conversa iniciada no Novo chat (só vira equipe se o pedido pedir trabalho); 'projeto': sempre monta equipe */
+  tipo: 'chat' | 'projeto';
   titulo: string;
   pedido: string;
   modelo: string;
@@ -63,7 +65,7 @@ export interface EstadoProjetos {
   pluginsConectados: string[];
 }
 
-export type FaseProjeto = 'pensando' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado';
+export type FaseProjeto = 'pensando' | 'conversa' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado';
 
 // ---------- linha do tempo de um projeto novo (ms após o envio) ----------
 export const TEMPOS = {
@@ -90,7 +92,7 @@ function carregar(): EstadoProjetos {
     if (!bruto) return inicial();
     const e = JSON.parse(bruto) as EstadoProjetos;
     if (e?.versao !== 1 || typeof e.agentes !== 'object' || !Array.isArray(e.projetos)) return inicial();
-    return { ...inicial(), ...e };
+    return { ...inicial(), ...e, projetos: e.projetos.map(p => ({ ...p, tipo: p.tipo ?? 'projeto' })) };
   } catch { return inicial(); }
 }
 
@@ -222,6 +224,9 @@ export function estadoProjeto(e: EstadoProjetos, p: ProjetoSora, agora: number):
   const nascidos = p.marcos.nascimentos.filter(t => t <= agora).length;
   const xs = e.execucoes.filter(x => x.projetoId === p.id);
   const concluidos = p.agenteIds.filter(id => xs.some(x => x.agenteId === id && x.inicio + duracaoRoteiro(x.roteiro) <= agora)).length;
+  if (!p.agenteIds.length && !p.tarefas.length) {
+    return { fase: agora < p.marcos.plano ? 'pensando' : 'conversa', nascidos: 0, concluidos: 0, pulso: agora < p.marcos.plano ? 0 : 1, progresso: 0 };
+  }
   const fase: FaseProjeto = p.aprovadoEm ? 'aprovado'
     : agora < p.marcos.plano ? 'pensando'
       : agora < p.marcos.trabalho ? 'planejando'
@@ -263,14 +268,43 @@ const usados = (e: EstadoProjetos) => ({
   coresEmUso: Object.values(e.agentes).map(a => a.cor),
 });
 
-/** Cria um projeto a partir do pedido: a Sora pensa, planeja e cria os agentes um a um. */
-export function criarProjeto(pedido: string, agora = Date.now()): ProjetoSora {
+const PENSAR_CONVERSA = 1600;
+
+/**
+ * Novo chat/projeto a partir da primeira mensagem.
+ * • tipo 'projeto' (padrão): a Sora pensa, planeja e cria a equipe inteira.
+ * • tipo 'chat': se a mensagem pede trabalho, idem; se é só conversa, a Sora apenas responde.
+ */
+export function criarProjeto(pedido: string, agora = Date.now(), opcoes: { tipo?: 'chat' | 'projeto' } = {}): ProjetoSora {
+  const tipo = opcoes.tipo ?? 'projeto';
+  if (tipo === 'chat' && !pedeTrabalho(pedido)) {
+    const projeto: ProjetoSora = {
+      id: novoId('chat'), tipo, titulo: tituloDoChat(pedido), pedido, modelo: 'conversa', assunto: '', resposta: '',
+      criadoEm: agora, tarefas: [], agenteIds: [], entregas: {},
+      marcos: { plano: agora + PENSAR_CONVERSA, nascimentos: [], trabalho: agora + PENSAR_CONVERSA, fim: agora + PENSAR_CONVERSA }, versao: 1,
+    };
+    const conversa = `sora:${projeto.id}`;
+    alterar(e => ({
+      ...e, projetos: [projeto, ...e.projetos], projetoAtivoId: projeto.id,
+      mensagens: [...e.mensagens,
+        { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto: pedido, criadoEm: agora },
+        { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: respostaConversa(pedido), criadoEm: agora + PENSAR_CONVERSA },
+      ],
+    }));
+    return projeto;
+  }
+  return montarEquipe(null, pedido, agora, tipo);
+}
+
+/** Planeja e cria a equipe — num projeto novo ou dentro de um chat que já existe. */
+function montarEquipe(base: ProjetoSora | null, pedido: string, agora: number, tipo: 'chat' | 'projeto'): ProjetoSora {
   const nascimentos: number[] = [];
   const plano = planejar(pedido, {
     ...usados(estado),
     criadoEm: i => { const t = agora + TEMPOS.nascer0 + i * TEMPOS.nascerPasso; nascimentos[i] = t; return t; },
   });
-  const projetoId = plano.agentes[0]?.projetoId ?? novoId('proj');
+  const projetoId = base?.id ?? plano.agentes[0]?.projetoId ?? novoId('proj');
+  const agentesNovos = plano.agentes.map(a => ({ ...a, projetoId }));
   const trabalho = (nascimentos[nascimentos.length - 1] ?? agora + TEMPOS.nascer0) + TEMPOS.folga;
   const execucoes: Execucao[] = [];
   let t = trabalho;
@@ -281,22 +315,23 @@ export function criarProjeto(pedido: string, agora = Date.now()): ProjetoSora {
   }
   const fim = t - TEMPOS.handoff;
   const projeto: ProjetoSora = {
-    id: projetoId, titulo: plano.titulo, pedido, modelo: plano.modelo, assunto: plano.assunto, resposta: plano.resposta,
-    criadoEm: agora, tarefas: plano.tarefas, agenteIds: plano.agentes.map(a => a.id), entregas: plano.entregas,
+    id: projetoId, tipo: base?.tipo ?? tipo, titulo: plano.titulo, pedido,
+    modelo: plano.modelo, assunto: plano.assunto, resposta: plano.resposta,
+    criadoEm: base?.criadoEm ?? agora, tarefas: plano.tarefas, agenteIds: agentesNovos.map(a => a.id), entregas: plano.entregas,
     marcos: { plano: agora + TEMPOS.pensar, nascimentos, trabalho, fim }, versao: 1,
   };
   const conversa = `sora:${projetoId}`;
   alterar(e => ({
     ...e,
-    agentes: { ...e.agentes, ...Object.fromEntries(plano.agentes.map(a => [a.id, a])) },
-    projetos: [projeto, ...e.projetos],
+    agentes: { ...e.agentes, ...Object.fromEntries(agentesNovos.map(a => [a.id, a])) },
+    projetos: base ? e.projetos.map(p => p.id === base.id ? projeto : p) : [projeto, ...e.projetos],
     projetoAtivoId: projetoId,
     execucoes: [...e.execucoes, ...execucoes],
     mensagens: [...e.mensagens,
       { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto: pedido, criadoEm: agora },
       { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: plano.resposta, criadoEm: agora + TEMPOS.pensar },
       { id: novoId('msg'), conversaId: conversa, autor: 'sora', criadoEm: trabalho,
-        texto: `${listaNomes(plano.agentes.map(a => a.nome))} já estão trabalhando. Acompanhe pela barra lateral.` },
+        texto: `${listaNomes(agentesNovos.map(a => a.nome))} já estão trabalhando. Acompanhe pela barra lateral.` },
       { id: novoId('msg'), conversaId: conversa, autor: 'sora', criadoEm: fim, texto: 'Pronto! Revise as entregas antes de publicar.' },
     ],
   }));
@@ -316,19 +351,32 @@ export function aprovarProjeto(id: string, agora = Date.now()) {
       texto: 'Aprovado! Registrei sua aprovação — a equipe pode seguir com a publicação.' }],
   }));
 }
-export function removerProjeto(id: string) {
+/**
+ * Apaga um projeto (chat da Sora + plano + execuções). Por padrão apaga também os agentes da equipe;
+ * com `manterAgentes` eles continuam existindo como agentes avulsos.
+ */
+export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } = {}) {
   alterar(e => {
     const p = e.projetos.find(x => x.id === id);
     const ids = new Set(p?.agenteIds ?? []);
+    const agentes = opcoes.manterAgentes
+      ? Object.fromEntries(Object.entries(e.agentes).map(([k, a]) => [k, ids.has(k) ? { ...a, avulso: true, projetoId: '', espera: 'Disponível' } : a]))
+      : Object.fromEntries(Object.entries(e.agentes).filter(([k]) => !ids.has(k)));
     return {
       ...e,
       projetos: e.projetos.filter(x => x.id !== id),
       projetoAtivoId: e.projetoAtivoId === id ? null : e.projetoAtivoId,
-      agentes: Object.fromEntries(Object.entries(e.agentes).filter(([k]) => !ids.has(k))),
+      agentes,
       execucoes: e.execucoes.filter(x => x.projetoId !== id),
-      mensagens: e.mensagens.filter(m => m.conversaId !== `sora:${id}` && !ids.has(m.conversaId)),
+      mensagens: e.mensagens.filter(m => m.conversaId !== `sora:${id}` && (opcoes.manterAgentes || !ids.has(m.conversaId))),
     };
   });
+}
+
+export function renomearProjeto(id: string, titulo: string) {
+  const t = titulo.trim();
+  if (!t) return;
+  alterar(e => ({ ...e, projetos: e.projetos.map(p => p.id === id ? { ...p, titulo: t } : p) }));
 }
 
 /** Mensagem direta do usuário a um agente: o agente trabalha (passos ao vivo) e responde. */
@@ -395,8 +443,20 @@ export function pedirAjuste(projetoId: string, texto: string, agenteId?: string,
  */
 export function conversarComSora(texto: string, agora = Date.now()) {
   const p = projetoAtivo(estado);
-  if (!p) return criarProjeto(texto, agora);
+  if (!p) return criarProjeto(texto, agora, { tipo: 'chat' });
   const fase = estadoProjeto(estado, p, agora).fase;
+  if (!p.agenteIds.length && !p.tarefas.length) {
+    if (pedeTrabalho(texto)) return montarEquipe(p, texto, agora, p.tipo);
+    alterar(e => ({
+      ...e,
+      mensagens: [...e.mensagens,
+        { id: novoId('msg'), conversaId: `sora:${p.id}`, autor: 'usuario', texto, criadoEm: agora },
+        { id: novoId('msg'), conversaId: `sora:${p.id}`, autor: 'sora', texto: respostaConversa(texto), criadoEm: agora + 1200 },
+      ],
+      projetos: e.projetos.map(q => q.id === p.id ? { ...q, marcos: { ...q.marcos, plano: agora + 1200, fim: agora + 1200 } } : q),
+    }));
+    return p;
+  }
   if (fase === 'pronto' || fase === 'aprovado') { pedirAjuste(p.id, texto, undefined, agora); return p; }
   const conversa = `sora:${p.id}`;
   const resposta = fase === 'pensando' || fase === 'planejando'
@@ -445,11 +505,17 @@ export function atualizarAgente(id: string, patch: Partial<Omit<AgenteSora, 'id'
 }
 
 /** Remove um agente avulso (agentes de equipe saem junto com o projeto). */
+/** Apaga um agente (avulso ou de equipe — na equipe, ele sai do projeto). A Sora não pode ser apagada. */
 export function removerAgente(id: string) {
   alterar(e => {
-    if (!e.agentes[id]?.avulso) return e;
+    if (!e.agentes[id]) return e;
     const agentes = { ...e.agentes }; delete agentes[id];
-    return { ...e, agentes, execucoes: e.execucoes.filter(x => x.agenteId !== id), mensagens: e.mensagens.filter(m => m.conversaId !== id) };
+    return {
+      ...e, agentes,
+      projetos: e.projetos.map(p => p.agenteIds.includes(id) ? { ...p, agenteIds: p.agenteIds.filter(x => x !== id) } : p),
+      execucoes: e.execucoes.filter(x => x.agenteId !== id),
+      mensagens: e.mensagens.filter(m => m.conversaId !== id),
+    };
   });
 }
 

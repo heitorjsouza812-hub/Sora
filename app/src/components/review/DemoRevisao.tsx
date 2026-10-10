@@ -59,6 +59,7 @@ const CURRENT: Record<string, EntregaGerada> = {
 
 const BASE_PROJECT: ProjetoSora = {
   id: 'demo-review',
+  tipo: 'projeto',
   titulo: 'Campanha da cafeteria',
   pedido: 'Crie uma campanha para lançar minha cafeteria.',
   modelo: 'campanha',

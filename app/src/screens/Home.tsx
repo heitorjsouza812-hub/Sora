@@ -1,8 +1,8 @@
-// Novo chat (aba Equipes): só a Sora. O pedido vira uma equipe inteira criada pela Sora.
-import { useEffect, useRef, useState } from 'react';
+// Novo chat: tela de chat normal (estilo ChatGPT), SEM o mascote. A Sora aparece no primeiro envio:
+// pensa (thinking orb), responde e, se o pedido pede trabalho, cria os agentes.
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
-import { SoraOrb } from '../components/mascot';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { criarProjeto, novoChat, useProjetos } from '../state/projetos';
 
@@ -13,71 +13,28 @@ const sugestoes: [string, string][] = [
   ['Resumir e-mails', 'Resuma meus e-mails da semana e sugira respostas.'],
 ];
 
-/** A animação de chegada da Sora só acontece na primeira abertura da sessão (lido uma vez por carga). */
-let chegadaPendente = (() => {
-  try {
-    if (sessionStorage.getItem('sora.chegou')) return false;
-    sessionStorage.setItem('sora.chegou', '1');
-    return true;
-  } catch { return false; }
-})();
-const primeiraVez = () => { const r = chegadaPendente; chegadaPendente = false; return r; };
-
 export default function Home() {
-  const [chegando, setChegando] = useState(() => chegadaPendente);
-  useEffect(() => { primeiraVez(); }, []);
-  const [ouvindo, setOuvindo] = useState(false);
-  const [enviado, setEnviado] = useState(false);
-  const [partindo, setPartindo] = useState(false);
   const [texto, setTexto] = useState('');
-  const [pulso, setPulso] = useState(0);
-  const timers = useRef<number[]>([]);
   const navigate = useNavigate();
   const { sora } = useProjetos();
 
   useEffect(() => { novoChat(); }, []);
-  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
 
   const enviar = (pedido: string) => {
-    if (enviado) return;
-    timers.current.forEach((t) => window.clearTimeout(t));
-    criarProjeto(pedido);
-    setEnviado(true);
-    setOuvindo(false);
-    setPulso((p) => p + 1);
-    timers.current = [
-      window.setTimeout(() => setPartindo(true), 650),
-      window.setTimeout(() => navigate('/chat/sora'), 1200),
-    ];
+    const p = criarProjeto(pedido, undefined, { tipo: 'chat' });
+    navigate(`/projeto/${p.id}`);
   };
 
-  const heroState = enviado ? 'thinking' : chegando ? 'arriving' : ouvindo ? 'listening' : 'idle';
-
   return (
-    <AppShell abas>
-      <main className="home-screen">
-        <div className={`hero-orb ${partindo ? 'orb-departing' : ''}`}>
-          <SoraOrb
-            size={260}
-            color={sora.cor}
-            state={heroState}
-            lookAt={ouvindo ? { x: -0.1, y: 0.85 } : null}
-            pulseKey={pulso}
-            seed={0}
-            onArrived={() => setChegando(false)}
-            title={enviado ? `${sora.nome} pensando` : `${sora.nome} pronta para ajudar`}
-          />
-        </div>
+    <AppShell titulo="Novo chat" acoes={<span />}>
+      <main className="home-screen home-plain">
         <h1>Em que posso te ajudar hoje?</h1>
-        <p className="home-hint">Descreva o que você precisa. A {sora.nome} monta um plano e cria uma equipe de agentes para você.</p>
         <div className="hero-composer">
           <MessageComposer
             placeholder={`Peça qualquer coisa à ${sora.nome}…`}
             tools
             value={texto}
             onValueChange={setTexto}
-            processing={enviado}
-            onActivity={setOuvindo}
             onSend={enviar}
           />
         </div>

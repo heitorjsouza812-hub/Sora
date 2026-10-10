@@ -135,3 +135,10 @@
   .ag-item small { display: none; }
   .ag-main { padding: 18px 16px 0; }
 }
+
+/* diálogos de apagar / renomear */
+.gestao-footer { display: flex; justify-content: flex-end; gap: 10px; }
+.gestao-danger { color: #fff; background: #d64545; }
+.gestao-check { display: flex; align-items: flex-start; gap: 10px; color: var(--text); font-size: 14px; line-height: 1.45; cursor: pointer; }
+.gestao-check input { width: 18px; height: 18px; margin-top: 1px; accent-color: #9cc4ff; }
+.st-menu-list button.is-danger { color: #ff9a9a; }

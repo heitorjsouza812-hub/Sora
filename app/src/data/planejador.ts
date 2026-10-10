@@ -513,3 +513,31 @@ export function agenteDeDescricao(descricao: string, opcoes: { nomesEmUso?: stri
     instrucoes: `Você é um agente de ${funcao.toLowerCase()}. ${descricao.trim()}${/[.!?]$/.test(descricao.trim()) ? '' : '.'} Responda em PT-BR, de forma clara e objetiva, e nunca publique nada sem a aprovação do usuário.`,
   };
 }
+
+// ---------- conversa simples (chat sem equipe) ----------
+
+const VERBOS_TRABALHO = /^(?:(?:por favor|pode|você pode|vc pode|consegue|quero que você|preciso que você)[\s,]+)?(crie|cria|criar|fa[cç]a|faz|fazer|monte|montar|pesquise|pesquisar|escreva|escrever|planeje|planejar|organize|organizar|gere|gerar|prepare|preparar|resuma|resumir|analise|analisar|desenvolva|desenvolver|produza|produzir|lance|lan[cç]ar|elabore|elaborar|redija)\b/i;
+
+/** O pedido pede TRABALHO (montar equipe) ou é só conversa? */
+export function pedeTrabalho(texto: string) {
+  const t = texto.trim();
+  if (t.length < 4) return false;
+  if (VERBOS_TRABALHO.test(t)) return true;
+  if (/\b(quero|preciso de|gostaria de)\s+(um|uma|uns|umas)\b/i.test(t)) return true;
+  return MODELOS.some(m => m.palavras.test(t)) && t.split(/\s+/).length >= 4;
+}
+
+/** Resposta da Sora quando a mensagem é só conversa (sem criar agentes). */
+export function respostaConversa(texto: string) {
+  const t = texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/^(oi|ola|ei|e ai|bom dia|boa tarde|boa noite)\b/.test(t)) return 'Oi! Eu sou a Sora. Me conte o que você precisa: posso só conversar ou montar uma equipe de agentes para fazer o trabalho.';
+  if (/obrigad|valeu/.test(t)) return 'Por nada! Se quiser, é só pedir a próxima tarefa.';
+  if (/o que (voce|vc) (faz|sabe)|quem e voce|como funciona|ajuda/.test(t)) return 'Eu entendo o seu pedido, monto um plano e crio agentes especializados para executar cada parte — pesquisa, criação, textos, código… Nada é publicado sem a sua aprovação. Experimente: “Crie uma campanha para…”.';
+  return 'Entendi. Quer que eu transforme isso em uma tarefa? Descreva o resultado que você espera e eu monto uma equipe de agentes para fazer.';
+}
+
+/** Título curto de um chat a partir da primeira mensagem. */
+export function tituloDoChat(texto: string) {
+  const t = texto.replace(/\s+/g, ' ').trim();
+  return cap(t.length > 42 ? `${t.slice(0, 40).trimEnd()}…` : t) || 'Nova conversa';
+}

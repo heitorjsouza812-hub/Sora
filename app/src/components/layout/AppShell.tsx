@@ -1,17 +1,15 @@
-// Moldura do app: barra lateral + cabeçalho (identidade, abas Equipes|Agentes, ações).
+// Moldura do app: barra lateral + cabeçalho (identidade + ações). A navegação é pela barra lateral.
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
 import { estadoAgente, useAgora, useProjetos } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
 import { BottomSheet } from '../overlay';
+import { GestaoHost } from '../gestao';
 import { EditorAgenteHost, MenuAgente } from '../studio';
 import { Navegacao, Sidebar } from './Sidebar';
 import { statusDaSora } from './useSoraStatus';
 
 export interface AppShellProps {
   children: ReactNode;
-  /** controle segmentado Equipes | Agentes (Novo chat e estúdio) */
-  abas?: boolean;
   /** quem aparece no cabeçalho: a Sora (padrão), um agente, ou só um título */
   agenteId?: string;
   titulo?: string;
@@ -19,15 +17,6 @@ export interface AppShellProps {
   acoes?: ReactNode;
   /** itens extras do menu "…" da identidade */
   menuItens?: { rotulo: string; onClick: () => void }[];
-}
-
-export function Abas() {
-  return (
-    <nav className="mode-tabs" aria-label="Modo">
-      <NavLink to="/" end>Equipes</NavLink>
-      <NavLink to="/agentes">Agentes</NavLink>
-    </nav>
-  );
 }
 
 function Compartilhar() {
@@ -68,18 +57,17 @@ function Identidade({ agenteId, titulo, menuItens }: Pick<AppShellProps, 'agente
   );
 }
 
-export function AppShell({ children, abas, agenteId, titulo, acoes, menuItens }: AppShellProps) {
+export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppShellProps) {
   const [menu, setMenu] = useState(false);
   return (
     <div className="app-shell">
       <Sidebar />
       <section className="app-stage">
-        <header className={`topbar ${abas ? 'has-tabs' : ''}`}>
+        <header className="topbar">
           <button type="button" className="mobile-menu-button" aria-label="Abrir menu" aria-expanded={menu} onClick={() => setMenu(true)}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
           <Identidade agenteId={agenteId} titulo={titulo} menuItens={menuItens} />
-          {abas && <Abas />}
           <div className="topbar-actions">{acoes ?? <Compartilhar />}</div>
         </header>
         {children}
@@ -88,6 +76,7 @@ export function AppShell({ children, abas, agenteId, titulo, acoes, menuItens }:
         <div className="mobile-nav"><Navegacao onNavegar={() => setMenu(false)} /></div>
       </BottomSheet>
       <EditorAgenteHost />
+      <GestaoHost />
     </div>
   );
 }

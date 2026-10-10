@@ -1,7 +1,7 @@
 // Chat da Sora: pedido → Sora pensa → plano → agentes nascem um a um → trabalho com handoffs
 // → entregas → Revisar. Funciona para QUALQUER equipe gerada pelo planejador.
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { statusDaSora } from '../components/layout/useSoraStatus';
 import { SoraOrb, SoraThinking } from '../components/mascot';
@@ -12,7 +12,7 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import { TrabalhoDock } from '../components/work';
 import { duracaoRoteiro } from '../data/planejador';
 import {
-  agentesDoProjeto, conversarComSora, estadoAgente, estadoProjeto, mensagensDa, projetoAtivo, useAgora, useProjetos,
+  abrirProjeto, agentesDoProjeto, conversarComSora, estadoAgente, estadoProjeto, mensagensDa, projetoAtivo, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos, type ProjetoSora,
 } from '../state/projetos';
 
@@ -102,9 +102,12 @@ export default function SoraChat() {
   const e = useProjetos();
   const agora = useAgora();
   const navigate = useNavigate();
-  const p = projetoAtivo(e);
+  const { projetoId } = useParams();
+  const p = projetoId ? e.projetos.find(x => x.id === projetoId) ?? null : projetoAtivo(e);
   const ep = p ? estadoProjeto(e, p, agora) : null;
   const sora = statusDaSora(e, agora);
+  const comEquipe = !!p && (p.agenteIds.length > 0 || p.tarefas.length > 0);
+  useEffect(() => { if (p && e.projetoAtivoId !== p.id) abrirProjeto(p.id); }, [p, e.projetoAtivoId]);
   const [texto, setTexto] = useState('');
   const [trabalhoAberto, setTrabalhoAberto] = useState(false);
   const [agenteTrabalho, setAgenteTrabalho] = useState<string | undefined>();
@@ -127,11 +130,11 @@ export default function SoraChat() {
     if (ep.fase === 'pensando') {
       itens.push({ t: agora, key: 'pensando', node: (
         <div className="assistant-row thinking-row">
-          <SoraThinking size={64} color={e.sora.cor} label="Analisando o pedido…" />
+          <SoraThinking size={64} color={e.sora.cor} label={comEquipe ? 'Analisando o pedido…' : `${e.sora.nome} está pensando…`} />
         </div>
       ) });
     }
-    if (agora >= p.marcos.plano) itens.push({ t: p.marcos.plano + 1, key: 'plano', node: <CartaoPlano e={e} p={p} agora={agora} /> });
+    if (comEquipe && agora >= p.marcos.plano) itens.push({ t: p.marcos.plano + 1, key: 'plano', node: <CartaoPlano e={e} p={p} agora={agora} /> });
     // handoffs (um agente entregou ao próximo)
     e.execucoes.filter(x => x.projetoId === p.id && x.tarefaId).forEach(x => {
       const h = x.roteiro.find(r => r.tipo === 'handoff');
@@ -148,7 +151,7 @@ export default function SoraChat() {
       ) });
     });
     // entregas (quando a primeira versão fica pronta)
-    const fimOriginal = Math.max(...e.execucoes.filter(x => x.projetoId === p.id && x.tarefaId).map(x => x.inicio + duracaoRoteiro(x.roteiro)));
+    const fimOriginal = !comEquipe ? Infinity : Math.max(...e.execucoes.filter(x => x.projetoId === p.id && x.tarefaId).map(x => x.inicio + duracaoRoteiro(x.roteiro)));
     if (agora >= fimOriginal) {
       const ags = p.agenteIds.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a);
       itens.push({ t: fimOriginal + 1, key: 'entregas', node: (
@@ -185,9 +188,12 @@ export default function SoraChat() {
   }, [ultimo, itens.length]);
   useEffect(() => { colado.current = true; }, [p?.id]);
 
+  if (projetoId && !p) return <Navigate to="/" replace />;
+  if (!projetoId && p) return <Navigate to={`/projeto/${p.id}`} replace />;
+
   return (
     <AppShell>
-      <div className={`workspace-grid sora-workspace ${trabalhoAberto ? 'work-open' : ''}`}>
+      <div className={`workspace-grid sora-workspace ${trabalhoAberto ? 'work-open' : ''} ${comEquipe ? '' : 'is-solo'}`}>
         <main className="conversation" aria-label={`Conversa com ${e.sora.nome}`}>
           <div className="conversation-scroll" ref={scrollRef} aria-live="polite" aria-relevant="additions"
             onScroll={ev => { const el = ev.currentTarget; colado.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
@@ -205,8 +211,8 @@ export default function SoraChat() {
           </div>
           <p className="sr-only" role="status">{p ? `${e.sora.nome}: ${sora.rotulo}` : ''}</p>
         </main>
-        <PainelEquipe e={e} p={p} agora={agora} onVerTrabalho={verTrabalho} />
-        {p && <TrabalhoDock agenteIds={p.agenteIds} agenteId={agenteTrabalho} onAgenteChange={setAgenteTrabalho} aberta={trabalhoAberto} onAlternar={setTrabalhoAberto} />}
+        {comEquipe && <PainelEquipe e={e} p={p} agora={agora} onVerTrabalho={verTrabalho} />}
+        {p && comEquipe && <TrabalhoDock agenteIds={p.agenteIds} agenteId={agenteTrabalho} onAgenteChange={setAgenteTrabalho} aberta={trabalhoAberto} onAlternar={setTrabalhoAberto} />}
       </div>
     </AppShell>
   );

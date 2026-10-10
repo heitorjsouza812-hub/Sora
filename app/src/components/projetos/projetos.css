@@ -1,0 +1,77 @@
+/* Tela Projetos (Brisa) — tokens de styles/tokens.css */
+.pj-screen { width: min(1180px, 100%); margin: 0 auto; padding: 38px 32px 80px; box-sizing: border-box; }
+.pj-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---- novo projeto ---- */
+.pj-novo { width: min(880px, 100%); margin: 0 auto 54px; }
+.pj-novo-cabeca { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+.pj-novo-cabeca canvas { flex: none; }
+.pj-novo h2 { margin: 0 0 4px; color: var(--text); font-size: 24px; font-weight: 450; letter-spacing: -.02em; }
+.pj-novo p { margin: 0; color: var(--text-2); font-size: 14.5px; line-height: 1.45; }
+.pj-sugestoes { justify-content: flex-start; }
+.pj-sugestoes button:disabled { opacity: .4; cursor: default; }
+
+/* ---- lista ---- */
+.pj-lista-topo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 20px; margin-bottom: 18px; }
+.pj-lista-topo h2 { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--text); font-size: 18px; font-weight: 550; }
+.pj-lista-topo h2 span { min-width: 24px; padding: 2px 8px; color: var(--text-2); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-pill); font-size: 12px; font-weight: 600; text-align: center; }
+.pj-controles { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.pj-filtros { display: flex; gap: 3px; padding: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-pill); }
+.pj-filtros button { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px; color: var(--text-2); background: transparent; border: 0; border-radius: var(--r-pill); font: inherit; font-size: 13px; cursor: pointer; transition: background .15s, color .15s; }
+.pj-filtros button span { color: var(--text-3); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.pj-filtros button:hover { color: var(--text); }
+.pj-filtros button.is-on { color: var(--btn-text); background: var(--btn-bg); }
+.pj-filtros button.is-on span { color: #4a5160; }
+.pj-filtros button:focus-visible, .pj-limpar:focus-visible { outline: 2px solid #9cc4ff; outline-offset: 2px; }
+.pj-busca { position: relative; display: flex; align-items: center; }
+.pj-busca svg { position: absolute; left: 12px; width: 16px; height: 16px; fill: none; stroke: var(--text-3); stroke-width: 1.8; stroke-linecap: round; pointer-events: none; }
+.pj-busca input { width: 220px; height: 38px; padding: 0 14px 0 36px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-pill); outline: 0; font: inherit; font-size: 13.5px; }
+.pj-busca input::placeholder { color: #818a9a; }
+.pj-busca input:focus { border-color: rgba(156,196,255,.5); }
+
+/* ---- grade + cards ---- */
+.pj-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.pj-card { --fase: var(--text-2); position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 18px 18px 0; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); transition: border-color .2s, transform .2s, background .2s; }
+.pj-card:hover { background: #12141a; border-color: rgba(255,255,255,.15); transform: translateY(-2px); }
+.pj-card:focus-within { border-color: rgba(156,196,255,.4); }
+.pj-card-top { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin: -4px -6px -2px 0; }
+.pj-fase { display: inline-flex; align-items: center; gap: 7px; color: var(--fase); font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+.pj-fase i { width: 7px; height: 7px; border-radius: 50%; background: var(--fase); box-shadow: 0 0 10px var(--fase); }
+.pj-card.is-busy .pj-fase i { animation: pj-pulso 1.6s ease-in-out infinite; }
+.pj-card h3 { margin: 0; font-size: 17px; font-weight: 560; line-height: 1.3; letter-spacing: -.01em; }
+.pj-card-link { color: var(--text); text-decoration: none; outline: 0; }
+.pj-card-link::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+.pj-card-link:focus-visible::after { outline: 2px solid #9cc4ff; outline-offset: -2px; }
+.pj-pedido { display: -webkit-box; margin: 0; overflow: hidden; color: var(--text-2); font-size: 13.5px; line-height: 1.5; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pj-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding: 6px 0 14px; }
+.pj-equipe { display: flex; align-items: center; }
+.pj-avatar { display: grid; place-items: center; width: 34px; height: 34px; margin-left: -8px; background: #0b0d11; border: 1px solid color-mix(in srgb, var(--cor), transparent 70%); border-radius: 50%; }
+.pj-avatar:first-child { margin-left: 0; }
+.pj-avatar-mais { color: var(--text-2); font-size: 11.5px; font-weight: 600; border-color: var(--line); }
+.pj-data { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+.pj-progresso { height: 3px; margin: 0 -18px; background: rgba(255,255,255,.05); }
+.pj-progresso span { display: block; height: 100%; background: var(--fase); box-shadow: 0 0 14px var(--fase); transition: width .4s ease; }
+
+/* ---- vazio ---- */
+.pj-vazio { display: grid; justify-items: center; gap: 6px; padding: 36px 20px 50px; text-align: center; background: radial-gradient(ellipse at 50% 30%, rgba(226,236,255,.045), transparent 60%); border: 1px dashed rgba(255,255,255,.09); border-radius: var(--r-xl); }
+.pj-vazio h3 { margin: 10px 0 0; color: var(--text); font-size: 19px; font-weight: 500; }
+.pj-vazio p { max-width: 430px; margin: 0; color: var(--text-2); font-size: 14px; line-height: 1.5; }
+.pj-limpar { margin-top: 12px; height: 36px; padding: 0 16px; color: var(--text); background: transparent; border: 1px solid rgba(255,255,255,.15); border-radius: var(--r-pill); font: inherit; font-size: 13px; cursor: pointer; }
+
+@keyframes pj-pulso { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .pj-card, .pj-progresso span { transition: none; }
+  .pj-card:hover { transform: none; }
+  .pj-card.is-busy .pj-fase i { animation: none; }
+}
+@media (max-width: 767px) {
+  .pj-screen { padding: 22px 16px 60px; }
+  .pj-novo { margin-bottom: 38px; }
+  .pj-novo-cabeca { gap: 12px; }
+  .pj-novo h2 { font-size: 20px; }
+  .pj-controles { width: 100%; }
+  .pj-filtros { width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .pj-filtros button { flex: none; }
+  .pj-busca, .pj-busca input { width: 100%; }
+  .pj-grade { grid-template-columns: 1fr; }
+}

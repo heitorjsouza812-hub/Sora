@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { abrirEditorAgente } from './abrirEditor';
 import './studio.css';
 
-export interface ItemMenu { rotulo: string; onClick: () => void }
+export interface ItemMenu { rotulo: string; onClick: () => void; perigo?: boolean }
 
 /** Botão "…" com menu: "Editar agente" sempre presente + itens extras (Ver trabalho, Conversar…). */
-export function MenuAgente({ agenteId, nome, itens = [], className = '' }: { agenteId: string; nome: string; itens?: ItemMenu[]; className?: string }) {
+export function MenuAgente({ agenteId, nome, itens = [], className = '', semEditar = false }: { agenteId: string; nome: string; itens?: ItemMenu[]; className?: string; semEditar?: boolean }) {
   const [aberto, setAberto] = useState(false);
   const raiz = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -15,7 +15,7 @@ export function MenuAgente({ agenteId, nome, itens = [], className = '' }: { age
     document.addEventListener('mousedown', fora); document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', fora); document.removeEventListener('keydown', esc); };
   }, [aberto]);
-  const todos: ItemMenu[] = [{ rotulo: agenteId === 'sora' ? 'Personalizar' : 'Editar agente', onClick: () => abrirEditorAgente(agenteId) }, ...itens];
+  const todos: ItemMenu[] = semEditar ? itens : [{ rotulo: agenteId === 'sora' ? 'Personalizar' : 'Editar agente', onClick: () => abrirEditorAgente(agenteId) }, ...itens];
   return (
     <div className={`st-menu ${className}`} ref={raiz}>
       <button type="button" className="st-menu-btn" aria-label={`Opções de ${nome}`} aria-haspopup="menu" aria-expanded={aberto}
@@ -23,7 +23,7 @@ export function MenuAgente({ agenteId, nome, itens = [], className = '' }: { age
       {aberto && (
         <div className="st-menu-list" role="menu">
           {todos.map(i => (
-            <button key={i.rotulo} type="button" role="menuitem" onClick={ev => { ev.preventDefault(); ev.stopPropagation(); setAberto(false); i.onClick(); }}>{i.rotulo}</button>
+            <button key={i.rotulo} type="button" role="menuitem" className={i.perigo ? 'is-danger' : undefined} onClick={ev => { ev.preventDefault(); ev.stopPropagation(); setAberto(false); i.onClick(); }}>{i.rotulo}</button>
           ))}
         </div>
       )}
