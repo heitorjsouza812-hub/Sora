@@ -1,0 +1,28 @@
+/* Tokens da Sora — fonte: CLAUDE.md §4.1 e mini-video/sora-demo.html */
+:root {
+  --bg: #050608;
+  --panel: #0f1115;
+  --panel-2: #14161b;
+  --line: rgba(255, 255, 255, 0.08);
+  --text: #f2f5fb;
+  --text-2: #8b93a3;
+  --text-3: #6b7280;
+  --ok: #7ef2c4;
+  --btn-bg: #eef2fa;
+  --btn-text: #0b0d12;
+
+  /* cores fixas dos agentes de exemplo */
+  --sora: #e2ecff;
+  --atlas: #56a8ff;
+  --luna: #ac80ff;
+  --nina: #46e8a8;
+
+  --font: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Playfair Display", Georgia, serif;
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+}

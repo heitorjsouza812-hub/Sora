@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(curl -s -o logo-sebopurapoesia.jpg \"https://scontent.cdninstagram.com/v/t51.2885-19/45448581_492850841211552_5727780772631281664_n.jpg?stp=dst-jpg_s150x150_tt6&_nc_cat=109&ccb=7-5&_nc_sid=f7ccc5&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy4xMDY4LkMzIn0%3D&_nc_ohc=lcFoOQx4R6MQ7kNvwFoegZn&_nc_oc=AdpK7G2kxLZ_AJiD0HbmTjPRnChzACkBd0bRBVp5ojA8xjvV1jTy1a2-KqXm4-g3mOeDwxWQdPn21Npj-wXykBju&_nc_zt=24&_nc_ht=scontent.cdninstagram.com&_nc_ss=7b689&oh=00_AQA8eS14LEQjTDZuH5JQ7efCqrzWNIrfNqtNmwMecDkOTw&oe=6A570AF1\")",
+      "mcp__8038a736-3b83-49d0-8f93-97dcf44a6974__get_file_upload_url",
+      "Bash(curl -s -X PUT -H \"Content-Type: image/jpeg\" -H \"x-goog-content-length-range: 0,262144000\" -H \"x-goog-meta-user_id: CmnFvPhUmXXSqi5iQq8154Jq0LB2\" --data-binary @logo-sebopurapoesia.jpg \"https://storage.googleapis.com/gpt-engineer-file-uploads/ephemeral/CmnFvPhUmXXSqi5iQq8154Jq0LB2/11578623-0eff-4822-a132-214ccd1e2add?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=go-api%40lovable-core-prod.iam.gserviceaccount.com%2F20260710%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260710T182823Z&X-Goog-Expires=3599&X-Goog-Signature=c7a2e0a0e6c7a2194af0cc32605a3e409267071d1eb3477c6a136d6c0f24cadf799ec1405961e0a370da33597dab18708738501f061290a461ed29664532d326524e80f57db333e4d4feee3943eebb3d60ce927bba6fbf8147c2c9abfe67934dbc2dd064a5b1af27808a3b2d888efa210eddbd1accd05fb51fca0ed6157c2a0f2775788f878528d6312db79d10dda0902990974019b97c0842ef9301c594420ed4e405cb35df0fd95127d05634f6acdeaad22dcb9c14dc7fdcc14ab787292ecc2445433b10381292ee48b9401ae6b2c2b7e3a29c79b34aeeabcd7987bc428a8f80de725599300e1131028585803282fcd116983d354e8935e7b0e0056d8a6e68&X-Goog-SignedHeaders=content-type%3Bhost%3Bx-goog-content-length-range%3Bx-goog-meta-user_id\" -w \"HTTP %{http_code}\")",
+      "mcp__8038a736-3b83-49d0-8f93-97dcf44a6974__create_project",
+      "mcp__8038a736-3b83-49d0-8f93-97dcf44a6974__list_workspaces",
+      "mcp__8038a736-3b83-49d0-8f93-97dcf44a6974__list_projects",
+      "mcp__8038a736-3b83-49d0-8f93-97dcf44a6974__render_project_widget",
+      "mcp__8038a736-3b83-49d0-8f93-97dcf44a6974__get_project",
+      "mcp__8038a736-3b83-49d0-8f93-97dcf44a6974__send_message"
+    ]
+  }
+}
