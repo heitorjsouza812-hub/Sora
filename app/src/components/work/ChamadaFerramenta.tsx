@@ -1,6 +1,7 @@
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import type { PassoTrabalho, ResultadoPasso } from '../../types';
 import { SoraOrb } from '../mascot';
+import { PecaCampanha } from '../ui/CampaignPiece';
 import { PluginMark } from '../ui/PluginMark';
 import type { Movimento } from '../../types';
 import { duracao, pluginInfo } from './util';
@@ -19,9 +20,7 @@ export function Miniaturas({ resultado, cor, quantidade }: { resultado: Resultad
   if (!n) return null;
   return (
     <div className="wk-thumbs">
-      {Array.from({ length: n }, (_, i) => resultado.imagens?.[i]
-        ? <img key={i} src={resultado.imagens[i]} alt="" loading="lazy" />
-        : <span key={i} className="wk-thumb-gen" style={{ '--c': cor, '--i': i } as CSSProperties} />)}
+      {Array.from({ length: n }, (_, i) => <PecaCampanha key={i} indice={i} imagem={resultado.imagens?.[i]} cor={cor} compacta />)}
     </div>
   );
 }

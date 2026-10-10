@@ -462,3 +462,32 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 .chat-row.is-child { margin-left: 18px; }
 .chat-row.is-child::before { content: ''; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 1px; background: var(--line); }
 .chat-row.is-child > a { height: 54px; }
+
+/* Rodada 5: card de tarefa em grid — título (1 ou 2 linhas) + agente, depois barra, depois status */
+.task-card { display: grid; grid-template-rows: auto auto auto; align-content: start; row-gap: 12px; }
+.task-card .task-title { min-height: 52px; align-items: flex-start; }
+.task-card .task-title > span { gap: 4px; }
+.task-card .task-title small { line-height: 1.3; }
+.task-card .progress, .task-card .task-status { margin: 0; }
+
+/* Rodada 5: composições distintas das peças (qualquer equipe) */
+.campaign-piece-detail img { object-position: 85% 20%; transform: scale(1.6); filter: saturate(1.15) brightness(.82) hue-rotate(-8deg); }
+.campaign-piece-detail .campaign-piece-copy { inset: auto 9% 8%; text-align: right; }
+.campaign-piece-generated { background:
+  radial-gradient(circle at calc(25% + var(--i) * 22%) 30%, color-mix(in srgb, var(--piece-color), white 25%) 0, transparent 48%),
+  linear-gradient(calc(135deg + var(--i) * 40deg), color-mix(in srgb, var(--piece-color), black 45%), color-mix(in srgb, var(--piece-color), black 82%)); }
+.campaign-piece-generated .campaign-piece-shade { background: linear-gradient(180deg, transparent 35%, rgba(0,0,0,.55)); }
+.campaign-piece-generated .campaign-piece-copy small { color: color-mix(in srgb, var(--piece-color), white 55%); }
+.piece-strip .campaign-piece { width: 33.333%; height: 100%; aspect-ratio: auto; }
+.piece-strip .campaign-piece-copy strong { font-size: 11px; line-height: 1.05; }
+.wk-thumbs .campaign-piece { width: 56px; height: 56px; aspect-ratio: auto; border-radius: 8px; }
+
+/* Rodada 5: acesso a Configurações no rodapé da barra lateral */
+.account .account-settings { display: grid; place-items: center; flex: none; width: 34px; height: 34px; margin-left: auto; color: var(--text-2); border-radius: 10px; }
+.account .account-settings svg { width: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.account .account-settings:hover { color: var(--text); background: rgba(255,255,255,.07); }
+.account .account-settings.active { color: var(--text); background: rgba(255,255,255,.1); }
+.account .account-settings + button { margin-left: 0; }
+/* Configurações (tela do Forja) dentro do AppShell */
+.app-stage .cfg-page { height: calc(100dvh - var(--topbar)); min-height: 0; overflow-y: auto; }
+.app-stage .cfg-shell { min-height: 100%; }

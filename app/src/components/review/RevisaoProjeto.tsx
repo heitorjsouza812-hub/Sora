@@ -2,6 +2,7 @@ import { useRef, useState, type CSSProperties } from 'react';
 import type { AgenteSora, EntregaGerada, ProjetoSora } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
 import { Modal } from '../overlay/Modal';
+import { PecaCampanha } from '../ui/CampaignPiece';
 import './review.css';
 
 export interface RevisaoProjetoProps {
@@ -29,7 +30,7 @@ function DeliveryContent({ entrega, color }: { entrega?: EntregaGerada; color: s
 
   if (entrega.tipo === 'imagem') {
     const images = entrega.imagens ?? [];
-    return <>{heading}<div className="review-images">{images.map((image, index) => <figure className="review-image" key={`${image}-${index}`}><img src={image} alt={`${entrega.titulo}, peça ${index + 1}`} /><span>Peça {index + 1}</span></figure>)}{!images.length && [1, 2, 3].map((item) => <div className="review-image" key={item} style={{ '--review-agent': color } as CSSProperties}><span>Peça {item}</span></div>)}</div></>;
+    return <>{heading}<div className="review-images">{Array.from({ length: Math.max(3, images.length) }, (_, index) => <figure className="review-image" key={index}><PecaCampanha indice={index} imagem={images[index]} cor={color} /><span>Peça {index + 1}</span></figure>)}</div></>;
   }
 
   if (entrega.tipo === 'calendario') {

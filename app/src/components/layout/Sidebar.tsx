@@ -8,7 +8,7 @@ import { estadoAgente, estadoProjeto, novoChat, useAgora, useProjetos, type Agen
 import { pedirApagar, pedirRenomear } from '../gestao';
 import { AccountMenu } from '../review/AccountMenu';
 import { MenuAgente } from '../studio';
-import { AgentsIcon, FolderIcon, GridIcon, PlusIcon } from '../ui/Icons';
+import { AgentsIcon, FolderIcon, GearIcon, GridIcon, PlusIcon } from '../ui/Icons';
 
 function LinhaAgente({ a, onNavegar, filho }: { a: AgenteSora; onNavegar?: () => void; filho?: boolean }) {
   const e = useProjetos();
@@ -100,6 +100,7 @@ export function Sidebar() {
       <div className="account">
         <span className="account-avatar" aria-hidden="true">{usuario.empresa.slice(0, 1)}</span>
         <span><strong>{usuario.empresa}</strong><small>{usuario.plano}</small></span>
+        <NavLink to="/configuracoes" className="account-settings" aria-label="Configurações" title="Configurações"><GearIcon /></NavLink>
         <button ref={contaRef} type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={conta} onClick={() => setConta(v => !v)}>•••</button>
         <AccountMenu open={conta} onClose={() => setConta(false)} anchorRef={contaRef} empresa={usuario.empresa} plano={usuario.plano}
           onSelect={a => { if (a === 'plugins') navigate('/plugins'); if (a === 'configuracoes') navigate('/configuracoes'); if (a === 'sair') { novoChat(); navigate('/'); } }} />

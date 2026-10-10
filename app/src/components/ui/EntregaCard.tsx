@@ -1,9 +1,13 @@
 // Cartão de entrega genérico (qualquer equipe): links, imagens, textos ou calendário.
 import type { CSSProperties } from 'react';
 import type { AgenteSora, EntregaGerada } from '../../state/projetos';
+import { useProjetos } from '../../state/projetos';
+import { PecaCampanha } from './CampaignPiece';
 import { Calendar } from './Calendar';
 
 export function EntregaCard({ entrega, agente }: { entrega: EntregaGerada; agente: AgenteSora }) {
+  const { projetos } = useProjetos();
+  const marca = projetos.find(p => p.id === agente.projetoId)?.assunto ?? '';
   return (
     <article className="delivery-card card" style={{ '--agent': agente.cor } as CSSProperties}>
       <header><i aria-hidden="true" /><h3>{entrega.titulo}</h3><span>{agente.nome} · {entrega.resumo}</span></header>
@@ -12,9 +16,9 @@ export function EntregaCard({ entrega, agente }: { entrega: EntregaGerada; agent
         : <p className="delivery-text">{entrega.resumo} organizadas por {agente.nome}.</p>)}
       {entrega.tipo === 'imagem' && (
         <div className="piece-strip">
-          {(entrega.imagens?.length ? entrega.imagens : [0, 1, 2]).map((img, i) => typeof img === 'string'
-            ? <img key={i} src={img} alt={`${entrega.titulo} ${i + 1}`} />
-            : <span key={i} className="piece-generated" style={{ '--i': i } as CSSProperties} aria-label={`${entrega.titulo} ${i + 1}`} role="img" />)}
+          {Array.from({ length: Math.max(3, entrega.imagens?.length ?? 0) }, (_, i) => (
+            <PecaCampanha key={i} indice={i} imagem={entrega.imagens?.[i]} cor={agente.cor} marca={marca} />
+          )).slice(0, 3)}
         </div>
       )}
       {entrega.tipo === 'calendario' && <Calendar compact />}

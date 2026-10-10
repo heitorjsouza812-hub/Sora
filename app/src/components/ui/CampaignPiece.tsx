@@ -1,24 +1,43 @@
-export interface CampaignPieceData {
-  titulo: string;
-  formato: string;
-  imagem: string;
+// Peças visuais de uma entrega. Cada POSIÇÃO tem uma composição própria (recorte, filtro e texto
+// em Playfair), então nunca aparecem duas peças iguais lado a lado — mesmo que a foto se repita.
+// Sem foto, a peça é gerada na cor do agente. Vale para qualquer equipe.
+import type { CSSProperties } from 'react';
+
+const COMPOSICOES = [
+  { classe: 'post', titulo: 'O novo começa aqui.', detalhe: 'Lançamento' },
+  { classe: 'story', titulo: 'Sua nova pausa favorita.', detalhe: 'Vem aí' },
+  { classe: 'poster', titulo: 'Abrimos!', detalhe: 'Já disponível' },
+  { classe: 'detail', titulo: 'Bora conferir?', detalhe: 'Novidade' },
+] as const;
+
+export interface PecaProps {
+  /** posição da peça na entrega (define a composição) */
+  indice: number;
+  imagem?: string;
+  /** cor do agente (fundo das peças geradas) */
+  cor: string;
+  /** marca/assunto exibido no topo (ex.: "Cafeteria") */
+  marca?: string;
+  /** miniatura: só a composição visual, sem texto */
+  compacta?: boolean;
+  gerando?: boolean;
+  className?: string;
 }
 
-const copy: Record<string, { eyebrow: string; title: string; detail: string }> = {
-  'Post de inauguração': { eyebrow: 'NOVA CAFETERIA', title: 'O café que abraça.', detail: 'Inauguração · Sábado, 9h' },
-  Story: { eyebrow: 'CAFETERIA AROMA', title: 'Sua nova pausa favorita.', detail: 'Vem aí · Sábado, 9h' },
-  'Cartaz da vitrine': { eyebrow: 'CAFETERIA AROMA', title: 'Abrimos!', detail: 'Cafeteria Aroma · Sábado, 9h' },
-};
-
-export function CampaignPiece({ piece, generating = false }: { piece: CampaignPieceData; generating?: boolean }) {
-  const text = copy[piece.titulo] ?? copy.Story;
-  const slug = piece.titulo === 'Cartaz da vitrine' ? 'poster' : piece.titulo === 'Story' ? 'story' : 'post';
+export function PecaCampanha({ indice, imagem, cor, marca = '', compacta = false, gerando = false, className = '' }: PecaProps) {
+  const c = COMPOSICOES[indice % COMPOSICOES.length];
   return (
-    <div className={`campaign-piece campaign-piece-${slug} ${generating ? 'is-generating' : ''}`}>
-      <img src={piece.imagem} alt="" />
+    <div className={`campaign-piece campaign-piece-${c.classe} ${imagem ? '' : 'campaign-piece-generated'} ${gerando ? 'is-generating' : ''} ${className}`}
+      style={{ '--piece-color': cor, '--i': indice } as CSSProperties} role="img" aria-label={`Peça ${indice + 1}: ${c.titulo}`}>
+      {imagem && <img src={imagem} alt="" />}
       <span className="campaign-piece-shade" />
-      <div className="campaign-piece-copy"><small>{text.eyebrow}</small><strong>{text.title}</strong><span>{text.detail}</span></div>
+      {!compacta && (
+        <div className="campaign-piece-copy" aria-hidden="true">
+          {marca && <small>{marca.toUpperCase()}</small>}
+          <strong>{c.titulo}</strong>
+          <span>{c.detalhe}</span>
+        </div>
+      )}
     </div>
   );
 }
-
