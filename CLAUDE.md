@@ -28,7 +28,7 @@ Os agentes usam **plugins** (Figma, Canva, Notion, Higgsfield, ChatGPT, Gemini, 
 
 ### Estado atual do repositório
 
-Ainda **não existe o app**. Até agora existem só os vídeos de apresentação, que definem o visual e o comportamento esperado:
+O **front-end do app existe** em `app/` (feito em 2026-10-10 — veja **§7 Estado do app** para rodar, estrutura, decisões e pendências). Ainda **não há back-end**: tudo é simulado no navegador. Os vídeos de apresentação continuam como referência visual:
 
 | Arquivo | O que é |
 |---|---|
@@ -40,7 +40,9 @@ Ainda **não existe o app**. Até agora existem só os vídeos de apresentação
 
 Cada HTML expõe `renderFrame(t)` determinístico (render feito com Playwright + ffmpeg). **O `sora-demo.html` é a referência visual principal**: cores, textos, telas e estados dos agentes vêm de lá.
 
-Stack do app: **a definir** — registre a decisão no log quando for tomada.
+> A demo é um **exemplo** (campanha da cafeteria com Atlas, Luna e Nina). No app real os agentes são criados a partir do pedido do usuário.
+
+Stack do app: **Vite + React 19 + TypeScript + react-router-dom, CSS puro com tokens** (decidido em 2026-10-10). Efeitos: `border-beam` e `voice-glow`.
 
 ---
 
@@ -67,10 +69,11 @@ Modelo de entrada:
 ### 👤 Heitor
 
 - **Papel:** _(preencher — ex.: produto / design / front-end)_
-- **Onde parou:** vídeos de apresentação da Sora prontos (comercial 30 s e demo 75 s). Este `CLAUDE.md` criado para começar o app.
-- **Próximo passo:** definir a stack e começar pela tela inicial com o mascote.
+- **Onde parou:** front-end da Sora pronto em `app/` (todas as telas, mascote, fluxo simulado de equipes, construtor de agentes, painel Trabalho, Configurações de modelos). Tudo roda só no navegador, com dados simulados.
+- **Próximo passo:** decidir o back-end (chamadas reais aos modelos, contas, salvar as chaves com segurança) e voltar aos **Plugins** (congelados de propósito). Ver pendências em §7.5.
 
 **Histórico**
+- **2026-10-10** — Front-end do app construído com um time de agentes de IA no Maestri (detalhes em §7.6). Mudanças de produto pedidas no caminho: barra lateral vazia ao abrir, Sora grande na tela do 1º prompt, agentes criados pelo pedido e listados em CHATS, telas Projetos e Agentes, construtor de agente no estilo GPT builder, painel Trabalho, apagar/renomear, Configurações com APIs dos modelos. Arquivos: `app/**`, `CLAUDE.md`, `AGENTS.md`. Pendente: back-end, plugins reais, microfone real testado em celular.
 - **2026-10-10** — Criou o `CLAUDE.md` com introdução, logs, mascote, interface e funções. Arquivos: `CLAUDE.md`.
 - **2026-10-03** — Produziu o comercial de 30 s e a demo de 75 s da Sora em canvas; renomeou o produto de "Mini" para "Sora". Arquivos: `mini-video/*`. Pendente: os scripts de render (Playwright + ffmpeg + trilha) ficaram fora do projeto e podem precisar ser refeitos.
 
@@ -125,7 +128,7 @@ O mascote **é** a Sora. Ele não é um enfeite: a interface inteira é organiza
 
 | Estado | O mascote | A interface |
 |---|---|---|
-| **Chegando** (primeira abertura) | pontos espalhados se juntam e formam o corpo; os olhos abrem | tela vazia, só a Sora no centro |
+| **Chegando** (primeira abertura da sessão, ~1,6 s) | pontos espalhados se juntam e formam o corpo; os olhos abrem | tela do 1º prompt, só a Sora no centro; barra lateral vazia |
 | **Ocioso** | "respira" e gira devagar, pisca | tela inicial: "Em que posso te ajudar hoje?" |
 | **Ouvindo** (usuário digitando ou falando) | a superfície ondula, os olhos olham para o campo de texto | BorderBeam correndo na borda do campo; no celular, VoiceBeam reagindo à voz |
 | **Entendeu / enviou** | pulso de luz | a Sora encolhe e vai para a barra lateral como avatar; abre o chat |
@@ -135,8 +138,9 @@ O mascote **é** a Sora. Ele não é um enfeite: a interface inteira é organiza
 | **Pronto** | calma, olhos abertos | botão "Revisar" + aviso "Nada é publicado sem a sua aprovação." |
 
 Regras:
-- A Sora **nunca some**: se não está no centro, está como avatar na barra lateral ou no topo do celular.
-- O **movimento** do mascote é o indicador de carregamento. Evite spinners genéricos onde o mascote puder mostrar o estado.
+- **Ao abrir o app** (decisão de 2026-10-10): a barra lateral começa **vazia** (sem chats nem agentes) e a Sora aparece **grande no centro da tela do 1º prompt**. Só depois do primeiro envio a conversa e os agentes passam a existir na barra lateral.
+- Depois do 1º envio a Sora está sempre visível: avatar no cabeçalho do chat, nas mensagens e no topo do celular.
+- O **movimento** do mascote é o indicador de carregamento. Nada de spinners genéricos. O **thinking orb** (estado `thinking`: faixas de luz em hélice, brilho respirando, olhos semicerrados olhando para cima) é o "pensando" do app inteiro.
 - A cor de um agente aparece em **tudo** que é dele: avatar, status, barra de progresso, nome nas mensagens.
 
 ---
@@ -164,10 +168,12 @@ Visual escuro, limpo, com o brilho vindo dos pontos e dos beams. Tudo tirado do 
 
 ### 4.2 Telas
 
-**Barra lateral (sempre visível no desktop)**
-- Logo "Sora", botões **Novo chat** e **Plugins**.
-- Seção **CHATS**: a Sora (agente principal) e cada agente da equipe, com avatar animado, nome e status colorido ("Pesquisando", "Aguardando referências", "Concluído").
-- Rodapé: conta/empresa do usuário e plano (ex.: "Cafeteria Aroma · Plano Pro").
+> As telas abaixo vieram da demo. **As mudanças feitas no app estão em §7.3** e valem mais que este texto quando houver conflito.
+
+**Barra lateral (sempre visível no desktop; menu ☰ no celular)**
+- Logo "Sora", **Novo chat**, **Projetos**, **Agentes**, **Plugins**.
+- Seção **CHATS**: começa vazia. Recebe cada conversa e, recuados abaixo dela, os agentes criados nela (avatar animado na cor do agente, nome, status colorido). Cada item tem menu "…" com **Renomear** e **Apagar**.
+- Rodapé: conta/empresa e plano, **engrenagem → Configurações** e menu da conta.
 
 **Novo chat (tela inicial)**
 - Sora grande no centro, título "Em que posso te ajudar hoje?".
@@ -257,3 +263,78 @@ Status de agente/tarefa: `aguardando` · `trabalhando` · `concluido` · `erro`.
 - Não altere a aparência do mascote nem as cores dos agentes sem pedido explícito.
 - Ao criar telas novas, reaproveite os tokens e textos da seção 4; em caso de dúvida, consulte `mini-video/sora-demo.html`.
 - Não apague os vídeos nem os HTMLs de referência.
+- Ao mudar algo de produto, atualize a **§7** e copie o `CLAUDE.md` para o `AGENTS.md` (o Codex lê o `AGENTS.md`).
+
+---
+
+## 7. Estado do app (front-end)
+
+### 7.1 Como rodar
+
+```bash
+cd app
+npm install
+npm run dev          # http://localhost:5173
+npm run build        # checagem de tipos + build
+npx oxlint           # lint
+```
+
+Tudo é **simulado no navegador** (sem back-end). Os dados ficam no `localStorage` (`sora.projetos.v1`, `sora.modelos.v1`). Para começar do zero: Configurações → Conta → **Apagar todos os dados**.
+
+### 7.2 Estrutura (`app/src`)
+
+| Pasta / arquivo | O que tem |
+|---|---|
+| `components/mascot/` | **Mascote**: `SoraOrb` (canvas de pontos, porte fiel da demo), `SoraThinking`, `orbEngine.ts`. Estados: `arriving · idle · listening · thinking · coordinating · working · done`. |
+| `state/projetos.ts` | **Store principal** (projetos, conversas, agentes, execuções, passos do painel Trabalho). O relógio é a fonte da verdade: status e % são calculados a partir do horário, então sobrevivem a recarregar a página. |
+| `state/modelos.ts` | Provedores de IA, chaves (mascaradas) e modelo padrão da Sora/de cada agente. |
+| `data/planejador.ts` | **Planejador simulado**: lê o pedido e escolhe um modelo de equipe (campanha, site, pesquisa, e-mails, vídeo ou genérico), com nomes, cores, movimentos, ferramentas e o roteiro de passos. |
+| `screens/` | `Home` (1º prompt), `SoraChat` (chat do projeto), `AgentChat`, `Projetos`, `Agentes` (galeria), `CriarAgente` (construtor), `Revisao`, `Configuracoes`, `Plugins`, `Mobile` (/celular), `OrbLab` (/lab/orb). |
+| `components/work/` | Painel **Trabalho** (prompt, chamadas de ferramenta, handoffs). |
+| `components/builder/` | Construtor de agente (abas Criar/Configurar + prévia com chat de teste). |
+| `components/settings/` | Cartões de provedores e modelo padrão. |
+| `components/projetos/`, `gestao/` | Tela Projetos; diálogos Renomear/Apagar. |
+| `components/review/`, `overlay/` | Tela de revisão; Modal, BottomSheet, Popover e menus acessíveis. |
+| `components/layout/`, `ui/` | AppShell, barra lateral, composer (BorderBeam + VoiceBeam), cards, peças de campanha. |
+| `components/studio/` | Editor de agente antigo, ainda usado no Modal "Editar agente". O construtor novo fica em `builder/`. |
+
+Rotas: `/` · `/projeto/:id` · `/chat/:agenteId` · `/projetos` · `/agentes` · `/agentes/novo` · `/agentes/:id/editar` · `/revisao/:id` · `/configuracoes` · `/plugins` · `/celular` · `/lab/orb` (laboratório do mascote; `?solo=240&state=thinking&color=%23AC80FF` mostra um orb isolado).
+
+### 7.3 Decisões de produto tomadas (2026-10-10)
+
+1. **Início:** barra lateral vazia + Sora grande na tela do 1º prompt.
+2. **A Sora cria os agentes a partir do pedido.** Se o pedido não exige trabalho ("oi, tudo bem?"), ela só responde. Os agentes aparecem em **CHATS**, embaixo da conversa onde nasceram.
+3. **Projetos** (barra lateral): tela para escrever o prompt de um projeto; a Sora monta a equipe inteira. Os projetos ficam listados com filtro e busca.
+4. **Agentes** (barra lateral): galeria + **construtor no estilo GPT builder** (aba *Criar*, conversando com a Sora; aba *Configurar*, formulário; à direita, a prévia com chat de teste). O usuário troca **nome, cor, movimento, função, instruções, ferramentas e modelo**. Agente novo recebe uma cor livre da paleta, e nunca `#E2ECFF`, que é da Sora.
+5. **Painel Trabalho:** enquanto um agente trabalha, mostra ao vivo o **prompt** recebido, as **chamadas de ferramenta** (ex.: `figma.criar_frame`, com parâmetros e resultado) e as entregas passadas a outro agente.
+6. **Apagar/renomear** chats, projetos e agentes, com confirmação. A Sora não pode ser apagada.
+7. **Configurações → Modelos de IA:** conectar OpenAI, Anthropic, Gemini, xAI, DeepSeek, Mistral, OpenRouter, Ollama e qualquer API compatível com OpenAI; escolher o modelo padrão da Sora e dos agentes.
+8. **Revisão:** "Revisar" abre as entregas; o usuário escolhe *Aprovar e publicar* ou *Pedir ajuste* (gera nova versão, com comparação).
+9. **Plugins: congelados de propósito.** A tela existe, mas não mexer até o grupo decidir.
+
+### 7.4 Ferramentas de QA (`app/qa/`)
+
+- `node qa/shoot.mjs [rotas] [--wait ms]` → screenshots em 1440 e 390 px em `qa/shots/` + erros do console.
+- `node qa/shoot.mjs --flow` → digita um pedido e fotografa o fluxo a cada 3 s.
+- `node qa/e2e.mjs` → teste de ponta a ponta dos fluxos principais (criado pelo validador).
+- `qa/ref/` → quadros da demo para comparar (gerados a partir do vídeo; não versionados).
+
+### 7.5 Pendências / próximos passos
+
+- **Back-end:** hoje o "Testar conexão" só confere o formato da chave e as respostas dos agentes são simuladas. Falta um servidor que chame os modelos de verdade e guarde as chaves com criptografia (**nunca** guardar chaves só no navegador em produção).
+- **Plugins** reais (congelados).
+- Testar o microfone (VoiceBeam com `useMicrophone`) num celular de verdade, via https.
+- Contas/login e sincronização entre computador e celular.
+
+### 7.6 Como o app foi feito (time de IA no Maestri)
+
+O front-end foi construído em 2026-10-10 por um time de agentes no Maestri, coordenado por um Claude Code orquestrador, em rodadas: construir → validar com screenshots → corrigir, em loop.
+
+| Agente | Modelo | Fez |
+|---|---|---|
+| Prisma | Claude Code (Opus) | mascote, thinking orb, store, planejador, integração geral |
+| Forja | Codex (GPT-5.6) | telas da rodada 1–2, overlays, revisão, Configurações, construtor de agente |
+| Brisa | Claude Code | tela Projetos, diálogos Renomear/Apagar |
+| Vigia | Hermes (OpenAI) | validação: ferramentas de QA, auditoria de código/acessibilidade, testes E2E |
+
+Os papéis ficam salvos no Maestri (workspace "Sora"); o histórico está nos commits do git (`git log`). O Hermes deve usar **só modelos da OpenAI**. Use raciocínio *medium* no Codex para não estourar a cota.
