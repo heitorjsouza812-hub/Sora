@@ -1,0 +1,33 @@
+/* Estilos do mascote (Prisma). Shimmer igual ao shimmerText da demo: #5f6672 → #f1f4f9 → #5f6672. */
+.sora-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  font-family: var(--font, "Inter", system-ui, sans-serif);
+  font-weight: 500;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+.sora-shimmer {
+  color: #8b93a3;
+  background: linear-gradient(90deg, #5f6672 0%, #5f6672 35%, #f1f4f9 50%, #5f6672 65%, #5f6672 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: sora-shimmer 1.25s linear infinite;
+}
+
+@keyframes sora-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sora-shimmer {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
