@@ -65,13 +65,13 @@ export default function Mobile() {
             return <Link to={`/chat/${a.id}`} key={a.id} style={{ '--agent': a.cor } as CSSProperties}>
               <span className="mobile-orb"><SoraOrb size={38} color={a.cor} movimento={a.tipoMovimento} glow={false} decorative
                 state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : 'idle'} />{st.status === 'concluido' && <i aria-hidden="true">✓</i>}</span>
-              <b style={{ color: a.cor }}>{a.nome}</b><small>{st.rotulo}</small>
+              <b className="agent-color">{a.nome}</b><small>{st.rotulo}</small>
             </Link>;
           })}</div>
         </section>
         {(ep?.fase === 'pronto' || ep?.fase === 'aprovado' || p.versao > 1) && (
           <section className="mobile-campaign card"><h2>{p.titulo}</h2>
-            <ul>{p.agenteIds.map(id => e.agentes[id] && p.entregas[id] && <li key={id}><b style={{ color: e.agentes[id].cor }}>{p.entregas[id].titulo}</b> · {p.entregas[id].resumo}</li>)}</ul>
+            <ul>{p.agenteIds.map(id => e.agentes[id] && p.entregas[id] && <li key={id} style={{ '--agent': e.agentes[id].cor } as CSSProperties}><b className="agent-color">{p.entregas[id].titulo}</b> · {p.entregas[id].resumo}</li>)}</ul>
             <Link to={`/revisao/${p.id}`} className="mobile-review">Revisar</Link>
           </section>
         )}

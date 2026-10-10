@@ -1,17 +1,118 @@
-/* Tokens da Sora — fonte: CLAUDE.md §4.1 e mini-video/sora-demo.html */
+/* Sistema visual da Sora: fonte única para cor, tipo, espaço e movimento. */
 :root {
-  --bg: #050608;
-  --panel: #0f1115;
-  --panel-2: #14161b;
-  --line: rgba(255, 255, 255, 0.08);
-  --text: #f2f5fb;
+  --surface-1: #050608;
+  --surface-2: #0f1115;
+  --surface-3: #14161b;
+  --text-1: #f2f5fb;
   --text-2: #8b93a3;
-  --text-3: #7d8595; /* ≥4,5:1 sobre o fundo e os painéis (auditoria Vigia) */
-  --ok: #7ef2c4;
-  --btn-bg: #eef2fa;
-  --btn-text: #0b0d12;
+  --text-3: #7d8595; /* contraste AA sobre --surface-1 */
+  --text-inverse: #0b0d12;
 
-  /* cores fixas dos agentes de exemplo */
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --focus: #9cc4ff;
+  --focus-soft: rgba(156, 196, 255, 0.4);
+  --focus-ring: 0 0 0 3px var(--focus-soft);
+  --ok: #7ef2c4;
+  --warn: #febc2e;
+  --danger: #ff6b6b;
+  --danger-strong: #d64545;
+  --action: #eef2fa;
+  --link: #9cc4ff;
+
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-32: 32px;
+  --fs-48: 48px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+  --sp-9: 36px;
+  --sp-10: 40px;
+  --sp-11: 44px;
+  --sp-12: 48px;
+  --sp-13: 52px;
+  --sp-14: 56px;
+  --sp-15: 60px;
+  --sp-16: 64px;
+
+  --r-6: 6px;
+  --r-10: 10px;
+  --r-16: 16px;
+  --r-24: 24px;
+  --r-pill: 999px;
+
+  --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.58);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --duration-fast: var(--dur-fast);
+  --duration-normal: var(--dur-base);
+  --duration-slow: var(--dur-slow);
+
+  --white-a03: rgba(255, 255, 255, 0.03);
+  --white-a04: rgba(255, 255, 255, 0.04);
+  --white-a05: rgba(255, 255, 255, 0.05);
+  --white-a06: rgba(255, 255, 255, 0.06);
+  --white-a07: rgba(255, 255, 255, 0.07);
+  --white-a09: rgba(255, 255, 255, 0.09);
+  --white-a10: rgba(255, 255, 255, 0.10);
+  --white-a11: rgba(255, 255, 255, 0.11);
+  --white-a12: rgba(255, 255, 255, 0.12);
+  --white-a13: rgba(255, 255, 255, 0.13);
+  --white-a14: rgba(255, 255, 255, 0.14);
+  --white-a15: rgba(255, 255, 255, 0.15);
+  --white-a18: rgba(255, 255, 255, 0.18);
+  --white-a22: rgba(255, 255, 255, 0.22);
+  --white-a24: rgba(255, 255, 255, 0.24);
+  --white-a30: rgba(255, 255, 255, 0.30);
+  --black-a24: rgba(0, 0, 0, 0.24);
+  --black-a35: rgba(0, 0, 0, 0.35);
+  --black-a38: rgba(0, 0, 0, 0.38);
+  --black-a40: rgba(0, 0, 0, 0.40);
+  --black-a45: rgba(0, 0, 0, 0.45);
+  --black-a50: rgba(0, 0, 0, 0.50);
+  --black-a55: rgba(0, 0, 0, 0.55);
+  --black-a58: rgba(0, 0, 0, 0.58);
+  --black-a65: rgba(0, 0, 0, 0.65);
+  --scrim: rgba(2, 3, 6, 0.72);
+  --ok-soft: rgba(126, 242, 196, 0.10);
+  --ok-line: rgba(126, 242, 196, 0.35);
+  --danger-soft: rgba(214, 69, 69, 0.35);
+  --danger-bg: rgba(255, 100, 100, 0.06);
+  --danger-line: rgba(255, 107, 107, 0.25);
+  --sora-soft: rgba(226, 236, 255, 0.045);
+  --sora-muted: rgba(226, 236, 255, 0.62);
+  --atlas-soft: rgba(86, 168, 255, 0.08);
+  --atlas-line: rgba(86, 168, 255, 0.16);
+  --luna-soft: rgba(172, 128, 255, 0.16);
+  --nina-soft: rgba(70, 232, 168, 0.10);
+  --nina-line: rgba(70, 232, 168, 0.35);
+  --coffee-overlay: rgba(13, 8, 4, 0.84);
+  --coffee-overlay-strong: rgba(20, 7, 2, 0.90);
+  --coffee-shadow: rgba(43, 20, 8, 0.12);
+
+  --coffee-ink: #21170f;
+  --coffee-cream: #f4e8d7;
+  --coffee-paper: #fff8ee;
+  --coffee-accent: #ffcf9a;
+  --coffee-copy: #f4d7ad;
+  --browser-red: #ff5f57;
+  --browser-green: #28c840;
+
+  /* Cores fixas do mascote e dos agentes: não alterar. */
   --sora: #e2ecff;
   --atlas: #56a8ff;
   --luna: #ac80ff;
@@ -20,9 +121,15 @@
   --font: "Inter", "Segoe UI", system-ui, sans-serif;
   --font-display: "Playfair Display", Georgia, serif;
 
-  --r-sm: 10px;
-  --r-md: 14px;
-  --r-lg: 18px;
-  --r-xl: 24px;
-  --r-pill: 999px;
+  /* Aliases legados. */
+  --bg: var(--surface-1);
+  --panel: var(--surface-2);
+  --panel-2: var(--surface-3);
+  --text: var(--text-1);
+  --btn-bg: var(--action);
+  --btn-text: var(--text-inverse);
+  --r-sm: var(--r-10);
+  --r-md: var(--r-16);
+  --r-lg: var(--r-16);
+  --r-xl: var(--r-24);
 }

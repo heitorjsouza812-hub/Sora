@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import { AppShell } from '../components/layout/AppShell';
 import { PluginMark } from '../components/ui/PluginMark';
 import { plugins } from '../data/mock';
@@ -20,7 +19,7 @@ export default function Plugins() {
         </article>)}</section>
         <section className="plugin-gallery" aria-label="Todos os plugins">{plugins.map((plugin) => (
           <button type="button" aria-pressed={conectado(plugin.nome)} className={`plugin-tile card ${conectado(plugin.nome) ? 'is-connected' : ''}`} key={plugin.id}
-            style={{ '--brand': plugin.cor } as CSSProperties} onClick={() => alternarPlugin(plugin.nome)}>
+            onClick={() => alternarPlugin(plugin.nome)}>
             <PluginMark nome={plugin.nome} cor={plugin.cor} path={plugin.path} size={42} />
             <strong>{plugin.nome}</strong><small>{conectado(plugin.nome) ? '● Conectado' : plugin.categoria}</small>
           </button>

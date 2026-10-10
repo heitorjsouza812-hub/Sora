@@ -14,13 +14,11 @@ export function SoraThinking({
   label = 'Sora está pensando…', size = 28, color = '#E2ECFF', layout = 'inline', className,
 }: SoraThinkingProps) {
   const stacked = layout === 'stacked';
-  const fontSize = stacked ? Math.max(13, Math.min(16, 11 + size * 0.025)) : Math.max(13, Math.min(18, size * 0.52));
   return (
     <span
       className={`sora-thinking${stacked ? ' sora-thinking--stacked' : ''}${className ? ' ' + className : ''}`}
       role="status"
       aria-live="polite"
-      style={{ fontSize }}
     >
       <SoraOrb size={size} color={color} state="thinking" glow={stacked && size >= 96} title={label} />
       {label && <span className="sora-shimmer">{label}</span>}

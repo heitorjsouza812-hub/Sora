@@ -1,0 +1,38 @@
+.orb-lab-page { min-height: 100dvh; padding: var(--sp-10) clamp(var(--sp-4), 4vw, var(--sp-14)) calc(var(--sp-16) + var(--sp-4)); box-sizing: border-box; color: var(--text-1); background: var(--surface-1); font-family: var(--font); }
+.orb-lab-page > h1 { margin: 0 0 var(--sp-2); font-size: var(--fs-32); font-weight: 600; }
+.orb-lab-subtitle { margin: 0 0 36px; color: var(--text-2); font-size: var(--fs-14); }
+.orb-lab-section-title { margin: var(--sp-12) 0 var(--sp-4); color: var(--text-3); font-size: var(--fs-13); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.orb-lab-solo { min-height: 100dvh; display: grid; place-items: center; background: var(--surface-1); }
+.orb-lab-solo canvas { display: block; }
+.orb-lab-card { padding: var(--sp-5); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16); }
+.orb-lab-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: var(--sp-5); align-items: start; }
+.orb-lab-stage { min-height: 420px; display: grid; place-items: center; }
+.orb-lab-stage-caption { margin-top: var(--sp-2); }
+.orb-lab-controls { display: flex; flex-direction: column; gap: var(--sp-5); }
+.orb-lab-small { color: var(--text-2); font-size: var(--fs-13); }
+.orb-lab-label { margin-bottom: var(--sp-2); }
+.orb-lab-actions, .orb-lab-orb-row, .orb-lab-placeholder-row, .orb-lab-load-test { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.orb-lab-button { padding: var(--sp-2) var(--sp-4); color: var(--agent-color, var(--text-1)); background: var(--surface-3); border: 1px solid var(--line); border-radius: var(--r-pill); cursor: pointer; font: inherit; font-size: var(--fs-13); }
+.orb-lab-button.is-active { color: var(--text-inverse); background: var(--action); }
+.orb-lab-grid { display: grid; gap: var(--sp-4); }
+.orb-lab-grid-states { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.orb-lab-grid-agents { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.orb-lab-item, .orb-lab-orb-item { display: grid; justify-items: center; gap: var(--sp-2); }
+.orb-lab-state-card { padding: var(--sp-4); }
+.orb-lab-item-title { font-size: var(--fs-14); font-weight: 600; }
+.orb-lab-centered { text-align: center; }
+.orb-lab-orb-row { align-items: flex-end; gap: var(--sp-6); }
+.orb-lab-thinking-row { gap: var(--sp-9); }
+.orb-lab-orb-item { gap: var(--sp-2); }
+.orb-lab-agent-color { color: var(--agent-color); }
+.orb-lab-sidebar { max-width: 300px; display: grid; gap: var(--sp-1); padding: var(--sp-3); }
+.orb-lab-sidebar-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-10); }
+.orb-lab-sidebar-row.is-current { background: var(--surface-3); }
+.orb-lab-sidebar-name { font-size: var(--fs-14); font-weight: 500; }
+.orb-lab-sidebar-status { font-size: var(--fs-12); }
+.orb-lab-inline-demo { max-width: 560px; display: grid; gap: var(--sp-5); }
+.orb-lab-user-message { align-self: end; justify-self: end; padding: var(--sp-3) var(--sp-4); background: var(--surface-3); border-radius: var(--r-16); font-size: var(--fs-14); }
+.orb-lab-placeholder-row { gap: var(--sp-4); margin-top: var(--sp-4); }
+.orb-lab-placeholder { min-height: 220px; flex: 1 1 240px; display: grid; place-items: center; background: var(--surface-3); }
+.orb-lab-load-test { gap: var(--sp-3); }
+@media (max-width: 767px) { .orb-lab-page { padding: var(--sp-6) var(--sp-4) var(--sp-12); } .orb-lab-hero { grid-template-columns: 1fr; } .orb-lab-stage { min-height: 360px; } }

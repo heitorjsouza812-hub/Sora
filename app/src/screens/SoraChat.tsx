@@ -33,13 +33,13 @@ function CartaoPlano({ e, p, agora }: { e: EstadoProjetos; p: ProjetoSora; agora
         <div><h2>Plano · {p.titulo}</h2><p>{p.tarefas.map(t => t.titulo).join(' → ')}</p></div>
         <span>{p.tarefas.length} tarefas</span>
       </div>
-      <div className="task-grid" style={{ '--cols': Math.min(p.tarefas.length, 4) } as CSSProperties}>
+      <div className={`task-grid cols-${Math.min(p.tarefas.length, 4)}`}>
         {p.tarefas.map(tarefa => {
           const ag = e.agentes[tarefa.agenteId];
           const nascido = !!ag && ag.criadoEm <= agora;
           const st = ag ? estadoAgente(e, ag.id, agora) : null;
           return (
-            <article key={tarefa.id} className={`task-card ${nascido ? 'is-visible' : ''}`} style={{ '--agent': nascido && ag ? ag.cor : '#8b93a3' } as CSSProperties}>
+            <article key={tarefa.id} className={`task-card ${nascido ? 'is-visible' : ''}`} style={{ '--agent': nascido && ag ? ag.cor : 'var(--text-2)' } as CSSProperties}>
               <div className="task-title">
                 {nascido && ag
                   ? <SoraOrb size={30} color={ag.cor} movimento={ag.tipoMovimento} glow={false} decorative seed={tarefa.ordem}
@@ -146,7 +146,7 @@ export default function SoraChat() {
       itens.push({ t, key: `h-${x.id}`, node: (
         <div className="handoff-banner" style={{ '--agent': de.cor } as CSSProperties}>
           <strong>{de.nome}</strong> {h.texto.replace(/^Enviou/, 'enviou').replace(para ? ` para ${para.nome}` : '', '')} <span aria-hidden="true">→</span>
-          {para && <b style={{ color: para.cor }}>{para.nome}</b>}
+          {para && <b className="handoff-target" style={{ '--agent': para.cor } as CSSProperties}>{para.nome}</b>}
         </div>
       ) });
     });
@@ -156,7 +156,7 @@ export default function SoraChat() {
       const ags = p.agenteIds.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a);
       itens.push({ t: fimOriginal + 1, key: 'entregas', node: (
         <section className="deliveries" aria-label="Entregas">
-          <div className="delivery-grid" style={{ '--cols': Math.min(ags.length, 3) } as CSSProperties}>
+          <div className={`delivery-grid cols-${Math.min(ags.length, 3)}`}>
             {ags.map(a => p.entregas[a.id] && <EntregaCard key={a.id} entrega={p.entregas[a.id]} agente={a} />)}
           </div>
           <div className="review-row">

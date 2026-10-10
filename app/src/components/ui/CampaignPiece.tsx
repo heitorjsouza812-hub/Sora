@@ -27,8 +27,8 @@ export interface PecaProps {
 export function PecaCampanha({ indice, imagem, cor, marca = '', compacta = false, gerando = false, className = '' }: PecaProps) {
   const c = COMPOSICOES[indice % COMPOSICOES.length];
   return (
-    <div className={`campaign-piece campaign-piece-${c.classe} ${imagem ? '' : 'campaign-piece-generated'} ${gerando ? 'is-generating' : ''} ${className}`}
-      style={{ '--piece-color': cor, '--i': indice } as CSSProperties} role="img" aria-label={`Peça ${indice + 1}: ${c.titulo}`}>
+    <div className={`campaign-piece campaign-piece-${c.classe} campaign-piece-index-${indice % COMPOSICOES.length} ${imagem ? '' : 'campaign-piece-generated'} ${gerando ? 'is-generating' : ''} ${className}`}
+      style={{ '--agent': cor } as CSSProperties} role="img" aria-label={`Peça ${indice + 1}: ${c.titulo}`}>
       {imagem && <img src={imagem} alt="" />}
       <span className="campaign-piece-shade" />
       {!compacta && (

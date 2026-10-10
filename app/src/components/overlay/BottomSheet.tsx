@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDialogA11y } from './useDialogA11y';
 import './overlay.css';
@@ -24,6 +24,9 @@ export function BottomSheet({
   const titleId = useId();
   const descriptionId = useId();
   useDialogA11y(open, onClose, sheetRef);
+  useEffect(() => {
+    sheetRef.current?.style.setProperty('--sheet-drag', `${drag}px`);
+  }, [drag]);
 
   if (!open || typeof document === 'undefined') return null;
 
@@ -62,7 +65,6 @@ export function BottomSheet({
       <section
         ref={sheetRef}
         className={`sora-sheet ${className}`}
-        style={{ '--sheet-drag': `${drag}px` } as CSSProperties}
         data-dragging={dragging}
         role="dialog"
         aria-modal="true"

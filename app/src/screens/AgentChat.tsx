@@ -98,7 +98,7 @@ export default function AgentChat() {
         const proj = x.projetoId ? e.projetos.find(p => p.id === x.projetoId) : undefined;
         const ent = proj?.entregas[a.id];
         itens.push({ t: fim, key: `e-${x.id}`, node: <>
-          <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="done" glow={false} decorative seed={4} /><p><strong style={{ color: a.cor }}>{a.nome}</strong>&nbsp; Pronto! {ent ? `${ent.titulo}: ${ent.resumo}.` : ''}</p></div>
+          <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="done" glow={false} decorative seed={4} /><p><strong className="agent-color">{a.nome}</strong>&nbsp; Pronto! {ent ? `${ent.titulo}: ${ent.resumo}.` : ''}</p></div>
           {ent && <div className="agent-delivery"><EntregaCard entrega={ent} agente={a} /></div>}
         </> });
       }
@@ -107,7 +107,7 @@ export default function AgentChat() {
       t: m.criadoEm, key: m.id,
       node: m.autor === 'usuario' ? <div className="user-message">{m.texto}</div>
         : m.autor === 'sora' ? <div className="assistant-row"><SoraOrb size={34} color={e.sora.cor} state="coordinating" glow={false} decorative seed={72} /><p><strong>{e.sora.nome}</strong>&nbsp; {m.texto}</p></div>
-          : <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="idle" glow={false} decorative seed={5} /><p><strong style={{ color: a.cor }}>{a.nome}</strong>&nbsp; {m.texto}</p></div>,
+          : <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="idle" glow={false} decorative seed={5} /><p><strong className="agent-color">{a.nome}</strong>&nbsp; {m.texto}</p></div>,
     }));
   }
   itens.sort((x, y) => x.t - y.t);

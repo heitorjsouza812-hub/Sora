@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import './overlay.css';
 
@@ -21,7 +21,6 @@ export function Popover({
 }: PopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useLayoutEffect(() => {
@@ -38,7 +37,9 @@ export function Popover({
       const preferredTop = side === 'top' ? a.top - p.height - gap : a.bottom + gap;
       const fallbackTop = side === 'top' ? a.bottom + gap : a.top - p.height - gap;
       const top = preferredTop >= 12 && preferredTop + p.height <= window.innerHeight - 12 ? preferredTop : Math.max(12, fallbackTop);
-      setPosition({ top, left });
+      popover.style.top = `${top}px`;
+      popover.style.left = `${left}px`;
+      popover.style.width = `${width}px`;
     };
     const frame = window.requestAnimationFrame(update);
     window.addEventListener('resize', update);
@@ -79,7 +80,6 @@ export function Popover({
       className={`sora-popover ${className}`}
       role={role}
       aria-label={ariaLabel}
-      style={{ top: position.top, left: position.left, '--popover-width': `${width}px` } as CSSProperties}
     >
       {children}
     </div>,

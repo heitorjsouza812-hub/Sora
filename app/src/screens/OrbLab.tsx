@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, typ
 import { SoraOrb, SoraThinking, type OrbState } from '../components/mascot';
 import { OrbRenderer } from '../components/mascot/orbEngine';
 import type { Movimento } from '../types';
+import './orb-lab.css';
 
 const ESTADOS: { id: OrbState; nome: string; desc: string }[] = [
   { id: 'arriving', nome: 'Chegando', desc: 'pontos se juntam, olhos abrem' },
@@ -23,22 +24,8 @@ const AGENTES: { nome: string; cor: string; movimento: Movimento; verbo: string 
 
 const TAMANHOS = [20, 28, 40, 64, 96, 160, 240, 320];
 
-const s = {
-  page: { minHeight: '100dvh', background: 'var(--bg, #050608)', color: 'var(--text, #F2F5FB)', fontFamily: 'var(--font)', padding: '40px clamp(16px, 4vw, 56px) 80px', boxSizing: 'border-box' },
-  h1: { fontSize: 28, fontWeight: 600, margin: '0 0 6px' },
-  sub: { color: 'var(--text-2, #8B93A3)', margin: '0 0 36px', fontSize: 15 },
-  h2: { fontSize: 13, fontWeight: 600, letterSpacing: '0.08em', color: 'var(--text-3, #6B7280)', textTransform: 'uppercase', margin: '48px 0 16px' },
-  card: { background: 'var(--panel, #0F1115)', border: '1px solid var(--line, rgba(255,255,255,.08))', borderRadius: 'var(--r-lg, 18px)', padding: 20 },
-  grid: (min: number) => ({ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${min}px, 1fr))`, gap: 16 }),
-  small: { color: 'var(--text-2, #8B93A3)', fontSize: 13 },
-  btn: (on: boolean) => ({
-    border: '1px solid var(--line, rgba(255,255,255,.08))', borderRadius: 999, padding: '8px 14px', cursor: 'pointer',
-    fontSize: 13, fontFamily: 'inherit', background: on ? '#EEF2FA' : 'var(--panel-2, #14161B)', color: on ? '#0B0D12' : 'var(--text, #F2F5FB)',
-  }),
-} satisfies Record<string, CSSProperties | ((...a: never[]) => CSSProperties)>;
-
 function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
-  return <section><h2 style={s.h2}>{titulo}</h2>{children}</section>;
+  return <section><h2 className="orb-lab-section-title">{titulo}</h2>{children}</section>;
 }
 
 function useFps() {
@@ -85,10 +72,10 @@ function OrbSolo({ q }: { q: URLSearchParams }) {
     r.renderAt(Number(t), rot);
   }, [size, color, state, movimento, glow, t, rot]);
   return (
-    <div style={{ minHeight: '100dvh', background: '#050608', display: 'grid', placeItems: 'center' }}>
+    <div className="orb-lab-solo">
       {t === null
         ? <SoraOrb size={size} state={state} color={color} movimento={movimento} glow={glow} />
-        : <canvas ref={ref} data-solo style={{ width: size, height: size }} />}
+        : <canvas ref={ref} data-solo width={size} height={size} />}
     </div>
   );
 }
@@ -115,14 +102,14 @@ function OrbLabFull() {
   };
 
   return (
-    <div style={s.page}>
-      <h1 style={s.h1}>Laboratório do mascote</h1>
-      <p style={s.sub}>Todos os estados, cores de agente e tamanhos da Sora. {fps} fps</p>
+    <div className="orb-lab-page">
+      <h1>Laboratório do mascote</h1>
+      <p className="orb-lab-subtitle">Todos os estados, cores de agente e tamanhos da Sora. {fps} fps</p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(260px, 340px)', gap: 20, alignItems: 'start' }}>
+      <div className="orb-lab-hero">
         <div
           ref={palco}
-          style={{ ...s.card, display: 'grid', placeItems: 'center', minHeight: 420 }}
+          className="orb-lab-card orb-lab-stage"
           onPointerMove={mover}
           onPointerLeave={() => setLook(null)}
         >
@@ -137,17 +124,17 @@ function OrbLabFull() {
             title={A.nome}
             onArrived={() => setEstado(e => (e === 'arriving' ? 'idle' : e))}
           />
-          <p style={{ ...s.small, marginTop: 8 }}>
+          <p className="orb-lab-small orb-lab-stage-caption">
             {ESTADOS.find(e => e.id === estado)?.desc} · mova o mouse para o olhar seguir
           </p>
         </div>
 
-        <div style={{ ...s.card, display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div className="orb-lab-card orb-lab-controls">
           <div>
-            <div style={{ ...s.small, marginBottom: 8 }}>Estado</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div className="orb-lab-small orb-lab-label">Estado</div>
+            <div className="orb-lab-actions">
               {ESTADOS.map(e => (
-                <button key={e.id} style={s.btn(estado === e.id)}
+                <button key={e.id} className={`orb-lab-button ${estado === e.id ? 'is-active' : ''}`}
                   onClick={() => { setEstado(e.id); if (e.id === 'arriving') setChegada(c => c + 1); }}>
                   {e.nome}
                 </button>
@@ -155,83 +142,83 @@ function OrbLabFull() {
             </div>
           </div>
           <div>
-            <div style={{ ...s.small, marginBottom: 8 }}>Agente (cor + movimento)</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div className="orb-lab-small orb-lab-label">Agente (cor + movimento)</div>
+            <div className="orb-lab-actions">
               {AGENTES.map((a, i) => (
-                <button key={a.nome} style={{ ...s.btn(agente === i), color: agente === i ? '#0B0D12' : a.cor }} onClick={() => setAgente(i)}>
+                <button key={a.nome} className={`orb-lab-button ${agente === i ? 'is-active' : ''}`} style={{ '--agent-color': a.cor } as CSSProperties} onClick={() => setAgente(i)}>
                   {a.nome} · {a.movimento}
                 </button>
               ))}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button style={s.btn(false)} onClick={() => setPulso(p => p + 1)}>Disparar pulso</button>
-            <button style={s.btn(estresse)} onClick={() => setEstresse(v => !v)}>Teste de carga (60 orbs)</button>
+          <div className="orb-lab-actions">
+            <button className="orb-lab-button" onClick={() => setPulso(p => p + 1)}>Disparar pulso</button>
+            <button className={`orb-lab-button ${estresse ? 'is-active' : ''}`} onClick={() => setEstresse(v => !v)}>Teste de carga (60 orbs)</button>
           </div>
           <SoraThinking />
         </div>
       </div>
 
       <Secao titulo="Estados">
-        <div style={s.grid(150)}>
+        <div className="orb-lab-grid orb-lab-grid-states">
           {ESTADOS.map((e, i) => (
-            <div key={e.id} style={{ ...s.card, display: 'grid', justifyItems: 'center', gap: 8, padding: 14 }}>
+            <div key={e.id} className="orb-lab-card orb-lab-item orb-lab-state-card">
               <SoraOrb size={120} state={e.id} seed={i + 1} movimento="gira" />
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{e.nome}</div>
-              <div style={{ ...s.small, textAlign: 'center' }}>{e.desc}</div>
+              <div className="orb-lab-item-title">{e.nome}</div>
+              <div className="orb-lab-small orb-lab-centered">{e.desc}</div>
             </div>
           ))}
         </div>
       </Secao>
 
       <Secao titulo="Pensando (thinking orb) — 28, 72 e 240 px">
-        <div style={{ ...s.card, display: 'flex', alignItems: 'flex-end', gap: 36, flexWrap: 'wrap' }}>
+        <div className="orb-lab-card orb-lab-orb-row orb-lab-thinking-row">
           {[28, 72, 240].map((t, i) => (
-            <div key={t} style={{ display: 'grid', justifyItems: 'center', gap: 6 }}>
+            <div key={t} className="orb-lab-orb-item">
               <SoraOrb size={t} state="thinking" seed={i + 31} />
-              <span style={s.small}>{t}px</span>
+              <span className="orb-lab-small">{t}px</span>
             </div>
           ))}
           {AGENTES.slice(1).map((a, i) => (
-            <div key={a.nome} style={{ display: 'grid', justifyItems: 'center', gap: 6 }}>
+            <div key={a.nome} className="orb-lab-orb-item">
               <SoraOrb size={72} state="thinking" color={a.cor} seed={i + 41} title={a.nome} />
-              <span style={{ ...s.small, color: a.cor }}>{a.nome}</span>
+              <span className="orb-lab-small orb-lab-agent-color" style={{ '--agent-color': a.cor } as CSSProperties}>{a.nome}</span>
             </div>
           ))}
         </div>
       </Secao>
 
       <Secao titulo="Agentes trabalhando">
-        <div style={s.grid(200)}>
+        <div className="orb-lab-grid orb-lab-grid-agents">
           {AGENTES.map((a, i) => (
-            <div key={a.nome} style={{ ...s.card, display: 'grid', justifyItems: 'center', gap: 8 }}>
+            <div key={a.nome} className="orb-lab-card orb-lab-item">
               <SoraOrb size={150} color={a.cor} state={i === 0 ? 'coordinating' : 'working'} movimento={a.movimento} seed={i * 3 + 2} title={a.nome} />
-              <div style={{ fontWeight: 600, color: a.cor }}>{a.nome}</div>
-              <div style={s.small}>{a.verbo} · {a.movimento}</div>
+              <div className="orb-lab-item-title orb-lab-agent-color" style={{ '--agent-color': a.cor } as CSSProperties}>{a.nome}</div>
+              <div className="orb-lab-small">{a.verbo} · {a.movimento}</div>
             </div>
           ))}
         </div>
       </Secao>
 
       <Secao titulo="Tamanhos (20 px a 320 px)">
-        <div style={{ ...s.card, display: 'flex', alignItems: 'flex-end', gap: 24, flexWrap: 'wrap' }}>
+        <div className="orb-lab-card orb-lab-orb-row">
           {TAMANHOS.map((t, i) => (
-            <div key={t} style={{ display: 'grid', justifyItems: 'center', gap: 6 }}>
+            <div key={t} className="orb-lab-orb-item">
               <SoraOrb size={t} seed={i + 11} state={estado === 'arriving' ? 'idle' : estado} color={A.cor} movimento={A.movimento} />
-              <span style={s.small}>{t}px</span>
+              <span className="orb-lab-small">{t}px</span>
             </div>
           ))}
         </div>
       </Secao>
 
       <Secao titulo="Barra lateral (avatares)">
-        <div style={{ ...s.card, maxWidth: 300, display: 'grid', gap: 4, padding: 10 }}>
+        <div className="orb-lab-card orb-lab-sidebar">
           {AGENTES.map((a, i) => (
-            <div key={a.nome} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 12, background: i === 0 ? 'var(--panel-2, #14161B)' : 'transparent' }}>
+            <div key={a.nome} className={`orb-lab-sidebar-row ${i === 0 ? 'is-current' : ''}`}>
               <SoraOrb size={36} color={a.cor} state={i === 0 ? 'coordinating' : 'working'} movimento={a.movimento} seed={i + 21} />
               <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{a.nome}</div>
-                <div style={{ fontSize: 12, color: a.cor }}>{i === 0 ? 'Coordenando 3 agentes' : a.verbo}</div>
+                <div className="orb-lab-sidebar-name">{a.nome}</div>
+                <div className="orb-lab-sidebar-status orb-lab-agent-color" style={{ '--agent-color': a.cor } as CSSProperties}>{i === 0 ? 'Coordenando 3 agentes' : a.verbo}</div>
               </div>
             </div>
           ))}
@@ -239,8 +226,8 @@ function OrbLabFull() {
       </Secao>
 
       <Secao titulo="SoraThinking (inline no chat)">
-        <div style={{ ...s.card, display: 'grid', gap: 18, maxWidth: 560 }}>
-          <div style={{ alignSelf: 'end', justifySelf: 'end', background: 'var(--panel-2, #14161B)', borderRadius: 16, padding: '10px 14px', fontSize: 14 }}>
+        <div className="orb-lab-card orb-lab-inline-demo">
+          <div className="orb-lab-user-message">
             Crie uma campanha para lançar minha cafeteria.
           </div>
           <SoraThinking />
@@ -249,11 +236,11 @@ function OrbLabFull() {
           <SoraThinking label="Escrevendo legendas…" size={22} color="#46E8A8" />
           <SoraThinking label="Montando o plano…" size={40} />
         </div>
-        <div style={{ ...s.card, display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 16 }}>
-          <div style={{ ...s.card, background: 'var(--panel-2, #14161B)', flex: '1 1 240px', display: 'grid', placeItems: 'center', minHeight: 220 }}>
+        <div className="orb-lab-card orb-lab-placeholder-row">
+          <div className="orb-lab-card orb-lab-placeholder">
             <SoraThinking layout="stacked" size={72} label="Preparando a equipe…" />
           </div>
-          <div style={{ ...s.card, background: 'var(--panel-2, #14161B)', flex: '1 1 240px', display: 'grid', placeItems: 'center', minHeight: 220 }}>
+          <div className="orb-lab-card orb-lab-placeholder">
             <SoraThinking layout="stacked" size={96} color="#AC80FF" label="Luna está criando as peças…" />
           </div>
         </div>
@@ -261,7 +248,7 @@ function OrbLabFull() {
 
       {estresse && (
         <Secao titulo="Teste de carga">
-          <div style={{ ...s.card, display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <div className="orb-lab-card orb-lab-load-test">
             {Array.from({ length: 60 }, (_, i) => {
               const a = AGENTES[i % 4];
               return <SoraOrb key={i} size={i % 10 === 0 ? 64 : 28} color={a.cor} state={i % 5 === 0 ? 'thinking' : 'working'} movimento={a.movimento} seed={i} />;

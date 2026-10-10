@@ -58,10 +58,9 @@ export function SoraOrb({
       role={decorative ? undefined : 'img'}
       aria-label={decorative ? undefined : title}
       aria-hidden={decorative || undefined}
-      className={className}
+      className={`sora-orb${className ? ` ${className}` : ''}`}
       width={Math.round(size)}
       height={Math.round(size)}
-      style={{ width: size, height: size, display: 'block', flex: 'none' }}
     />
   );
 }

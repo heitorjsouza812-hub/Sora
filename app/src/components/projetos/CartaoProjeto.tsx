@@ -22,7 +22,7 @@ export function CartaoProjeto({ e, projeto, agora }: { e: EstadoProjetos; projet
   const equipeTexto = equipe.length ? equipe.map((a) => a.nome).join(', ') : 'Equipe ainda sendo criada';
 
   return (
-    <article className={`pj-card ${trabalhando ? 'is-busy' : ''}`} style={{ '--fase': fase.cor } as CSSProperties}>
+    <article className={`pj-card pj-fase-${ep.fase} ${trabalhando ? 'is-busy' : ''}`}>
       <header className="pj-card-top">
         <span className="pj-fase" role="status"><i aria-hidden="true" />{fase.rotulo}</span>
         <MenuItemAcoes alvo={{ tipo: 'projeto', id: projeto.id }} nome={projeto.titulo}
@@ -49,10 +49,8 @@ export function CartaoProjeto({ e, projeto, agora }: { e: EstadoProjetos; projet
         </div>
         <time className="pj-data" dateTime={new Date(projeto.criadoEm).toISOString()}>{tempoRelativo(projeto.criadoEm, agora)}</time>
       </div>
-      <div className="pj-progresso" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progresso}
-        aria-label={`Progresso de ${projeto.titulo}`} aria-valuetext={`${progresso}%, ${fase.rotulo.toLowerCase()}`}>
-        <span style={{ width: `${progresso}%` }} />
-      </div>
+      <progress className="pj-progresso" max={100} value={progresso}
+        aria-label={`Progresso de ${projeto.titulo}`} aria-valuetext={`${progresso}%, ${fase.rotulo.toLowerCase()}`} />
     </article>
   );
 }

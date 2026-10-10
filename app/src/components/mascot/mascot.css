@@ -1,7 +1,13 @@
-/* Estilos do mascote (Prisma). Shimmer igual ao shimmerText da demo: #5f6672 → #f1f4f9 → #5f6672. */
+/* Estilos do mascote (Prisma). Shimmer igual ao shimmerText da demo: var(--text-3) → var(--text-1) → var(--text-3). */
+.sora-orb {
+  display: block;
+  flex: none;
+}
+
 .sora-thinking {
   display: inline-flex;
   align-items: center;
+  font-size: var(--fs-14);
   gap: 0.55em;
   font-family: var(--font, "Inter", system-ui, sans-serif);
   font-weight: 500;
@@ -17,8 +23,8 @@
 }
 
 .sora-shimmer {
-  color: #8b93a3;
-  background: linear-gradient(90deg, #5f6672 0%, #5f6672 35%, #f1f4f9 50%, #5f6672 65%, #5f6672 100%);
+  color: var(--text-2);
+  background: linear-gradient(90deg, var(--text-3) 0%, var(--text-3) 35%, var(--text-1) 50%, var(--text-3) 65%, var(--text-3) 100%);
   background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -38,3 +44,4 @@
     -webkit-text-fill-color: currentColor;
   }
 }
+
