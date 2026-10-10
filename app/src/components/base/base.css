@@ -1,0 +1,127 @@
+/* Componentes base (Brisa · item 30). Só tokens de styles/tokens.css (nomes combinados com o Forja). */
+.b-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Button / IconButton ---------- */
+.b-btn {
+  --b-alt: 40px; --b-px: var(--sp-4); --b-fs: var(--fs-14); --b-gap: var(--sp-2);
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--b-gap);
+  height: var(--b-alt); padding: 0 var(--b-px); box-sizing: border-box;
+  font: inherit; font-size: var(--b-fs); font-weight: 600; line-height: 1; white-space: nowrap; text-decoration: none;
+  border: 1px solid transparent; border-radius: var(--r-pill); cursor: pointer;
+  transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast), opacity var(--dur-fast);
+}
+.b-btn--P { --b-alt: 32px; --b-px: var(--sp-3); --b-fs: var(--fs-13); --b-gap: var(--sp-1); }
+.b-btn--G { --b-alt: 48px; --b-px: var(--sp-6); --b-fs: var(--fs-16); --b-gap: var(--sp-3); }
+.b-btn--bloco { width: 100%; }
+.b-btn__icone { display: inline-grid; place-items: center; flex: none; }
+.b-btn__icone svg { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.b-btn__icone canvas { display: block; }
+.b-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.b-btn:disabled, .b-btn[aria-disabled="true"] { cursor: default; opacity: .4; pointer-events: none; }
+.b-btn[aria-busy="true"] { opacity: .85; }
+
+.b-btn--primario { color: var(--btn-text); background: var(--btn-bg); }
+.b-btn--primario:hover { background: color-mix(in srgb, var(--action), white 60%); }
+.b-btn--secundario { color: var(--text-1); background: var(--surface-2); border-color: var(--line-strong); }
+.b-btn--secundario:hover { background: var(--surface-3); border-color: var(--white-a22); }
+.b-btn--fantasma { color: var(--text-2); background: transparent; }
+.b-btn--fantasma:hover { color: var(--text-1); background: var(--white-a06); }
+.b-btn--perigo { color: var(--text-1); background: var(--danger-strong); }
+.b-btn--perigo:hover { background: color-mix(in srgb, var(--danger-strong), var(--text-1) 10%); }
+
+.b-icon { width: var(--b-alt); padding: 0; }
+
+/* ---------- Campos ---------- */
+.b-campo { display: grid; gap: var(--sp-2); min-width: 0; }
+.b-campo__rotulo { color: var(--text-2); font-size: var(--fs-13); font-weight: 600; }
+.b-campo__ajuda { margin: 0; color: var(--text-3); font-size: var(--fs-12); line-height: 1.45; }
+.b-campo__erro { margin: 0; color: var(--danger); font-size: var(--fs-12); line-height: 1.45; }
+.b-input {
+  width: 100%; min-height: 40px; padding: 0 var(--sp-3); box-sizing: border-box;
+  color: var(--text-1); background: var(--surface-2);
+  border: 1px solid var(--line-strong); border-radius: var(--r-10);
+  font: inherit; font-size: var(--fs-14); outline: 0; transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.b-input::placeholder { color: var(--text-3); opacity: 1; }
+.b-input:hover { border-color: var(--white-a22); }
+.b-input:focus-visible, .b-input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px var(--focus-soft); }
+.b-input:disabled { opacity: .5; cursor: not-allowed; }
+.b-campo.is-erro .b-input { border-color: var(--danger); }
+.b-campo.is-erro .b-input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger), transparent 80%); }
+.b-textarea { min-height: 96px; padding: var(--sp-3); line-height: 1.5; resize: vertical; }
+.b-select { position: relative; display: block; }
+.b-select select { padding-right: var(--sp-10); appearance: none; cursor: pointer; }
+.b-select select option { color: var(--text-1); background: var(--surface-2); }
+.b-select svg { position: absolute; top: 50%; right: var(--sp-3); width: 18px; height: 18px; translate: 0 -50%; fill: none; stroke: var(--text-2); stroke-width: 1.8; stroke-linecap: round; pointer-events: none; }
+
+/* ---------- Badge ---------- */
+.b-badge {
+  --b-cor: var(--text-2);
+  display: inline-flex; align-items: center; gap: var(--sp-1); height: 24px; padding: 0 var(--sp-2);
+  color: var(--b-cor); background: color-mix(in srgb, var(--b-cor), transparent 88%);
+  border: 1px solid color-mix(in srgb, var(--b-cor), transparent 78%); border-radius: var(--r-pill);
+  font-size: var(--fs-12); font-weight: 600; white-space: nowrap;
+}
+.b-badge--sucesso { --b-cor: var(--ok); }
+.b-badge--aviso { --b-cor: var(--warn); }
+.b-badge--erro { --b-cor: var(--danger); }
+.b-badge--agente { --b-cor: var(--agent-color, var(--sora)); }
+.b-badge__ponto { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.b-badge__ponto.is-pulso { animation: b-pulso 1.6s ease-in-out infinite; }
+
+/* ---------- Card ---------- */
+.b-card { min-width: 0; box-sizing: border-box; color: var(--text-1); border: 1px solid var(--line); border-radius: var(--r-16); }
+.b-card--s1 { background: var(--surface-1); }
+.b-card--s2 { background: var(--surface-2); box-shadow: var(--shadow-sm); }
+.b-card--s3 { background: var(--surface-3); border-color: var(--line-strong); box-shadow: var(--shadow-md); }
+.b-card--P { padding: var(--sp-3); }
+.b-card--M { padding: var(--sp-5); }
+.b-card--G { padding: var(--sp-8); }
+.b-card.is-interativo { transition: border-color var(--dur-base), transform var(--dur-base); }
+.b-card.is-interativo:hover, .b-card.is-interativo:focus-within { border-color: var(--line-strong); }
+
+/* ---------- Tooltip ---------- */
+.b-tooltip {
+  position: fixed; z-index: 120; max-width: 260px; padding: var(--sp-2) var(--sp-3);
+  color: var(--text-1); background: var(--surface-3);
+  border: 1px solid var(--line-strong); border-radius: var(--r-6);
+  box-shadow: var(--shadow-md); font-size: var(--fs-12); line-height: 1.4;
+  animation: b-surgir var(--dur-fast) ease-out;
+}
+
+/* ---------- Toast ---------- */
+.b-toasts { position: fixed; z-index: 130; right: var(--sp-6); bottom: var(--sp-6); width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.b-toasts ol { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.b-toasts div + div ol:not(:empty) { margin-top: var(--sp-2); }
+.b-toast {
+  --b-cor: var(--text-2);
+  display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+  color: var(--text-1); background: var(--surface-3);
+  border: 1px solid var(--line-strong); border-radius: var(--r-16);
+  box-shadow: var(--shadow-lg); pointer-events: auto;
+  animation: b-subir var(--dur-base) ease-out;
+}
+.b-toast--sucesso { --b-cor: var(--ok); }
+.b-toast--aviso { --b-cor: var(--warn); }
+.b-toast--erro { --b-cor: var(--danger); }
+.b-toast__ponto { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--b-cor); box-shadow: 0 0 10px var(--b-cor); }
+.b-toast__texto { display: grid; flex: 1; gap: 2px; min-width: 0; padding-top: 1px; }
+.b-toast__texto strong { font-size: var(--fs-14); font-weight: 600; line-height: 1.35; }
+.b-toast__texto span { color: var(--text-2); font-size: var(--fs-13); line-height: 1.4; }
+.b-toast__acao { flex: none; height: 28px; padding: 0 var(--sp-3); color: var(--btn-text); background: var(--btn-bg); border: 0; border-radius: var(--r-pill); font: inherit; font-size: var(--fs-13); font-weight: 600; cursor: pointer; }
+.b-toast__fechar { display: grid; flex: none; place-items: center; width: 28px; height: 28px; padding: 0; color: var(--text-3); background: transparent; border: 0; border-radius: var(--r-6); cursor: pointer; }
+.b-toast__fechar:hover { color: var(--text-1); background: var(--white-a07); }
+.b-toast__fechar svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.b-toast__acao:focus-visible, .b-toast__fechar:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+@keyframes b-pulso { 50% { opacity: .35; } }
+@keyframes b-surgir { from { opacity: 0; } }
+@keyframes b-subir { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) {
+  .b-btn, .b-input, .b-card, .b-tooltip, .b-toast, .b-badge__ponto.is-pulso { transition: none; animation: none; }
+}
+@media (max-width: 767px) {
+  .b-toasts { right: 16px; left: 16px; bottom: 16px; width: auto; }
+}
+.b-tooltip-alvo { display: inline-flex; }
+
