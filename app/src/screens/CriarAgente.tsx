@@ -5,14 +5,29 @@ import '../components/builder/builder.css';
 import { Modal } from '../components/overlay';
 import { PALETA_AGENTES } from '../data/planejador';
 import { definirModeloAgente, useModelos } from '../state/modelos';
-import { removerAgente, salvarAgente, useProjetos } from '../state/projetos';
+import { removerAgente, salvarAgente, todosAgentes, useProjetos } from '../state/projetos';
 
-function novoRascunho(): RascunhoConstrutor { return { nome: '', funcao: 'Assistente', descricaoCurta: '', cor: PALETA_AGENTES[0], tipoMovimento: 'gira', ferramentas: [], instrucoes: '', frasesIniciais: [], tom: 'objetivo', modelo: null }; }
+function hslParaHex(h: number, s: number, l: number) {
+  const a = s * Math.min(l, 1 - l);
+  const canal = (n: number) => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return `#${[canal(0), canal(8), canal(4)].map(x => Math.round(255 * x).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
+function primeiraCorDisponivel(cores: string[]) {
+  const usadas = new Set(cores.map(c => c.toUpperCase()));
+  const livre = PALETA_AGENTES.find(c => !usadas.has(c.toUpperCase()));
+  if (livre) return livre;
+  for (let i = 0; i < 360; i++) {
+    const candidata = hslParaHex((cores.length * 137.508 + i * 29) % 360, .72, .65);
+    if (candidata !== '#E2ECFF' && !usadas.has(candidata)) return candidata;
+  }
+  return '#56A8FF';
+}
+function novoRascunho(cor: string): RascunhoConstrutor { return { nome: '', funcao: 'Assistente', descricaoCurta: '', cor, tipoMovimento: 'gira', ferramentas: [], instrucoes: '', frasesIniciais: [], tom: 'objetivo', modelo: null }; }
 export default function CriarAgente() {
   const { id } = useParams<{ id: string }>();
   const projetos = useProjetos(); const modelos = useModelos(); const navigate = useNavigate();
   const existente = id ? projetos.agentes[id] : undefined;
-  const inicial = useMemo<RascunhoConstrutor>(() => existente ? { id: existente.id, nome: existente.nome, funcao: existente.funcao, descricaoCurta: existente.funcao, cor: existente.cor, tipoMovimento: existente.tipoMovimento, ferramentas: [...existente.ferramentas], instrucoes: existente.instrucoes, frasesIniciais: [], tom: 'objetivo', modelo: modelos.modelosPorAgente[existente.id] ?? null } : novoRascunho(), [existente, modelos.modelosPorAgente]);
+  const inicial = useMemo<RascunhoConstrutor>(() => existente ? { id: existente.id, nome: existente.nome, funcao: existente.funcao, descricaoCurta: existente.funcao, cor: existente.cor, tipoMovimento: existente.tipoMovimento, ferramentas: [...existente.ferramentas], instrucoes: existente.instrucoes, frasesIniciais: [], tom: 'objetivo', modelo: modelos.modelosPorAgente[existente.id] ?? null } : novoRascunho(primeiraCorDisponivel(todosAgentes(projetos, Number.POSITIVE_INFINITY).map(a => a.cor))), [existente, modelos.modelosPorAgente, projetos]);
   const [rascunho, setRascunho] = useState(inicial); const [aba, setAba] = useState<AbaConstrutor>('criar'); const [salvo, setSalvo] = useState(!!existente); const [confirmar, setConfirmar] = useState(false);
   const alterar = (valor: RascunhoConstrutor) => { setRascunho(valor); setSalvo(false); };
   const salvar = () => { if (!rascunho.nome.trim() || !rascunho.funcao.trim()) return; const agente = salvarAgente({ id: rascunho.id, nome: rascunho.nome, funcao: rascunho.funcao, cor: rascunho.cor, tipoMovimento: rascunho.tipoMovimento, ferramentas: rascunho.ferramentas, instrucoes: rascunho.instrucoes }); if (rascunho.modelo) definirModeloAgente(agente.id, rascunho.modelo.provedor, rascunho.modelo.modelo); setRascunho(x => ({ ...x, id: agente.id })); setSalvo(true); if (!id) navigate(`/agentes/${agente.id}/editar`, { replace: true }); };

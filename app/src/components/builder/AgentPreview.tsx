@@ -4,7 +4,9 @@ import type { RascunhoConstrutor } from './types';
 
 interface TesteMsg { id: string; autor: 'agente' | 'usuario'; texto: string }
 export function AgentPreview({ agente }: { agente: RascunhoConstrutor }) {
-  const boasVindas = `Oi! Sou ${agente.nome || 'seu novo agente'}. ${agente.descricaoCurta || `Posso ajudar com ${agente.funcao.toLowerCase()}.`}`;
+  const funcaoEspecifica = agente.funcao.trim() && agente.funcao.trim().toLowerCase() !== 'assistente';
+  const apresentacao = agente.descricaoCurta || (funcaoEspecifica ? `Posso ajudar com ${agente.funcao.toLowerCase()}.` : 'Estou pronto para ajudar no que você precisar.');
+  const boasVindas = `Oi! Sou ${agente.nome || 'seu novo agente'}. ${apresentacao}`;
   const [mensagens, setMensagens] = useState<TesteMsg[]>([{ id: 'welcome', autor: 'agente', texto: boasVindas }]);
   const [texto, setTexto] = useState('');
   const [pensando, setPensando] = useState(false);

@@ -32,13 +32,13 @@ export interface DefinicaoProvedor {
 }
 
 export const PROVEDORES_MODELO: DefinicaoProvedor[] = [
-  { id: 'openai', nome: 'OpenAI', descricao: 'GPT para conversa, raciocínio e multimodal.', modelos: ['gpt-5', 'gpt-5-mini', 'gpt-4.1'], prefixo: 'sk-', pedeChave: true, iconePlugin: 'ChatGPT' },
-  { id: 'anthropic', nome: 'Anthropic', descricao: 'Família Claude para escrita e raciocínio.', modelos: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-3-5'], prefixo: 'sk-ant-', pedeChave: true, iconePlugin: 'Anthropic' },
-  { id: 'gemini', nome: 'Google Gemini', descricao: 'Modelos multimodais do Google.', modelos: ['gemini-2.5-pro', 'gemini-2.5-flash'], prefixo: 'AIza', pedeChave: true, iconePlugin: 'Gemini' },
-  { id: 'xai', nome: 'xAI (Grok)', descricao: 'Modelos Grok da xAI.', modelos: ['grok-4', 'grok-3-mini'], prefixo: 'xai-', pedeChave: true },
-  { id: 'deepseek', nome: 'DeepSeek', descricao: 'Modelos de raciocínio e código.', modelos: ['deepseek-chat', 'deepseek-reasoner'], prefixo: 'sk-', pedeChave: true },
+  { id: 'openai', nome: 'OpenAI', descricao: 'GPT para conversa, raciocínio e multimodal.', modelos: ['gpt-5.5', 'gpt-5.5-mini', 'gpt-5.5-codex'], prefixo: 'sk-', pedeChave: true, iconePlugin: 'ChatGPT' },
+  { id: 'anthropic', nome: 'Anthropic', descricao: 'Família Claude para escrita e raciocínio.', modelos: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'], prefixo: 'sk-ant-', pedeChave: true, iconePlugin: 'Anthropic' },
+  { id: 'gemini', nome: 'Google Gemini', descricao: 'Modelos multimodais do Google.', modelos: ['gemini-3.1-pro', 'gemini-3.8-flash'], prefixo: 'AIza', pedeChave: true, iconePlugin: 'Gemini' },
+  { id: 'xai', nome: 'xAI (Grok)', descricao: 'Modelos Grok da xAI.', modelos: ['grok-4.7', 'grok-4.7-fast'], prefixo: 'xai-', pedeChave: true },
+  { id: 'deepseek', nome: 'DeepSeek', descricao: 'Modelos de raciocínio e código.', modelos: ['deepseek-v4-pro', 'deepseek-v4'], prefixo: 'sk-', pedeChave: true },
   { id: 'mistral', nome: 'Mistral', descricao: 'Modelos abertos e comerciais da Mistral AI.', modelos: ['mistral-large-latest', 'codestral-latest'], pedeChave: true },
-  { id: 'openrouter', nome: 'OpenRouter', descricao: 'Acesso unificado a modelos de vários provedores.', modelos: ['openrouter/auto', 'anthropic/claude-sonnet-4', 'google/gemini-2.5-pro'], prefixo: 'sk-or-', pedeChave: true },
+  { id: 'openrouter', nome: 'OpenRouter', descricao: 'Acesso unificado a modelos de vários provedores.', modelos: ['openrouter/auto', 'anthropic/claude-sonnet-5.5', 'google/gemini-3.1-pro'], prefixo: 'sk-or-', pedeChave: true },
   { id: 'ollama', nome: 'Ollama', descricao: 'Modelos executados localmente neste dispositivo.', modelos: ['llama3.3', 'qwen3', 'gemma3'], pedeChave: false, pedeUrl: true },
   { id: 'openai-compativel', nome: 'Compatível com OpenAI', descricao: 'Servidor próprio com API no formato OpenAI.', modelos: ['modelo-personalizado'], pedeChave: true, pedeUrl: true, pedeNome: true },
 ];
