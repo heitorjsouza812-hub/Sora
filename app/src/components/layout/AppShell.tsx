@@ -1,7 +1,9 @@
 // Moldura do app: barra lateral + cabeçalho (identidade + ações). A navegação é pela barra lateral.
 import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { estadoAgente, useAgora, useProjetos } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
+import { Button, IconButton } from '../base';
 import { BottomSheet } from '../overlay';
 import { GestaoHost } from '../gestao';
 import { EditorAgenteHost, MenuAgente } from '../builder';
@@ -13,7 +15,7 @@ export interface AppShellProps {
   /** quem aparece no cabeçalho: a Sora (padrão), um agente, ou só um título */
   agenteId?: string;
   titulo?: string;
-  /** ações à direita (padrão: Compartilhar) */
+  /** ações à direita da tela (o Compartilhar aparece sozinho em chat, projeto e revisão) */
   acoes?: ReactNode;
   /** itens extras do menu "…" da identidade */
   menuItens?: { rotulo: string; onClick: () => void }[];
@@ -22,19 +24,22 @@ export interface AppShellProps {
 function Compartilhar() {
   const [ok, setOk] = useState(false);
   return (
-    <button type="button" className="share-button" onClick={() => {
+    <Button variante="secundario" tamanho="P" className="share-button" onClick={() => {
       void navigator.clipboard?.writeText(window.location.href).catch(() => {});
       setOk(true); window.setTimeout(() => setOk(false), 1800);
     }}>
       <span aria-live="polite">{ok ? 'Link copiado' : 'Compartilhar'}</span>
-    </button>
+    </Button>
   );
 }
+
+/** "Compartilhar" só faz sentido onde há algo para mostrar: chats, projetos e revisões. */
+const compartilhavel = (caminho: string) => /^\/(projeto|chat|revisao)\//.test(caminho);
 
 function Identidade({ agenteId, titulo, menuItens }: Pick<AppShellProps, 'agenteId' | 'titulo' | 'menuItens'>) {
   const e = useProjetos();
   const agora = useAgora();
-  if (titulo) return <div className="topbar-identity topbar-title"><strong>{titulo}</strong></div>;
+  if (titulo) return <div className="topbar-identity topbar-title"><span className="mobile-brand" aria-hidden="true"><SoraOrb size={22} color={e.sora.cor} glow={false} decorative seed={3} /></span><strong>{titulo}</strong></div>;
   const ag = agenteId ? e.agentes[agenteId] : undefined;
   if (ag) {
     const st = estadoAgente(e, ag.id, agora);
@@ -59,16 +64,17 @@ function Identidade({ agenteId, titulo, menuItens }: Pick<AppShellProps, 'agente
 
 export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppShellProps) {
   const [menu, setMenu] = useState(false);
+  const { pathname } = useLocation();
+  const share = compartilhavel(pathname);
   return (
     <div className="app-shell">
       <Sidebar />
       <section className="app-stage">
         <header className="topbar">
-          <button type="button" className="mobile-menu-button" aria-label="Abrir menu" aria-expanded={menu} onClick={() => setMenu(true)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
-          </button>
+          <IconButton className="mobile-menu-button" variante="secundario" aria-label="Abrir menu" aria-expanded={menu} onClick={() => setMenu(true)}
+            icone={<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>} />
           <Identidade agenteId={agenteId} titulo={titulo} menuItens={menuItens} />
-          <div className="topbar-actions">{acoes ?? <Compartilhar />}</div>
+          {(acoes || share) && <div className="topbar-actions">{acoes}{share && <Compartilhar />}</div>}
         </header>
         {children}
       </section>

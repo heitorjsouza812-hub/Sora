@@ -1,15 +1,20 @@
 // Chat da Sora: pedido → Sora pensa → plano → agentes nascem um a um → trabalho com handoffs
 // → entregas → Revisar. Funciona para QUALQUER equipe gerada pelo planejador.
+// À direita, UM painel com abas Equipe | Trabalho | Entregas (recolhível; BottomSheet no celular).
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Button } from '../components/base';
 import { AppShell } from '../components/layout/AppShell';
+import { PainelLateral } from '../components/layout/PainelLateral';
+import { usePainelLateral } from '../components/layout/usePainelLateral';
 import { statusDaSora } from '../components/layout/useSoraStatus';
 import { SoraOrb, SoraThinking } from '../components/mascot';
 import { MenuAgente } from '../components/builder';
 import { EntregaCard } from '../components/ui/EntregaCard';
+import { ActivityIcon, BoxIcon, TeamIcon } from '../components/ui/Icons';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { TrabalhoDock } from '../components/work';
+import { PainelTrabalho } from '../components/work';
 import { duracaoRoteiro } from '../data/planejador';
 import {
   abrirProjeto, agentesDoProjeto, conversarComSora, estadoAgente, estadoProjeto, mensagensDa, projetoAtivo, useAgora, useProjetos,
@@ -18,37 +23,44 @@ import {
 
 type Item = { t: number; key: string; node: ReactNode };
 
-function LinhaSora({ children, orb }: { children: ReactNode; orb?: ReactNode }) {
-  return <div className="assistant-row">{orb ?? <SoraOrbMini />}{children}</div>;
-}
-function SoraOrbMini() {
+function LinhaSora({ children }: { children: ReactNode }) {
   const { sora } = useProjetos();
-  return <SoraOrb size={34} color={sora.cor} state="coordinating" glow={false} decorative seed={31} />;
+  return <div className="assistant-row"><SoraOrb size={30} color={sora.cor} state="coordinating" glow={false} decorative seed={31} />{children}</div>;
 }
 
+/** Card Plano: as tarefas surgem uma a uma, junto com o nascimento dos agentes; a próxima aparece como esqueleto. */
 function CartaoPlano({ e, p, agora }: { e: EstadoProjetos; p: ProjetoSora; agora: number }) {
+  const nascidos = p.tarefas.filter(t => { const ag = e.agentes[t.agenteId]; return !!ag && ag.criadoEm <= agora; }).length;
+  const visiveis = Math.min(p.tarefas.length, nascidos + 1);
+  const definindo = nascidos < p.tarefas.length;
   return (
-    <section className="plan-card card" aria-label={`Plano: ${p.titulo}`}>
+    <section className="plan-card card" aria-label={`Plano: ${p.titulo}`} aria-busy={definindo || undefined}>
       <div className="section-heading">
-        <div><h2>Plano · {p.titulo}</h2><p>{p.tarefas.map(t => t.titulo).join(' → ')}</p></div>
+        <div><h2>Plano · {p.titulo}</h2><p>{p.tarefas.slice(0, nascidos).map(t => t.titulo).join(' → ')}{definindo ? `${nascidos ? ' → ' : ''}definindo tarefas…` : ''}</p></div>
         <span>{p.tarefas.length} tarefas</span>
       </div>
       <div className={`task-grid cols-${Math.min(p.tarefas.length, 4)}`}>
-        {p.tarefas.map(tarefa => {
+        {p.tarefas.slice(0, visiveis).map((tarefa, i) => {
           const ag = e.agentes[tarefa.agenteId];
-          const nascido = !!ag && ag.criadoEm <= agora;
-          const st = ag ? estadoAgente(e, ag.id, agora) : null;
+          if (i >= nascidos || !ag) {
+            return (
+              <article key={tarefa.id} className="task-card task-skeleton" aria-label="Definindo a próxima tarefa">
+                <div className="task-title"><span className="sk sk-orb" /><span className="sk-lines"><span className="sk sk-line" /><small className="sk-label">Definindo agente…</small></span></div>
+                <span className="sk sk-bar" />
+                <div className="task-status"><span className="sk sk-line is-tiny" /></div>
+              </article>
+            );
+          }
+          const st = estadoAgente(e, ag.id, agora);
           return (
-            <article key={tarefa.id} className={`task-card ${nascido ? 'is-visible' : ''}`} style={{ '--agent': nascido && ag ? ag.cor : 'var(--text-2)' } as CSSProperties}>
+            <article key={tarefa.id} className="task-card is-visible" style={{ '--agent': ag.cor } as CSSProperties}>
               <div className="task-title">
-                {nascido && ag
-                  ? <SoraOrb size={30} color={ag.cor} movimento={ag.tipoMovimento} glow={false} decorative seed={tarefa.ordem}
-                    state={st?.status === 'trabalhando' ? 'working' : st?.status === 'concluido' ? 'done' : agora - ag.criadoEm < 1800 ? 'arriving' : 'idle'} />
-                  : <span className="avatar-placeholder" aria-hidden="true" />}
-                <span><strong>{tarefa.titulo}</strong><small>{nascido && ag ? ag.nome : 'Definindo agente…'}</small></span>
+                <SoraOrb size={28} color={ag.cor} movimento={ag.tipoMovimento} glow={false} decorative seed={tarefa.ordem}
+                  state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : agora - ag.criadoEm < 1800 ? 'arriving' : 'idle'} />
+                <span><strong>{tarefa.titulo}</strong><small>{ag.nome}</small></span>
               </div>
-              <ProgressBar value={nascido ? st?.progresso ?? 0 : 0} color={ag?.cor ?? '#8b93a3'} label={ag?.nome ?? tarefa.titulo} status={st?.rotulo} />
-              <div className="task-status"><span>{nascido ? st?.rotulo : 'Aguardando'}</span><b>{nascido ? `${st?.progresso ?? 0}%` : ''}</b></div>
+              <ProgressBar value={st.progresso} color={ag.cor} label={ag.nome} status={st.rotulo} />
+              <div className="task-status"><span>{st.rotulo}</span><b>{st.progresso}%</b></div>
             </article>
           );
         })}
@@ -57,19 +69,18 @@ function CartaoPlano({ e, p, agora }: { e: EstadoProjetos; p: ProjetoSora; agora
   );
 }
 
-function PainelEquipe({ e, p, agora, onVerTrabalho }: { e: EstadoProjetos; p: ProjetoSora | null; agora: number; onVerTrabalho: (id: string) => void }) {
+function AbaEquipe({ e, p, agora, onVerTrabalho }: { e: EstadoProjetos; p: ProjetoSora; agora: number; onVerTrabalho: (id: string) => void }) {
   const navigate = useNavigate();
   const ags = agentesDoProjeto(e, p, agora);
-  const ep = p ? estadoProjeto(e, p, agora) : null;
+  const ep = estadoProjeto(e, p, agora);
   const resumoVivo = ags.map(a => `${a.nome}: ${estadoAgente(e, a.id, agora).rotulo}`).join('. ');
   return (
-    <aside className="team-panel card" aria-label="Equipe">
-      <div className="section-heading"><div><h2>{p ? 'Equipe' : 'Sua equipe'}</h2><p>{p ? (ags.length ? `${e.sora.nome} coordena ${ags.length} ${ags.length === 1 ? 'agente' : 'agentes'}` : `${e.sora.nome} vai montar a equipe`) : 'Faça um pedido para a Sora montar a equipe.'}</p></div></div>
+    <div className="team-tab">
+      <p className="side-sub">{ags.length ? `${e.sora.nome} coordena ${ags.length} ${ags.length === 1 ? 'agente' : 'agentes'}` : `${e.sora.nome} vai montar a equipe`}</p>
       <p className="sr-only" role="status" aria-live="polite">{resumoVivo}</p>
       {!ags.length && (
         <div className="team-placeholder">
-          {p ? <SoraThinking size={56} layout="stacked" color={e.sora.cor} label={ep?.fase === 'pensando' ? 'Analisando o pedido…' : 'Montando a equipe…'} />
-            : <><SoraOrb size={72} color={e.sora.cor} state="idle" glow={false} decorative /><span>Aguardando um pedido</span></>}
+          <SoraThinking size={48} layout="stacked" color={e.sora.cor} label={ep.fase === 'pensando' ? 'Analisando o pedido…' : 'Montando a equipe…'} />
         </div>
       )}
       {ags.map(a => {
@@ -77,7 +88,7 @@ function PainelEquipe({ e, p, agora, onVerTrabalho }: { e: EstadoProjetos; p: Pr
         return (
           <article className={`team-agent ${agora - a.criadoEm < 1800 ? 'is-born' : ''}`} key={a.id} style={{ '--agent': a.cor } as CSSProperties}>
             <button type="button" className="team-agent-orb" onClick={() => navigate(`/chat/${a.id}`)} aria-label={`Abrir chat de ${a.nome}`}>
-              <SoraOrb size={58} color={a.cor} movimento={a.tipoMovimento} glow={false} decorative seed={a.nome.length + 50}
+              <SoraOrb size={44} color={a.cor} movimento={a.tipoMovimento} glow={false} decorative seed={a.nome.length + 50}
                 state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : agora - a.criadoEm < 1800 ? 'arriving' : 'idle'} />
             </button>
             <div><strong>{a.nome}</strong><small>{a.funcao}</small></div>
@@ -88,13 +99,35 @@ function PainelEquipe({ e, p, agora, onVerTrabalho }: { e: EstadoProjetos; p: Pr
             <ProgressBar value={st.progresso} color={a.cor} label={a.nome} status={st.rotulo} />
             <div className="team-agent-foot">
               <span className={`agent-status status-${st.status}`}>{st.rotulo}</span>
-              <button type="button" className="see-work" onClick={() => onVerTrabalho(a.id)}>Ver trabalho</button>
+              <Button variante="fantasma" tamanho="P" className="see-work" onClick={() => onVerTrabalho(a.id)}>Ver trabalho</Button>
             </div>
           </article>
         );
       })}
-      {(ep?.fase === 'pronto' || ep?.fase === 'aprovado') && <div className="all-done" role="status">✓ <strong>Todas as tarefas concluídas</strong></div>}
-    </aside>
+      {(ep.fase === 'pronto' || ep.fase === 'aprovado') && <div className="all-done" role="status">✓ <strong>Todas as tarefas concluídas</strong></div>}
+    </div>
+  );
+}
+
+function AbaEntregas({ e, p, agora }: { e: EstadoProjetos; p: ProjetoSora; agora: number }) {
+  const navigate = useNavigate();
+  const ags = p.agenteIds.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a);
+  const prontos = ags.filter(a => estadoAgente(e, a.id, agora).status === 'concluido' && p.entregas[a.id]);
+  const fase = estadoProjeto(e, p, agora).fase;
+  return (
+    <div className="deliveries-tab">
+      {!prontos.length && <p className="side-empty">As entregas aparecem aqui conforme cada agente termina.</p>}
+      {prontos.map(a => <EntregaCard key={a.id} entrega={p.entregas[a.id]} agente={a} />)}
+      {ags.filter(a => !prontos.includes(a)).map(a => (
+        <div key={a.id} className="delivery-pending" style={{ '--agent': a.cor } as CSSProperties}><i aria-hidden="true" />{a.nome} · {estadoAgente(e, a.id, agora).rotulo}</div>
+      ))}
+      {(fase === 'pronto' || fase === 'aprovado') && (
+        <div className="review-row">
+          <Button variante="primario" onClick={() => navigate(`/revisao/${p.id}`)}>{p.aprovadoEm ? 'Ver revisão' : 'Revisar'}</Button>
+          <p>Nada é publicado sem a sua aprovação.</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -109,12 +142,14 @@ export default function SoraChat() {
   const comEquipe = !!p && (p.agenteIds.length > 0 || p.tarefas.length > 0);
   useEffect(() => { if (p && e.projetoAtivoId !== p.id) abrirProjeto(p.id); }, [p, e.projetoAtivoId]);
   const [texto, setTexto] = useState('');
-  const [trabalhoAberto, setTrabalhoAberto] = useState(false);
+  const painel = usePainelLateral('sora.painel.projeto', 'equipe');
+  const [folha, setFolha] = useState(false);
   const [agenteTrabalho, setAgenteTrabalho] = useState<string | undefined>();
   const scrollRef = useRef<HTMLDivElement>(null);
   const colado = useRef(true);
 
-  const verTrabalho = (id: string) => { setAgenteTrabalho(id); setTrabalhoAberto(true); };
+  /** "Ver trabalho": abre a aba Trabalho já com o agente selecionado (e o painel/folha, se fechados). */
+  const verTrabalho = (id: string) => { setAgenteTrabalho(id); painel.setAba('trabalho'); painel.setRecolhido(false); setFolha(true); };
   const processando = !!ep && ['pensando', 'planejando', 'coordenando'].includes(ep.fase);
 
   // ---- linha do tempo da conversa (mensagens + cartões), ordenada pelo tempo ----
@@ -123,14 +158,12 @@ export default function SoraChat() {
     const msgs = mensagensDa(e, `sora:${p.id}`, agora);
     msgs.forEach(m => itens.push({
       t: m.criadoEm, key: m.id,
-      node: m.autor === 'usuario'
-        ? <div className="user-message">{m.texto}</div>
-        : <LinhaSora><p>{m.texto}</p></LinhaSora>,
+      node: m.autor === 'usuario' ? <div className="user-message">{m.texto}</div> : <LinhaSora><p>{m.texto}</p></LinhaSora>,
     }));
     if (ep.fase === 'pensando') {
       itens.push({ t: agora, key: 'pensando', node: (
         <div className="assistant-row thinking-row">
-          <SoraThinking size={64} color={e.sora.cor} label={comEquipe ? 'Analisando o pedido…' : `${e.sora.nome} está pensando…`} />
+          <SoraThinking size={56} color={e.sora.cor} label={comEquipe ? 'Analisando o pedido…' : `${e.sora.nome} está pensando…`} />
         </div>
       ) });
     }
@@ -160,7 +193,7 @@ export default function SoraChat() {
             {ags.map(a => p.entregas[a.id] && <EntregaCard key={a.id} entrega={p.entregas[a.id]} agente={a} />)}
           </div>
           <div className="review-row">
-            <button type="button" className="primary-button" onClick={() => navigate(`/revisao/${p.id}`)}>{p.aprovadoEm ? 'Ver revisão' : 'Revisar'}</button>
+            <Button variante="primario" onClick={() => navigate(`/revisao/${p.id}`)}>{p.aprovadoEm ? 'Ver revisão' : 'Revisar'}</Button>
             <p>Nada é publicado sem a sua aprovação.</p>
           </div>
         </section>
@@ -191,9 +224,12 @@ export default function SoraChat() {
   if (projetoId && !p) return <Navigate to="/" replace />;
   if (!projetoId && p) return <Navigate to={`/projeto/${p.id}`} replace />;
 
+  const trabalhando = p ? agentesDoProjeto(e, p, agora).find(a => estadoAgente(e, a.id, agora).status === 'trabalhando') : undefined;
+  const nEntregas = p ? p.agenteIds.filter(id => e.agentes[id] && estadoAgente(e, id, agora).status === 'concluido' && p.entregas[id]).length : 0;
+
   return (
     <AppShell>
-      <div className={`workspace-grid sora-workspace ${trabalhoAberto ? 'work-open' : ''} ${comEquipe ? '' : 'is-solo'}`}>
+      <div className={`workspace-grid sora-workspace ${comEquipe ? '' : 'is-solo'} ${painel.recolhido ? 'panel-collapsed' : ''}`}>
         <main className="conversation" aria-label={`Conversa com ${e.sora.nome}`}>
           <div className="conversation-scroll" ref={scrollRef} aria-live="polite" aria-relevant="additions"
             onScroll={ev => { const el = ev.currentTarget; colado.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
@@ -211,8 +247,22 @@ export default function SoraChat() {
           </div>
           <p className="sr-only" role="status">{p ? `${e.sora.nome}: ${sora.rotulo}` : ''}</p>
         </main>
-        {comEquipe && <PainelEquipe e={e} p={p} agora={agora} onVerTrabalho={verTrabalho} />}
-        {p && comEquipe && <TrabalhoDock agenteIds={p.agenteIds} agenteId={agenteTrabalho} onAgenteChange={setAgenteTrabalho} aberta={trabalhoAberto} onAlternar={setTrabalhoAberto} />}
+        {p && comEquipe && (
+          <PainelLateral
+            rotulo="Painel do projeto"
+            aba={painel.aba} onAba={painel.setAba} recolhido={painel.recolhido} onRecolher={painel.setRecolhido}
+            folhaAberta={folha} onFolha={setFolha}
+            resumo={trabalhando ? `${trabalhando.nome} · ${trabalhando.verbo}…` : sora.rotulo}
+            abas={[
+              { id: 'equipe', rotulo: 'Equipe', icone: <TeamIcon />, contagem: agentesDoProjeto(e, p, agora).length,
+                conteudo: <AbaEquipe e={e} p={p} agora={agora} onVerTrabalho={verTrabalho} /> },
+              { id: 'trabalho', rotulo: 'Trabalho', icone: <ActivityIcon />, vivo: trabalhando?.cor ?? null,
+                conteudo: <PainelTrabalho agenteIds={p.agenteIds} agenteId={agenteTrabalho} onAgenteChange={setAgenteTrabalho} className="side-work" /> },
+              { id: 'entregas', rotulo: 'Entregas', icone: <BoxIcon />, contagem: nEntregas,
+                conteudo: <AbaEntregas e={e} p={p} agora={agora} /> },
+            ]}
+          />
+        )}
       </div>
     </AppShell>
   );

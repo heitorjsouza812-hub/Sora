@@ -7,23 +7,28 @@ import { usuario } from '../../data/mock';
 import { estadoAgente, estadoProjeto, novoChat, useAgora, useProjetos, type AgenteSora, type ProjetoSora } from '../../state/projetos';
 import { pedirApagar, pedirRenomear } from '../gestao';
 import { AccountMenu } from '../review/AccountMenu';
+import { Tooltip } from '../base';
 import { MenuAgente } from '../builder';
 import { AgentsIcon, FolderIcon, GearIcon, GridIcon, PlusIcon } from '../ui/Icons';
+import { statusCurto } from './useSoraStatus';
 
 function LinhaAgente({ a, onNavegar, filho }: { a: AgenteSora; onNavegar?: () => void; filho?: boolean }) {
   const e = useProjetos();
   const agora = useAgora();
   const navigate = useNavigate();
   const st = estadoAgente(e, a.id, agora);
+  const sc = statusCurto(e, a.id, agora);
   const recemNascido = agora - a.criadoEm < 2000;
   return (
     <div className={`chat-row ${recemNascido ? 'is-born' : ''} ${filho ? 'is-child' : ''}`} style={{ '--agent': a.cor } as CSSProperties}>
-      <NavLink to={`/chat/${a.id}`} onClick={onNavegar}>
-        <SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} glow={false} decorative seed={a.nome.length}
-          state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : recemNascido ? 'arriving' : 'idle'} />
-        <span><strong>{a.nome}</strong><small className={st.status === 'trabalhando' ? 'agent-color' : ''}>{st.rotulo || a.funcao}</small></span>
-        <i className={`status-dot status-${st.status}`} role="img" aria-label={st.status === 'concluido' ? 'Concluído' : st.status === 'trabalhando' ? 'Trabalhando' : 'Aguardando'} />
-      </NavLink>
+      <Tooltip conteudo={<><strong>{a.nome}</strong> · {sc.completo}</>} lado="baixo">
+        <NavLink to={`/chat/${a.id}`} onClick={onNavegar}>
+          <SoraOrb size={28} color={a.cor} movimento={a.tipoMovimento} glow={false} decorative seed={a.nome.length}
+            state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : recemNascido ? 'arriving' : 'idle'} />
+          <span><strong>{a.nome}</strong><small className={st.status === 'trabalhando' ? 'agent-color' : ''}>{sc.curto}</small></span>
+          <i className={`status-dot status-${st.status}`} role="img" aria-label={st.status === 'concluido' ? 'Concluído' : st.status === 'trabalhando' ? 'Trabalhando' : 'Aguardando'} />
+        </NavLink>
+      </Tooltip>
       <MenuAgente agenteId={a.id} nome={a.nome} className="chat-row-menu" itens={[
         { rotulo: 'Ver trabalho', onClick: () => { navigate(`/chat/${a.id}?painel=trabalho`); onNavegar?.(); } },
         { rotulo: 'Renomear', onClick: () => pedirRenomear({ tipo: 'agente', id: a.id }) },
@@ -41,9 +46,9 @@ function LinhaChat({ p, onNavegar }: { p: ProjetoSora; onNavegar?: () => void })
   return (
     <div className="chat-row chat-row-sora">
       <NavLink to={`/projeto/${p.id}`} onClick={onNavegar}>
-        <SoraOrb size={34} color={e.sora.cor} glow={false} decorative seed={p.titulo.length}
+        <SoraOrb size={28} color={e.sora.cor} glow={false} decorative seed={p.titulo.length}
           state={pensando ? 'thinking' : fase === 'coordenando' || fase === 'planejando' ? 'coordinating' : 'idle'} />
-        <span><strong>{p.titulo}</strong><small>{pensando ? `${e.sora.nome} está pensando…` : p.agenteIds.length ? `${e.sora.nome} · ${p.agenteIds.length} agentes` : e.sora.nome}</small></span>
+        <span><strong>{p.titulo}</strong><small>{pensando ? 'Pensando…' : p.agenteIds.length ? `${p.agenteIds.length} agentes` : e.sora.nome}</small></span>
         {pensando && <i className="status-dot status-thinking" aria-hidden="true" />}
       </NavLink>
       <MenuAgente agenteId={p.id} nome={p.titulo} className="chat-row-menu" semEditar itens={[
@@ -90,12 +95,15 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
 }
 
 export function Sidebar() {
+  const { sora } = useProjetos();
   const [conta, setConta] = useState(false);
   const contaRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   return (
     <aside className="sidebar" aria-label="Navegação principal">
-      <NavLink to="/" className="brand" aria-label="Sora, novo chat" onClick={() => novoChat()}>Sora</NavLink>
+      <NavLink to="/" className="brand" aria-label="Sora, novo chat" onClick={() => novoChat()}>
+        <SoraOrb size={22} color={sora.cor} glow={false} decorative seed={3} /><span>Sora</span>
+      </NavLink>
       <div className="sidebar-scroll"><Navegacao /></div>
       <div className="account">
         <span className="account-avatar" aria-hidden="true">{usuario.empresa.slice(0, 1)}</span>

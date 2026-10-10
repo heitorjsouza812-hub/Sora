@@ -499,3 +499,122 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 .app-stage .cfg-page { height: calc(100dvh - var(--topbar)); min-height: 0; overflow-y: auto; }
 .app-stage .cfg-shell { min-height: 100%; }
 
+/* ================= Parte B · Etapa 2 (Prisma): densidade, painel único, esqueleto, status curtos, logo, toque ================= */
+
+/* 37 · logotipo: mini mascote ao lado de "Sora" */
+.brand { display: flex; align-items: center; gap: var(--sp-2); }
+.brand canvas { flex: none; }
+.mobile-brand { display: none; }
+
+/* 36 · linhas da barra lateral com Tooltip (o invólucro do tooltip não pode quebrar o layout) */
+.chat-row > .b-tooltip-alvo { display: block; }
+.chat-row > .b-tooltip-alvo > a { padding-right: var(--sp-10); }
+.chat-row.is-born > .b-tooltip-alvo > a { animation: agent-glow 1.4s ease-out both; }
+.chat-row small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* 33 · densidade: um degrau menor, SÓ no desktop */
+@media (min-width: 768px) {
+  :root { --sidebar: 260px; --topbar: 60px; }
+  .sidebar { padding: var(--sp-5) var(--sp-3) var(--sp-3); }
+  .brand { margin: 0 var(--sp-3) var(--sp-5); font-size: var(--fs-20); }
+  .main-nav { gap: 2px; }
+  .main-nav a { height: 38px; gap: var(--sp-3); padding: 0 var(--sp-3); font-size: var(--fs-14); }
+  .main-nav svg { width: 18px; }
+  .chats-label { margin: var(--sp-5) var(--sp-3) var(--sp-2); }
+  .chat-nav { gap: 2px; }
+  .chat-nav a { height: 48px; gap: var(--sp-3); padding: var(--sp-1) var(--sp-3); }
+  .chat-nav strong { font-size: var(--fs-14); }
+  .chat-nav small { font-size: var(--fs-12); }
+  .chat-row.is-child > .b-tooltip-alvo > a { height: 44px; }
+  .account { padding: var(--sp-3) var(--sp-2) 0; }
+  .account-avatar { width: 32px; height: 32px; font-size: var(--fs-13); }
+  .topbar { padding: 0 var(--sp-6); }
+  .topbar-identity strong { font-size: var(--fs-14); }
+  .topbar-title strong { font-size: var(--fs-16); }
+  .workspace-grid { gap: var(--sp-4); padding: var(--sp-4); }
+  .conversation-scroll { padding: var(--sp-3) var(--sp-4) var(--sp-10); }
+  .user-message { margin: var(--sp-3) 0 var(--sp-7) auto; padding: var(--sp-3) var(--sp-4); font-size: var(--fs-16); }
+  .assistant-row { margin: var(--sp-4) 0; font-size: var(--fs-16); }
+  .assistant-row p { margin: 4px 0; line-height: 1.55; }
+  .thinking-row { min-height: 64px; font-size: var(--fs-14); }
+  .section-heading h2 { font-size: var(--fs-14); }
+  .section-heading p { font-size: var(--fs-12); }
+  .plan-card { padding: var(--sp-4) var(--sp-5); }
+  .handoff-banner { margin: var(--sp-3) 0; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-13); }
+  .home-screen h1 { margin: var(--sp-2) 0 var(--sp-8); font-size: clamp(var(--fs-24), 2.6vw, 40px); }
+  .hero-orb { height: 240px; }
+  .composer { min-height: 112px; padding: var(--sp-4) var(--sp-5) var(--sp-3); }
+  .composer textarea { font-size: var(--fs-16); }
+  .composer-compact { min-height: 52px; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-5); }
+  .composer-compact textarea { font-size: var(--fs-14); }
+  .agent-profile h1 { font-size: var(--fs-24); }
+}
+@media (min-width: 768px) and (max-width: 1180px) { :root { --sidebar: 240px; } }
+@media (min-width: 768px) and (max-width: 900px) { :root { --sidebar: 216px; } }
+
+/* 34 · painel direito ÚNICO (Equipe | Trabalho | Entregas), recolhível */
+.sora-workspace { grid-template-columns: minmax(0, 1fr) 360px; }
+.sora-workspace.panel-collapsed { grid-template-columns: minmax(0, 1fr) 52px; }
+.sora-workspace.is-solo { grid-template-columns: minmax(0, 900px); justify-content: center; }
+.side-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: var(--sp-3); overflow: hidden; }
+.side-head { display: flex; align-items: center; gap: var(--sp-2); }
+.side-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; padding: 3px; background: var(--surface-3); border-radius: var(--r-10); }
+.side-tabs button { flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 var(--sp-2); color: var(--text-2); background: none; border: 0; border-radius: var(--r-6); font-size: var(--fs-13); font-weight: 600; white-space: nowrap; }
+.side-tabs button:hover { color: var(--text-1); }
+.side-tabs button.is-on { color: var(--text-1); background: var(--white-a10); }
+.side-tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.side-count { min-width: 18px; height: 18px; display: inline-grid; place-items: center; padding: 0 5px; color: var(--text-2); background: var(--white-a07); border-radius: var(--r-pill); font-size: var(--fs-12); font-weight: 600; }
+.side-body { flex: 1; min-height: 0; overflow-y: auto; margin: var(--sp-3) calc(-1 * var(--sp-3)) 0; padding: 0 var(--sp-3) var(--sp-4); scrollbar-width: thin; scrollbar-color: var(--white-a10) transparent; }
+.side-sub { margin: 0 0 var(--sp-3); color: var(--text-2); font-size: var(--fs-13); }
+.side-empty { margin: var(--sp-4) 0; color: var(--text-2); font-size: var(--fs-13); line-height: 1.5; }
+.side-body .side-work.wk-panel { height: 100%; padding: 0; background: none; border: 0; border-radius: 0; }
+.side-panel.is-collapsed { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-2) 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16); }
+.side-panel.is-collapsed .b-btn__icone svg { width: 18px; height: 18px; }
+.side-rail-live { color: var(--agent); }
+.team-tab .team-agent { grid-template-columns: 44px 1fr auto; margin-top: var(--sp-3); padding: var(--sp-3); }
+.team-tab .team-agent strong { font-size: var(--fs-14); }
+.team-tab .team-agent-foot .see-work { --b-alt: 28px; }
+.deliveries-tab { display: grid; gap: var(--sp-3); }
+.deliveries-tab .delivery-card { min-height: 0; }
+.delivery-pending { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); color: var(--text-2); background: var(--white-a03); border: 1px dashed var(--line-strong); border-radius: var(--r-10); font-size: var(--fs-13); }
+.delivery-pending i { width: 7px; height: 7px; border-radius: 50%; background: var(--agent); opacity: .7; }
+.deliveries-tab .review-row { margin-top: var(--sp-2); }
+
+/* 35 · esqueleto do card Plano: shimmer visível; as tarefas surgem uma a uma */
+.task-card.task-skeleton { opacity: 1; border: 1px dashed var(--line-strong); background: var(--surface-3); animation: rise .45s ease-out both; }
+.sk { display: block; border-radius: var(--r-6); background: linear-gradient(100deg, var(--white-a07) 25%, var(--white-a22) 45%, var(--white-a07) 65%); background-size: 220% 100%; animation: sk-brilho 1.3s linear infinite; }
+.sk-orb { flex: none; width: 28px; height: 28px; border-radius: 50%; }
+.sk-lines { display: grid; flex: 1; gap: 6px; }
+.sk-line { height: 11px; width: 85%; }
+.sk-line.is-tiny { width: 40%; height: 9px; }
+.sk-bar { height: 5px; border-radius: var(--r-pill); }
+.sk-label { color: var(--text-2); font-size: var(--fs-12); }
+@keyframes sk-brilho { to { background-position: -220% 0; } }
+
+/* 58 · ações do topo: o Compartilhar usa o Button base */
+.topbar-actions .share-button.b-btn { height: var(--b-alt); padding: 0 var(--sp-3); border-radius: var(--r-pill); }
+
+/* 59 · celular: alvos de toque ≥ 44 px */
+@media (max-width: 767px) {
+  .mobile-brand { display: inline-grid; place-items: center; margin-right: var(--sp-1); }
+  .topbar-title { gap: var(--sp-2); }
+  .topbar .b-btn { --b-alt: 44px; }
+  .topbar .mobile-menu-button { width: 44px; height: 44px; border-radius: 50%; }
+  .icon-button, .send-button, .add-button { width: 44px; height: 44px; }
+  .tool-button { height: 44px; }
+  .mobile-nav .main-nav a { height: 48px; }
+  .mobile-nav .chat-nav a { min-height: 56px; height: auto; }
+  .mobile-nav .chat-row-menu { opacity: 1; right: 0; }
+  .mobile-nav .gestao-menu-btn { width: 44px; height: 44px; }
+  .mobile-nav .chat-row:hover .status-dot, .mobile-nav .chat-row:focus-within .status-dot { opacity: 1; }
+  .mobile-nav .status-dot { margin-right: var(--sp-10); }
+  .work-pill { height: 44px; border-radius: var(--r-pill); }
+  .side-sheet .side-tabs { position: sticky; top: 0; z-index: 1; }
+  .side-sheet .side-tabs button { height: 44px; font-size: var(--fs-14); }
+  .side-sheet .side-body { margin: var(--sp-3) 0 0; padding: 0; overflow: visible; }
+  .side-sheet .side-work.wk-panel { min-height: 60dvh; padding: 0; background: none; border: 0; }
+  .team-tab .team-agent-foot .see-work { --b-alt: 44px; }
+  .panel-tabs button { height: 44px; }
+  .suggestions button { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .sk, .chat-row.is-born > .b-tooltip-alvo > a, .task-card.task-skeleton { animation: none; } }

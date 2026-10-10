@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AgentConfigForm, AgentPreview, CreateConversation, type AbaConstrutor, type RascunhoConstrutor } from '../components/builder';
 import '../components/builder/builder.css';
 import { Modal } from '../components/overlay';
+import { modeloAgente } from '../components/projetos/modelos';
 import { PALETA_AGENTES } from '../data/planejador';
 import { definirModeloAgente, useModelos } from '../state/modelos';
 import { removerAgente, salvarAgente, todosAgentes, useProjetos } from '../state/projetos';
@@ -25,9 +26,11 @@ function primeiraCorDisponivel(cores: string[]) {
 function novoRascunho(cor: string): RascunhoConstrutor { return { nome: '', funcao: 'Assistente', descricaoCurta: '', cor, tipoMovimento: 'gira', ferramentas: [], instrucoes: '', frasesIniciais: [], tom: 'objetivo', modelo: null }; }
 export default function CriarAgente() {
   const { id } = useParams<{ id: string }>();
+  const [params] = useSearchParams();
+  const modeloId = params.get('modelo');
   const projetos = useProjetos(); const modelos = useModelos(); const navigate = useNavigate();
   const existente = id ? projetos.agentes[id] : undefined;
-  const inicial = useMemo<RascunhoConstrutor>(() => existente ? { id: existente.id, nome: existente.nome, funcao: existente.funcao, descricaoCurta: existente.funcao, cor: existente.cor, tipoMovimento: existente.tipoMovimento, ferramentas: [...existente.ferramentas], instrucoes: existente.instrucoes, frasesIniciais: [], tom: 'objetivo', modelo: modelos.modelosPorAgente[existente.id] ?? null } : novoRascunho(primeiraCorDisponivel(todosAgentes(projetos, Number.POSITIVE_INFINITY).map(a => a.cor))), [existente, modelos.modelosPorAgente, projetos]);
+  const inicial = useMemo<RascunhoConstrutor>(() => existente ? { id: existente.id, nome: existente.nome, funcao: existente.funcao, descricaoCurta: existente.funcao, cor: existente.cor, tipoMovimento: existente.tipoMovimento, ferramentas: [...existente.ferramentas], instrucoes: existente.instrucoes, frasesIniciais: [], tom: 'objetivo', modelo: modelos.modelosPorAgente[existente.id] ?? null } : { ...novoRascunho(primeiraCorDisponivel(todosAgentes(projetos, Number.POSITIVE_INFINITY).map(a => a.cor))), ...(modeloAgente(modeloId)?.rascunho ?? {}) }, [existente, modelos.modelosPorAgente, projetos, modeloId]);
   const [rascunho, setRascunho] = useState(inicial); const [aba, setAba] = useState<AbaConstrutor>('criar'); const [salvo, setSalvo] = useState(!!existente); const [confirmar, setConfirmar] = useState(false);
   const alterar = (valor: RascunhoConstrutor) => { setRascunho(valor); setSalvo(false); };
   const salvar = () => { if (!rascunho.nome.trim() || !rascunho.funcao.trim()) return; const agente = salvarAgente({ id: rascunho.id, nome: rascunho.nome, funcao: rascunho.funcao, cor: rascunho.cor, tipoMovimento: rascunho.tipoMovimento, ferramentas: rascunho.ferramentas, instrucoes: rascunho.instrucoes }); if (rascunho.modelo) definirModeloAgente(agente.id, rascunho.modelo.provedor, rascunho.modelo.modelo); setRascunho(x => ({ ...x, id: agente.id })); setSalvo(true); if (!id) navigate(`/agentes/${agente.id}/editar`, { replace: true }); };
