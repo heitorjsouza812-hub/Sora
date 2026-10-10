@@ -1,6 +1,7 @@
 // Laboratório do mascote (agente "Prisma") — rota /lab/orb.
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import { SoraOrb, SoraThinking, type OrbState } from '../components/mascot';
+import { OrbRenderer } from '../components/mascot/orbEngine';
 import type { Movimento } from '../types';
 
 const ESTADOS: { id: OrbState; nome: string; desc: string }[] = [
@@ -55,7 +56,37 @@ function useFps() {
   return fps;
 }
 
+// /lab/orb?solo=240&state=thinking&color=%23AC80FF&mov=espiral[&t=10&rot=4.2][&glow=0]
+// Um orb isolado em fundo preto, para QA e comparação lado a lado com a demo.
+// Com `t` (e `rot`) o quadro é determinístico e estático.
+function OrbSolo({ q }: { q: URLSearchParams }) {
+  const size = Number(q.get('solo')) || 240;
+  const state = (q.get('state') || 'idle') as OrbState;
+  const color = q.get('color') || '#E2ECFF';
+  const movimento = (q.get('mov') || 'gira') as Movimento;
+  const glow = q.has('glow') ? q.get('glow') !== '0' : undefined;
+  const t = q.get('t'), rot = Number(q.get('rot') ?? 0);
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (t === null) return;
+    const r = new OrbRenderer(ref.current!, { size, color, state, movimento, lookAt: null, pulseKey: undefined, glow: glow ?? size >= 96, seed: 0 });
+    r.renderAt(Number(t), rot);
+  }, [size, color, state, movimento, glow, t, rot]);
+  return (
+    <div style={{ minHeight: '100vh', background: '#050608', display: 'grid', placeItems: 'center' }}>
+      {t === null
+        ? <SoraOrb size={size} state={state} color={color} movimento={movimento} glow={glow} />
+        : <canvas ref={ref} data-solo style={{ width: size, height: size }} />}
+    </div>
+  );
+}
+
 export default function OrbLab() {
+  const q = new URLSearchParams(window.location.search);
+  return q.has('solo') ? <OrbSolo q={q} /> : <OrbLabFull />;
+}
+
+function OrbLabFull() {
   const [estado, setEstado] = useState<OrbState>('arriving');
   const [agente, setAgente] = useState(0);
   const [pulso, setPulso] = useState(0);
@@ -141,6 +172,23 @@ export default function OrbLab() {
         </div>
       </Secao>
 
+      <Secao titulo="Pensando (thinking orb) — 28, 72 e 240 px">
+        <div style={{ ...s.card, display: 'flex', alignItems: 'flex-end', gap: 36, flexWrap: 'wrap' }}>
+          {[28, 72, 240].map((t, i) => (
+            <div key={t} style={{ display: 'grid', justifyItems: 'center', gap: 6 }}>
+              <SoraOrb size={t} state="thinking" seed={i + 31} />
+              <span style={s.small}>{t}px</span>
+            </div>
+          ))}
+          {AGENTES.slice(1).map((a, i) => (
+            <div key={a.nome} style={{ display: 'grid', justifyItems: 'center', gap: 6 }}>
+              <SoraOrb size={72} state="thinking" color={a.cor} seed={i + 41} title={a.nome} />
+              <span style={{ ...s.small, color: a.cor }}>{a.nome}</span>
+            </div>
+          ))}
+        </div>
+      </Secao>
+
       <Secao titulo="Agentes trabalhando">
         <div style={s.grid(200)}>
           {AGENTES.map((a, i) => (
@@ -188,6 +236,14 @@ export default function OrbLab() {
           <SoraThinking label="Criando as peças…" size={22} color="#AC80FF" />
           <SoraThinking label="Escrevendo legendas…" size={22} color="#46E8A8" />
           <SoraThinking label="Montando o plano…" size={40} />
+        </div>
+        <div style={{ ...s.card, display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 16 }}>
+          <div style={{ ...s.card, background: 'var(--panel-2, #14161B)', flex: '1 1 240px', display: 'grid', placeItems: 'center', minHeight: 220 }}>
+            <SoraThinking layout="stacked" size={72} label="Preparando a equipe…" />
+          </div>
+          <div style={{ ...s.card, background: 'var(--panel-2, #14161B)', flex: '1 1 240px', display: 'grid', placeItems: 'center', minHeight: 220 }}>
+            <SoraThinking layout="stacked" size={96} color="#AC80FF" label="Luna está criando as peças…" />
+          </div>
         </div>
       </Secao>
 

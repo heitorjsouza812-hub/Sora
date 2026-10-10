@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { BorderBeam } from 'border-beam';
 import { VoiceBeam, useMicrophone, type VoiceBeamMotion } from 'voice-glow';
-import { MicIcon, SendIcon } from './Icons';
+import { MicIcon, PlusIcon, SendIcon } from './Icons';
 
 interface Props {
   placeholder: string;
@@ -25,8 +25,16 @@ const processingMotion = (): VoiceBeamMotion => ({
 export function MessageComposer({ placeholder, onSend, initialValue = '', processing = false, compact = false, tools = false, accent, onActivity }: Props) {
   const [value, setValue] = useState(initialValue);
   const [focused, setFocused] = useState(false);
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
   const mic = useMicrophone();
   const active = focused || value.trim().length > 0 || mic.state === 'live';
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)');
+    const update = () => setMobile(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -39,6 +47,7 @@ export function MessageComposer({ placeholder, onSend, initialValue = '', proces
   return (
     <BorderBeam size="md" colorVariant="colorful" strength={0.7} theme="dark" active={active} className="composer-beam">
       <VoiceBeam
+        type={mobile ? 'mobile' : undefined}
         stream={mic.stream}
         motion={processing ? processingMotion : undefined}
         active={mic.state === 'live' || processing}
@@ -67,7 +76,7 @@ export function MessageComposer({ placeholder, onSend, initialValue = '', proces
             }}
           />
           <div className="composer-actions">
-            {tools && <button type="button" className="tool-button">＋ <span>Ferramentas</span></button>}
+            {tools && <><button type="button" className="add-button" aria-label="Adicionar"><PlusIcon /></button><button type="button" className="tool-button">Ferramentas</button></>}
             <span className="composer-spacer" />
             <button
               type="button"

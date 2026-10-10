@@ -67,36 +67,48 @@ interface Grid {
   n: number;
   sh: Uint8Array; th: Float32Array; ph: Float32Array;
   r2: Float32Array; sx: Float32Array; sy: Float32Array; sz: Float32Array;
-  dot: number;  // raio do ponto em unidades de R
-  sats: number; // partículas do "pensando"
+  q: Float32Array; // chave de densidade (drawMainParticles)
+  // pré-calculados por ponto (economizam trigonometria a cada quadro)
+  cth: Float32Array; sth: Float32Array; cph: Float32Array; sph: Float32Array; rim: Float32Array;
 }
-function buildGrid(spec: [number, number][], dot: number, sats: number): Grid {
+function buildGrid(spec: [number, number][]): Grid {
   let n = 0; for (const [m, k] of spec) n += m * k;
   const g: Grid = {
-    n, dot, sats, sh: new Uint8Array(n), th: new Float32Array(n), ph: new Float32Array(n),
+    n, sh: new Uint8Array(n), th: new Float32Array(n), ph: new Float32Array(n), q: new Float32Array(n),
     r2: new Float32Array(n), sx: new Float32Array(n), sy: new Float32Array(n), sz: new Float32Array(n),
+    cth: new Float32Array(n), sth: new Float32Array(n), cph: new Float32Array(n), sph: new Float32Array(n), rim: new Float32Array(n),
   };
   let p = 0;
   spec.forEach(([m, k], sh) => {
     for (let j = 0; j < k; j++) for (let i = 0; i < m; i++) {
       g.sh[p] = sh; g.th[p] = i / m * TAU; g.ph[p] = lerp(0.3, SHELLS[sh].phMax, j / (k - 1));
-      g.r2[p] = rand(p + 999);
+      g.r2[p] = rand(p + 999); g.q[p] = rand(p + 55);
+      g.cth[p] = Math.cos(g.th[p]); g.sth[p] = Math.sin(g.th[p]);
+      g.cph[p] = Math.cos(g.ph[p]); g.sph[p] = Math.sin(g.ph[p]);
+      g.rim[p] = Math.exp(-Math.pow((SHELLS[sh].phMax - g.ph[p]) / 0.12, 2));
       g.sx[p] = (rand(p + 77) - 0.5) * 2.7; g.sy[p] = (rand(p + 177) - 0.5) * 2.7; g.sz[p] = rand(p + 277);
       p++;
     }
   });
   return g;
 }
-// Quantidade de pontos por tamanho (raio R em px CSS). XL ≈ GRID_MAIN, L/M/S = GRID_L/M/S da demo.
-let GRIDS: { xl: Grid; l: Grid; m: Grid; s: Grid } | null = null;
-function gridFor(R: number): Grid {
+// Grades exatamente como na demo. Duas regras de desenho, também da demo:
+//  • Sora principal (cor branca, R ≥ 34): drawMainParticles — GRID_MAIN com descarte por densidade
+//    (R/100)^1,5 e pontos ampliados abaixo de R 100;
+//  • agentes e avatares: drawBodyDots — GRID_L (R>55) / GRID_M (R>22) / GRID_S.
+let GRIDS: { main: Grid; l: Grid; m: Grid; s: Grid } | null = null;
+interface DotRule { grid: Grid; density: number; dot: (s: number) => number }
+function dotRule(R: number, main: boolean): DotRule {
   if (!GRIDS) GRIDS = {
-    xl: buildGrid([[56, 40], [56, 36]], 1.75 / 230 * 1.08, 16),
-    l: buildGrid([[40, 21], [40, 21]], 1.6 / 150, 10),
-    m: buildGrid([[24, 12], [24, 11]], 1.6 / 150 * 1.55, 6),
-    s: buildGrid([[18, 8], [18, 8]], 1.6 / 150 * 1.45, 4),
+    main: buildGrid([[60, 44], [60, 40]]),
+    l: buildGrid([[40, 21], [40, 21]]), m: buildGrid([[28, 14], [28, 13]]), s: buildGrid([[18, 8], [18, 8]]),
   };
-  return R >= 70 ? GRIDS.xl : R > 34 ? GRIDS.l : R > 13 ? GRIDS.m : GRIDS.s;
+  if (main && R >= 34) {
+    const k = 1.75 * R / 230 * (R < 100 ? lerp(2.2, 1, clamp((R - 16) / 84)) : 1);
+    return { grid: GRIDS.main, density: clamp(Math.pow(R / 100, 1.5), 0.1, 1), dot: s => Math.max(0.55, k * s) };
+  }
+  const k = 1.6 * R / 150 * (R < 60 ? 1.45 : 1);
+  return { grid: R > 55 ? GRIDS.l : R > 22 ? GRIDS.m : GRIDS.s, density: 1, dot: s => Math.max(0.55, k * s) };
 }
 
 // Parâmetros contínuos do corpo num quadro (todos suavizados — sem pulos).
@@ -104,29 +116,33 @@ interface Body {
   cx: number; cy: number; R: number; t: number; rot: number; seed: number; bph: number;
   listen: number; pulse: number; wG: number; w0: number; w1: number; w2: number;
   think: number; breath: number;
+  cr: [number, number]; sr: [number, number]; // cos/sen da rotação de cada casca neste quadro
+  r0: number;                                 // respiração deste quadro
 }
 const OUT = { x: 0, y: 0, z: 0, b: 0, a: 0, s: 0 };
 
 // bodyPoint da demo, com os tipos de movimento misturados por peso (transição suave entre eles)
-// + o estado "pensando" (torção em espiral, faixas de luz correndo, respiração em ondas).
-function bodyPoint(sh: number, th: number, ph: number, B: Body, idx: number) {
+// + o estado "pensando" (faixas de luz em hélice e respiração de brilho; a forma não muda).
+function bodyPoint(g: Grid, idx: number, B: Body) {
+  const sh = g.sh[idx], th = g.th[idx], ph = g.ph[idx];
   const S = SHELLS[sh], t = B.t;
-  let r = 1 + 0.014 * B.breath * Math.sin(B.bph + B.seed);
-  r *= 1 + B.listen * 0.055 * Math.sin(ph * 7 - t * 9);
+  let r = B.r0;
+  if (B.listen > 0.001) r *= 1 + B.listen * 0.055 * Math.sin(ph * 7 - t * 9);
   const work = Math.min(1, B.wG + B.w0 + B.w1 + B.w2);
-  let thv = th + B.rot * (sh ? -0.8 : 1);
-  let phv = ph;
-  if (B.w1 > 0) thv += B.w1 * 0.9 * Math.sin(ph * 2.2 + t * 3.2);                   // Luna: espiral
-  if (B.w2 > 0) r *= 1 + B.w2 * 0.07 * Math.sin(th * 5 + t * 6) * Math.sin(ph);       // Nina: ondas
-  if (B.w0 > 0) r *= 1 + B.w0 * 0.03 * Math.sin(ph * 12 + t * 14);                    // Atlas: vibração
-  if (B.think > 0) {
-    thv += B.think * 1.25 * ph;                                                        // torção em espiral
-    phv += B.think * 0.045 * Math.sin(th * 4 + t * 2.6 + sh * 2);
-    r *= 1 + B.think * 0.026 * Math.sin(t * 2.3 - ph * 2.4);                           // respiração em ondas
+  let ct: number, st: number;
+  if (B.w1 > 0.001) {                                                                // Luna: espiral
+    const thv = th + B.rot * (sh ? -0.8 : 1) + B.w1 * 0.9 * Math.sin(ph * 2.2 + t * 3.2);
+    ct = Math.cos(thv); st = Math.sin(thv);
+  } else {
+    const cr = B.cr[sh], sr = B.sr[sh], c0 = g.cth[idx], s0 = g.sth[idx];
+    ct = c0 * cr - s0 * sr; st = s0 * cr + c0 * sr;
   }
-  if (work > 0) r += work * 0.018 * Math.sin(idx * 12.9898 + t * 9);
-  if (B.pulse > 0) r += B.pulse * (0.05 + 0.025 * Math.sin(ph * 6 - t * 18));
-  const cp = Math.cos(phv), sp = Math.sin(phv), ct = Math.cos(thv), st = Math.sin(thv);
+  if (B.w2 > 0.001) r *= 1 + B.w2 * 0.07 * Math.sin(th * 5 + t * 6) * Math.sin(ph);       // Nina: ondas
+  if (B.w0 > 0.001) r *= 1 + B.w0 * 0.03 * Math.sin(ph * 12 + t * 14);                    // Atlas: vibração
+  if (B.think > 0.001) r *= 1 + B.think * 0.012 * Math.sin(t * 2.1);                      // respiração suave
+  if (work > 0.001) r += work * 0.018 * Math.sin(idx * 12.9898 + t * 9);
+  if (B.pulse > 0.001) r += B.pulse * (0.05 + 0.025 * Math.sin(ph * 6 - t * 18));
+  const cp = g.cph[idx], sp = g.sph[idx];
   const dx = cp * S.A[0] + sp * (ct * S.E1[0] + st * S.E2[0]);
   const dy = cp * S.A[1] + sp * (ct * S.E1[1] + st * S.E2[1]);
   const dz = cp * S.A[2] + sp * (ct * S.E1[2] + st * S.E2[2]);
@@ -135,18 +151,24 @@ function bodyPoint(sh: number, th: number, ph: number, B: Body, idx: number) {
   const top = clamp(0.5 - yy * 0.6 + x * 0.15 + z2 * 0.3);
   const front = smooth((dz + 0.06) / 0.22);
   let b = (0.14 + 0.95 * top) * S.bright;
-  b += 0.35 * front * Math.exp(-Math.pow((S.phMax - ph) / 0.12, 2));
-  const s = lerp(0.72, 1.6, top) * lerp(0.7, 1, front);
+  b += 0.35 * front * g.rim[idx];
+  let s = lerp(0.72, 1.6, top) * lerp(0.7, 1, front);
   let a = lerp(0.05, 1, front);
   if (sh === 1 && dx * SHELLS[0].A[0] + dy * SHELLS[0].A[1] + dz * SHELLS[0].A[2] > HOOD_EDGE) a *= 0.18;
-  if (B.w0 > 0) b += B.w0 * 0.9 * Math.exp(-Math.pow((yy - Math.sin(t * 2.6) * 0.9) / 0.09, 2)); // faixa de varredura
-  if (work > 0) b += work * 0.5 * Math.max(0, Math.sin(idx * 7.13 + t * 11)) ** 12;               // faíscas
-  if (B.think > 0) {
-    // duas faixas de luz em espiral correndo pela casca + brilho que respira em ondas
-    const u = thv / TAU * 2 + ph * 1.5 - t * 0.55;
-    const band = Math.max(0, Math.cos(u * TAU)) ** 6;
-    b = b * (1 - B.think * 0.38) * (1 + B.think * 0.2 * Math.sin(t * 2.3 - ph * 2.4)) + B.think * 1.15 * band * lerp(0.35, 1, front);
-    a = lerp(a, Math.max(a, 0.5 * band), B.think);
+  if (B.w0 > 0.001) b += B.w0 * 0.9 * Math.exp(-Math.pow((yy - Math.sin(t * 2.6) * 0.9) / 0.09, 2)); // faixa de varredura
+  if (work > 0.001) b += work * 0.5 * Math.max(0, Math.sin(idx * 7.13 + t * 11)) ** 12;               // faíscas
+  if (B.think > 0.001) {
+    // "pensando": a forma fica intacta; a energia é LUZ. Duas faixas em hélice (no espaço do corpo
+    // inteiro, contínuas entre capuz e tigela) sobem girando + uma onda de brilho que respira de
+    // cima para baixo.
+    const ang = Math.atan2(z2, x);
+    const u = ang / TAU * 2 - yy * 0.8 + t * 0.4;
+    const band = Math.pow(0.5 + 0.5 * Math.cos(u * TAU), 4);
+    const wave = 0.5 + 0.5 * Math.sin(t * 2.1 + yy * 2.2);
+    // a iluminação passa a vir das faixas: o corpo apaga para ~30–45 % e as faixas acendem por cima
+    const lit = b * (0.2 + 0.15 * wave) + 1.6 * band * lerp(0.35, 1, front) * (0.75 + 0.25 * wave);
+    b = lerp(b, lit, B.think);
+    s *= 1 + B.think * 0.3 * band;
   }
   const persp = 1 + z2 * 0.12;
   OUT.x = B.cx + x * B.R * persp; OUT.y = B.cy + yy * B.R * persp; OUT.z = z2;
@@ -202,7 +224,7 @@ export class OrbRenderer {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   p: OrbParams;
-  private colKey = ''; private col: RGB = [226, 236, 255]; private eyeCol: RGB = [236, 244, 255];
+  private colKey = ''; private main = true; private col: RGB = [226, 236, 255]; private eyeCol: RGB = [236, 244, 255];
   private styles: string[] = [];
   private last = -1; private t = 0; private rot = 0; private bph = 0;
   // valores suavizados
@@ -251,7 +273,7 @@ export class OrbRenderer {
         if (!look) T.lookY = 0.9;
         break;
       case 'thinking':
-        T.think = 1; T.rotSpeed = 0.95; T.eyes = 0.5; T.breath = 0.6;
+        T.think = 1; T.rotSpeed = 0.5; T.eyes = 0.7; T.breath = 0.6;
         T.lookY = -0.85; T.lookX = 0.35 * Math.sin(this.t * 0.7);
         break;
       case 'coordinating':
@@ -286,6 +308,7 @@ export class OrbRenderer {
     if (this.colKey === this.p.color) return;
     this.colKey = this.p.color;
     this.col = hexToRgb(this.p.color);
+    this.main = this.col[0] === 226 && this.col[1] === 236 && this.col[2] === 255; // a Sora (não um agente)
     this.eyeCol = mixc(this.col, [236, 244, 255], 0.6);
     this.styles = [];
     for (let i = 0; i < NB; i++) {
@@ -295,6 +318,14 @@ export class OrbRenderer {
         this.styles.push(`rgba(${Math.min(255, this.col[0] * bb) | 0},${Math.min(255, this.col[1] * bb) | 0},${Math.min(255, this.col[2] * bb) | 0},${a.toFixed(3)})`);
       }
     }
+  }
+
+  /** Quadro determinístico (QA / comparação com a demo): tempo e rotação fixos, estado já assentado. */
+  renderAt(t: number, rot: number) {
+    this.arriveT = Infinity; this.pulses.length = 0; this.blinks = [];
+    this.t = t; this.snap();
+    this.rot = rot; this.bph = t * 1.8; this.v.thinkT = t;
+    this.draw();
   }
 
   /** Um quadro. `now` em ms; `still` = quadro estático (prefers-reduced-motion). */
@@ -369,9 +400,11 @@ export class OrbRenderer {
     const B: Body = {
       cx, cy, R, t, rot: this.rot, seed: p.seed, bph: this.bph, listen: v.listen, pulse,
       wG: v.wG, w0: v.w0, w1: v.w1, w2: v.w2, think: v.think, breath: v.breath,
+      cr: [Math.cos(this.rot), Math.cos(-0.8 * this.rot)], sr: [Math.sin(this.rot), Math.sin(-0.8 * this.rot)],
+      r0: 1 + 0.014 * v.breath * Math.sin(this.bph + p.seed),
     };
 
-    const grid = gridFor(R);
+    const rule = dotRule(R, this.main), grid = rule.grid, density = rule.density;
     const L = scratch(W, W);
     L.setTransform(1, 0, 0, 1, 0, 0);
     L.globalCompositeOperation = 'source-over';
@@ -388,15 +421,18 @@ export class OrbRenderer {
     ensureBuf(grid.n);
     cnt.fill(0);
     let m = 0;
-    const dotK = grid.dot * R, minR = 0.55;
-    // tamanhos de avatar: pontos mais claros para continuar legível (a demo também compensava)
-    const smallK = lerp(1.45, 1, clamp((R - 7) / 28));
-    const pulseB = (1 + pulse * 0.35) * smallK;
-    // nos orbs pequenos os pontos de trás (alfa ~0,05) não aparecem: descartar economiza ~40%
-    const minA = R > 34 ? 0.01 : 0.07;
+    // abaixo de R 12 (orb de ~30 px) os pontos ficam mais claros para continuar legível
+    const pulseB = (1 + pulse * 0.35) * lerp(1.35, 1, clamp((R - 6) / 6));
+    // abaixo de R 60 os pontos de trás (alfa ~0,05) somem sob o brilho: descartar economiza ~40%
+    const minA = R > 60 ? 0.01 : 0.06;
     for (let i = 0; i < grid.n; i++) {
-      const q = bodyPoint(grid.sh[i], grid.th[i], grid.ph[i], B, i);
-      let x = q.x, y = q.y, b = q.b * pulseB, a = q.a, s = dotK * q.s;
+      let dA = 1;
+      if (density < 1) {
+        dA = smooth((density - grid.q[i]) / 0.05 + 0.5);
+        if (dA <= 0.01) continue;
+      }
+      const q = bodyPoint(grid, i, B);
+      let x = q.x, y = q.y, b = q.b * pulseB, a = q.a * dA, s = rule.dot(q.s);
       if (formIn < 1) {
         const fp = eio(formIn * 1.6 - grid.r2[i] * 0.6);
         if (fp < 1) {
@@ -410,7 +446,7 @@ export class OrbRenderer {
       const bi = Math.min(NB - 1, (clamp(b, 0, 1.6) / 1.6 * NB) | 0);
       const ai = Math.min(NA - 1, Math.max(0, Math.round(Math.sqrt(clamp(a)) * NA) - 1));
       const key = bi * NA + ai;
-      bx[m] = x; by[m] = y; br[m] = Math.max(minR, s); bk[m] = key;
+      bx[m] = x; by[m] = y; br[m] = Math.max(0.55, s); bk[m] = key;
       cnt[key + 1]++;
       m++;
     }
@@ -433,8 +469,6 @@ export class OrbRenderer {
       i0 = i1;
     }
 
-    // partículas sutis orbitando no "pensando"
-    if (v.think > 0.01) this.drawSatellites(L, B, grid, v.think, dotK);
 
     // ---- composição no canvas visível ----
     const c = this.ctx;
@@ -451,6 +485,18 @@ export class OrbRenderer {
     c.drawImage(layer!, 0, 0, W, W, 0, 0, W, W);
     c.globalCompositeOperation = 'source-over';
 
+    // "pensando": brilho interno que respira dentro da abertura, atrás dos olhos
+    if (v.think > 0.01) {
+      const br = 0.5 + 0.5 * Math.sin(t * 2.1);
+      const ex = (cx - 0.25 * R) * dpr, ey = (cy + 0.02 * R) * dpr, rr = R * dpr * lerp(0.42, 0.55, br);
+      const gr = c.createRadialGradient(ex, ey, 0, ex, ey, rr);
+      gr.addColorStop(0, rgba(this.col, 0.3 * v.think * (0.55 + 0.45 * br)));
+      gr.addColorStop(1, rgba(this.col, 0));
+      c.globalCompositeOperation = 'lighter';
+      c.fillStyle = gr; c.beginPath(); c.arc(ex, ey, rr, 0, TAU); c.fill();
+      c.globalCompositeOperation = 'source-over';
+    }
+
     // olhos
     let eyes = v.eyes;
     if (arriving) eyes = eback(prog(this.arriveT, ARRIVE_EYES[0], ARRIVE_EYES[1]));
@@ -460,7 +506,9 @@ export class OrbRenderer {
   private bloom(W: number, Rd: number) {
     const c = this.ctx;
     if (FILTER_OK) {
-      const b1 = Math.max(Rd * 0.06, 3), b2 = Math.max(Rd * 0.017, 1.2);
+      // raios da demo (14 px e 4 px), limitados nos orbs pequenos
+      const d = this.dpr, Rc = Rd / d;
+      const b1 = Math.min(14, Rc * 0.9) * d, b2 = Math.min(4, Rc * 0.27) * d;
       c.filter = `blur(${b1.toFixed(1)}px)`; c.globalAlpha = 0.5; c.drawImage(layer!, 0, 0, W, W, 0, 0, W, W);
       c.filter = `blur(${b2.toFixed(1)}px)`; c.globalAlpha = 0.55; c.drawImage(layer!, 0, 0, W, W, 0, 0, W, W);
       c.filter = 'none';
@@ -473,32 +521,6 @@ export class OrbRenderer {
       sx!.drawImage(layer!, 0, 0, W, W, 0, 0, s, s);
       c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
       c.globalAlpha = 0.85; c.drawImage(small!, 0, 0, s, s, 0, 0, W, W);
-    }
-  }
-
-  private drawSatellites(L: CanvasRenderingContext2D, B: Body, grid: Grid, think: number, dotK: number) {
-    const tt = this.v.thinkT, col = this.col, R = B.R;
-    const amt = smooth(think), satCol = mixc(col, [255, 255, 255], 0.35);
-    for (let i = 0; i < grid.sats; i++) {
-      const rho = 1.12 + rand(i * 3.3 + 1) * 0.22;
-      const tilt = 0.35 + rand(i * 5.1 + 2) * 0.9;
-      const node = (rand(i * 2.7 + 3) - 0.5) * 1.6;
-      const speed = (0.7 + rand(i * 9.2 + 4) * 0.8) * (i % 3 === 0 ? -1 : 1);
-      const ph0 = rand(i * 4.4 + 5) * TAU;
-      const cn = Math.cos(node), sn = Math.sin(node), stl = Math.sin(tilt), ctl = Math.cos(tilt);
-      const twinkle = 0.65 + 0.35 * Math.sin(B.t * 3 + i * 1.7);
-      for (let k = 0; k < 6; k++) {
-        const ang = ph0 + speed * tt - k * 0.07 * Math.sign(speed);
-        const ox = rho * Math.cos(ang), oy0 = rho * Math.sin(ang) * stl, oz = rho * Math.sin(ang) * ctl;
-        const x = ox * cn - oy0 * sn, y = ox * sn + oy0 * cn;
-        const depth = smooth((oz + 0.35) / 0.7); // atrás do corpo: mais apagada
-        const a = amt * twinkle * lerp(0.12, 0.9, depth) * (1 - k / 6);
-        if (a < 0.01) continue;
-        L.fillStyle = rgba(satCol, a);
-        L.beginPath();
-        L.arc(B.cx + x * R * 1.05, B.cy + y * R * 0.96, Math.max(0.6, dotK * 1.9 * (1 - k * 0.12)), 0, TAU);
-        L.fill();
-      }
     }
   }
 
@@ -517,7 +539,7 @@ export class OrbRenderer {
     let blink = 1;
     for (const bt of this.blinks) { const q = Math.abs(this.t - bt); if (q < 0.12) blink = Math.min(blink, q / 0.12); }
     const v = this.v, c = this.ctx;
-    const eyeK = lerp(1.45, 1, clamp((R / this.dpr - 7) / 20)); // olhos maiores em avatares
+    const eyeK = lerp(1.4, 1, clamp((R / this.dpr - 6) / 8)); // olhos um pouco maiores abaixo de ~35 px
     const w = 0.05 * R * eyeK, h = 0.125 * R * eyeK * clamp(open, 0, 1.3) * Math.max(0.08, blink);
     const ox = -0.25 * R + v.lookX * R * 0.09, oy = 0.02 * R + v.lookY * R * 0.06;
     c.save();

@@ -11,37 +11,41 @@ const sugestoes = ['Criar campanha', 'Pesquisar mercado', 'Planejar posts', 'Res
 export default function Home() {
   const [chegando, setChegando] = useState(true);
   const [ouvindo, setOuvindo] = useState(false);
+  const [partindo, setPartindo] = useState(false);
   const { enviar, dispatch, state } = useSora();
   const navigate = useNavigate();
   useEffect(() => {
-    const timer = window.setTimeout(() => setChegando(false), 2700);
+    const timer = window.setTimeout(() => setChegando(false), 2800);
     return () => window.clearTimeout(timer);
   }, []);
 
   const handleSend = (pedido: string) => {
     enviar(pedido);
-    window.setTimeout(() => navigate('/chat/sora'), 650);
+    setOuvindo(false);
+    window.setTimeout(() => setPartindo(true), 600);
+    window.setTimeout(() => navigate('/chat/sora'), 1180);
   };
+
+  const heroState = state.fase === 'enviado' ? 'thinking' : chegando ? 'arriving' : ouvindo ? 'listening' : 'idle';
 
   return (
     <AppShell title="Novo chat">
       <main className="home-screen">
-        <div className={`hero-orb ${state.fase === 'enviado' ? 'orb-departing' : ''}`}>
+        <div className={`hero-orb ${partindo ? 'orb-departing' : ''}`}>
           <SoraOrb
             size={260}
-            state={chegando ? 'arriving' : ouvindo ? 'listening' : 'idle'}
+            state={heroState}
             lookAt={ouvindo ? { x: 0, y: .8 } : null}
             pulseKey={state.pulseKey}
             seed={0}
             onArrived={() => setChegando(false)}
-            title="Sora pronta para ajudar"
+            title={state.fase === 'enviado' ? 'Sora pensando' : 'Sora pronta para ajudar'}
           />
         </div>
         <h1>Em que posso te ajudar hoje?</h1>
         <div className="hero-composer">
           <MessageComposer
             placeholder="Peça qualquer coisa à Sora…"
-            initialValue=""
             tools
             onActivity={(active) => { setOuvindo(active); dispatch({ type: 'OUVIR', ativo: active }); }}
             onSend={handleSend}

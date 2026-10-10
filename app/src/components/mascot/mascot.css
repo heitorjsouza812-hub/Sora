@@ -9,6 +9,13 @@
   vertical-align: middle;
 }
 
+.sora-thinking--stacked {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.75em;
+  text-align: center;
+}
+
 .sora-shimmer {
   color: #8b93a3;
   background: linear-gradient(90deg, #5f6672 0%, #5f6672 35%, #f1f4f9 50%, #5f6672 65%, #5f6672 100%);

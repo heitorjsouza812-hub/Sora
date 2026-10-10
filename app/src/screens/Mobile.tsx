@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { VoiceBeam } from 'voice-glow';
 import { SoraOrb, SoraThinking } from '../components/mascot';
+import { CampaignPiece } from '../components/ui/CampaignPiece';
 import { MicIcon } from '../components/ui/Icons';
 import { ShimmerText } from '../components/ui/ShimmerText';
 import { agentes, legendaAnterior, legendaNova, pecas, PEDIDO_AJUSTE } from '../data/mock';
@@ -26,7 +27,7 @@ export default function Mobile() {
     <header className="mobile-header"><SoraOrb size={42} state={stage === 'processing' ? 'thinking' : stage === 'ready' ? 'done' : 'idle'} glow={false} /><span><strong>Sora</strong><small>{stage === 'ready' ? 'Ajuste concluído' : 'Campanha em andamento'}</small></span></header>
     <div className="mobile-content">
       <section className="mobile-team card"><p className="eyebrow">Equipe</p><div>{agentes.map((agente) => <span key={agente.id}><span className="mobile-orb"><SoraOrb size={38} color={agente.cor} movimento={agente.tipoMovimento} state="done" glow={false} /><i>✓</i></span><b style={{ color: agente.cor }}>{agente.nome}</b></span>)}</div></section>
-      <section className="mobile-campaign card"><h2>Campanha da cafeteria</h2><div>{pecas.map((peca) => <img src={peca.imagem} alt={peca.titulo} key={peca.titulo} />)}</div><p>12 posts no calendário</p></section>
+      <section className="mobile-campaign card"><h2>Campanha da cafeteria</h2><div>{pecas.map((peca) => <CampaignPiece piece={peca} key={peca.titulo} />)}</div><p>12 posts no calendário</p></section>
       <section className={`mobile-caption card ${stage === 'ready' ? 'old-version' : ''}`}><p className="eyebrow">Legenda · Post de inauguração</p><p>{legendaAnterior}</p>{stage === 'ready' && <small>Versão anterior</small>}</section>
       {stage !== 'idle' && <div className="mobile-user-message">🎙 {PEDIDO_AJUSTE}</div>}
       {stage === 'processing' && <div className="mobile-status"><SoraThinking size={26} label="Sora está ajustando…" /></div>}
