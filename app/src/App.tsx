@@ -16,12 +16,13 @@ const Configuracoes = lazy(() => import('./screens/Configuracoes'));
 // Só em desenvolvimento (em produção redirecionam para /).
 const OrbLab = import.meta.env.DEV ? lazy(() => import('./screens/OrbLab')) : null;
 const Mobile = import.meta.env.DEV ? lazy(() => import('./screens/Mobile')) : null;
+const Catalogo = import.meta.env.DEV ? lazy(() => import('./screens/Catalogo')) : null;
 
 const carregando = <main className="orb-route-loading"><SoraOrb size={96} state="thinking" title="Carregando" /></main>;
 
 // Rotas: / (Novo chat) · /projeto/:projetoId (chat da Sora / projeto) · /projetos · /agentes (galeria)
 //        /agentes/novo · /agentes/:id/editar (construtor) · /chat/:agente · /revisao/:projetoId
-//        /configuracoes · /plugins · [DEV] /celular · /lab/orb
+//        /configuracoes · /plugins · [DEV] /celular · /lab/orb · /lab/ui (catálogo de componentes)
 function AppRoutes() {
   return <Suspense fallback={carregando}><Routes>
     <Route path="/" element={<Home />} />
@@ -37,6 +38,7 @@ function AppRoutes() {
     <Route path="/plugins" element={<Plugins />} />
     {Mobile && <Route path="/celular" element={<Mobile />} />}
     {OrbLab && <Route path="/lab/orb" element={<OrbLab />} />}
+    {Catalogo && <Route path="/lab/ui" element={<Catalogo />} />}
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></Suspense>;
 }
