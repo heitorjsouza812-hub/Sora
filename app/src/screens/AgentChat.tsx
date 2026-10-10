@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode }
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
-import { abrirEditorAgente } from '../components/studio';
+import { abrirEditorAgente } from '../components/builder';
 import { EntregaCard } from '../components/ui/EntregaCard';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { PluginMark } from '../components/ui/PluginMark';

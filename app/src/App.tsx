@@ -1,34 +1,27 @@
-import { lazy, Suspense, type ComponentType } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { SoraOrb } from './components/mascot';
 import Home from './screens/Home';
 import SoraChat from './screens/SoraChat';
 import AgentChat from './screens/AgentChat';
 import Agentes from './screens/Agentes';
+import Projetos from './screens/Projetos';
 import Revisao from './screens/Revisao';
 import Plugins from './screens/Plugins';
-import Mobile from './screens/Mobile';
-import { ConfiguracoesProvisoria, EditorAgenteProvisorio, ProjetosProvisoria } from './screens/Provisorias';
 import './components/ui/sora.css';
 
-const OrbLab = lazy(() => import('./screens/OrbLab'));
-
-// Telas de outros integrantes: entram sozinhas quando o arquivo existir (senão, a provisória).
-// Projetos.tsx (Brisa) · Configuracoes.tsx e CriarAgente.tsx (Forja)
-const externas = import.meta.glob<{ default: ComponentType }>(['./screens/Projetos.tsx', './screens/Configuracoes.tsx', './screens/CriarAgente.tsx']);
-const tela = (arquivo: string, provisoria: ComponentType) => {
-  const carregar = externas[`./screens/${arquivo}`];
-  return carregar ? lazy(carregar) : provisoria;
-};
-const Projetos = tela('Projetos.tsx', ProjetosProvisoria);
-const Configuracoes = tela('Configuracoes.tsx', ConfiguracoesProvisoria);
-const CriarAgente = tela('CriarAgente.tsx', EditorAgenteProvisorio);
+// Telas menos visitadas: carregadas sob demanda.
+const CriarAgente = lazy(() => import('./screens/CriarAgente'));
+const Configuracoes = lazy(() => import('./screens/Configuracoes'));
+// Só em desenvolvimento (em produção redirecionam para /).
+const OrbLab = import.meta.env.DEV ? lazy(() => import('./screens/OrbLab')) : null;
+const Mobile = import.meta.env.DEV ? lazy(() => import('./screens/Mobile')) : null;
 
 const carregando = <main className="orb-route-loading"><SoraOrb size={96} state="thinking" title="Carregando" /></main>;
 
 // Rotas: / (Novo chat) · /projeto/:projetoId (chat da Sora / projeto) · /projetos · /agentes (galeria)
 //        /agentes/novo · /agentes/:id/editar (construtor) · /chat/:agente · /revisao/:projetoId
-//        /configuracoes · /plugins · /celular · /lab/orb
+//        /configuracoes · /plugins · [DEV] /celular · /lab/orb
 function AppRoutes() {
   return <Suspense fallback={carregando}><Routes>
     <Route path="/" element={<Home />} />
@@ -42,8 +35,8 @@ function AppRoutes() {
     <Route path="/revisao/:projetoId" element={<Revisao />} />
     <Route path="/configuracoes" element={<Configuracoes />} />
     <Route path="/plugins" element={<Plugins />} />
-    <Route path="/celular" element={<Mobile />} />
-    <Route path="/lab/orb" element={<OrbLab />} />
+    {Mobile && <Route path="/celular" element={<Mobile />} />}
+    {OrbLab && <Route path="/lab/orb" element={<OrbLab />} />}
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></Suspense>;
 }

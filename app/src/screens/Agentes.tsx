@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
 import { pedirApagar, pedirRenomear } from '../components/gestao';
-import { MenuAgente } from '../components/studio';
+import { MenuAgente } from '../components/builder';
 import { estadoAgente, todosAgentes, useAgora, useProjetos } from '../state/projetos';
 
 export default function Agentes() {
@@ -32,7 +32,7 @@ export default function Agentes() {
             const st = estadoAgente(e, a.id, agora);
             const projeto = a.projetoId ? e.projetos.find(p => p.id === a.projetoId) : undefined;
             return (
-              <article key={a.id} className="gallery-card card" style={{ '--agent': a.cor } as CSSProperties}>
+              <article key={a.id} className="gallery-card agent-card card" style={{ '--agent': a.cor } as CSSProperties}>
                 <MenuAgente agenteId={a.id} nome={a.nome} className="gallery-menu" semEditar itens={[
                   { rotulo: 'Conversar', onClick: () => navigate(`/chat/${a.id}`) },
                   { rotulo: 'Editar', onClick: () => navigate(`/agentes/${a.id}/editar`) },

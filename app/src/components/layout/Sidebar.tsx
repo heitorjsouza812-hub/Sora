@@ -7,7 +7,7 @@ import { usuario } from '../../data/mock';
 import { estadoAgente, estadoProjeto, novoChat, useAgora, useProjetos, type AgenteSora, type ProjetoSora } from '../../state/projetos';
 import { pedirApagar, pedirRenomear } from '../gestao';
 import { AccountMenu } from '../review/AccountMenu';
-import { MenuAgente } from '../studio';
+import { MenuAgente } from '../builder';
 import { AgentsIcon, FolderIcon, GearIcon, GridIcon, PlusIcon } from '../ui/Icons';
 
 function LinhaAgente({ a, onNavegar, filho }: { a: AgenteSora; onNavegar?: () => void; filho?: boolean }) {

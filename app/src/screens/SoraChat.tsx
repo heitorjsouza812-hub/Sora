@@ -5,7 +5,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { statusDaSora } from '../components/layout/useSoraStatus';
 import { SoraOrb, SoraThinking } from '../components/mascot';
-import { MenuAgente } from '../components/studio';
+import { MenuAgente } from '../components/builder';
 import { EntregaCard } from '../components/ui/EntregaCard';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { ProgressBar } from '../components/ui/ProgressBar';

@@ -98,16 +98,16 @@ function carregar(): EstadoProjetos {
 
 let estado: EstadoProjetos = typeof window === 'undefined' ? inicial() : carregar();
 const ouvintes = new Set<() => void>();
-let gravacao = 0;
+/** Grava NA HORA: com atraso, uma navegação/recarga logo após a mudança perdia a gravação. */
+function gravar() {
+  try { localStorage.setItem(CHAVE, JSON.stringify(estado)); } catch { /* armazenamento indisponível: segue só em memória */ }
+}
 
 function definir(proximo: EstadoProjetos) {
   estado = proximo;
+  gravar();
   ouvintes.forEach(f => f());
   relogioReavaliar();
-  if (!gravacao) gravacao = window.setTimeout(() => {
-    gravacao = 0;
-    try { localStorage.setItem(CHAVE, JSON.stringify(estado)); } catch { /* armazenamento indisponível: segue só em memória */ }
-  }, 120);
 }
 const alterar = (f: (e: EstadoProjetos) => EstadoProjetos) => definir(f(estado));
 

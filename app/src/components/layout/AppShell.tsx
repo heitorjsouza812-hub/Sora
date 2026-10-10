@@ -4,7 +4,7 @@ import { estadoAgente, useAgora, useProjetos } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
 import { BottomSheet } from '../overlay';
 import { GestaoHost } from '../gestao';
-import { EditorAgenteHost, MenuAgente } from '../studio';
+import { EditorAgenteHost, MenuAgente } from '../builder';
 import { Navegacao, Sidebar } from './Sidebar';
 import { statusDaSora } from './useSoraStatus';
 
