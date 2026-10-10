@@ -33,7 +33,7 @@ export function ResultadoResumo({ resultado, cor }: { resultado: ResultadoPasso;
       {resultado.links && resultado.links.length > 0 && (
         <ul className="wk-links">{resultado.links.map(l => <li key={l.titulo}><span>{l.titulo}</span><small>{l.dominio}</small></li>)}</ul>
       )}
-      <Miniaturas resultado={resultado} cor={cor} />
+      <Miniaturas resultado={resultado} cor={cor} quantidade={/imag|cena|conceit|tela/i.test(resultado.resumo) ? Math.min(4, parseInt(resultado.resumo, 10) || 0) : 0} />
     </div>
   );
 }

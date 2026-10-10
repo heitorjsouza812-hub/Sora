@@ -86,7 +86,7 @@ export function RevisaoProjeto({
         const comparing = projeto.versao > 1;
         return <article className="review-agent" key={agent.id} style={{ '--review-agent': agent.cor } as CSSProperties}>
           <header className="review-agent__header">
-            <span className="review-agent__avatar" aria-hidden="true">{agent.nome.slice(0, 1)}</span>
+            <SoraOrb size={44} color={agent.cor} movimento={agent.tipoMovimento} state="done" glow={false} decorative seed={agent.nome.length} />
             <div><strong>{agent.nome}</strong><small>{agent.funcao}</small></div>
             <span>{current?.resumo ?? 'Entrega'}</span>
           </header>

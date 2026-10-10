@@ -6,7 +6,7 @@
   --line: rgba(255, 255, 255, 0.08);
   --text: #f2f5fb;
   --text-2: #8b93a3;
-  --text-3: #6b7280;
+  --text-3: #7d8595; /* ≥4,5:1 sobre o fundo e os painéis (auditoria Vigia) */
   --ok: #7ef2c4;
   --btn-bg: #eef2fa;
   --btn-text: #0b0d12;

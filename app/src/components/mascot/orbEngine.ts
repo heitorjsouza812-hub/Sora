@@ -218,7 +218,7 @@ function ensureBuf(n: number) {
 // ---------- uma instância ----------
 const K = { fast: 7, mid: 3.6, slow: 1.8 };
 const approach = (v: number, target: number, k: number, dt: number) => v + (target - v) * (1 - Math.exp(-k * dt));
-const ARRIVE_FORM = 2.5, ARRIVE_EYES = [2.25, 2.7] as const;
+const ARRIVE_FORM = 1.3, ARRIVE_EYES = [1.12, 1.5] as const; // chegada ~1,6 s
 
 export class OrbRenderer {
   canvas: HTMLCanvasElement;

@@ -3,10 +3,6 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, typ
 import { SoraOrb, SoraThinking, type OrbState } from '../components/mascot';
 import { OrbRenderer } from '../components/mascot/orbEngine';
 import type { Movimento } from '../types';
-import { EditorAgenteHost, MenuAgente } from '../components/studio';
-import { GavetaTrabalho, PainelTrabalho } from '../components/work';
-import { criarProjeto, estadoAgente, estadoProjeto, limparTudo, projetoAtivo, useAgora, useProjetos } from '../state/projetos';
-import Agentes from './Agentes';
 
 const ESTADOS: { id: OrbState; nome: string; desc: string }[] = [
   { id: 'arriving', nome: 'Chegando', desc: 'pontos se juntam, olhos abrem' },
@@ -28,7 +24,7 @@ const AGENTES: { nome: string; cor: string; movimento: Movimento; verbo: string 
 const TAMANHOS = [20, 28, 40, 64, 96, 160, 240, 320];
 
 const s = {
-  page: { minHeight: '100vh', background: 'var(--bg, #050608)', color: 'var(--text, #F2F5FB)', fontFamily: 'var(--font)', padding: '40px clamp(16px, 4vw, 56px) 80px', boxSizing: 'border-box' },
+  page: { minHeight: '100dvh', background: 'var(--bg, #050608)', color: 'var(--text, #F2F5FB)', fontFamily: 'var(--font)', padding: '40px clamp(16px, 4vw, 56px) 80px', boxSizing: 'border-box' },
   h1: { fontSize: 28, fontWeight: 600, margin: '0 0 6px' },
   sub: { color: 'var(--text-2, #8B93A3)', margin: '0 0 36px', fontSize: 15 },
   h2: { fontSize: 13, fontWeight: 600, letterSpacing: '0.08em', color: 'var(--text-3, #6B7280)', textTransform: 'uppercase', margin: '48px 0 16px' },
@@ -63,13 +59,25 @@ function useFps() {
 // /lab/orb?solo=240&state=thinking&color=%23AC80FF&mov=espiral[&t=10&rot=4.2][&glow=0]
 // Um orb isolado em fundo preto, para QA e comparação lado a lado com a demo.
 // Com `t` (e `rot`) o quadro é determinístico e estático.
+const ESTADOS_VALIDOS: OrbState[] = ['arriving', 'idle', 'listening', 'thinking', 'coordinating', 'working', 'done'];
+const MOVIMENTOS_VALIDOS: Movimento[] = ['gira', 'vibracao', 'espiral', 'ondas'];
+const num = (v: string | null, min: number, max: number, padrao: number) => {
+  const n = Number(v);
+  return v !== null && Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : padrao;
+};
+
 function OrbSolo({ q }: { q: URLSearchParams }) {
-  const size = Number(q.get('solo')) || 240;
-  const state = (q.get('state') || 'idle') as OrbState;
-  const color = q.get('color') || '#E2ECFF';
-  const movimento = (q.get('mov') || 'gira') as Movimento;
+  // parâmetros públicos validados: enums conhecidos, cor hex, tamanho limitado (evita canvas gigante)
+  const size = Math.round(num(q.get('solo'), 16, 720, 240));
+  const st = q.get('state') as OrbState;
+  const state = ESTADOS_VALIDOS.includes(st) ? st : 'idle';
+  const corQ = q.get('color') ?? '';
+  const color = /^#[0-9a-f]{6}$/i.test(corQ) ? corQ : '#E2ECFF';
+  const mv = q.get('mov') as Movimento;
+  const movimento = MOVIMENTOS_VALIDOS.includes(mv) ? mv : 'gira';
   const glow = q.has('glow') ? q.get('glow') !== '0' : undefined;
-  const t = q.get('t'), rot = Number(q.get('rot') ?? 0);
+  const t = q.has('t') ? String(num(q.get('t'), 0, 1e5, 0)) : null;
+  const rot = num(q.get('rot'), -1e4, 1e4, 0);
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (t === null) return;
@@ -77,7 +85,7 @@ function OrbSolo({ q }: { q: URLSearchParams }) {
     r.renderAt(Number(t), rot);
   }, [size, color, state, movimento, glow, t, rot]);
   return (
-    <div style={{ minHeight: '100vh', background: '#050608', display: 'grid', placeItems: 'center' }}>
+    <div style={{ minHeight: '100dvh', background: '#050608', display: 'grid', placeItems: 'center' }}>
       {t === null
         ? <SoraOrb size={size} state={state} color={color} movimento={movimento} glow={glow} />
         : <canvas ref={ref} data-solo style={{ width: size, height: size }} />}
@@ -85,47 +93,8 @@ function OrbSolo({ q }: { q: URLSearchParams }) {
   );
 }
 
-// /lab/orb#trabalho (e #agentes) — banco de testes da Rodada 3 (planejador + store + painel Trabalho + editor)
-function PreviaTrabalho() {
-  const e = useProjetos();
-  const agora = useAgora();
-  const [aberta, setAberta] = useState(true);
-  const [pedido, setPedido] = useState('Crie uma campanha para lançar minha cafeteria: pesquise referências, prepare as peças e monte um calendário de posts.');
-  const p = projetoAtivo(e);
-  const ep = p ? estadoProjeto(e, p, agora) : null;
-  const trabalhando = p?.agenteIds.map(id => e.agentes[id]).find(a => a && estadoAgente(e, a.id, agora).status === 'trabalhando');
-  return (
-    <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 18, padding: 18, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font)' }}>
-      <div style={{ overflowY: 'auto' }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <input value={pedido} onChange={ev => setPedido(ev.target.value)} style={{ flex: 1, height: 40, padding: '0 12px', color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 10 }} />
-          <button className="st-btn" onClick={() => criarProjeto(pedido)}>Criar equipe</button>
-          <button className="st-btn-ghost" onClick={limparTudo}>Limpar</button>
-        </div>
-        <p style={{ color: 'var(--text-2)' }}>{p ? `${p.titulo} · fase: ${ep?.fase} · ${ep?.nascidos}/${p.agenteIds.length} agentes · ${ep?.progresso}%` : 'Nenhum projeto ativo.'}</p>
-        {p && <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 0' }}><SoraOrb size={56} color={e.sora.cor} state={ep?.fase === 'pensando' ? 'thinking' : ep?.fase === 'pronto' ? 'done' : 'coordinating'} pulseKey={ep?.pulso} glow={false} /><strong>{e.sora.nome}</strong><MenuAgente agenteId="sora" nome={e.sora.nome} /></div>}
-        {p?.agenteIds.map(id => e.agentes[id]).filter(a => a && a.criadoEm <= agora).map(a => {
-          const st = estadoAgente(e, a.id, agora);
-          return <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8 }}>
-            <SoraOrb size={36} color={a.cor} movimento={a.tipoMovimento} state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : 'arriving'} glow={false} />
-            <strong style={{ color: a.cor }}>{a.nome}</strong><small style={{ color: 'var(--text-2)' }}>{a.funcao} · {st.rotulo} · {st.progresso}%</small>
-            <MenuAgente agenteId={a.id} nome={a.nome} />
-          </div>;
-        })}
-      </div>
-      <GavetaTrabalho aberta={aberta} onAlternar={() => setAberta(v => !v)} corAtiva={trabalhando?.cor} resumo={trabalhando ? `${trabalhando.nome} · ${trabalhando.verbo}` : undefined}>
-        <PainelTrabalho agenteIds={p?.agenteIds ?? []} />
-      </GavetaTrabalho>
-      <EditorAgenteHost />
-    </div>
-  );
-}
-
 export default function OrbLab() {
   const q = new URLSearchParams(window.location.search);
-  const previa = window.location.hash.slice(1);
-  if (previa === 'agentes') return <><Agentes /><EditorAgenteHost /></>;
-  if (previa === 'trabalho') return <PreviaTrabalho />;
   return q.has('solo') ? <OrbSolo q={q} /> : <OrbLabFull />;
 }
 

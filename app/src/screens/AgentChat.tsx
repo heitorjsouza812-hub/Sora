@@ -1,116 +1,156 @@
-import { useEffect, useRef } from 'react';
-import type { CSSProperties } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+// Chat de um agente (de uma equipe ou avulso): o trabalho dele ao vivo + conversa direta.
+// À direita: abas "Trabalho" (painel de passos) e "Perfil" (orb, status, progresso, ferramentas).
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
-import { Calendar } from '../components/ui/Calendar';
-import { CampaignPiece } from '../components/ui/CampaignPiece';
-import { LinkIcon } from '../components/ui/Icons';
+import { abrirEditorAgente } from '../components/studio';
+import { EntregaCard } from '../components/ui/EntregaCard';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { PluginMark } from '../components/ui/PluginMark';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { ShimmerText } from '../components/ui/ShimmerText';
-import { agentes, legendaAnterior, pecas, plugins, referencias } from '../data/mock';
-import { useSora } from '../state/SoraContext';
+import { useCelular } from '../components/ui/useMedia';
+import { PainelTrabalho, pluginInfo, TrabalhoDock } from '../components/work';
+import { duracaoRoteiro } from '../data/planejador';
+import {
+  enviarParaAgente, estadoAgente, execucoesDoAgente, mensagensDa, passosDoAgente, useAgora, useProjetos,
+  type AgenteSora, type EstadoProjetos,
+} from '../state/projetos';
 
-const toolState = (status: string, index: number, progress: number, total: number) => {
-  if (status === 'concluido') return 'Usado';
-  if (status !== 'trabalhando') return 'Conectado';
-  const active = Math.min(total - 1, Math.floor(progress / (100 / total)));
-  if (index < active) return 'Usado';
-  return index === active ? 'Em uso' : 'Conectado';
-};
+type Item = { t: number; key: string; node: ReactNode };
 
-function WaitingWork({ nome, message, color, movimento, seed }: { nome: string; message: string; color: string; movimento: 'gira' | 'vibracao' | 'espiral' | 'ondas'; seed: number }) {
-  return <div className="agent-empty"><SoraOrb size={112} color={color} movimento={movimento} state="idle" seed={seed} title={nome} /><h2>{message}</h2><p>O trabalho aparecerá aqui assim que a etapa anterior for concluída.</p></div>;
-}
-
-function AtlasWork({ done, progress }: { done: boolean; progress: number }) {
-  const visibleCount = done ? referencias.length : Math.max(1, Math.ceil(progress / 25));
-  const visibleRefs = referencias.slice(0, visibleCount);
-  return <>
-    <div className="assistant-row agent-copy"><span className="mini-agent-dot atlas-dot" />{done ? <p>Encontrei 4 boas referências e organizei os links:</p> : <ShimmerText>{`Pesquisando na web… ${visibleCount}/4`}</ShimmerText>}</div>
-    <section className="browser-card card">
-      <div className="browser-bar"><span /><span /><span /><div>⌕ campanha de lançamento para cafeteria</div></div>
-      <div className="search-results">{visibleRefs.map((ref) => <a key={ref.titulo} href={ref.url} target="_blank" rel="noreferrer"><img src={ref.imagem} alt="" /><span><small>{ref.dominio}</small><strong>{ref.titulo}</strong></span></a>)}</div>
-    </section>
-    {progress >= 55 && <section className="references-card card"><div className="section-heading"><h2>Referências organizadas</h2><span>{visibleCount} links</span></div>{visibleRefs.map((ref) => <a href={ref.url} target="_blank" rel="noreferrer" key={ref.titulo}><img src={ref.imagem} alt="" /><LinkIcon /><strong>{ref.titulo}</strong><small>{ref.dominio}</small><b>✓</b></a>)}</section>}
-  </>;
-}
-
-function LunaWork({ done, progress }: { done: boolean; progress: number }) {
-  const clearCount = done ? pecas.length : Math.max(0, Math.floor(progress / 34));
-  return <>
-    <div className="handoff-banner atlas-banner"><strong>Atlas</strong> enviou 4 referências <span>↗ ↗ ↗ ↗</span></div>
-    <div className="assistant-row agent-copy"><span className="mini-agent-dot luna-dot" />{done ? <p>3 peças prontas para a sua revisão.</p> : <ShimmerText>Criando as peças da campanha…</ShimmerText>}</div>
-    <div className="creative-grid">{pecas.map((peca, index) => <article key={peca.titulo}>
-      <CampaignPiece piece={peca} generating={!done && index >= clearCount} />
-      <div><strong>{peca.titulo}</strong><small>{done || index < clearCount ? peca.formato : 'Gerando…'}</small></div>
-    </article>)}</div>
-    {(done || progress >= 68) && <section className="identity-card card"><h2>Identidade da campanha</h2><div className="palette">{['#3b2416', '#7a4a2a', '#c27a43', '#efd9bd', '#f7f1e8'].map((cor) => <i key={cor} style={{ background: cor }} />)}<span>Tons de café e creme · tipografia moderna · fotos acolhedoras</span></div></section>}
-  </>;
-}
-
-function NinaWork({ done, progress }: { done: boolean; progress: number }) {
-  const typedLength = done ? legendaAnterior.length : Math.max(1, Math.floor((progress / 100) * legendaAnterior.length));
-  const typed = legendaAnterior.slice(0, typedLength);
-  return <>
-    <div className="handoff-banner luna-banner"><strong>Luna</strong> enviou 3 peças <span>▧ ▧ ▧</span></div>
-    <div className="assistant-row agent-copy"><span className="mini-agent-dot nina-dot" />{done ? <p>Calendário pronto: 12 posts organizados.</p> : <ShimmerText>Escrevendo as legendas…</ShimmerText>}</div>
-    <section className="caption-card card"><CampaignPiece piece={pecas[0]} /><div><small>LEGENDA · POST DE INAUGURAÇÃO</small><p>{typed}{!done && <span className="typing-caret">|</span>}</p><b>#cafeteria&nbsp;&nbsp; #inauguração&nbsp;&nbsp; #cafeespecial</b></div></section>
-    {progress >= 30 && <section className="full-calendar card"><div className="section-heading"><h2>Calendário · Novembro</h2><span>{Math.ceil((progress / 100) * 12)} posts</span></div><Calendar progress={progress} /></section>}
-  </>;
+function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: number }) {
+  const st = estadoAgente(e, a.id, agora);
+  const passos = passosDoAgente(e, a.id, agora).filter(p => p.tipo === 'ferramenta');
+  const estadoFerramenta = (nome: string) => {
+    const ps = passos.filter(p => p.ferramenta === nome);
+    if (ps.some(p => p.status === 'executando')) return 'Em uso';
+    if (ps.length) return 'Usado';
+    return e.pluginsConectados.includes(nome) ? 'Conectado' : 'Disponível';
+  };
+  return (
+    <div className="agent-profile">
+      <div className="agent-orb"><SoraOrb size={180} color={a.cor} movimento={a.tipoMovimento} title={a.nome}
+        state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : 'idle'} pulseKey={st.status === 'concluido' ? 1 : 0} /></div>
+      <h1>{a.nome}</h1><p>{a.funcao}</p>
+      <span className="agent-pill" role="status"><i aria-hidden="true" />{st.status === 'trabalhando' ? `${a.verbo}…` : st.rotulo || 'Disponível'}</span>
+      <div className="progress-title"><span>Progresso</span><b>{st.progresso}%</b></div>
+      <ProgressBar value={st.progresso} color={a.cor} label={a.nome} status={st.rotulo} />
+      <p className="eyebrow tools-label">Ferramentas</p>
+      <div className="tools-list">
+        {a.ferramentas.map(nome => {
+          const p = pluginInfo(nome);
+          const s = estadoFerramenta(nome);
+          return <div key={nome}><PluginMark nome={nome} cor={p?.hex ?? a.cor} path={p?.path ?? null} size={25} /><strong>{nome}</strong><span className={s === 'Em uso' ? 'agent-color' : ''}>{s}</span></div>;
+        })}
+        {!a.ferramentas.length && <p className="tools-empty">Sem ferramentas: este agente só conversa.</p>}
+      </div>
+      {a.instrucoes && <><p className="eyebrow tools-label">Instruções</p><p className="agent-instructions">{a.instrucoes}</p></>}
+      <button type="button" className="st-btn-ghost agent-edit" onClick={() => abrirEditorAgente(a.id)}>Editar agente</button>
+    </div>
+  );
 }
 
 export default function AgentChat() {
-  const { agente: id } = useParams();
-  const indice = agentes.findIndex((item) => item.id === id);
-  const { state, statusAgente } = useSora();
+  const { agente: id = '' } = useParams();
+  const [params] = useSearchParams();
+  const e = useProjetos();
+  const agora = useAgora();
+  const celular = useCelular();
+  const a = e.agentes[id];
+  const st = a ? estadoAgente(e, a.id, agora) : null;
+  const [aba, setAba] = useState<'trabalho' | 'perfil' | null>(params.get('painel') === 'trabalho' ? 'trabalho' : null);
+  const [sheet, setSheet] = useState(params.get('painel') === 'trabalho');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  const status = indice >= 0 ? statusAgente(indice) : 'aguardando';
-  const progress = indice >= 0 ? state.progressos[indice] : 0;
-  const done = status === 'concluido' || state.fase === 'pronto';
-  const waiting = status === 'aguardando' && !done;
+  const abaAtual = aba ?? (st?.status === 'trabalhando' ? 'trabalho' : 'perfil');
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  const itens: Item[] = [];
+  if (a) {
+    const xs = execucoesDoAgente(e, a.id).filter(x => x.inicio <= agora);
+    // quem entregou para este agente (handoff na equipe)
+    const anterior = e.execucoes.find(x => x.roteiro.some(r => r.tipo === 'handoff' && r.paraAgenteId === a.id));
+    const h = anterior?.roteiro.find(r => r.tipo === 'handoff' && r.paraAgenteId === a.id);
+    const de = anterior ? e.agentes[anterior.agenteId] : undefined;
+    if (anterior && h && de && anterior.inicio + h.em <= agora) {
+      itens.push({ t: anterior.inicio + h.em, key: 'recebeu', node: (
+        <div className="handoff-banner" style={{ '--agent': de.cor } as CSSProperties}><strong>{de.nome}</strong> {h.texto.replace(/^Enviou/, 'enviou').replace(` para ${a.nome}`, '')} <span aria-hidden="true">↘</span></div>
+      ) });
+    }
+    xs.forEach(x => {
+      const prompt = x.roteiro.find(r => r.tipo === 'prompt');
+      if (prompt && prompt.origem !== 'usuario') {
+        itens.push({ t: x.inicio, key: `p-${x.id}`, node: (
+          <div className="assistant-row"><SoraOrb size={34} color={e.sora.cor} state="coordinating" glow={false} decorative seed={71} /><p><strong>{e.sora.nome}</strong>&nbsp; {prompt.texto}</p></div>
+        ) });
+      }
+      const fim = x.inicio + duracaoRoteiro(x.roteiro);
+      if (agora < fim) {
+        const atual = [...x.roteiro].reverse().find(r => x.inicio + r.em <= agora && r.tipo !== 'prompt');
+        itens.push({ t: agora, key: `w-${x.id}`, node: (
+          <div className="assistant-row agent-copy">
+            <SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="working" glow={false} decorative seed={3} />
+            <span><ShimmerText>{atual?.tipo === 'ferramenta' ? `${atual.texto}… (${atual.acao})` : atual?.texto ?? `${a.verbo}…`}</ShimmerText>
+              {!celular && <button type="button" className="see-work inline" onClick={() => setAba('trabalho')}>Ver passos</button>}</span>
+          </div>
+        ) });
+      } else if (x.tarefaId) {
+        const proj = x.projetoId ? e.projetos.find(p => p.id === x.projetoId) : undefined;
+        const ent = proj?.entregas[a.id];
+        itens.push({ t: fim, key: `e-${x.id}`, node: <>
+          <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="done" glow={false} decorative seed={4} /><p><strong style={{ color: a.cor }}>{a.nome}</strong>&nbsp; Pronto! {ent ? `${ent.titulo}: ${ent.resumo}.` : ''}</p></div>
+          {ent && <div className="agent-delivery"><EntregaCard entrega={ent} agente={a} /></div>}
+        </> });
+      }
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [progress, status]);
+    mensagensDa(e, a.id, agora).forEach(m => itens.push({
+      t: m.criadoEm, key: m.id,
+      node: m.autor === 'usuario' ? <div className="user-message">{m.texto}</div>
+        : m.autor === 'sora' ? <div className="assistant-row"><SoraOrb size={34} color={e.sora.cor} state="coordinating" glow={false} decorative seed={72} /><p><strong>{e.sora.nome}</strong>&nbsp; {m.texto}</p></div>
+          : <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="idle" glow={false} decorative seed={5} /><p><strong style={{ color: a.cor }}>{a.nome}</strong>&nbsp; {m.texto}</p></div>,
+    }));
+  }
+  itens.sort((x, y) => x.t - y.t);
+  const ultimo = itens[itens.length - 1]?.key;
+  useLayoutEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [ultimo, itens.length]);
 
-  if (indice < 0) return <Navigate to="/chat/sora" replace />;
-  const agente = agentes[indice];
+  if (id === 'sora') return <Navigate to="/chat/sora" replace />;
+  if (!a || !st) return <Navigate to="/chat/sora" replace />;
 
-  return <AppShell title={agente.nome}>
-    <div className="workspace-grid agent-workspace" style={{ '--agent': agente.cor } as CSSProperties}>
-      <main className="conversation">
-        <div className="conversation-scroll agent-scroll" ref={scrollRef}>
-          {waiting
-            ? <WaitingWork nome={agente.nome} message={agente.espera} color={agente.cor} movimento={agente.tipoMovimento} seed={61 + indice} />
-            : <>
-              {indice === 0 && <div className="assistant-row"><SoraOrb size={34} state="coordinating" glow={false} seed={71} /><p><strong>Sora</strong>&nbsp; Pesquise referências de campanhas de lançamento para cafeterias.</p></div>}
-              {indice === 0 ? <AtlasWork done={done} progress={progress} /> : indice === 1 ? <LunaWork done={done} progress={progress} /> : <NinaWork done={done} progress={progress} />}
-            </>}
-          <div className="chat-end-anchor" ref={endRef} />
-        </div>
-        <div className="chat-composer"><MessageComposer placeholder={`Mensagem para ${agente.nome}…`} compact accent={agente.cor} processing={status === 'trabalhando'} /></div>
-      </main>
-      <aside className="agent-panel card">
-        <div className="agent-orb"><SoraOrb size={180} color={agente.cor} movimento={agente.tipoMovimento} state={status === 'trabalhando' ? 'working' : done ? 'done' : 'idle'} pulseKey={state.pulseKey} seed={81 + indice} title={agente.nome} /></div>
-        <h1>{agente.nome}</h1><p>{agente.funcao}</p>
-        <span className="agent-pill"><i />{done ? 'Concluído' : status === 'trabalhando' ? agente.verbo : agente.espera}</span>
-        <div className="progress-title"><span>Progresso</span><b>{progress}%</b></div><ProgressBar value={progress} color={agente.cor} />
-        <p className="eyebrow tools-label">Ferramentas</p>
-        <div className="tools-list">{agente.ferramentas.map((nome, toolIndex) => {
-          const plugin = plugins.find((item) => item.nome === nome);
-          const toolStatus = toolState(status, toolIndex, progress, agente.ferramentas.length);
-          return <div key={nome}><PluginMark nome={nome} cor={plugin?.cor ?? agente.cor} path={plugin?.path ?? null} size={25} /><strong>{nome}</strong><span className={toolStatus === 'Em uso' ? 'agent-color' : ''}>{toolStatus}</span></div>;
-        })}</div>
-      </aside>
-    </div>
-  </AppShell>;
+  return (
+    <AppShell agenteId={a.id} menuItens={[{ rotulo: 'Ver trabalho', onClick: () => { setAba('trabalho'); setSheet(true); } }]}>
+      <div className="workspace-grid agent-workspace" style={{ '--agent': a.cor } as CSSProperties}>
+        <main className="conversation" aria-label={`Conversa com ${a.nome}`}>
+          <div className="conversation-scroll agent-scroll" ref={scrollRef} aria-live="polite" aria-relevant="additions">
+            {!itens.length && (
+              <div className="agent-empty">
+                <SoraOrb size={112} color={a.cor} movimento={a.tipoMovimento} state="idle" seed={61} title={a.nome} />
+                <h2>{a.avulso ? `Converse com ${a.nome}` : st.rotulo}</h2>
+                <p>{a.avulso ? `${a.funcao}. Mande uma mensagem e acompanhe os passos no painel Trabalho.` : 'O trabalho aparecerá aqui assim que a etapa anterior for concluída.'}</p>
+              </div>
+            )}
+            {itens.map(i => <div key={i.key} className="chat-item">{i.node}</div>)}
+          </div>
+          <div className="chat-composer">
+            <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'}
+              onSend={t => enviarParaAgente(a.id, t)} />
+          </div>
+        </main>
+        {!celular && (
+          <aside className="agent-panel card" aria-label={`Painel de ${a.nome}`}>
+            <div className="panel-tabs" role="tablist" aria-label="Painel do agente">
+              <button type="button" role="tab" aria-selected={abaAtual === 'trabalho'} className={abaAtual === 'trabalho' ? 'is-on' : ''} onClick={() => setAba('trabalho')}>
+                <i className={`wk-pulse ${st.status === 'trabalhando' ? 'is-live' : ''}`} aria-hidden="true" />Trabalho
+              </button>
+              <button type="button" role="tab" aria-selected={abaAtual === 'perfil'} className={abaAtual === 'perfil' ? 'is-on' : ''} onClick={() => setAba('perfil')}>Perfil</button>
+            </div>
+            {abaAtual === 'trabalho'
+              ? <PainelTrabalho agenteIds={[a.id]} agenteId={a.id} semSeletor className="panel-work" />
+              : <Perfil e={e} a={a} agora={agora} />}
+          </aside>
+        )}
+        {celular && <TrabalhoDock agenteIds={[a.id]} agenteId={a.id} semSeletor aberta={sheet} onAlternar={setSheet} />}
+      </div>
+    </AppShell>
+  );
 }
-

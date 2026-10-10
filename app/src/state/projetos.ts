@@ -37,6 +37,8 @@ export interface ProjetoSora {
   marcos: { plano: number; nascimentos: number[]; trabalho: number; fim: number };
   aprovadoEm?: number;
   versao: number;
+  entregasAnteriores?: Record<string, EntregaGerada>;   // versão anterior (após um ajuste)
+  ajusteAgenteId?: string;                              // agente que fez o último ajuste
 }
 
 export interface MensagemChat {
@@ -58,6 +60,7 @@ export interface EstadoProjetos {
   projetoAtivoId: string | null;
   execucoes: Execucao[];
   mensagens: MensagemChat[];
+  pluginsConectados: string[];
 }
 
 export type FaseProjeto = 'pensando' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado';
@@ -75,7 +78,11 @@ export const TEMPOS = {
 const CHAVE = 'sora.projetos.v1';
 const inicial = (): EstadoProjetos => ({
   versao: 1, sora: { nome: 'Sora', cor: COR_SORA }, agentes: {}, projetos: [], projetoAtivoId: null, execucoes: [], mensagens: [],
+  pluginsConectados: [...PLUGINS_PADRAO],
 });
+
+/** Plugins conectados de início (os destaques da tela Plugins). */
+export const PLUGINS_PADRAO = ['Figma', 'ChatGPT', 'Gemini', 'Canva', 'Notion'];
 
 function carregar(): EstadoProjetos {
   try {
@@ -301,8 +308,13 @@ const listaNomes = (n: string[]) => n.length < 2 ? (n[0] ?? '') : `${n.slice(0, 
 /** "Novo chat": volta ao estado só-Sora (projetos anteriores continuam na lista). */
 export function novoChat() { alterar(e => ({ ...e, projetoAtivoId: null })); }
 export function abrirProjeto(id: string) { alterar(e => ({ ...e, projetoAtivoId: id })); }
-export function aprovarProjeto(id: string) {
-  alterar(e => ({ ...e, projetos: e.projetos.map(p => p.id === id ? { ...p, aprovadoEm: Date.now() } : p) }));
+export function aprovarProjeto(id: string, agora = Date.now()) {
+  alterar(e => ({
+    ...e,
+    projetos: e.projetos.map(p => p.id === id ? { ...p, aprovadoEm: agora } : p),
+    mensagens: [...e.mensagens, { id: novoId('msg'), conversaId: `sora:${id}`, autor: 'sora', criadoEm: agora + 400,
+      texto: 'Aprovado! Registrei sua aprovação — a equipe pode seguir com a publicação.' }],
+  }));
 }
 export function removerProjeto(id: string) {
   alterar(e => {
@@ -320,7 +332,7 @@ export function removerProjeto(id: string) {
 }
 
 /** Mensagem direta do usuário a um agente: o agente trabalha (passos ao vivo) e responde. */
-export function enviarParaAgente(agenteId: string, texto: string, agora = Date.now()) {
+export function enviarParaAgente(agenteId: string, texto: string, agora = Date.now(), registrarNoChat = true) {
   const ag = estado.agentes[agenteId];
   if (!ag) return;
   const ocupadoAte = Math.max(agora + 500, ...execucoesDoAgente(estado, agenteId).map(x => x.inicio + duracaoRoteiro(x.roteiro) + 300));
@@ -332,7 +344,7 @@ export function enviarParaAgente(agenteId: string, texto: string, agora = Date.n
     ...e,
     execucoes: [...e.execucoes, x],
     mensagens: [...e.mensagens,
-      { id: novoId('msg'), conversaId: agenteId, autor: 'usuario', texto, criadoEm: agora },
+      { id: novoId('msg'), conversaId: agenteId, autor: registrarNoChat ? 'usuario' : 'sora', texto, criadoEm: agora },
       { id: novoId('msg'), conversaId: agenteId, autor: agenteId, criadoEm: fim, execucaoId: x.id,
         texto: `Feito. ${entrega?.resultado?.resumo ?? 'Pronto'} — veja os passos no painel Trabalho.` },
     ],
@@ -341,24 +353,70 @@ export function enviarParaAgente(agenteId: string, texto: string, agora = Date.n
 }
 
 /** Pedido de ajuste num projeto: a Sora repassa ao agente certo e uma nova versão é gerada. */
-export function pedirAjuste(projetoId: string, texto: string, agora = Date.now()) {
+export function pedirAjuste(projetoId: string, texto: string, agenteId?: string, agora = Date.now()) {
   const p = estado.projetos.find(x => x.id === projetoId);
   if (!p) return;
   const t = texto.toLowerCase();
-  const alvo = p.agenteIds.map(id => estado.agentes[id]).filter(Boolean)
-    .find(a => t.split(/\s+/).some(w => w.length > 4 && (a.funcao.toLowerCase().includes(w.slice(0, 5)) || a.nome.toLowerCase() === w)))
-    ?? estado.agentes[p.agenteIds[p.agenteIds.length - 1]];
+  const ags = p.agenteIds.map(id => estado.agentes[id]).filter(Boolean);
+  const porPalavra = ags.find(a => t.split(/\s+/).some(w => w.length > 4 && (a.funcao.toLowerCase().includes(w.slice(0, 5)) || a.nome.toLowerCase() === w)));
+  // pelo tipo do que precisa mudar: textos → quem entregou texto/calendário; visual → quem entregou imagens
+  const querTexto = /texto|legenda|escrev|tom|descontra|formal|se[cç][oõ]es|roteiro/.test(t);
+  const querVisual = /imag|foto|cor|visual|pe[cç]a|layout|tela|cena/.test(t);
+  const porTipo = querTexto ? (ags.find(a => /texto|roteir|resum|relat|legend/i.test(a.funcao)) ?? ags.find(a => ['texto', 'calendario'].includes(p.entregas[a.id]?.tipo ?? '')))
+    : querVisual ? (ags.find(a => /visual|design|cena|layout/i.test(a.funcao)) ?? ags.find(a => p.entregas[a.id]?.tipo === 'imagem')) : undefined;
+  const alvo = (agenteId && estado.agentes[agenteId]) || porPalavra || porTipo || ags[ags.length - 1];
   if (!alvo) return;
-  const x = enviarParaAgente(alvo.id, texto, agora);
+  const x = enviarParaAgente(alvo.id, texto, agora, false);
+  const anterior = p.entregas[alvo.id];
+  const nova: EntregaGerada | undefined = anterior && {
+    ...anterior,
+    resumo: `${anterior.resumo} · v${p.versao + 1}`,
+    itens: [...(anterior.itens ?? []).slice(0, 5), `Ajuste: ${texto}`],
+  };
   const conversa = `sora:${projetoId}`;
   alterar(e => ({
     ...e,
-    projetos: e.projetos.map(q => q.id === projetoId ? { ...q, versao: q.versao + 1, aprovadoEm: undefined } : q),
+    projetos: e.projetos.map(q => q.id === projetoId ? {
+      ...q, versao: q.versao + 1, aprovadoEm: undefined, ajusteAgenteId: alvo.id,
+      entregasAnteriores: { ...q.entregas }, entregas: nova ? { ...q.entregas, [alvo.id]: nova } : q.entregas,
+      marcos: { ...q.marcos, fim: Math.max(q.marcos.fim, x ? x.inicio + duracaoRoteiro(x.roteiro) : 0) },
+    } : q),
     mensagens: [...e.mensagens,
       { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto, criadoEm: agora },
       { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: `Pedi para ${alvo.nome} ajustar. Já te mostro a nova versão.`, criadoEm: agora + 900 },
       ...(x ? [{ id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: 'Pronto. Veja a nova versão.', criadoEm: x.inicio + duracaoRoteiro(x.roteiro) }] : []),
     ],
+  }));
+}
+
+/**
+ * Mensagem para a Sora no chat dela. Sem projeto ativo → vira um pedido (cria a equipe).
+ * Projeto pronto/aprovado → vira ajuste. Durante o trabalho → a Sora responde e anota.
+ */
+export function conversarComSora(texto: string, agora = Date.now()) {
+  const p = projetoAtivo(estado);
+  if (!p) return criarProjeto(texto, agora);
+  const fase = estadoProjeto(estado, p, agora).fase;
+  if (fase === 'pronto' || fase === 'aprovado') { pedirAjuste(p.id, texto, undefined, agora); return p; }
+  const conversa = `sora:${p.id}`;
+  const resposta = fase === 'pensando' || fase === 'planejando'
+    ? `Anotado: “${resumir(texto)}”. Vou considerar isso no plano.`
+    : `Anotado: “${resumir(texto)}”. Repasso para a equipe e te aviso quando terminar.`;
+  alterar(e => ({
+    ...e,
+    mensagens: [...e.mensagens,
+      { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto, criadoEm: agora },
+      { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: resposta, criadoEm: agora + 1100 },
+    ],
+  }));
+  return p;
+}
+const resumir = (t: string) => t.length > 70 ? `${t.slice(0, 67).trimEnd()}…` : t;
+
+export function alternarPlugin(nome: string) {
+  alterar(e => ({
+    ...e,
+    pluginsConectados: e.pluginsConectados.includes(nome) ? e.pluginsConectados.filter(n => n !== nome) : [...e.pluginsConectados, nome],
   }));
 }
 
@@ -400,3 +458,8 @@ export function restaurarSora() { alterar(e => ({ ...e, sora: { nome: 'Sora', co
 
 /** Zera tudo (QA / "começar do zero"). */
 export function limparTudo() { definir(inicial()); }
+
+// Ganchos de QA (só em desenvolvimento): qa/shoot.mjs usa para semear projetos já concluídos.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).__sora = { criarProjeto, limparTudo, lerEstado, novoChat, abrirProjeto };
+}

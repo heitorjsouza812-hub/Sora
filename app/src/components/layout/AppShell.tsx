@@ -1,48 +1,93 @@
-import type { CSSProperties, ReactNode } from 'react';
+// Moldura do app: barra lateral + cabeçalho (identidade, abas Equipes|Agentes, ações).
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { agentes } from '../../data/mock';
-import { useSora } from '../../state/SoraContext';
+import { estadoAgente, useAgora, useProjetos } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
-import { Sidebar } from './Sidebar';
+import { BottomSheet } from '../overlay';
+import { EditorAgenteHost, MenuAgente } from '../studio';
+import { Navegacao, Sidebar } from './Sidebar';
+import { statusDaSora } from './useSoraStatus';
 
-export function AppShell({ title, children }: { title: string; children: ReactNode }) {
-  const { state, statusAgente } = useSora();
-  const agente = agentes.find((item) => item.nome === title);
-  const indice = agente ? agentes.indexOf(agente) : -1;
-  const status = indice >= 0 ? statusAgente(indice) : null;
-  const soraThinking = ['enviado', 'pensando'].includes(state.fase);
-  const nome = agente?.nome ?? 'Sora';
-  const subtitulo = agente
-    ? status === 'concluido' ? 'Concluído' : status === 'trabalhando' ? agente.verbo : agente.espera
-    : soraThinking ? 'Pensando…'
-      : state.fase === 'coordenando' ? 'Coordenando 3 agentes'
-        : state.fase === 'pronto' ? 'Campanha pronta' : title === 'Novo chat' ? 'Disponível' : title === 'Sora' ? 'Agente principal' : title;
-  const orbState = agente
-    ? status === 'trabalhando' ? 'working' : status === 'concluido' ? 'done' : 'idle'
-    : soraThinking ? 'thinking' : state.fase === 'pronto' ? 'done' : state.fase === 'coordenando' ? 'coordinating' : 'idle';
-  const cor = agente?.cor ?? '#7EF2C4';
+export interface AppShellProps {
+  children: ReactNode;
+  /** controle segmentado Equipes | Agentes (Novo chat e estúdio) */
+  abas?: boolean;
+  /** quem aparece no cabeçalho: a Sora (padrão), um agente, ou só um título */
+  agenteId?: string;
+  titulo?: string;
+  /** ações à direita (padrão: Compartilhar) */
+  acoes?: ReactNode;
+  /** itens extras do menu "…" da identidade */
+  menuItens?: { rotulo: string; onClick: () => void }[];
+}
 
+export function Abas() {
   return (
-    <div className="app-shell">
-      <Sidebar />
-      <section className="app-stage">
-        <header className="topbar" style={{ '--header-accent': cor } as CSSProperties}>
-          <div className="topbar-identity">
-            <SoraOrb size={38} color={agente?.cor} movimento={agente?.tipoMovimento} state={orbState} glow={false} seed={91 + Math.max(indice, 0)} title={nome} />
-            <span><strong>{nome}</strong><small><i />{subtitulo}</small></span>
-          </div>
-          <details className="mobile-team-menu">
-            <summary>Equipe</summary>
-            <nav>
-              <NavLink to="/chat/sora">Sora <small>Coordenação</small></NavLink>
-              {agentes.map((item, itemIndex) => <NavLink key={item.id} to={`/chat/${item.id}`} style={{ '--agent': item.cor } as CSSProperties}>{item.nome}<small>{statusAgente(itemIndex) === 'concluido' ? 'Concluído' : item.espera}</small></NavLink>)}
-            </nav>
-          </details>
-          <button className="share-button">Compartilhar</button>
-        </header>
-        {children}
-      </section>
+    <nav className="mode-tabs" aria-label="Modo">
+      <NavLink to="/" end>Equipes</NavLink>
+      <NavLink to="/agentes">Agentes</NavLink>
+    </nav>
+  );
+}
+
+function Compartilhar() {
+  const [ok, setOk] = useState(false);
+  return (
+    <button type="button" className="share-button" onClick={() => {
+      void navigator.clipboard?.writeText(window.location.href).catch(() => {});
+      setOk(true); window.setTimeout(() => setOk(false), 1800);
+    }}>
+      <span aria-live="polite">{ok ? 'Link copiado' : 'Compartilhar'}</span>
+    </button>
+  );
+}
+
+function Identidade({ agenteId, titulo, menuItens }: Pick<AppShellProps, 'agenteId' | 'titulo' | 'menuItens'>) {
+  const e = useProjetos();
+  const agora = useAgora();
+  if (titulo) return <div className="topbar-identity topbar-title"><strong>{titulo}</strong></div>;
+  const ag = agenteId ? e.agentes[agenteId] : undefined;
+  if (ag) {
+    const st = estadoAgente(e, ag.id, agora);
+    return (
+      <div className="topbar-identity" style={{ '--header-accent': st.status === 'concluido' ? 'var(--ok)' : ag.cor } as CSSProperties}>
+        <SoraOrb size={38} color={ag.cor} movimento={ag.tipoMovimento} glow={false} decorative seed={7}
+          state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : 'idle'} />
+        <span><strong>{ag.nome}</strong><small role="status"><i />{st.rotulo || ag.funcao}</small></span>
+        <MenuAgente agenteId={ag.id} nome={ag.nome} itens={menuItens} />
+      </div>
+    );
+  }
+  const s = statusDaSora(e, agora);
+  return (
+    <div className="topbar-identity" style={{ '--header-accent': s.orb === 'thinking' ? e.sora.cor : 'var(--ok)' } as CSSProperties}>
+      <SoraOrb size={38} color={e.sora.cor} state={s.orb} pulseKey={s.pulso} glow={false} decorative seed={9} />
+      <span><strong>{e.sora.nome}</strong><small role="status"><i />{s.rotulo}</small></span>
+      <MenuAgente agenteId="sora" nome={e.sora.nome} itens={menuItens} />
     </div>
   );
 }
 
+export function AppShell({ children, abas, agenteId, titulo, acoes, menuItens }: AppShellProps) {
+  const [menu, setMenu] = useState(false);
+  return (
+    <div className="app-shell">
+      <Sidebar />
+      <section className="app-stage">
+        <header className={`topbar ${abas ? 'has-tabs' : ''}`}>
+          <button type="button" className="mobile-menu-button" aria-label="Abrir menu" aria-expanded={menu} onClick={() => setMenu(true)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+          <Identidade agenteId={agenteId} titulo={titulo} menuItens={menuItens} />
+          {abas && <Abas />}
+          <div className="topbar-actions">{acoes ?? <Compartilhar />}</div>
+        </header>
+        {children}
+      </section>
+      <BottomSheet open={menu} onClose={() => setMenu(false)} title="Menu" className="mobile-nav-sheet">
+        <div className="mobile-nav"><Navegacao onNavegar={() => setMenu(false)} /></div>
+      </BottomSheet>
+      <EditorAgenteHost />
+    </div>
+  );
+}

@@ -1,61 +1,90 @@
-import { useEffect, useState } from 'react';
+// Novo chat (aba Equipes): só a Sora. O pedido vira uma equipe inteira criada pela Sora.
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
 import { MessageComposer } from '../components/ui/MessageComposer';
-import { PEDIDO_CAMPANHA } from '../data/mock';
-import { useSora } from '../state/SoraContext';
+import { criarProjeto, novoChat, useProjetos } from '../state/projetos';
 
-const sugestoes = ['Criar campanha', 'Pesquisar mercado', 'Planejar posts', 'Resumir e-mails'];
+const sugestoes: [string, string][] = [
+  ['Criar campanha', 'Crie uma campanha para lançar minha cafeteria: pesquise referências, prepare as peças e monte um calendário de posts.'],
+  ['Pesquisar mercado', 'Faça uma pesquisa de mercado sobre cafeterias no meu bairro, com concorrentes e preços.'],
+  ['Planejar posts', 'Planeje os posts do mês para o Instagram da minha loja.'],
+  ['Resumir e-mails', 'Resuma meus e-mails da semana e sugira respostas.'],
+];
+
+/** A animação de chegada da Sora só acontece na primeira abertura da sessão (lido uma vez por carga). */
+let chegadaPendente = (() => {
+  try {
+    if (sessionStorage.getItem('sora.chegou')) return false;
+    sessionStorage.setItem('sora.chegou', '1');
+    return true;
+  } catch { return false; }
+})();
+const primeiraVez = () => { const r = chegadaPendente; chegadaPendente = false; return r; };
 
 export default function Home() {
-  const [chegando, setChegando] = useState(true);
+  const [chegando, setChegando] = useState(() => chegadaPendente);
+  useEffect(() => { primeiraVez(); }, []);
   const [ouvindo, setOuvindo] = useState(false);
+  const [enviado, setEnviado] = useState(false);
   const [partindo, setPartindo] = useState(false);
-  const { enviar, dispatch, state } = useSora();
+  const [texto, setTexto] = useState('');
+  const [pulso, setPulso] = useState(0);
+  const timers = useRef<number[]>([]);
   const navigate = useNavigate();
-  useEffect(() => {
-    const timer = window.setTimeout(() => setChegando(false), 2800);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const { sora } = useProjetos();
 
-  const handleSend = (pedido: string) => {
-    enviar(pedido);
+  useEffect(() => { novoChat(); }, []);
+  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
+
+  const enviar = (pedido: string) => {
+    if (enviado) return;
+    timers.current.forEach((t) => window.clearTimeout(t));
+    criarProjeto(pedido);
+    setEnviado(true);
     setOuvindo(false);
-    window.setTimeout(() => setPartindo(true), 600);
-    window.setTimeout(() => navigate('/chat/sora'), 1180);
+    setPulso((p) => p + 1);
+    timers.current = [
+      window.setTimeout(() => setPartindo(true), 650),
+      window.setTimeout(() => navigate('/chat/sora'), 1200),
+    ];
   };
 
-  const heroState = state.fase === 'enviado' ? 'thinking' : chegando ? 'arriving' : ouvindo ? 'listening' : 'idle';
+  const heroState = enviado ? 'thinking' : chegando ? 'arriving' : ouvindo ? 'listening' : 'idle';
 
   return (
-    <AppShell title="Novo chat">
+    <AppShell abas>
       <main className="home-screen">
         <div className={`hero-orb ${partindo ? 'orb-departing' : ''}`}>
           <SoraOrb
             size={260}
+            color={sora.cor}
             state={heroState}
-            lookAt={ouvindo ? { x: 0, y: .8 } : null}
-            pulseKey={state.pulseKey}
+            lookAt={ouvindo ? { x: -0.1, y: 0.85 } : null}
+            pulseKey={pulso}
             seed={0}
             onArrived={() => setChegando(false)}
-            title={state.fase === 'enviado' ? 'Sora pensando' : 'Sora pronta para ajudar'}
+            title={enviado ? `${sora.nome} pensando` : `${sora.nome} pronta para ajudar`}
           />
         </div>
         <h1>Em que posso te ajudar hoje?</h1>
+        <p className="home-hint">Descreva o que você precisa. A {sora.nome} monta um plano e cria uma equipe de agentes para você.</p>
         <div className="hero-composer">
           <MessageComposer
-            placeholder="Peça qualquer coisa à Sora…"
+            placeholder={`Peça qualquer coisa à ${sora.nome}…`}
             tools
-            onActivity={(active) => { setOuvindo(active); dispatch({ type: 'OUVIR', ativo: active }); }}
-            onSend={handleSend}
+            value={texto}
+            onValueChange={setTexto}
+            processing={enviado}
+            onActivity={setOuvindo}
+            onSend={enviar}
           />
         </div>
         <div className="suggestions" aria-label="Sugestões">
-          {sugestoes.map((sugestao) => <button key={sugestao} onClick={() => handleSend(sugestao === 'Criar campanha' ? PEDIDO_CAMPANHA : sugestao)}>{sugestao}</button>)}
+          {sugestoes.map(([rotulo, pedido]) => <button type="button" key={rotulo} onClick={() => setTexto(pedido)}>{rotulo}</button>)}
         </div>
       </main>
     </AppShell>
   );
 }
-

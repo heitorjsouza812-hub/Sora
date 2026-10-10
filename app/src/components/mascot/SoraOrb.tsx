@@ -17,12 +17,13 @@ export interface SoraOrbProps {
   className?: string;
   title?: string;               // aria-label
   seed?: number;                // dessincroniza piscar/rotação entre vários orbs (padrão 0)
-  onArrived?: () => void;       // chamado quando a animação 'arriving' termina (~2,8 s)
+  onArrived?: () => void;       // chamado quando a animação 'arriving' termina (~1,6 s)
+  decorative?: boolean;         // só enfeite (o nome já está ao lado): aria-hidden, fora do leitor de tela
 }
 
 export function SoraOrb({
   size, color = '#E2ECFF', state = 'idle', movimento = 'gira', lookAt = null,
-  pulseKey, glow, className, title = 'Sora', seed = 0, onArrived,
+  pulseKey, glow, className, title = 'Sora', seed = 0, onArrived, decorative = false,
 }: SoraOrbProps) {
   const ref = useRef<HTMLCanvasElement>(null);
   const orb = useRef<OrbRenderer | null>(null);
@@ -54,8 +55,9 @@ export function SoraOrb({
   return (
     <canvas
       ref={ref}
-      role="img"
-      aria-label={title}
+      role={decorative ? undefined : 'img'}
+      aria-label={decorative ? undefined : title}
+      aria-hidden={decorative || undefined}
       className={className}
       width={Math.round(size)}
       height={Math.round(size)}

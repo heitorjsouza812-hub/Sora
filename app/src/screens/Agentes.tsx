@@ -45,7 +45,7 @@ export default function Agentes() {
   const total = avulsos.length + grupos.reduce((n, g) => n + g.ags.length, 0);
 
   return (
-    <AppShell title="Agentes">
+    <AppShell abas>
       <div className="ag-studio">
         <aside className="ag-list" aria-label="Seus agentes">
           <button type="button" className="ag-new" onClick={() => selecionar('novo')}><span>+</span>Novo agente</button>
