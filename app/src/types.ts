@@ -25,3 +25,29 @@ export interface Entrega {
   tipo: 'links' | 'imagem' | 'texto' | 'calendario'; conteudo: unknown; versao: number;
 }
 export interface Plugin { id: string; nome: string; categoria: string; conectado: boolean }
+
+// ---- Rodada 3: equipes geradas, agentes avulsos e painel "Trabalho" ----
+
+/** Um passo do trabalho de um agente, exibido ao vivo no painel "Trabalho". */
+export interface PassoTrabalho {
+  id: string;
+  agenteId: string;
+  tipo: 'prompt' | 'pensamento' | 'ferramenta' | 'entrega' | 'handoff';
+  texto: string;
+  ferramenta?: string;                  // nome do plugin (ex.: "Perplexity")
+  acao?: string;                        // ex.: "perplexity.buscar"
+  parametros?: Record<string, unknown>;
+  resultado?: ResultadoPasso;
+  status: 'executando' | 'concluido' | 'erro';
+  inicio: number;                       // ms (epoch)
+  fim?: number;
+  paraAgenteId?: string;                // handoff: quem recebe
+  origem?: 'sora' | 'usuario';          // prompt: quem pediu
+}
+
+export interface ResultadoPasso {
+  resumo: string;                       // ex.: "4 links"
+  links?: { titulo: string; dominio: string }[];
+  imagens?: string[];                   // URLs (ou vazio → miniatura gerada na cor do agente)
+  itens?: string[];                     // linhas de texto (títulos, tópicos…)
+}

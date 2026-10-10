@@ -3,6 +3,10 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, typ
 import { SoraOrb, SoraThinking, type OrbState } from '../components/mascot';
 import { OrbRenderer } from '../components/mascot/orbEngine';
 import type { Movimento } from '../types';
+import { EditorAgenteHost, MenuAgente } from '../components/studio';
+import { GavetaTrabalho, PainelTrabalho } from '../components/work';
+import { criarProjeto, estadoAgente, estadoProjeto, limparTudo, projetoAtivo, useAgora, useProjetos } from '../state/projetos';
+import Agentes from './Agentes';
 
 const ESTADOS: { id: OrbState; nome: string; desc: string }[] = [
   { id: 'arriving', nome: 'Chegando', desc: 'pontos se juntam, olhos abrem' },
@@ -81,8 +85,47 @@ function OrbSolo({ q }: { q: URLSearchParams }) {
   );
 }
 
+// /lab/orb#trabalho (e #agentes) — banco de testes da Rodada 3 (planejador + store + painel Trabalho + editor)
+function PreviaTrabalho() {
+  const e = useProjetos();
+  const agora = useAgora();
+  const [aberta, setAberta] = useState(true);
+  const [pedido, setPedido] = useState('Crie uma campanha para lançar minha cafeteria: pesquise referências, prepare as peças e monte um calendário de posts.');
+  const p = projetoAtivo(e);
+  const ep = p ? estadoProjeto(e, p, agora) : null;
+  const trabalhando = p?.agenteIds.map(id => e.agentes[id]).find(a => a && estadoAgente(e, a.id, agora).status === 'trabalhando');
+  return (
+    <div style={{ height: '100vh', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 18, padding: 18, boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font)' }}>
+      <div style={{ overflowY: 'auto' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <input value={pedido} onChange={ev => setPedido(ev.target.value)} style={{ flex: 1, height: 40, padding: '0 12px', color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 10 }} />
+          <button className="st-btn" onClick={() => criarProjeto(pedido)}>Criar equipe</button>
+          <button className="st-btn-ghost" onClick={limparTudo}>Limpar</button>
+        </div>
+        <p style={{ color: 'var(--text-2)' }}>{p ? `${p.titulo} · fase: ${ep?.fase} · ${ep?.nascidos}/${p.agenteIds.length} agentes · ${ep?.progresso}%` : 'Nenhum projeto ativo.'}</p>
+        {p && <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 0' }}><SoraOrb size={56} color={e.sora.cor} state={ep?.fase === 'pensando' ? 'thinking' : ep?.fase === 'pronto' ? 'done' : 'coordinating'} pulseKey={ep?.pulso} glow={false} /><strong>{e.sora.nome}</strong><MenuAgente agenteId="sora" nome={e.sora.nome} /></div>}
+        {p?.agenteIds.map(id => e.agentes[id]).filter(a => a && a.criadoEm <= agora).map(a => {
+          const st = estadoAgente(e, a.id, agora);
+          return <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8 }}>
+            <SoraOrb size={36} color={a.cor} movimento={a.tipoMovimento} state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : 'arriving'} glow={false} />
+            <strong style={{ color: a.cor }}>{a.nome}</strong><small style={{ color: 'var(--text-2)' }}>{a.funcao} · {st.rotulo} · {st.progresso}%</small>
+            <MenuAgente agenteId={a.id} nome={a.nome} />
+          </div>;
+        })}
+      </div>
+      <GavetaTrabalho aberta={aberta} onAlternar={() => setAberta(v => !v)} corAtiva={trabalhando?.cor} resumo={trabalhando ? `${trabalhando.nome} · ${trabalhando.verbo}` : undefined}>
+        <PainelTrabalho agenteIds={p?.agenteIds ?? []} />
+      </GavetaTrabalho>
+      <EditorAgenteHost />
+    </div>
+  );
+}
+
 export default function OrbLab() {
   const q = new URLSearchParams(window.location.search);
+  const previa = window.location.hash.slice(1);
+  if (previa === 'agentes') return <><Agentes /><EditorAgenteHost /></>;
+  if (previa === 'trabalho') return <PreviaTrabalho />;
   return q.has('solo') ? <OrbSolo q={q} /> : <OrbLabFull />;
 }
 
