@@ -19,7 +19,8 @@ export function SeletorProjeto({ onEscolhido }: { onEscolhido: () => void }) {
     [projetos, termo],
   );
   const opcoes: Opcao[] = [{ id: null }, ...filtrados.map((projeto) => ({ id: projeto.id, projeto }))];
-  const atual = Math.min(ativo, Math.max(0, opcoes.length - 1));
+  // A opção automática garante uma lista não vazia; derive o índice válido sem sincronizar estado em efeito.
+  const atual = Math.min(ativo, opcoes.length - 1);
 
   const escolher = (id: string | null) => {
     definirIlhaPrefs({ projetoId: id });
