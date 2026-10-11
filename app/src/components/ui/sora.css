@@ -653,3 +653,13 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 /* E3: pílula do painel no celular em uma linha (rótulo inteiro, resumo cede espaço) */
 .work-pill strong { flex: none; white-space: nowrap; }
 .work-pill span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Ajustes finais: entregas coladas no ritmo do chat (a barra de ações da mensagem anterior já dá o respiro) */
+.chat-item > .deliveries { margin-top: 0; }
+/* miniaturas das peças no card de entrega: mais claras e título que cabe na miniatura */
+.piece-strip .campaign-piece { container-type: inline-size; }
+.piece-strip .campaign-piece img, .piece-strip .campaign-piece-poster img { filter: saturate(1.05) brightness(.98); }
+.piece-strip .campaign-piece-shade, .piece-strip .campaign-piece-poster .campaign-piece-shade { background: linear-gradient(180deg, transparent 38%, var(--coffee-overlay) 100%); }
+.piece-strip .campaign-piece-copy, .piece-strip .campaign-piece-poster .campaign-piece-copy { inset: auto 8% 7%; text-shadow: 0 1px 3px var(--black-a65), 0 0 10px var(--black-a65); }
+.piece-strip .campaign-piece-copy strong, .piece-strip .campaign-piece-poster .campaign-piece-copy strong { font-size: clamp(9px, 15cqi, var(--fs-13)); line-height: 1.12; overflow-wrap: normal; word-break: keep-all; }
+/* a regra antiga .piece-strip img (33%) também pegava a foto DENTRO da peça: a foto cobre a miniatura toda */
+.piece-strip .campaign-piece img { width: 100%; height: 100%; border-radius: 0; }
