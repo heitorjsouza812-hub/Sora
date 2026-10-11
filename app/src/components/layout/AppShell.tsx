@@ -7,6 +7,7 @@ import { Button, IconButton, toast } from '../base';
 import { BottomSheet } from '../overlay';
 import { GestaoHost } from '../gestao';
 import { Comandos } from '../comandos';
+import { Ilha } from '../ilha';
 import { FaixaSemConexao } from '../erros';
 import { EditorAgenteHost, MenuAgente } from '../builder';
 import { Navegacao, Sidebar } from './Sidebar';
@@ -84,6 +85,7 @@ export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppSh
       <EditorAgenteHost />
       <GestaoHost />
       <Comandos />
+      <Ilha />
     </div>
   );
 }
