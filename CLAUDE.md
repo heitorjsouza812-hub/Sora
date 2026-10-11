@@ -263,6 +263,7 @@ Status de agente/tarefa: `aguardando` · `trabalhando` · `concluido` · `erro`.
 - Não altere a aparência do mascote nem as cores dos agentes sem pedido explícito.
 - Ao criar telas novas, reaproveite os tokens e textos da seção 4; em caso de dúvida, consulte `mini-video/sora-demo.html`.
 - Não apague os vídeos nem os HTMLs de referência.
+- Ao terminar uma sessão, registre em **`log/`** (diário `log/AAAA-MM-DD.md` + atualizar `log/ONDE-PARAMOS.md`).
 - Ao mudar algo de produto, atualize a **§7** e copie o `CLAUDE.md` para o `AGENTS.md` (o Codex lê o `AGENTS.md`).
 
 ---
