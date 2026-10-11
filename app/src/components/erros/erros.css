@@ -1,0 +1,26 @@
+/* Estados de erro (item 47). Só tokens. */
+.err-faixa { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); padding: var(--sp-2) var(--sp-5); color: var(--text-1); background: color-mix(in srgb, var(--warn), var(--surface-1) 86%); border-bottom: 1px solid color-mix(in srgb, var(--warn), transparent 65%); font-size: var(--fs-13); }
+.err-faixa p { flex: 1; min-width: 200px; margin: 0; line-height: 1.4; }
+.err-faixa__ponto { flex: none; width: 8px; height: 8px; background: var(--warn); border-radius: 50%; box-shadow: 0 0 10px var(--warn); }
+
+.err-card { display: flex; align-items: flex-start; gap: var(--sp-3); max-width: 620px; padding: var(--sp-4); background: var(--danger-bg); border: 1px solid var(--danger-line); border-radius: var(--r-16); }
+.err-card canvas { flex: none; }
+.err-card__texto { display: grid; gap: var(--sp-1); min-width: 0; }
+.err-card__texto strong { font-size: var(--fs-14); }
+.err-card__texto p { margin: 0 0 var(--sp-2); color: var(--text-2); font-size: var(--fs-13); line-height: 1.5; }
+.err-card__texto b { color: var(--text-1); font-weight: 600; }
+.err-acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.err-aviso { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); padding: var(--sp-3); color: var(--text-1); background: color-mix(in srgb, var(--warn), var(--surface-2) 90%); border: 1px solid color-mix(in srgb, var(--warn), transparent 65%); border-radius: var(--r-10); font-size: var(--fs-13); }
+.err-aviso > svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--warn); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.err-aviso p { flex: 1; min-width: 180px; margin: 0; line-height: 1.45; }
+.err-aviso--creditos.is-compacto { padding: var(--sp-2) 0 0; background: transparent; border: 0; }
+
+.err-dev { display: grid; gap: var(--sp-2); margin: 0; padding: var(--sp-4); border: 1px dashed var(--line-strong); border-radius: var(--r-10); }
+.err-dev legend { padding: 0 var(--sp-1); color: var(--text-2); font-size: var(--fs-12); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.err-dev small { color: var(--text-2); font-size: var(--fs-12); }
+
+@media (max-width: 767px) {
+  .err-faixa { padding: var(--sp-2) var(--sp-3); }
+  .err-faixa .b-btn, .err-card .b-btn, .err-aviso .b-btn, .err-dev .b-btn { min-height: 44px; }
+}

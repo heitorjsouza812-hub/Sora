@@ -45,6 +45,21 @@
 .cfg-security { margin-top: 18px; padding: var(--sp-6) var(--sp-6); background: var(--ok-soft); border: 1px solid var(--ok-line); border-radius: var(--r-16); }.cfg-security h3 { margin: 0 0 8px; font-size: var(--fs-16); }.cfg-security p { margin: 0 0 16px; color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }
 .cfg-placeholder, .cfg-account { padding: var(--sp-7); color: var(--text-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16); font-size: var(--fs-14); }
 .cfg-account { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-7); border-color: var(--danger-bg); }.cfg-account h3 { margin: 0 0 7px; color: var(--text-1); font-size: var(--fs-16); }.cfg-account p { max-width: 580px; margin: 0; line-height: 1.55; }.cfg-account .cfg-button { flex: none; }
+.cfg-plano { display: grid; gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-6); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16); }
+.cfg-plano__topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--sp-2) var(--sp-4); }
+.cfg-plano__topo h3 { margin: var(--sp-1) 0 0; font-size: var(--fs-20); }
+.cfg-plano__topo strong { font-size: var(--fs-14); }
+.cfg-plano__barra { width: 100%; height: 6px; appearance: none; border: 0; border-radius: var(--r-pill); background: var(--white-a10); overflow: hidden; }
+.cfg-plano__barra::-webkit-progress-bar { background: var(--white-a10); }
+.cfg-plano__barra::-webkit-progress-value { background: var(--ok); border-radius: var(--r-pill); }
+.cfg-plano__barra::-moz-progress-bar { background: var(--ok); }
+.cfg-plano p { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.5; }
+.cfg-planos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.cfg-planos li { display: grid; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-10); }
+.cfg-planos li[data-atual] { border-color: var(--ok-line); background: var(--ok-soft); }
+.cfg-planos span { color: var(--text-2); font-size: var(--fs-13); }
+.cfg-planos small { color: var(--ok); font-size: var(--fs-12); font-weight: 600; }
+.cfg-plano > .b-btn { justify-self: start; }
 .cfg-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }.cfg-modal-copy { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }
 @media (max-width: 767px) { .cfg-shell { grid-template-columns: 1fr; }
   /* celular: o título já está no cabeçalho; as abas viram uma faixa presa ao topo */
@@ -57,7 +72,7 @@
   .cfg-fields input, .cfg-model-row input, .cfg-defaults select { height: 44px; }
   .cfg-secret { display: flex; gap: var(--sp-2); }.cfg-secret input { padding-right: var(--sp-3); }.cfg-secret button { position: static; flex: none; height: 44px; padding: 0 var(--sp-3); border-radius: var(--r-10); font-size: var(--fs-13); }
   .cfg-switch { min-height: 44px; }.cfg-inline { min-height: 44px; }
-.cfg-main { padding: var(--sp-8) var(--sp-4) var(--sp-15); }.cfg-provider-summary { grid-template-columns: 42px minmax(0, 1fr) 18px; padding: var(--sp-4); }.cfg-provider-summary .cfg-status { grid-column: 2; }.cfg-chevron { grid-column: 3; grid-row: 1 / span 2; }.cfg-provider-body { padding: var(--sp-1) var(--sp-4) var(--sp-5); }.cfg-fields, .cfg-defaults { grid-template-columns: 1fr; }.cfg-model-row { grid-template-columns: minmax(0, 1fr) 120px; }.cfg-card-actions { flex-wrap: wrap; }.cfg-card-actions > span { display: none; }.cfg-account { align-items: flex-start; flex-direction: column; } }
+.cfg-main { padding: var(--sp-8) var(--sp-4) var(--sp-15); }.cfg-provider-summary { grid-template-columns: 42px minmax(0, 1fr) 18px; padding: var(--sp-4); }.cfg-provider-summary .cfg-status { grid-column: 2; }.cfg-chevron { grid-column: 3; grid-row: 1 / span 2; }.cfg-provider-body { padding: var(--sp-1) var(--sp-4) var(--sp-5); }.cfg-fields, .cfg-defaults { grid-template-columns: 1fr; }.cfg-model-row { grid-template-columns: minmax(0, 1fr) 120px; }.cfg-card-actions { flex-wrap: wrap; }.cfg-card-actions > span { display: none; }.cfg-account { align-items: flex-start; flex-direction: column; }.cfg-planos { grid-template-columns: 1fr; }.cfg-plano { padding: var(--sp-5); } }
 @media (prefers-reduced-motion: reduce) { .cfg-chevron { transition: none; } }
 
 
