@@ -14,7 +14,7 @@
   pointer-events: none;
 }
 .ilha { position: relative; pointer-events: auto; color: var(--text-1); font-family: inherit; }
-.ilha button { font: inherit; color: inherit; }
+:where(.ilha, .ilha-destacada) button { font: inherit; color: inherit; }
 
 /* ---------- espiando: faixa fina ---------- */
 .ilha-espiando {
@@ -31,26 +31,69 @@
 .ilha-espiando::after { content: ''; position: absolute; inset: -10px -20px; } /* área de hover maior */
 .ilha-espiando:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
-/* ---------- compacta: pílula preta pendurada no topo ---------- */
+/* ---------- casca preta: anima largura/altura/raio com mola entre pílula e painel ---------- */
+@property --ilha-ang { syntax: '<angle>'; initial-value: 0deg; inherits: true; }
+.ilha {
+  --ilha-raio: 20px;
+  --ilha-mola: cubic-bezier(.34, 1.32, .5, 1);
+  isolation: isolate;
+  border-radius: 0 0 var(--ilha-raio) var(--ilha-raio);
+}
+.ilha[data-modo='expandida'], .ilha[data-modo='alerta'] { --ilha-raio: 28px; }
+.ilha-casca {
+  position: relative;
+  overflow: hidden;
+  background: var(--ilha-preto);
+  border-radius: 0 0 var(--ilha-raio) var(--ilha-raio);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .5), inset 0 -1px 0 var(--ilha-borda), inset 1px 0 0 var(--ilha-borda), inset -1px 0 0 var(--ilha-borda);
+  transition: width 460ms var(--ilha-mola), height 460ms cubic-bezier(.34, 1.18, .5, 1), border-radius 320ms ease, box-shadow var(--dur-base) ease;
+}
+.ilha-casca > .ilha-pilula, .ilha-casca > .ilha-painel { position: absolute; top: 0; left: 50%; transform: translateX(-50%); }
+
+/* halo: brilho correndo na borda, nas cores dos agentes trabalhando */
+.ilha::before, .ilha::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 -1.5px -1.5px;
+  border-radius: 0 0 calc(var(--ilha-raio) + 1.5px) calc(var(--ilha-raio) + 1.5px);
+  background: var(--ilha-halo, none);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease, border-radius 320ms ease;
+  animation: ilha-girar 3.6s linear infinite;
+}
+.ilha::after { inset: 0 -6px -8px; filter: blur(12px); }
+.ilha[data-trabalhando]::before { opacity: .95; }
+.ilha[data-trabalhando]::after { opacity: .45; }
+@keyframes ilha-girar { to { --ilha-ang: 360deg; } }
+
+/* alerta não visto: a pílula respira até alguém abrir */
+.ilha[data-respira] .ilha-casca { animation: ilha-respirar 2.6s ease-in-out infinite; }
+@keyframes ilha-respirar {
+  0%, 100% { box-shadow: 0 12px 34px rgba(0, 0, 0, .5), 0 0 0 0 transparent; }
+  50% { box-shadow: 0 12px 34px rgba(0, 0, 0, .5), 0 0 22px 2px color-mix(in srgb, var(--ok), transparent 60%); }
+}
+
+/* ---------- compacta ---------- */
 .ilha-pilula {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  width: max-content;
   min-width: 280px;
   max-width: 420px;
   height: 40px;
   padding: 0 var(--sp-3) 0 var(--sp-2);
-  background: var(--ilha-preto);
-  border: 1px solid var(--ilha-borda);
-  border-top: 0;
-  border-radius: 0 0 var(--r-24) var(--r-24);
-  box-shadow: 0 10px 30px var(--black-a45, rgba(0, 0, 0, .45));
+  border-radius: inherit;
   cursor: pointer;
   user-select: none;
-  transition: transform var(--dur-slow) var(--ilha-easing), opacity var(--dur-base) ease, box-shadow var(--dur-base) ease;
 }
-.ilha-pilula:hover { box-shadow: 0 10px 30px rgba(0, 0, 0, .45), 0 0 18px color-mix(in srgb, var(--ilha-cor), transparent 82%); }
-.ilha-pilula:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ilha-pilula > * { animation: ilha-surgir 280ms ease both; }
+.ilha-pilula > :nth-child(2) { animation-delay: 60ms; }
+.ilha-pilula > :nth-child(3) { animation-delay: 110ms; }
+.ilha-pilula:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus); }
+.ilha:hover .ilha-casca { box-shadow: 0 12px 34px rgba(0, 0, 0, .5), 0 0 18px color-mix(in srgb, var(--ilha-cor), transparent 82%), inset 0 -1px 0 var(--ilha-borda); }
 .ilha-compacta-sora { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
 .ilha-compacta-texto {
   flex: 1;
@@ -63,33 +106,47 @@
   text-overflow: ellipsis;
 }
 .ilha-bonecos { display: flex; align-items: center; gap: 2px; flex: none; }
+.ilha-boneco-mini { position: relative; display: grid; place-items: center; animation: ilha-entrar-boneco 420ms var(--ilha-mola) both; animation-delay: calc(var(--i, 0) * 60ms + 80ms); }
 .ilha-bonecos-mais { margin-left: var(--sp-1); color: var(--text-3); font-size: var(--fs-12); font-weight: 600; }
+
+/* número que troca subindo ("2 trabalhando" → "3 trabalhando") */
+.ilha-num { display: inline-block; font-variant-numeric: tabular-nums; animation: ilha-numero 360ms var(--ilha-mola); }
 
 /* ---------- expandida: painel ---------- */
 .ilha-painel {
-  position: absolute;
-  top: 0;
-  left: 50%;
   width: 720px;
   max-width: calc(100vw - var(--sidebar, 0px) - 16px);
-  min-height: 300px;
+  max-height: min(560px, calc(100dvh - 24px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--sp-2) var(--sp-4) var(--sp-4);
-  background: var(--ilha-preto);
-  border: 1px solid var(--ilha-borda);
-  border-top: 0;
-  border-radius: 0 0 var(--r-24) var(--r-24);
-  box-shadow: var(--shadow-lg);
-  transform: translateX(-50%);
-  transform-origin: top center;
-  animation: ilha-crescer var(--dur-slow) var(--ilha-easing);
+  scrollbar-width: thin;
 }
-@keyframes ilha-crescer {
-  from { opacity: 0; transform: translateX(-50%) scale(.42, .14); border-radius: 0 0 var(--r-24) var(--r-24); }
-  to { opacity: 1; transform: translateX(-50%) scale(1); }
+.ilha-cabecalho { animation: ilha-surgir 300ms 70ms ease both; }
+.ilha-corpo { animation: ilha-surgir 360ms 130ms ease both; }
+.ilha-visao > .ilha-card:nth-child(2) { animation: ilha-surgir 360ms 200ms ease both; }
+.ilha-painel--alerta { background: radial-gradient(120% 70% at 50% 120%, color-mix(in srgb, var(--ok), transparent 90%), transparent 70%); }
+
+/* entrada / saída / conclusão */
+.ilha-saindo { animation: ilha-sair 260ms ease forwards !important; pointer-events: none; }
+.ilha-anel {
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--agente);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ilha-anel 900ms ease-out forwards;
 }
-.ilha[data-modo='expandida'] .ilha-pilula,
-.ilha[data-modo='alerta'] .ilha-pilula { opacity: 0; }
-.ilha-painel--alerta { box-shadow: var(--shadow-lg), 0 0 40px color-mix(in srgb, var(--ok), transparent 85%); }
+.ilha-boneco-mini:has(.ilha-anel) > canvas, .ilha-boneco-orb:has(.ilha-anel) > canvas { animation: ilha-pop 520ms var(--ilha-mola); }
+
+@keyframes ilha-surgir { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes ilha-entrar-boneco { from { opacity: 0; transform: scale(.3); } }
+@keyframes ilha-sair { to { opacity: 0; transform: scale(.6); } }
+@keyframes ilha-numero { from { opacity: 0; transform: translateY(70%); } }
+@keyframes ilha-anel { from { opacity: 1; transform: scale(.7); } to { opacity: 0; transform: scale(2); } }
+@keyframes ilha-pop { 40% { transform: scale(1.3); } }
+@keyframes ilha-brilho { to { background-position: -200% 0; } }
 
 .ilha-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); height: 44px; margin-bottom: var(--sp-2); }
 .ilha-abas, .ilha-status { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
@@ -136,16 +193,84 @@
 .ilha-card { min-height: 220px; padding: var(--sp-4); background: var(--ilha-card); border: 1px solid var(--ilha-borda); border-radius: var(--r-24); }
 .ilha-card-sora { display: flex; align-items: center; gap: var(--sp-4); }
 .ilha-sora-grande { display: grid; place-items: center; flex: none; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
-.ilha-sora-info { display: grid; gap: var(--sp-2); min-width: 0; }
+.ilha-sora-info { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; gap: var(--sp-2); min-width: 0; }
 .ilha-sora-titulo { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-14); color: var(--text-2); }
 .ilha-sora-titulo strong { min-width: 0; color: var(--text-1); font-weight: 650; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ilha-sora-rotulo { margin: 0; color: var(--text-2); font-size: var(--fs-13); }
 .ilha-ponto { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--ilha-cor, var(--text-1)); box-shadow: 0 0 8px var(--ilha-cor, var(--text-1)); }
 .ilha-ponto--ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 
-.ilha-card-bonecos { display: flex; align-items: center; }
+.ilha-card-bonecos { display: flex; flex-direction: column; justify-content: center; gap: var(--sp-3); }
+
+/* filtro segmentado Todos · Trabalhando · Concluídos */
+.ilha-filtro { display: flex; gap: 2px; width: 100%; padding: 3px; background: var(--white-a04); border: 1px solid var(--ilha-borda); border-radius: var(--r-pill); }
+.ilha-filtro-opcao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  justify-content: center;
+  height: 28px;
+  padding: 0 var(--sp-2);
+  color: var(--text-2);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  font-size: var(--fs-12);
+  font-weight: 560;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-base) ease, color var(--dur-base) ease;
+}
+.ilha-filtro-opcao:hover { color: var(--text-1); }
+.ilha-filtro-opcao[aria-checked='true'] { color: var(--text-1); background: var(--white-a12); }
+.ilha-filtro-n { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ilha-filtro-opcao[aria-checked='true'] .ilha-filtro-n { color: var(--text-2); }
 .ilha-vazio { width: 100%; margin: 0; color: var(--text-3); font-size: var(--fs-13); text-align: center; }
 .ilha-bonecos-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-2); width: 100%; max-height: 230px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.ilha-bonecos-lista > li { position: relative; animation: ilha-entrar-boneco 420ms var(--ilha-mola) both; animation-delay: calc(var(--i, 0) * 55ms + 160ms); }
+.ilha-boneco-orb { position: relative; display: grid; place-items: center; flex: none; }
+
+/* olho: esconder o boneco da ilha */
+.ilha-olho {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--text-2);
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+  opacity: 0;
+  transform: translateY(-50%);
+  cursor: pointer;
+  transition: opacity var(--dur-base) ease, color var(--dur-fast) ease;
+}
+.ilha-olho svg, .ilha-escondido svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ilha-bonecos-lista > li:hover .ilha-olho, .ilha-olho:focus-visible { opacity: 1; }
+.ilha-olho:hover { color: var(--text-1); }
+@media (hover: none) { .ilha-olho { opacity: .8; } }
+
+.ilha-escondidos { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--text-3); font-size: var(--fs-12); animation: ilha-surgir 280ms ease both; }
+.ilha-escondido {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 var(--sp-2);
+  color: color-mix(in srgb, var(--agente), var(--text-3) 40%);
+  border: 1px dashed color-mix(in srgb, var(--agente), transparent 60%);
+  border-radius: var(--r-pill);
+  background: transparent;
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+.ilha-escondido:hover { color: var(--agente); }
+.ilha-escondidos-todos { padding: 0 var(--sp-1); color: var(--link); border: 0; background: transparent; font-size: var(--fs-12); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .ilha-boneco {
   position: relative;
   display: flex;
@@ -153,7 +278,7 @@
   gap: var(--sp-2);
   width: 100%;
   min-height: 48px;
-  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-2);
+  padding: var(--sp-2) 40px var(--sp-2) var(--sp-2);
   overflow: hidden;
   text-align: left;
   border: 1px solid color-mix(in srgb, var(--agente), transparent 60%);
@@ -168,7 +293,13 @@
 .ilha-boneco-texto strong { color: var(--agente); font-size: var(--fs-13); font-weight: 640; }
 .ilha-boneco-texto small { overflow: hidden; color: var(--text-2); font-size: var(--fs-12); white-space: nowrap; text-overflow: ellipsis; }
 .ilha-boneco-barra { position: absolute; left: 18px; right: 18px; bottom: 3px; height: 2px; border-radius: 2px; background: var(--white-a06); }
-.ilha-boneco-barra i { display: block; height: 100%; border-radius: inherit; background: var(--agente); transition: width var(--dur-slow) ease; }
+.ilha-boneco-barra i { display: block; height: 100%; border-radius: inherit; background: var(--agente); transition: width 700ms var(--ilha-mola, ease); }
+.ilha-boneco[data-status='trabalhando'] .ilha-boneco-barra i {
+  background: linear-gradient(90deg, var(--agente) 30%, color-mix(in srgb, var(--agente), #fff 65%) 50%, var(--agente) 70%);
+  background-size: 200% 100%;
+  box-shadow: 0 0 6px var(--agente);
+  animation: ilha-brilho 1.6s linear infinite;
+}
 
 /* ---------- Aprovação ---------- */
 .ilha-aprovacao {
@@ -209,14 +340,19 @@
 /* ---------- janela destacada (Picture-in-Picture) ---------- */
 .ilha-destacada .ilha-btn--primario { color: var(--text-inverse); }
 .ilha-destacada { min-height: 100vh; background: #000; color: var(--text-1); }
-.ilha-destacada .ilha-painel { position: static; width: 100%; max-width: none; min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; transform: none; animation: none; }
+.ilha-destacada .ilha-painel { position: static; width: 100%; max-width: none; max-height: none; min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; transform: none; animation: none; }
 .ilha-destacada .ilha-visao { grid-template-columns: 1fr; }
+
+/* ---------- app de desktop: janela transparente própria, pílula colada no topo da tela ---------- */
+.ilha-ancora[data-desktop] { left: 0; right: 0; top: 0; }
+.ilha-ancora[data-desktop] .ilha-painel { max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
 
 /* ---------- celular (≤ 767 px): pendurada embaixo da barra do topo ---------- */
 @media (max-width: 767px) {
   .ilha-ancora { top: calc(var(--topbar, 68px) - 1px); }
   .ilha-pilula { min-width: 0; max-width: calc(100vw - 32px); height: 44px; gap: var(--sp-2); }
   .ilha-compacta-texto { max-width: 150px; }
+  .ilha-ancora[data-desktop] { top: 0; }
   .ilha-painel {
     width: calc(100vw - 16px);
     max-width: none;
@@ -238,7 +374,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ilha-painel { animation: none; }
-  .ilha-pilula, .ilha-boneco, .ilha-boneco-barra i, .ilha-icone { transition: none; }
+  .ilha-casca, .ilha::before, .ilha::after, .ilha-pilula, .ilha-boneco, .ilha-boneco-barra i, .ilha-icone, .ilha-olho, .ilha-filtro-opcao { transition: none; }
+  .ilha::before, .ilha::after, .ilha[data-respira] .ilha-casca, .ilha-pilula > *, .ilha-cabecalho, .ilha-corpo, .ilha-visao > .ilha-card,
+  .ilha-boneco-mini, .ilha-bonecos-lista > li, .ilha-num, .ilha-saindo, .ilha-escondidos, .ilha-boneco-mini > canvas, .ilha-boneco-orb > canvas,
+  .ilha-boneco[data-status='trabalhando'] .ilha-boneco-barra i { animation: none !important; }
+  .ilha-anel { display: none; }
   .ilha .shimmer { animation: none; color: var(--text-2); background: none; }
 }

@@ -9,6 +9,7 @@ import Agentes from './screens/Agentes';
 import Projetos from './screens/Projetos';
 import Revisao from './screens/Revisao';
 import Plugins from './screens/Plugins';
+import { PonteNavegacao } from './desktop/PonteNavegacao';
 import './components/ui/sora.css';
 
 // Telas menos visitadas: carregadas sob demanda.
@@ -45,5 +46,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <BrowserRouter><AppRoutes /><ToastProvider /></BrowserRouter>;
+  return <BrowserRouter><AppRoutes /><PonteNavegacao /><ToastProvider /></BrowserRouter>;
 }
