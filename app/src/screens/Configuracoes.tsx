@@ -5,9 +5,10 @@ import { Button } from '../components/base';
 import { Modal } from '../components/overlay';
 import { ModelDefaults, ProviderCard } from '../components/settings';
 import '../components/settings/settings.css';
-import { definirIlhaPrefs, useIlha, useIlhaPrefs } from '../components/ilha/ilhaEstado';
+import { definirIlhaPrefs, useIlha, useIlhaPrefs, type FiltroAgentes } from '../components/ilha/ilhaEstado';
 import { abrirIlha, fecharIlha } from '../components/ilha/ilhaUi';
 import { tocar } from '../components/ilha/som';
+import { janelaAtual } from '../desktop/ponte';
 import '../components/ilha/ilha-partes.css';
 import { apagarTodasAsChaves, PROVEDORES_MODELO, useModelos } from '../state/modelos';
 import { limparTudo } from '../state/projetos';
@@ -35,6 +36,8 @@ function ConfiguracaoIlha() {
       <label className="cfg-ilha__linha"><span><strong>Sons</strong><small>Avisos discretos ao abrir, concluir e deixar um projeto pronto.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.som} onChange={(e) => definirIlhaPrefs({ som: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.som ? 'Ligados' : 'Desligados'}</em></span></label>
       <label className="cfg-ilha__linha"><span><strong>Recolher quando nada roda</strong><small>Deixa apenas uma faixa fina até você passar o mouse no topo.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.esconderOciosa} onChange={(e) => definirIlhaPrefs({ esconderOciosa: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.esconderOciosa ? 'Sim' : 'Não'}</em></span></label>
       <label className="cfg-ilha__linha"><span><strong>Projeto mostrado</strong><small>No modo automático, a ilha acompanha o projeto aberto ou em execução.</small></span><select value={prefs.projetoId ?? ''} onChange={(e) => definirIlhaPrefs({ projetoId: e.target.value || null })}><option value="">Automático — projeto aberto</option>{projetos.map((projeto) => <option key={projeto.id} value={projeto.id}>{projeto.titulo}</option>)}</select></label>
+      <label className="cfg-ilha__linha"><span><strong>Filtro padrão</strong><small>Quais agentes aparecem na ilha. Dá para trocar também direto na ilha.</small></span><select value={prefs.filtro} onChange={(e) => definirIlhaPrefs({ filtro: e.target.value as FiltroAgentes })}><option value="todos">Todos</option><option value="trabalhando">Trabalhando</option><option value="concluidos">Concluídos</option></select></label>
+      {janelaAtual !== 'web' && <label className="cfg-ilha__linha"><span><strong>Mostrar também dentro do app</strong><small>No computador a ilha fica no topo da tela; ligue para vê-la também no alto desta janela.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.ilhaNoApp} onChange={(e) => definirIlhaPrefs({ ilhaNoApp: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.ilhaNoApp ? 'Sim' : 'Não'}</em></span></label>}
       <div className="cfg-ilha__acoes"><Button onClick={() => tocar('abrir')} disabled={!prefs.som}>Testar som</Button></div>
     </div>
   </>;
