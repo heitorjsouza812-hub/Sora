@@ -1,36 +1,31 @@
-/* Gestão: menu "…" e diálogos Renomear / Apagar */
+/* Gestão: menu "…" e diálogos Renomear / Apagar (botões e campo vêm de components/base) */
 .gestao-menu { position: relative; display: inline-flex; }
-.gestao-menu-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; color: var(--text-2); background: transparent; border: 0; border-radius: 9px; cursor: pointer; transition: background .15s, color .15s; }
+.gestao-menu-btn { position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; color: var(--text-2); background: transparent; border: 0; border-radius: var(--r-10); cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast); }
 .gestao-menu-btn svg { width: 18px; height: 18px; fill: currentColor; }
-.gestao-menu-btn:hover, .gestao-menu-btn[aria-expanded="true"] { color: var(--text); background: var(--line); }
+.gestao-menu-btn:hover, .gestao-menu-btn[aria-expanded="true"] { color: var(--text-1); background: var(--white-a07); }
 .gestao-menu-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.gestao-menu-list { padding: 5px; }
+.gestao-menu-list { padding: var(--sp-1); }
 .gestao-menu-list > div { display: grid; }
-.gestao-menu-list button { padding: 9px 11px; color: var(--text-1); text-align: left; background: none; border: 0; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.gestao-menu-list button { min-height: 36px; padding: var(--sp-2) var(--sp-3); color: var(--text-1); text-align: left; background: none; border: 0; border-radius: var(--r-6); font: inherit; font-size: var(--fs-13); cursor: pointer; }
 .gestao-menu-list button:hover, .gestao-menu-list button:focus-visible { background: var(--white-a07); outline: 0; }
 .gestao-menu-list button.is-danger { color: var(--danger); }
 
-.gestao-footer { display: flex; justify-content: flex-end; gap: 10px; }
-.gestao-btn { height: 42px; padding: 0 22px; color: var(--btn-text); background: var(--btn-bg); border: 0; border-radius: 21px; font: inherit; font-weight: 650; cursor: pointer; }
-.gestao-btn:disabled { opacity: .3; cursor: default; }
-.gestao-btn-ghost { height: 42px; padding: 0 18px; color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: 21px; font: inherit; cursor: pointer; }
-.gestao-btn-ghost:hover { color: var(--text); border-color: var(--white-a18); }
-.gestao-btn:focus-visible, .gestao-btn-ghost:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.gestao-danger { color: var(--text-1); background: var(--danger-strong); }
+.gestao-footer { display: flex; justify-content: flex-end; gap: var(--sp-2); }
 
-.gestao-field { display: grid; gap: 9px; }
-.gestao-field label { color: var(--text-3); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-.gestao-input { width: 100%; height: 44px; padding: 0 14px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; outline: 0; font: inherit; font-size: 15px; box-sizing: border-box; }
-.gestao-input:focus { border-color: var(--focus-soft); }
-
-.gestao-aviso { margin: 0 0 10px; color: var(--text-2); font-size: 14px; line-height: 1.45; }
-.gestao-equipe { display: grid; gap: 6px; margin: 0 0 16px; padding: 0; list-style: none; }
-.gestao-equipe li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--panel-2); border: 1px solid var(--line); border-left: 2px solid var(--cor); border-radius: 10px; }
+.gestao-aviso { margin: 0 0 var(--sp-2); color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
+.gestao-equipe { display: grid; gap: var(--sp-2); margin: 0 0 var(--sp-4); padding: 0; list-style: none; }
+.gestao-equipe li { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); background: var(--surface-3); border: 1px solid var(--line); border-left: 2px solid var(--cor); border-radius: var(--r-10); }
 .gestao-equipe span { display: grid; min-width: 0; }
-.gestao-equipe strong { color: var(--cor); font-size: 13px; font-weight: 600; }
-.gestao-equipe small { overflow: hidden; color: var(--text-3); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
-.gestao-projetos { margin: 0; padding-left: 18px; color: var(--text); font-size: 14px; line-height: 1.6; }
-.gestao-check { display: flex; align-items: flex-start; gap: 10px; color: var(--text); font-size: 14px; line-height: 1.45; cursor: pointer; }
-.gestao-check input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--focus); }
-.gestao-sora { display: grid; place-items: center; padding: 6px 0 2px; }
+.gestao-equipe strong { color: var(--cor); font-size: var(--fs-13); font-weight: 600; }
+.gestao-equipe small { overflow: hidden; color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; text-overflow: ellipsis; }
+.gestao-projetos { margin: 0; padding-left: var(--sp-5); color: var(--text-1); font-size: var(--fs-14); line-height: 1.6; }
+.gestao-check { display: flex; align-items: center; gap: var(--sp-2); min-height: 44px; color: var(--text-1); font-size: var(--fs-14); line-height: 1.45; cursor: pointer; }
+.gestao-check input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--focus); }
+.gestao-sora { display: grid; place-items: center; padding: var(--sp-2) 0 2px; }
 
+/* celular: alvos de toque com 44 px (item 59) — o "…" mantém o visual e ganha área invisível */
+@media (max-width: 767px) {
+  .gestao-menu-btn::after { content: ""; position: absolute; inset: -6px; }
+  .gestao-menu-list button { min-height: 44px; }
+  .gestao-footer .b-btn { flex: 1; }
+}

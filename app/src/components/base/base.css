@@ -120,7 +120,12 @@
 @media (prefers-reduced-motion: reduce) {
   .b-btn, .b-input, .b-card, .b-tooltip, .b-toast, .b-badge__ponto.is-pulso { transition: none; animation: none; }
 }
+/* celular: alvos de toque com pelo menos 44 px (item 59) */
 @media (max-width: 767px) {
+  .b-btn--P, .b-btn--M { --b-alt: 44px; }
+  .b-input { min-height: 44px; }
+  .b-toast__acao, .b-toast__fechar { min-height: 44px; }
+  .b-toast__fechar { width: 44px; }
   .b-toasts { right: 16px; left: 16px; bottom: 16px; width: auto; }
 }
 .b-tooltip-alvo { display: inline-flex; }

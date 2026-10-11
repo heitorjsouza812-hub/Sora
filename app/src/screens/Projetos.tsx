@@ -1,9 +1,9 @@
 // Tela PROJETOS: pedido grande no topo (a Sora monta a equipe) + grade de projetos com filtro e busca.
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import {
-  CartaoProjeto, CompositorProjeto, EstadoVazio, FILTROS, grupoDaFase, normalizar, type FiltroProjetos,
+  CartaoProjeto, CompositorProjeto, EstadoVazio, FILTROS, focarCompositor, grupoDaFase, MODELOS_PROJETO, normalizar, type FiltroProjetos,
 } from '../components/projetos';
 import { criarProjeto, estadoProjeto, useAgora, useProjetos } from '../state/projetos';
 import '../components/projetos/projetos.css';
@@ -12,11 +12,17 @@ export default function Projetos() {
   const e = useProjetos();
   const agora = useAgora();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // ?pedido=… (ex.: "Agendar próxima campanha" da tela de aprovado) ou ?modelo=<id> pré-preenchem o compositor
+  const [texto, setTexto] = useState(() => params.get('pedido') ?? MODELOS_PROJETO.find((m) => m.id === params.get('modelo'))?.pedido ?? '');
   const [pensando, setPensando] = useState(false);
   const [filtro, setFiltro] = useState<FiltroProjetos>('todos');
   const [busca, setBusca] = useState('');
   const timer = useRef(0);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  const veioPreenchido = useRef(Boolean(texto));
+  useEffect(() => { if (veioPreenchido.current) focarCompositor(); }, []);
+  const usarModelo = (pedido: string) => { setTexto(pedido); window.requestAnimationFrame(focarCompositor); };
 
   const enviar = (pedido: string) => {
     if (pensando) return;
@@ -38,7 +44,7 @@ export default function Projetos() {
   return (
     <AppShell titulo="Projetos">
       <main className="pj-screen">
-        <CompositorProjeto nomeSora={e.sora.nome} corSora={e.sora.cor} pensando={pensando} onEnviar={enviar} />
+        <CompositorProjeto nomeSora={e.sora.nome} corSora={e.sora.cor} texto={texto} onTexto={setTexto} pensando={pensando} onEnviar={enviar} />
 
         <section className="pj-lista" aria-labelledby="pj-lista-titulo">
           <div className="pj-lista-topo">
@@ -63,7 +69,7 @@ export default function Projetos() {
           </div>
 
           {projetos.length === 0
-            ? <EstadoVazio corSora={e.sora.cor} nomeSora={e.sora.nome} />
+            ? <EstadoVazio corSora={e.sora.cor} nomeSora={e.sora.nome} onModelo={(m) => usarModelo(m.pedido)} />
             : visiveis.length === 0
               ? <EstadoVazio corSora={e.sora.cor} nomeSora={e.sora.nome} busca onLimpar={() => { setBusca(''); setFiltro('todos'); }} />
               : <div className="pj-grade">

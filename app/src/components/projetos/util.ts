@@ -49,3 +49,14 @@ export const resumirPedido = (t: string, max = 120) => t.length > max ? `${t.sli
 
 /** Busca sem acento e sem caixa. */
 export const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+export const ID_COMPOSITOR = 'pj-novo';
+
+/** Leva o foco ao campo do compositor (depois de um modelo preencher o texto). */
+export function focarCompositor() {
+  const campo = document.querySelector<HTMLTextAreaElement>(`#${ID_COMPOSITOR} textarea`);
+  if (!campo) return;
+  campo.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  campo.focus({ preventScroll: true });
+  campo.setSelectionRange(campo.value.length, campo.value.length);
+}

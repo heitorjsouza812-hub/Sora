@@ -54,7 +54,7 @@ export function ToastProvider({ children }: { children?: ReactNode }) {
   return <>
     {children}
     {typeof document !== 'undefined' && createPortal(
-      <section className="b-toasts" aria-label="Avisos">
+      <section className="b-toasts" aria-label="Avisos" data-camada-livre="">
         <div role="status" aria-live="polite" aria-relevant="additions"><ol>{comuns.map((t) => <ItemToast key={t.id} t={t} />)}</ol></div>
         <div role="alert" aria-live="assertive" aria-relevant="additions"><ol>{erros.map((t) => <ItemToast key={t.id} t={t} />)}</ol></div>
       </section>,

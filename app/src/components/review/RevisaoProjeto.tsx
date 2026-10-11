@@ -2,7 +2,9 @@ import { useRef, useState, type CSSProperties } from 'react';
 import type { AgenteSora, EntregaGerada, ProjetoSora } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
 import { Modal } from '../overlay/Modal';
-import { PecaCampanha } from '../ui/CampaignPiece';
+import { Button, Select, Textarea } from '../base';
+import { DeliveryContent } from './Entregas';
+import { ProjetoAprovado } from './ProjetoAprovado';
 import './review.css';
 
 export interface RevisaoProjetoProps {
@@ -14,39 +16,17 @@ export interface RevisaoProjetoProps {
   pulseKey?: number;
   onAprovar: (projetoId: string) => void;
   onPedirAjuste: (texto: string, agenteId?: string) => void;
+  /** próximos passos da tela "Projeto aprovado!" */
+  onAgendarProxima?: () => void;
+  onVoltarProjeto?: () => void;
+  onNovoProjeto?: () => void;
+  corSora?: string;
   className?: string;
-}
-
-function DeliveryContent({ entrega, color }: { entrega?: EntregaGerada; color: string }) {
-  if (!entrega) return <div className="review-empty">Entrega não disponível nesta versão.</div>;
-
-  const heading = <div className="review-delivery__heading"><h4>{entrega.titulo}</h4><span>{entrega.resumo}</span></div>;
-  if (entrega.tipo === 'links') {
-    return <>{heading}<div className="review-links">{entrega.links?.map((link) => {
-      const href = /^https?:\/\//.test(link.dominio) ? link.dominio : `https://${link.dominio}`;
-      return <a key={`${link.dominio}-${link.titulo}`} href={href} target="_blank" rel="noreferrer"><span>{link.titulo}</span><small>↗ {link.dominio}</small></a>;
-    })}{!entrega.links?.length && <div className="review-empty">Nenhum link nesta entrega.</div>}</div></>;
-  }
-
-  if (entrega.tipo === 'imagem') {
-    const images = entrega.imagens ?? [];
-    return <>{heading}<div className="review-images">{Array.from({ length: Math.max(3, images.length) }, (_, index) => <figure className="review-image" key={index}><PecaCampanha indice={index} imagem={images[index]} cor={color} /><span>Peça {index + 1}</span></figure>)}</div></>;
-  }
-
-  if (entrega.tipo === 'calendario') {
-    const items = entrega.itens ?? [];
-    return <>{heading}<div className="review-calendar">{items.map((item, index) => <div className="review-calendar__item" key={`${item}-${index}`}>{item}</div>)}{!items.length && <p className="review-text">{entrega.resumo}</p>}</div></>;
-  }
-
-  const items = entrega.itens ?? [];
-  return <>{heading}{items.length > 1
-    ? <ul className="review-items">{items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul>
-    : <p className="review-text">{items[0] ?? entrega.resumo}</p>}</>;
 }
 
 export function RevisaoProjeto({
   projeto, agentes, entregas = projeto.entregas, entregasAnteriores,
-  aprovado = Boolean(projeto.aprovadoEm), pulseKey, onAprovar, onPedirAjuste, className = '',
+  aprovado = Boolean(projeto.aprovadoEm), pulseKey, onAprovar, onPedirAjuste, onAgendarProxima, onVoltarProjeto, onNovoProjeto, corSora, className = '',
 }: RevisaoProjetoProps) {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustText, setAdjustText] = useState('');
@@ -56,12 +36,8 @@ export function RevisaoProjeto({
   const projectAgents = projeto.agenteIds.map((id) => byId[id]).filter((agent): agent is AgenteSora => Boolean(agent));
 
   if (aprovado) {
-    return <section className={`review-project review-approved ${className}`} aria-live="polite">
-      <SoraOrb size={164} state="done" pulseKey={pulseKey ?? projeto.versao + 1} title="Sora, projeto aprovado" />
-      <h2>Projeto aprovado!</h2>
-      <p>A Sora registrou sua aprovação e a equipe pode seguir com a publicação.</p>
-      <span className="review-approved__badge">✓ Aprovação confirmada</span>
-    </section>;
+    return <ProjetoAprovado projeto={projeto} agentes={projectAgents} entregas={entregas} corSora={corSora} pulseKey={pulseKey}
+      onAgendarProxima={onAgendarProxima} onVoltarProjeto={onVoltarProjeto} onNovoProjeto={onNovoProjeto} />;
   }
 
   const sendAdjustment = () => {
@@ -101,8 +77,8 @@ export function RevisaoProjeto({
     </div>
 
     <footer className="review-actions" aria-label="Ações da revisão">
-      <button className="review-actions__approve" type="button" onClick={() => onAprovar(projeto.id)}>Aprovar e publicar</button>
-      <button className="review-actions__adjust" type="button" onClick={() => setAdjustOpen(true)}>Pedir ajuste</button>
+      <Button variante="primario" tamanho="G" onClick={() => onAprovar(projeto.id)}>Aprovar e publicar</Button>
+      <Button tamanho="G" onClick={() => setAdjustOpen(true)}>Pedir ajuste</Button>
       <p>Nada é publicado sem a sua aprovação.</p>
     </footer>
 
@@ -114,18 +90,14 @@ export function RevisaoProjeto({
       size="sm"
       initialFocusRef={textareaRef}
       footer={<div className="review-adjust__footer">
-        <button className="review-adjust__cancel" type="button" onClick={() => setAdjustOpen(false)}>Cancelar</button>
-        <button className="review-adjust__send" type="button" onClick={sendAdjustment} disabled={!adjustText.trim()}>Enviar ajuste</button>
+        <Button variante="fantasma" onClick={() => setAdjustOpen(false)}>Cancelar</Button>
+        <Button variante="primario" onClick={sendAdjustment} disabled={!adjustText.trim()}>Enviar ajuste</Button>
       </div>}
     >
       <div className="review-adjust">
-        <label>Instrução<textarea ref={textareaRef} value={adjustText} onChange={(event) => setAdjustText(event.target.value)} placeholder="Ex.: deixe os textos mais descontraídos…" /></label>
-        <label>Direcionar para
-          <select value={agentId} onChange={(event) => setAgentId(event.target.value)}>
-            <option value="">Sora decide</option>
-            {projectAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.nome} · {agent.funcao}</option>)}
-          </select>
-        </label>
+        <Textarea ref={textareaRef} rotulo="Instrução" value={adjustText} onChange={(event) => setAdjustText(event.target.value)} placeholder="Ex.: deixe os textos mais descontraídos…" />
+        <Select rotulo="Direcionar para" value={agentId} onChange={(event) => setAgentId(event.target.value)}
+          vazio="Sora decide" opcoes={projectAgents.map((agent) => ({ valor: agent.id, rotulo: `${agent.nome} · ${agent.funcao}` }))} />
       </div>
     </Modal>
   </section>;

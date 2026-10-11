@@ -6,6 +6,7 @@ import { useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { removerAgente, removerProjeto, useProjetos } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
+import { Button } from '../base';
 import { Modal } from '../overlay';
 import type { AlvoGestao } from './acoes';
 import './gestao.css';
@@ -25,7 +26,7 @@ export function DialogoApagar({ alvo, onClose, onApagado }: { alvo: AlvoGestao; 
     return (
       <Modal open onClose={onClose} size="sm" title={`${e.sora.nome} não pode ser apagada`}
         description="Ela é a agente principal: coordena as equipes e está sempre com você. Você pode renomear ou personalizar a Sora."
-        footer={<div className="gestao-footer"><button type="button" className="gestao-btn" onClick={onClose}>Entendi</button></div>}>
+        footer={<div className="gestao-footer"><Button variante="primario" onClick={onClose}>Entendi</Button></div>}>
         <div className="gestao-sora"><SoraOrb size={84} color={e.sora.cor} state="idle" decorative glow={false} /></div>
       </Modal>
     );
@@ -60,8 +61,8 @@ export function DialogoApagar({ alvo, onClose, onApagado }: { alvo: AlvoGestao; 
   return (
     <Modal open onClose={onClose} size="sm" title={titulo} description={descricao}
       footer={<div className="gestao-footer">
-        <button type="button" className="gestao-btn-ghost" onClick={onClose}>Cancelar</button>
-        <button type="button" className="gestao-btn gestao-danger" onClick={apagar}>Apagar</button>
+        <Button variante="fantasma" onClick={onClose}>Cancelar</Button>
+        <Button variante="perigo" onClick={apagar}>Apagar</Button>
       </div>}>
       {projeto && equipe.length > 0 && <>
         <p className="gestao-aviso">{manter

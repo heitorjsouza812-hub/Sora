@@ -1,5 +1,5 @@
 // Input, Textarea e Select (nativo) com rótulo, ajuda e erro ligados por aria-describedby.
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { useId, type ComponentProps, type ReactNode } from 'react';
 import './base.css';
 
 interface Moldura {
@@ -37,21 +37,21 @@ function Campo({ m, ids, children, className }: { m: Moldura; ids: ReturnType<ty
   );
 }
 
-export type InputProps = Moldura & InputHTMLAttributes<HTMLInputElement>;
+export type InputProps = Moldura & ComponentProps<'input'>;
 export function Input({ rotulo, ajuda, erro, rotuloOculto, id, className, 'aria-describedby': db, ...resto }: InputProps) {
   const m = { rotulo, ajuda, erro, rotuloOculto };
   const ids = useCampo(id, m, db);
   return <Campo m={m} ids={ids} className={className}><input id={ids.campoId} className="b-input" {...ids.aria} {...resto} /></Campo>;
 }
 
-export type TextareaProps = Moldura & TextareaHTMLAttributes<HTMLTextAreaElement>;
+export type TextareaProps = Moldura & ComponentProps<'textarea'>;
 export function Textarea({ rotulo, ajuda, erro, rotuloOculto, id, className, rows = 4, 'aria-describedby': db, ...resto }: TextareaProps) {
   const m = { rotulo, ajuda, erro, rotuloOculto };
   const ids = useCampo(id, m, db);
   return <Campo m={m} ids={ids} className={className}><textarea id={ids.campoId} rows={rows} className="b-input b-textarea" {...ids.aria} {...resto} /></Campo>;
 }
 
-export type SelectProps = Moldura & SelectHTMLAttributes<HTMLSelectElement> & {
+export type SelectProps = Moldura & ComponentProps<'select'> & {
   opcoes: { valor: string; rotulo: string; desativada?: boolean }[];
   /** primeira opção vazia (ex.: "Escolha…") */
   vazio?: string;

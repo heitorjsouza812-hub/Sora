@@ -1,6 +1,7 @@
 // Renomear projeto, agente ou a própria Sora.
 import { useRef, useState } from 'react';
 import { atualizarAgente, atualizarSora, renomearProjeto, useProjetos } from '../../state/projetos';
+import { Button, Input } from '../base';
 import { Modal } from '../overlay';
 import type { AlvoGestao } from './acoes';
 import './gestao.css';
@@ -29,13 +30,12 @@ export function DialogoRenomear({ alvo, onClose }: { alvo: AlvoGestao; onClose: 
     <Modal open onClose={onClose} size="sm" initialFocusRef={campo}
       title={projeto ? 'Renomear projeto' : `Renomear ${nomeAtual}`}
       footer={<div className="gestao-footer">
-        <button type="button" className="gestao-btn-ghost" onClick={onClose}>Cancelar</button>
-        <button type="button" className="gestao-btn" disabled={!valido} onClick={salvar}>Salvar</button>
+        <Button variante="fantasma" onClick={onClose}>Cancelar</Button>
+        <Button variante="primario" disabled={!valido} onClick={salvar}>Salvar</Button>
       </div>}>
-      <form className="gestao-field" onSubmit={(ev) => { ev.preventDefault(); salvar(); }}>
-        <label htmlFor={`renomear-${alvo.id}`}>{projeto ? 'Título' : 'Nome'}</label>
-        <input id={`renomear-${alvo.id}`} ref={campo} className="gestao-input" value={nome} maxLength={projeto ? 60 : 24}
-          autoComplete="off" onChange={(ev) => setNome(ev.target.value)} onFocus={(ev) => ev.currentTarget.select()} />
+      <form onSubmit={(ev) => { ev.preventDefault(); salvar(); }}>
+        <Input ref={campo} rotulo={projeto ? 'Título' : 'Nome'} value={nome} maxLength={projeto ? 60 : 24} autoComplete="off"
+          ajuda={`${nome.length}/${projeto ? 60 : 24}`} onChange={(ev) => setNome(ev.target.value)} onFocus={(ev) => ev.currentTarget.select()} />
       </form>
     </Modal>
   );
