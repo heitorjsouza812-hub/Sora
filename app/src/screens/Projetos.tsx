@@ -5,7 +5,8 @@ import { AppShell } from '../components/layout/AppShell';
 import {
   CartaoProjeto, CompositorProjeto, EstadoVazio, FILTROS, focarCompositor, grupoDaFase, MODELOS_PROJETO, normalizar, type FiltroProjetos,
 } from '../components/projetos';
-import { criarProjeto, estadoProjeto, useAgora, useProjetos } from '../state/projetos';
+import type { Anexo } from '../components/anexos';
+import { anexarEnvio, criarProjeto, estadoProjeto, useAgora, useProjetos } from '../state/projetos';
 import '../components/projetos/projetos.css';
 
 export default function Projetos() {
@@ -24,9 +25,11 @@ export default function Projetos() {
   useEffect(() => { if (veioPreenchido.current) focarCompositor(); }, []);
   const usarModelo = (pedido: string) => { setTexto(pedido); window.requestAnimationFrame(focarCompositor); };
 
-  const enviar = (pedido: string) => {
+  const enviar = (pedido: string, anexos: Anexo[]) => {
     if (pensando) return;
-    const p = criarProjeto(pedido, undefined, { tipo: 'projeto' });
+    // os anexos do primeiro envio ficam na pergunta do usuário (anexarEnvio só guarda metadados no store)
+    const texto = pedido.trim() || 'Monte um projeto a partir dos arquivos anexados.';
+    const p = anexarEnvio(anexos, () => criarProjeto(texto, undefined, { tipo: 'projeto' }));
     setPensando(true);
     // um instante de "pensando" aqui (VoiceBeam em processing) antes de abrir o chat do projeto
     timer.current = window.setTimeout(() => navigate(`/projeto/${p.id}`), 900);

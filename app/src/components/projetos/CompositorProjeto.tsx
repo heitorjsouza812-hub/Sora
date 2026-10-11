@@ -2,6 +2,7 @@
 // pensa depois do envio (VoiceBeam em "processing") e monta a equipe. O texto fica com a tela
 // (modelos do estado vazio e ?pedido= também preenchem o campo).
 import { useState } from 'react';
+import type { Anexo } from '../anexos';
 import { SoraOrb } from '../mascot';
 import { MessageComposer } from '../ui/MessageComposer';
 import { MODELOS_PROJETO } from './modelos';
@@ -14,7 +15,8 @@ export interface CompositorProjetoProps {
   onTexto: (texto: string) => void;
   /** true depois do envio: a Sora está pensando */
   pensando: boolean;
-  onEnviar: (pedido: string) => void;
+  /** texto + anexos do compositor (anexos podem vir sem texto) */
+  onEnviar: (pedido: string, anexos: Anexo[]) => void;
 }
 
 export function CompositorProjeto({ nomeSora, corSora, texto, onTexto, pensando, onEnviar }: CompositorProjetoProps) {
