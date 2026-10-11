@@ -69,10 +69,11 @@ Modelo de entrada:
 ### 👤 Heitor
 
 - **Papel:** _(preencher — ex.: produto / design / front-end)_
-- **Onde parou:** front-end da Sora pronto em `app/` (todas as telas, mascote, fluxo simulado de equipes, construtor de agentes, painel Trabalho, Configurações de modelos). Tudo roda só no navegador, com dados simulados.
-- **Próximo passo:** decidir o back-end (chamadas reais aos modelos, contas, salvar as chaves com segurança) e voltar aos **Plugins** (congelados de propósito). Ver pendências em §7.5.
+- **Onde parou:** front-end da Sora pronto em `app/`, ainda simulado. Em 2026-10-11 revisou o front contra a especificação do backend (documento "Sora: plano de implementação"); a lista do que falta está em `log/2026-10-11.md`.
+- **Próximo passo:** decidir créditos x chaves próprias; criar a camada de API + eventos (com modo demonstração); onboarding com API obrigatória e Configurações reais; completar a especificação do backend (passos do painel Trabalho, aparência dos agentes, entregas e versões). Plugins seguem congelados.
 
 **Histórico**
+- **2026-10-11** — Revisão do `app/` contra a especificação do backend: build, lint, testes e E2E passando; lista do que adicionar e consertar para ligar no backend. Nenhum código alterado. Arquivos: `log/2026-10-11.md`, `log/ONDE-PARAMOS.md`, `log/README.md`, `CLAUDE.md`, `AGENTS.md`. Pendente: tudo da lista; `npm run test:visual` no PC.
 - **2026-10-10** — Front-end do app construído com um time de agentes de IA no Maestri (detalhes em §7.6). Mudanças de produto pedidas no caminho: barra lateral vazia ao abrir, Sora grande na tela do 1º prompt, agentes criados pelo pedido e listados em CHATS, telas Projetos e Agentes, construtor de agente no estilo GPT builder, painel Trabalho, apagar/renomear, Configurações com APIs dos modelos. Arquivos: `app/**`, `CLAUDE.md`, `AGENTS.md`. Pendente: back-end, plugins reais, microfone real testado em celular.
 - **2026-10-10** — Criou o `CLAUDE.md` com introdução, logs, mascote, interface e funções. Arquivos: `CLAUDE.md`.
 - **2026-10-03** — Produziu o comercial de 30 s e a demo de 75 s da Sora em canvas; renomeou o produto de "Mini" para "Sora". Arquivos: `mini-video/*`. Pendente: os scripts de render (Playwright + ffmpeg + trilha) ficaram fora do projeto e podem precisar ser refeitos.
