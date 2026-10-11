@@ -73,6 +73,7 @@ Modelo de entrada:
 - **Próximo passo:** decidir créditos x chaves próprias; criar a camada de API + eventos (com modo demonstração); onboarding com API obrigatória e Configurações reais; completar a especificação do backend (passos do painel Trabalho, aparência dos agentes, entregas e versões). Plugins seguem congelados.
 
 **Histórico**
+- **2026-10-11** — **Ilha da Sora** (adaptação do Coucou) feita por um time no Maestri: Farol (Claude Code Opus, núcleo), Tear (Codex GPT-5.6, peças/Configurações/atalhos), Sentinela (Hermes OpenAI, testes e QA). Build, lint, 27 testes, `qa/e2e.mjs` e `qa/ilha.mjs` passando. Arquivos: `app/src/components/ilha/**`, `app/docs/ilha-da-sora.md`, `AppShell.tsx`, `Configuracoes.tsx`, `components/comandos/*`, `app/qa/ilha.mjs`. Pendente: agentes externos reais (precisa back-end).
 - **2026-10-11** — Revisão do `app/` contra a especificação do backend: build, lint, testes e E2E passando; lista do que adicionar e consertar para ligar no backend. Nenhum código alterado. Arquivos: `log/2026-10-11.md`, `log/ONDE-PARAMOS.md`, `log/README.md`, `CLAUDE.md`, `AGENTS.md`. Pendente: tudo da lista; `npm run test:visual` no PC.
 - **2026-10-10** — Front-end do app construído com um time de agentes de IA no Maestri (detalhes em §7.6). Mudanças de produto pedidas no caminho: barra lateral vazia ao abrir, Sora grande na tela do 1º prompt, agentes criados pelo pedido e listados em CHATS, telas Projetos e Agentes, construtor de agente no estilo GPT builder, painel Trabalho, apagar/renomear, Configurações com APIs dos modelos. Arquivos: `app/**`, `CLAUDE.md`, `AGENTS.md`. Pendente: back-end, plugins reais, microfone real testado em celular.
 - **2026-10-10** — Criou o `CLAUDE.md` com introdução, logs, mascote, interface e funções. Arquivos: `CLAUDE.md`.
@@ -298,6 +299,7 @@ Tudo é **simulado no navegador** (sem back-end). Os dados ficam no `localStorag
 | `components/projetos/`, `gestao/` | Tela Projetos; diálogos Renomear/Apagar. |
 | `components/review/`, `overlay/` | Tela de revisão; Modal, BottomSheet, Popover e menus acessíveis. |
 | `components/layout/`, `ui/` | AppShell, barra lateral, composer (BorderBeam + VoiceBeam), cards, peças de campanha. |
+| `components/ilha/` | **Ilha da Sora** (adaptação do Coucou): pílula no topo com a Sora branca + os agentes rodando ("bonecos"), aba para escolher o projeto, detalhe do agente, aprovação. Spec: `app/docs/ilha-da-sora.md`. |
 | `components/studio/` | Editor de agente antigo, ainda usado no Modal "Editar agente". O construtor novo fica em `builder/`. |
 
 Rotas: `/` · `/projeto/:id` · `/chat/:agenteId` · `/projetos` · `/agentes` · `/agentes/novo` · `/agentes/:id/editar` · `/revisao/:id` · `/configuracoes` · `/plugins` · `/celular` · `/lab/orb` (laboratório do mascote; `?solo=240&state=thinking&color=%23AC80FF` mostra um orb isolado).
@@ -313,12 +315,14 @@ Rotas: `/` · `/projeto/:id` · `/chat/:agenteId` · `/projetos` · `/agentes` �
 7. **Configurações → Modelos de IA:** conectar OpenAI, Anthropic, Gemini, xAI, DeepSeek, Mistral, OpenRouter, Ollama e qualquer API compatível com OpenAI; escolher o modelo padrão da Sora e dos agentes.
 8. **Revisão:** "Revisar" abre as entregas; o usuário escolhe *Aprovar e publicar* ou *Pedir ajuste* (gera nova versão, com comparação).
 9. **Plugins: congelados de propósito.** A tela existe, mas não mexer até o grupo decidir.
+10. **Ilha da Sora** (2026-10-11, inspirada no Coucou — github.com/Louis-CFM/coucou): pílula preta fixa no topo de todas as telas com projeto. Compacta: Sora branca pequena (olha para o mouse) + "N trabalhando" + os agentes rodando como orbs coloridos. Expandida (hover, clique ou **Ctrl/⌘+Shift+S**): abas Início · **Projeto ▾** (escolhe qual projeto mostrar; padrão "Automático") · Abrir chat; Visão geral (Sora grande + ticker dos passos + pílulas dos agentes), detalhe do agente (passos, ferramenta, mensagem direta), **Aprovação** quando a equipe termina (Pedir ajuste N · Revisar R · Aprovar e publicar Y). Sons via WebAudio, botão "destacar" (janela Picture-in-Picture, Chrome/Edge), Configurações → aba **Ilha**. Preferências em `localStorage['sora.ilha.v1']`. Hoje mostra os agentes da Sora (simulados); ligar agentes externos (Claude Code, Codex, Hermes via hooks, como no Coucou) exige back-end — fica para depois.
 
 ### 7.4 Ferramentas de QA (`app/qa/`)
 
 - `node qa/shoot.mjs [rotas] [--wait ms]` → screenshots em 1440 e 390 px em `qa/shots/` + erros do console.
 - `node qa/shoot.mjs --flow` → digita um pedido e fotografa o fluxo a cada 3 s.
 - `node qa/e2e.mjs` → teste de ponta a ponta dos fluxos principais (criado pelo validador).
+- `node qa/ilha.mjs` → ponta a ponta da Ilha da Sora (screenshots em `qa/shots/ilha/`).
 - `qa/ref/` → quadros da demo para comparar (gerados a partir do vídeo; não versionados).
 
 ### 7.5 Pendências / próximos passos

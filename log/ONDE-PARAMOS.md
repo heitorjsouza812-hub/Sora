@@ -1,6 +1,6 @@
 # Onde paramos
 
-_Atualizado em 2026-10-11 — revisão do front-end contra a especificação do backend (nenhum código alterado). Antes: 2026-10-10, ~23h20, trabalho pausado a pedido do Heitor._
+_Atualizado em 2026-10-11 — **Ilha da Sora** pronta (adaptação do Coucou; veja abaixo). Antes: revisão do front-end contra a especificação do backend (nenhum código alterado). Antes: 2026-10-10, ~23h20, trabalho pausado a pedido do Heitor._
 
 ## Estado atual
 
@@ -17,6 +17,11 @@ _Atualizado em 2026-10-11 — revisão do front-end contra a especificação do 
 - Os ajustes visuais finais (miniaturas das peças e espaçamento das entregas) foram **concluídos** (commit `4e5ab5f`).
 - O **teste visual automático** (Playwright `toHaveScreenshot`, item 56) foi criado e commitado pelo Vigia (`903a401`, `2c79f38`): `npm run test:visual`, com o dev server rodando.
 - **Faltou:** o veredito final do Vigia sobre a Parte B inteira (itens 28–60). A validação foi interrompida antes do relatório. Na próxima sessão, rodar: `npm run build`, `npx oxlint`, `npm test`, `node qa/e2e.mjs`, `npm run test:visual` e `node qa/contraste.mjs`, e conferir os itens novos no navegador.
+
+## Ilha da Sora (2026-10-11)
+
+- Nova pílula no topo de todas as telas com projeto: Sora branca + os agentes rodando; aba **Projeto ▾** escolhe o projeto; detalhe do agente; **Aprovação** quando a equipe termina; Ctrl/⌘+Shift+S; Configurações → Ilha. Spec: `app/docs/ilha-da-sora.md`. QA: `node qa/ilha.mjs`.
+- Próximo (só com "sim" do Heitor): mostrar agentes externos reais (Claude Code/Codex/Hermes via hooks), o que exige um servidor local.
 
 ## Revisão de 2026-10-11 (detalhes em `log/2026-10-11.md`)
 
