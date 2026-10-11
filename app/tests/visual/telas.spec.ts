@@ -28,10 +28,16 @@ test('home vazia', async ({ page }) => {
   await captura(page, 'home.png');
 });
 
-for (const rota of ['/projetos', '/agentes', '/agentes/novo', '/configuracoes', '/lab/ui']) {
+for (const [rota, titulo] of [
+  ['/projetos', 'Seus projetos'],
+  ['/agentes', 'Seus agentes'],
+  ['/agentes/novo', 'Criar agente'],
+  ['/configuracoes', 'Configurações'],
+  ['/lab/ui', 'Componentes base'],
+] as const) {
   test(`tela ${rota}`, async ({ page }) => {
     await page.goto(rota);
-    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByText(titulo, { exact: false }).first()).toBeVisible();
     await captura(page, `${rota.slice(1).replaceAll('/', '-')}.png`);
   });
 }
