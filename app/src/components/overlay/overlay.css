@@ -118,6 +118,11 @@
   .sora-overlay-backdrop:not(.sora-sheet-backdrop) { padding: var(--sp-3); }
   .sora-modal { max-height: 92dvh; border-radius: var(--r-16); }
   .sora-modal__header, .sora-modal__body, .sora-modal__footer { padding-inline: var(--sp-5); }
+  /* item 59: alvos de toque de 44 px no celular */
+  .sora-overlay-close { width: 44px; height: 44px; }
+  .sora-sheet__handle-zone { min-height: 44px; }
+  .sora-popover [role="menuitem"] { min-height: 44px; }
+  .sora-modal__footer .b-btn, .sora-sheet__footer .b-btn { min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -202,8 +202,8 @@ async function settings(page) {
   await expectVisible(page, 'Chave salva');
   const cardText = await page.locator('.cfg-provider-card').filter({ has: page.getByRole('button', { name: /OpenAI/i }) }).first().innerText();
   assert.ok(!cardText.includes('sk-teste123') && /\*|••|…/.test(cardText), 'a chave deve aparecer mascarada');
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Apagar todas as chaves', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Apagar chaves', exact: true }).click();
   await expectVisible(page, 'Não conectado');
   await snap(page, 'f-configuracoes');
 }

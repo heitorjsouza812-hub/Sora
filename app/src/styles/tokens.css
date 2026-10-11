@@ -16,7 +16,7 @@
   --ok: #7ef2c4;
   --warn: #febc2e;
   --danger: #ff6b6b;
-  --danger-strong: #d64545;
+  --danger-strong: #c03a3a; /* texto claro em cima: 4,9:1 (AA) */
   --action: #eef2fa;
   --link: #9cc4ff;
 
@@ -67,6 +67,7 @@
   --white-a05: rgba(255, 255, 255, 0.05);
   --white-a06: rgba(255, 255, 255, 0.06);
   --white-a07: rgba(255, 255, 255, 0.07);
+  --white-a08: rgba(255, 255, 255, 0.08);
   --white-a09: rgba(255, 255, 255, 0.09);
   --white-a10: rgba(255, 255, 255, 0.10);
   --white-a11: rgba(255, 255, 255, 0.11);

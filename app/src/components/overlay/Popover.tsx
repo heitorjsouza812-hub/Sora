@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { empilharCamada } from './camadas';
 import './overlay.css';
 
 export interface PopoverProps {
@@ -57,20 +58,41 @@ export function Popover({
       const target = event.target as Node;
       if (!popoverRef.current?.contains(target) && !anchorRef.current?.contains(target)) onCloseRef.current();
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onCloseRef.current();
-        anchorRef.current?.focus();
-      }
-    };
+    // Esc fecha só a camada do topo (um Popover dentro de um Modal não fecha o Modal)
+    const camada = popoverRef.current ? empilharCamada(popoverRef.current, {
+      modal: false,
+      onEsc: () => { onCloseRef.current(); anchorRef.current?.focus(); },
+    }) : null;
     document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
+      camada?.remover();
     };
   }, [anchorRef, open]);
+
+  // menus: foco no 1º item ao abrir (se o dono ainda não focou nenhum)
+  useEffect(() => {
+    if (!open || role !== 'menu') return;
+    const frame = window.requestAnimationFrame(() => {
+      const menu = popoverRef.current;
+      if (menu && !menu.contains(document.activeElement)) menu.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, role]);
+
+  // menus: setas circulam, Home/End vão às pontas (quem já trata as teclas chama preventDefault)
+  const teclaMenu = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (role !== 'menu' || event.defaultPrevented) return;
+    const itens = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'));
+    if (!itens.length) return;
+    const atual = itens.indexOf(document.activeElement as HTMLElement);
+    const n = itens.length;
+    const destino = event.key === 'ArrowDown' ? (atual + 1) % n : event.key === 'ArrowUp' ? (atual - 1 + n) % n
+      : event.key === 'Home' ? 0 : event.key === 'End' ? n - 1 : -1;
+    if (destino < 0) return;
+    event.preventDefault();
+    itens[destino].focus();
+  };
 
   if (!open || typeof document === 'undefined') return null;
 
@@ -80,6 +102,7 @@ export function Popover({
       className={`sora-popover ${className}`}
       role={role}
       aria-label={ariaLabel}
+      onKeyDown={teclaMenu}
     >
       {children}
     </div>,

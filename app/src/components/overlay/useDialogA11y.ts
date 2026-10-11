@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
+import { ehCamadaDoTopo, empilharCamada } from './camadas';
 
 const FOCUSABLE = [
   'a[href]', 'button:not([disabled])', 'textarea:not([disabled])', 'input:not([disabled])',
@@ -20,8 +21,8 @@ export function useDialogA11y(
     if (!dialog) return;
 
     const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    // Esc, 'inert' no fundo e trava de rolagem ficam na pilha de camadas
+    const camada = empilharCamada(dialog, { modal: true, onEsc: () => onCloseRef.current() });
 
     const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE))
       .filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true');
@@ -31,12 +32,7 @@ export function useDialogA11y(
     });
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== 'Tab') return;
+      if (event.key !== 'Tab' || !ehCamadaDoTopo(camada.id)) return;
       const items = focusable();
       if (!items.length) {
         event.preventDefault();
@@ -58,7 +54,7 @@ export function useDialogA11y(
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      camada.remover();
       if (returnFocus?.isConnected) returnFocus.focus();
     };
   }, [dialogRef, initialFocusRef, open]);

@@ -1,8 +1,12 @@
 .cfg-page { color: var(--text, var(--text-1)); background: var(--bg, var(--surface-1)); }
 .cfg-shell { display: grid; grid-template-columns: 190px minmax(0, 930px); justify-content: center; width: 100%; max-width: 1120px; margin: 0 auto; }
-.cfg-nav { padding: var(--sp-12) var(--sp-5); border-right: 1px solid var(--line, var(--line)); }
+/* item 38: a navegação fica presa ao topo da área que rola (.cfg-page) */
+.cfg-nav { position: sticky; top: 0; z-index: 2; align-self: start; height: calc(100dvh - var(--topbar)); padding: var(--sp-12) var(--sp-5); box-sizing: border-box; border-right: 1px solid var(--line); }
 .cfg-nav h1 { margin: 0 0 24px; font-size: var(--fs-24); font-weight: 620; letter-spacing: -.02em; }
-.cfg-nav button { width: 100%; padding: var(--sp-3); color: var(--text-2); text-align: left; background: transparent; border: 0; border-radius: var(--r-10); font: inherit; font-size: var(--fs-14); }
+.cfg-nav [role="tablist"] { display: grid; gap: var(--sp-1); }
+.cfg-nav button { width: 100%; min-height: 40px; padding: var(--sp-2) var(--sp-3); color: var(--text-2); text-align: left; background: transparent; border: 0; border-radius: var(--r-10); font: inherit; font-size: var(--fs-14); cursor: pointer; }
+.cfg-nav button:hover { color: var(--text-1); background: var(--white-a04); }
+.cfg-nav button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .cfg-nav button[aria-selected="true"] { color: var(--text-1); background: var(--white-a07); }
 .cfg-main { width: 100%; max-width: 930px; padding: var(--sp-12) var(--sp-6) calc(var(--sp-16) + var(--sp-4)); box-sizing: border-box; }
 .cfg-heading h2 { margin: 0; font-size: clamp(var(--fs-24), 4vw, var(--fs-32)); font-weight: 520; letter-spacing: -.025em; }
@@ -34,13 +38,26 @@
 .cfg-inline { width: fit-content; padding: var(--sp-2) 0; color: var(--focus); background: none; border: 0; font-size: var(--fs-13); }
 .cfg-card-feedback { min-height: 24px; display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-14); }
 .cfg-card-actions { display: flex; gap: var(--sp-2); align-items: center; }.cfg-card-actions > span { flex: 1; }
-.cfg-button { height: 40px; padding: 0 var(--sp-4); color: var(--text-1); background: transparent; border: 1px solid var(--white-a12); border-radius: var(--r-pill); font-size: var(--fs-14); font-weight: 600; }.cfg-button:disabled { opacity: .5; }.cfg-button-primary { color: var(--text-inverse); background: var(--action); border-color: var(--action); }.cfg-button-danger { color: var(--danger); border-color: var(--danger-line); }
+/* botões vêm de components/base; aqui só o tom "perigo contornado" */
+.cfg-btn-perigo.b-btn--secundario { color: var(--danger); background: transparent; border-color: var(--danger-line); }
+.cfg-btn-perigo.b-btn--secundario:hover { background: var(--danger-bg); border-color: var(--danger); }
 .cfg-defaults { display: grid; grid-template-columns: minmax(210px, 1fr) 1fr 1fr; gap: var(--sp-5); align-items: end; margin-top: 30px; padding: var(--sp-6); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16); }.cfg-defaults h2 { margin: 7px 0 5px; font-size: var(--fs-20); }.cfg-defaults p, .cfg-defaults small { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }.cfg-defaults select { appearance: none; font-size: var(--fs-14); }
 .cfg-security { margin-top: 18px; padding: var(--sp-6) var(--sp-6); background: var(--ok-soft); border: 1px solid var(--ok-line); border-radius: var(--r-16); }.cfg-security h3 { margin: 0 0 8px; font-size: var(--fs-16); }.cfg-security p { margin: 0 0 16px; color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }
 .cfg-placeholder, .cfg-account { padding: var(--sp-7); color: var(--text-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16); font-size: var(--fs-14); }
 .cfg-account { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-7); border-color: var(--danger-bg); }.cfg-account h3 { margin: 0 0 7px; color: var(--text-1); font-size: var(--fs-16); }.cfg-account p { max-width: 580px; margin: 0; line-height: 1.55; }.cfg-account .cfg-button { flex: none; }
-.cfg-modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }.cfg-button-danger-solid { color: var(--text-1); background: var(--danger-strong); border-color: var(--danger-strong); }.cfg-modal-copy { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }
-@media (max-width: 767px) { .cfg-shell { grid-template-columns: 1fr; }.cfg-nav { padding: var(--sp-5) var(--sp-4); border-right: 0; border-bottom: 1px solid var(--line); }.cfg-nav h1 { margin-bottom: 12px; }.cfg-nav div { display: flex; overflow-x: auto; }.cfg-nav button { width: auto; white-space: nowrap; }.cfg-main { padding: var(--sp-8) var(--sp-4) var(--sp-15); }.cfg-provider-summary { grid-template-columns: 42px minmax(0, 1fr) 18px; padding: var(--sp-4); }.cfg-provider-summary .cfg-status { grid-column: 2; }.cfg-chevron { grid-column: 3; grid-row: 1 / span 2; }.cfg-provider-body { padding: var(--sp-1) var(--sp-4) var(--sp-5); }.cfg-fields, .cfg-defaults { grid-template-columns: 1fr; }.cfg-model-row { grid-template-columns: minmax(0, 1fr) 120px; }.cfg-card-actions { flex-wrap: wrap; }.cfg-card-actions > span { display: none; }.cfg-account { align-items: flex-start; flex-direction: column; } }
+.cfg-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }.cfg-modal-copy { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }
+@media (max-width: 767px) { .cfg-shell { grid-template-columns: 1fr; }
+  /* celular: o título já está no cabeçalho; as abas viram uma faixa presa ao topo */
+  .cfg-nav { height: auto; padding: var(--sp-2) var(--sp-4); background: var(--surface-1); border-right: 0; border-bottom: 1px solid var(--line); }
+  .cfg-nav h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .cfg-nav [role="tablist"] { display: flex; gap: var(--sp-1); overflow-x: auto; scrollbar-width: none; }
+  .cfg-nav button { width: auto; min-height: 44px; padding: 0 var(--sp-4); white-space: nowrap; border-radius: var(--r-pill); }
+  /* item 59: alvos de toque de 44 px */
+  .cfg-page .b-btn, .cfg-page .b-input { min-height: 44px; }
+  .cfg-fields input, .cfg-model-row input, .cfg-defaults select { height: 44px; }
+  .cfg-secret { display: flex; gap: var(--sp-2); }.cfg-secret input { padding-right: var(--sp-3); }.cfg-secret button { position: static; flex: none; height: 44px; padding: 0 var(--sp-3); border-radius: var(--r-10); font-size: var(--fs-13); }
+  .cfg-switch { min-height: 44px; }.cfg-inline { min-height: 44px; }
+.cfg-main { padding: var(--sp-8) var(--sp-4) var(--sp-15); }.cfg-provider-summary { grid-template-columns: 42px minmax(0, 1fr) 18px; padding: var(--sp-4); }.cfg-provider-summary .cfg-status { grid-column: 2; }.cfg-chevron { grid-column: 3; grid-row: 1 / span 2; }.cfg-provider-body { padding: var(--sp-1) var(--sp-4) var(--sp-5); }.cfg-fields, .cfg-defaults { grid-template-columns: 1fr; }.cfg-model-row { grid-template-columns: minmax(0, 1fr) 120px; }.cfg-card-actions { flex-wrap: wrap; }.cfg-card-actions > span { display: none; }.cfg-account { align-items: flex-start; flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { .cfg-chevron { transition: none; } }
 
 

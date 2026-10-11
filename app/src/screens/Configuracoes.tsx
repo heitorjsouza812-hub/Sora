@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
+import { Button } from '../components/base';
 import { Modal } from '../components/overlay';
 import { ModelDefaults, ProviderCard } from '../components/settings';
 import '../components/settings/settings.css';
@@ -8,27 +9,43 @@ import { apagarTodasAsChaves, PROVEDORES_MODELO, useModelos } from '../state/mod
 import { limparTudo } from '../state/projetos';
 
 type Secao = 'modelos' | 'conta' | 'aparencia';
+const SECOES: { id: Secao; rotulo: string }[] = [
+  { id: 'modelos', rotulo: 'Modelos de IA' },
+  { id: 'conta', rotulo: 'Conta' },
+  { id: 'aparencia', rotulo: 'Aparência' },
+];
+
 export default function Configuracoes() {
   const [secao, setSecao] = useState<Secao>('modelos');
   const [confirmarLimpeza, setConfirmarLimpeza] = useState(false);
+  const [confirmarChaves, setConfirmarChaves] = useState(false);
   const estado = useModelos();
   const navigate = useNavigate();
+  // setas/Home/End entre as abas (padrão WAI-ARIA de tablist)
+  const teclaAba = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const i = SECOES.findIndex(s => s.id === secao);
+    const proximo = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? (i + 1) % SECOES.length
+      : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? (i - 1 + SECOES.length) % SECOES.length
+      : e.key === 'Home' ? 0 : e.key === 'End' ? SECOES.length - 1 : -1;
+    if (proximo < 0) return;
+    e.preventDefault();
+    setSecao(SECOES[proximo].id);
+    e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[proximo]?.focus();
+  };
   return <AppShell titulo="Configurações" acoes={<span />}><main className="cfg-page">
     <div className="cfg-shell">
-      <aside className="cfg-nav"><h1>Configurações</h1><div role="tablist" aria-label="Seções das configurações">
-        <button role="tab" aria-selected={secao === 'modelos'} onClick={() => setSecao('modelos')}>Modelos de IA</button>
-        <button role="tab" aria-selected={secao === 'conta'} onClick={() => setSecao('conta')}>Conta</button>
-        <button role="tab" aria-selected={secao === 'aparencia'} onClick={() => setSecao('aparencia')}>Aparência</button>
+      <aside className="cfg-nav"><h1>Configurações</h1><div role="tablist" aria-label="Seções das configurações" aria-orientation="vertical" onKeyDown={teclaAba}>
+        {SECOES.map(s => <button key={s.id} id={`cfg-aba-${s.id}`} role="tab" aria-selected={secao === s.id} aria-controls="cfg-painel" tabIndex={secao === s.id ? 0 : -1} onClick={() => setSecao(s.id)}>{s.rotulo}</button>)}
       </div></aside>
-      <section className="cfg-main">
+      <section className="cfg-main" id="cfg-painel" role="tabpanel" aria-labelledby={`cfg-aba-${secao}`}>
         {secao === 'modelos' ? <><header className="cfg-heading"><h2>Modelos de IA</h2><p>Conecte os provedores que a Sora e seus agentes podem usar. Você escolhe o modelo padrão e pode personalizar cada agente.</p></header>
           <div className="cfg-provider-grid">{PROVEDORES_MODELO.map(p => <ProviderCard key={p.id} provedor={p} configuracao={estado.provedores[p.id]} />)}</div>
           <ModelDefaults estado={estado} />
-          <section className="cfg-security"><h3>Segurança das suas chaves</h3><p>Suas chaves ficam salvas apenas neste dispositivo. Em produção, elas serão guardadas com criptografia no servidor.</p><button type="button" className="cfg-button cfg-button-danger" onClick={() => { if (window.confirm('Apagar todas as chaves salvas neste navegador?')) apagarTodasAsChaves(); }}>Apagar todas as chaves</button></section>
-        </> : secao === 'conta' ? <><header className="cfg-heading"><h2>Conta</h2><p>Gerencie os dados da sua conta e do seu plano.</p></header><section className="cfg-account"><div><h3>Dados da Sora</h3><p>Apague projetos, conversas e agentes criados neste navegador. As conexões de modelos não serão alteradas.</p></div><button type="button" className="cfg-button cfg-button-danger" onClick={() => setConfirmarLimpeza(true)}>Apagar todos os dados</button></section></> : <><header className="cfg-heading"><h2>Aparência</h2><p>Personalize como a Sora aparece para você.</p></header><div className="cfg-placeholder">Esta seção estará disponível em breve.</div></>}
+          <section className="cfg-security"><h3>Segurança das suas chaves</h3><p>Suas chaves ficam salvas apenas neste dispositivo. Em produção, elas serão guardadas com criptografia no servidor.</p><Button className="cfg-btn-perigo" onClick={() => setConfirmarChaves(true)}>Apagar todas as chaves</Button></section>
+        </> : secao === 'conta' ? <><header className="cfg-heading"><h2>Conta</h2><p>Gerencie os dados da sua conta e do seu plano.</p></header><section className="cfg-account"><div><h3>Dados da Sora</h3><p>Apague projetos, conversas e agentes criados neste navegador. As conexões de modelos não serão alteradas.</p></div><Button className="cfg-btn-perigo" onClick={() => setConfirmarLimpeza(true)}>Apagar todos os dados</Button></section></> : <><header className="cfg-heading"><h2>Aparência</h2><p>Personalize como a Sora aparece para você.</p></header><div className="cfg-placeholder">Esta seção estará disponível em breve.</div></>}
       </section>
     </div>
-    <Modal open={confirmarLimpeza} onClose={() => setConfirmarLimpeza(false)} title="Apagar todos os dados?" description="Esta ação não pode ser desfeita." size="sm" footer={<div className="cfg-modal-actions"><button type="button" className="cfg-button" onClick={() => setConfirmarLimpeza(false)}>Cancelar</button><button type="button" className="cfg-button cfg-button-danger-solid" onClick={() => { limparTudo(); setConfirmarLimpeza(false); navigate('/'); }}>Apagar todos os dados</button></div>}><p className="cfg-modal-copy">Todos os projetos, chats e agentes serão removidos deste navegador.</p></Modal>
+    <Modal open={confirmarLimpeza} onClose={() => setConfirmarLimpeza(false)} title="Apagar todos os dados?" description="Esta ação não pode ser desfeita." size="sm" footer={<div className="cfg-modal-actions"><Button onClick={() => setConfirmarLimpeza(false)}>Cancelar</Button><Button variante="perigo" onClick={() => { limparTudo(); setConfirmarLimpeza(false); navigate('/'); }}>Apagar todos os dados</Button></div>}><p className="cfg-modal-copy">Todos os projetos, chats e agentes serão removidos deste navegador.</p></Modal>
+    <Modal open={confirmarChaves} onClose={() => setConfirmarChaves(false)} title="Apagar todas as chaves?" description="As conexões com os provedores serão removidas." size="sm" footer={<div className="cfg-modal-actions"><Button onClick={() => setConfirmarChaves(false)}>Cancelar</Button><Button variante="perigo" onClick={() => { apagarTodasAsChaves(); setConfirmarChaves(false); }}>Apagar chaves</Button></div>}><p className="cfg-modal-copy">Todas as chaves salvas neste navegador serão apagadas. Seus projetos e agentes continuam.</p></Modal>
   </main></AppShell>;
 }
-
