@@ -8,6 +8,7 @@ import { estadoAgente, estadoProjeto, novoChat, useAgora, useProjetos, type Agen
 import { pedirApagar, pedirRenomear } from '../gestao';
 import { AccountMenu } from '../review/AccountMenu';
 import { Tooltip } from '../base';
+import { IndicadorCreditos } from '../creditos';
 import { MenuAgente } from '../builder';
 import { AgentsIcon, FolderIcon, GearIcon, GridIcon, PlusIcon } from '../ui/Icons';
 import { statusCurto } from './useSoraStatus';
@@ -105,9 +106,10 @@ export function Sidebar() {
         <SoraOrb size={22} color={sora.cor} glow={false} decorative seed={3} /><span>Sora</span>
       </NavLink>
       <div className="sidebar-scroll"><Navegacao /></div>
+      <IndicadorCreditos />
       <div className="account">
         <span className="account-avatar" aria-hidden="true">{usuario.empresa.slice(0, 1)}</span>
-        <span><strong>{usuario.empresa}</strong><small>{usuario.plano}</small></span>
+        <span><strong title={usuario.empresa}>{usuario.empresa}</strong><small>{usuario.plano}</small></span>
         <NavLink to="/configuracoes" className="account-settings" aria-label="Configurações" title="Configurações"><GearIcon /></NavLink>
         <button ref={contaRef} type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={conta} onClick={() => setConta(v => !v)}>•••</button>
         <AccountMenu open={conta} onClose={() => setConta(false)} anchorRef={contaRef} empresa={usuario.empresa} plano={usuario.plano}

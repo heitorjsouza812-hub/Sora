@@ -1,7 +1,7 @@
 // Chat da Sora: pedido → Sora pensa → plano → agentes nascem um a um → trabalho com handoffs
 // → entregas → Revisar. Funciona para QUALQUER equipe gerada pelo planejador.
 // À direita, UM painel com abas Equipe | Trabalho | Entregas (recolhível; BottomSheet no celular).
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/base';
 import { AppShell } from '../components/layout/AppShell';
@@ -11,22 +11,24 @@ import { statusDaSora } from '../components/layout/useSoraStatus';
 import { SoraOrb, SoraThinking } from '../components/mascot';
 import { MenuAgente } from '../components/builder';
 import { EntregaCard } from '../components/ui/EntregaCard';
+import { IrParaFim } from '../components/ui/IrParaFim';
+import { MensagemChat } from '../components/ui/MensagemChat';
+import { useRolagemFim } from '../components/ui/useRolagemFim';
 import { ActivityIcon, BoxIcon, TeamIcon } from '../components/ui/Icons';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { PainelTrabalho } from '../components/work';
+import { ZonaSoltar } from '../components/anexos';
+import { CardErroModelo, definirErroSimulado, useErroSimulado } from '../components/erros';
 import { duracaoRoteiro } from '../data/planejador';
 import {
-  abrirProjeto, agentesDoProjeto, conversarComSora, estadoAgente, estadoProjeto, mensagensDa, projetoAtivo, useAgora, useProjetos,
+  abrirProjeto, agentesDoProjeto, anexarEnvio, conversarComSora, estadoAgente, estadoProjeto, gerandoNa, mensagensDa, pararGeracao, projetoAtivo,
+  podeRefazer, refazerResposta, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos, type ProjetoSora,
 } from '../state/projetos';
 
 type Item = { t: number; key: string; node: ReactNode };
 
-function LinhaSora({ children }: { children: ReactNode }) {
-  const { sora } = useProjetos();
-  return <div className="assistant-row"><SoraOrb size={30} color={sora.cor} state="coordinating" glow={false} decorative seed={31} />{children}</div>;
-}
 
 /** Card Plano: as tarefas surgem uma a uma, junto com o nascimento dos agentes; a próxima aparece como esqueleto. */
 function CartaoPlano({ e, p, agora }: { e: EstadoProjetos; p: ProjetoSora; agora: number }) {
@@ -145,20 +147,28 @@ export default function SoraChat() {
   const painel = usePainelLateral('sora.painel.projeto', 'equipe');
   const [folha, setFolha] = useState(false);
   const [agenteTrabalho, setAgenteTrabalho] = useState<string | undefined>();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const colado = useRef(true);
 
   /** "Ver trabalho": abre a aba Trabalho já com o agente selecionado (e o painel/folha, se fechados). */
   const verTrabalho = (id: string) => { setAgenteTrabalho(id); painel.setAba('trabalho'); painel.setRecolhido(false); setFolha(true); };
   const processando = !!ep && ['pensando', 'planejando', 'coordenando'].includes(ep.fase);
 
   // ---- linha do tempo da conversa (mensagens + cartões), ordenada pelo tempo ----
+  const erroModelo = useErroSimulado() === 'modelo';
   const itens: Item[] = [];
   if (p && ep) {
-    const msgs = mensagensDa(e, `sora:${p.id}`, agora);
+    const todas = mensagensDa(e, `sora:${p.id}`, agora);
+    // erro simulado do modelo: a resposta depois da última pergunta vira o card de erro
+    const pergunta = erroModelo ? todas.filter(m => m.autor === 'usuario').pop() : undefined;
+    const msgs = pergunta ? todas.filter(m => m.autor === 'usuario' || m.criadoEm <= pergunta.criadoEm) : todas;
+    const falhou = pergunta && todas.find(m => m.autor !== 'usuario' && m.criadoEm > pergunta.criadoEm);
+    if (pergunta) itens.push({
+      t: pergunta.criadoEm + 1, key: 'erro-modelo',
+      node: <CardErroModelo cor={e.sora.cor} autor={`A ${e.sora.nome}`}
+        onTentarDeNovo={() => { definirErroSimulado(null); if (falhou && podeRefazer(falhou)) refazerResposta(falhou.id); }} />,
+    });
     msgs.forEach(m => itens.push({
       t: m.criadoEm, key: m.id,
-      node: m.autor === 'usuario' ? <div className="user-message">{m.texto}</div> : <LinhaSora><p>{m.texto}</p></LinhaSora>,
+      node: <MensagemChat m={m} agora={agora} avatar={m.autor === 'usuario' ? undefined : <SoraOrb size={30} color={e.sora.cor} state={textoVisivel(m, agora).gerando ? 'thinking' : 'coordinating'} glow={false} decorative seed={31} />} />,
     }));
     if (ep.fase === 'pensando') {
       itens.push({ t: agora, key: 'pensando', node: (
@@ -213,13 +223,12 @@ export default function SoraChat() {
     }
   }
   itens.sort((a, b) => a.t - b.t);
-  const ultimo = itens[itens.length - 1]?.key;
-
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (el && colado.current) el.scrollTop = el.scrollHeight;
-  }, [ultimo, itens.length]);
-  useEffect(() => { colado.current = true; }, [p?.id]);
+  const conversaId = p ? `sora:${p.id}` : '';
+  const gerando = !!p && !erroModelo && gerandoNa(e, conversaId, agora);
+  // cresce enquanto o texto aparece (streaming) — mantém o fim à vista se o usuário estiver no fim
+  const assinatura = p ? mensagensDa(e, conversaId, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0;
+  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
+  useEffect(() => { seguirFim(); }, [p?.id, seguirFim]);
 
   if (projetoId && !p) return <Navigate to="/" replace />;
   if (!projetoId && p) return <Navigate to={`/projeto/${p.id}`} replace />;
@@ -231,20 +240,25 @@ export default function SoraChat() {
     <AppShell>
       <div className={`workspace-grid sora-workspace ${comEquipe ? '' : 'is-solo'} ${painel.recolhido ? 'panel-collapsed' : ''}`}>
         <main className="conversation" aria-label={`Conversa com ${e.sora.nome}`}>
-          <div className="conversation-scroll" ref={scrollRef} aria-live="polite" aria-relevant="additions"
-            onScroll={ev => { const el = ev.currentTarget; colado.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
+          <ZonaSoltar className="conversation-drop">
+          <div className="conversation-area">
+          <div className="conversation-scroll" ref={rolagemRef} aria-live="polite" aria-relevant="additions" onScroll={aoRolar}>
             {!p && (
               <div className="empty-chat">
                 <SoraOrb size={120} color={e.sora.cor} state="idle" title={e.sora.nome} />
                 <p>Descreva o que você precisa. A {e.sora.nome} monta o plano e cria a equipe.</p>
               </div>
             )}
-            {itens.map(i => <div key={i.key} className="chat-item">{i.node}</div>)}
+            {itens.map(i => <div key={i.key} className="chat-item" data-chave={i.key}>{i.node}</div>)}
+          </div>
+          {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
           </div>
           <div className="chat-composer">
             <MessageComposer placeholder={`Mensagem para ${e.sora.nome}…`} compact value={texto} onValueChange={setTexto}
-              processing={processando} onSend={t => { conversarComSora(t); colado.current = true; }} />
+              processing={processando} onSend={(t, anexos) => { anexarEnvio(anexos, () => conversarComSora(t)); seguirFim(); }}
+              gerando={gerando} onParar={() => pararGeracao(conversaId)} />
           </div>
+          </ZonaSoltar>
           <p className="sr-only" role="status">{p ? `${e.sora.nome}: ${sora.rotulo}` : ''}</p>
         </main>
         {p && comEquipe && (

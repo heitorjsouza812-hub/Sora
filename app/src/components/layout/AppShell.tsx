@@ -3,9 +3,11 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { estadoAgente, useAgora, useProjetos } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
-import { Button, IconButton } from '../base';
+import { Button, IconButton, toast } from '../base';
 import { BottomSheet } from '../overlay';
 import { GestaoHost } from '../gestao';
+import { Comandos } from '../comandos';
+import { FaixaSemConexao } from '../erros';
 import { EditorAgenteHost, MenuAgente } from '../builder';
 import { Navegacao, Sidebar } from './Sidebar';
 import { statusDaSora } from './useSoraStatus';
@@ -22,14 +24,11 @@ export interface AppShellProps {
 }
 
 function Compartilhar() {
-  const [ok, setOk] = useState(false);
   return (
     <Button variante="secundario" tamanho="P" className="share-button" onClick={() => {
       void navigator.clipboard?.writeText(window.location.href).catch(() => {});
-      setOk(true); window.setTimeout(() => setOk(false), 1800);
-    }}>
-      <span aria-live="polite">{ok ? 'Link copiado' : 'Compartilhar'}</span>
-    </Button>
+      toast({ mensagem: 'Link copiado', tom: 'sucesso' });
+    }}>Compartilhar</Button>
   );
 }
 
@@ -76,6 +75,7 @@ export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppSh
           <Identidade agenteId={agenteId} titulo={titulo} menuItens={menuItens} />
           {(acoes || share) && <div className="topbar-actions">{acoes}{share && <Compartilhar />}</div>}
         </header>
+        <FaixaSemConexao />
         {children}
       </section>
       <BottomSheet open={menu} onClose={() => setMenu(false)} title="Menu" className="mobile-nav-sheet">
@@ -83,6 +83,7 @@ export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppSh
       </BottomSheet>
       <EditorAgenteHost />
       <GestaoHost />
+      <Comandos />
     </div>
   );
 }

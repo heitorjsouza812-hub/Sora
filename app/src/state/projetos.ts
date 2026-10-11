@@ -50,7 +50,19 @@ export interface MensagemChat {
   texto: string;
   criadoEm: number;            // mensagens futuras (respostas) só aparecem quando agora >= criadoEm
   execucaoId?: string;
+  /** respostas: "Parar" congela o texto parcial neste instante */
+  interrompidaEm?: number;
+  /** 👍 / 👎 do usuário */
+  avaliacao?: 'positiva' | 'negativa';
+  /** resposta de conversa comum (pode ser refeita com outra redação) */
+  origem?: 'conversa';
+  /** qual redação da resposta está aparecendo (Refazer incrementa) */
+  variante?: number;
+  /** anexos da pergunta (só metadados; a prévia blob: não sobrevive a recarregar) */
+  anexos?: AnexoMsg[];
 }
+
+export interface AnexoMsg { id: string; nome: string; tipo: string; tamanho: number }
 
 export interface SoraPerfil { nome: string; cor: string }
 
@@ -129,7 +141,7 @@ function fimDeTudo(e: EstadoProjetos) {
   let fim = 0;
   for (const x of e.execucoes) fim = Math.max(fim, x.inicio + duracaoRoteiro(x.roteiro));
   for (const p of e.projetos) fim = Math.max(fim, p.marcos.fim);
-  for (const m of e.mensagens) fim = Math.max(fim, m.criadoEm);
+  for (const m of e.mensagens) fim = Math.max(fim, m.criadoEm + (m.autor === 'usuario' ? 0 : duracaoStream(m.texto)));
   return fim;
 }
 function relogioReavaliar() {
@@ -288,7 +300,7 @@ export function criarProjeto(pedido: string, agora = Date.now(), opcoes: { tipo?
       ...e, projetos: [projeto, ...e.projetos], projetoAtivoId: projeto.id,
       mensagens: [...e.mensagens,
         { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto: pedido, criadoEm: agora },
-        { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: respostaConversa(pedido), criadoEm: agora + PENSAR_CONVERSA },
+        { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: respostaConversa(pedido), criadoEm: agora + PENSAR_CONVERSA, origem: 'conversa' },
       ],
     }));
     return projeto;
@@ -355,7 +367,8 @@ export function aprovarProjeto(id: string, agora = Date.now()) {
  * Apaga um projeto (chat da Sora + plano + execuções). Por padrão apaga também os agentes da equipe;
  * com `manterAgentes` eles continuam existindo como agentes avulsos.
  */
-export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } = {}) {
+export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } = {}): Desfazer {
+  const antes = estado;
   alterar(e => {
     const p = e.projetos.find(x => x.id === id);
     const ids = new Set(p?.agenteIds ?? []);
@@ -371,6 +384,7 @@ export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } =
       mensagens: e.mensagens.filter(m => m.conversaId !== `sora:${id}` && (opcoes.manterAgentes || !ids.has(m.conversaId))),
     };
   });
+  return () => desfazerRemocao(antes, { projetoId: id, agenteIds: antes.projetos.find(x => x.id === id)?.agenteIds ?? [] });
 }
 
 export function renomearProjeto(id: string, titulo: string) {
@@ -451,7 +465,7 @@ export function conversarComSora(texto: string, agora = Date.now()) {
       ...e,
       mensagens: [...e.mensagens,
         { id: novoId('msg'), conversaId: `sora:${p.id}`, autor: 'usuario', texto, criadoEm: agora },
-        { id: novoId('msg'), conversaId: `sora:${p.id}`, autor: 'sora', texto: respostaConversa(texto), criadoEm: agora + 1200 },
+        { id: novoId('msg'), conversaId: `sora:${p.id}`, autor: 'sora', texto: respostaConversa(texto), criadoEm: agora + 1200, origem: 'conversa' },
       ],
       projetos: e.projetos.map(q => q.id === p.id ? { ...q, marcos: { ...q.marcos, plano: agora + 1200, fim: agora + 1200 } } : q),
     }));
@@ -506,7 +520,8 @@ export function atualizarAgente(id: string, patch: Partial<Omit<AgenteSora, 'id'
 
 /** Remove um agente avulso (agentes de equipe saem junto com o projeto). */
 /** Apaga um agente (avulso ou de equipe — na equipe, ele sai do projeto). A Sora não pode ser apagada. */
-export function removerAgente(id: string) {
+export function removerAgente(id: string): Desfazer {
+  const antes = estado;
   alterar(e => {
     if (!e.agentes[id]) return e;
     const agentes = { ...e.agentes }; delete agentes[id];
@@ -517,7 +532,61 @@ export function removerAgente(id: string) {
       mensagens: e.mensagens.filter(m => m.conversaId !== id),
     };
   });
+  return () => desfazerRemocao(antes, { agenteIds: [id] });
 }
+
+// ---------- Desfazer (toasts com "Desfazer", item 45) ----------
+
+/** Função que desfaz uma remoção. Pode ser chamada uma vez; chamadas extras não fazem nada. */
+export type Desfazer = () => void;
+
+/**
+ * Restaura o que uma remoção tirou, a partir do estado de ANTES, sem apagar o que mudou depois
+ * (mensagens novas, outros agentes, renomes…): agentes e campos alterados pelo "manter como avulsos",
+ * o projeto na mesma posição da lista, os agenteIds dos projetos, execuções, mensagens e o projeto ativo.
+ */
+function desfazerRemocao(antes: EstadoProjetos, alvo: { projetoId?: string; agenteIds: string[] }) {
+  alterar(e => {
+    const ids = new Set(alvo.agenteIds);
+    // agentes: volta quem sumiu; quem virou avulso volta a ser da equipe
+    const agentes = { ...e.agentes };
+    for (const aid of ids) {
+      const velho = antes.agentes[aid];
+      if (!velho) continue;
+      const atual = agentes[aid];
+      agentes[aid] = atual ? { ...atual, avulso: velho.avulso, projetoId: velho.projetoId, espera: velho.espera } : velho;
+    }
+    // projetos: o removido volta na mesma posição; os demais recuperam os agenteIds que perderam
+    let projetos = e.projetos.map(p => {
+      const velho = antes.projetos.find(x => x.id === p.id);
+      if (!velho || !velho.agenteIds.some(a => ids.has(a))) return p;
+      const faltam = velho.agenteIds.filter(a => ids.has(a) && !p.agenteIds.includes(a));
+      return faltam.length ? { ...p, agenteIds: velho.agenteIds.filter(a => p.agenteIds.includes(a) || faltam.includes(a)) } : p;
+    });
+    if (alvo.projetoId && !projetos.some(p => p.id === alvo.projetoId)) {
+      const velho = antes.projetos.find(x => x.id === alvo.projetoId);
+      if (velho) {
+        const pos = Math.min(antes.projetos.findIndex(x => x.id === alvo.projetoId), projetos.length);
+        projetos = [...projetos.slice(0, pos), velho, ...projetos.slice(pos)];
+      }
+    }
+    const temExec = new Set(e.execucoes.map(x => x.id));
+    const temMsg = new Set(e.mensagens.map(m => m.id));
+    const voltaExec = antes.execucoes.filter(x => !temExec.has(x.id) && (ids.has(x.agenteId) || (alvo.projetoId && x.projetoId === alvo.projetoId)));
+    const voltaMsg = antes.mensagens.filter(m => !temMsg.has(m.id) && (ids.has(m.conversaId) || (alvo.projetoId && m.conversaId === `sora:${alvo.projetoId}`)));
+    return {
+      ...e, agentes, projetos,
+      execucoes: [...e.execucoes, ...voltaExec],
+      mensagens: [...e.mensagens, ...voltaMsg],
+      projetoAtivoId: e.projetoAtivoId ?? (alvo.projetoId && antes.projetoAtivoId === alvo.projetoId ? alvo.projetoId : null),
+    };
+  });
+}
+
+/** Fotografia do estado inteiro (para fluxos que precisam voltar tudo de uma vez). */
+export function capturarSnapshot(): EstadoProjetos { return estado; }
+/** Volta o estado inteiro para uma fotografia tirada com capturarSnapshot(). */
+export function restaurarSnapshot(snapshot: EstadoProjetos) { definir(snapshot); }
 
 export function atualizarSora(patch: Partial<SoraPerfil>) { alterar(e => ({ ...e, sora: { ...e.sora, ...patch } })); }
 export function restaurarSora() { alterar(e => ({ ...e, sora: { nome: 'Sora', cor: COR_SORA } })); }
@@ -528,4 +597,112 @@ export function limparTudo() { definir(inicial()); }
 // Ganchos de QA (só em desenvolvimento): qa/shoot.mjs usa para semear projetos já concluídos.
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__sora = { criarProjeto, limparTudo, lerEstado, novoChat, abrirProjeto };
+}
+
+// ---------- Recursos de chat (E3): streaming simulado, Parar, Refazer, 👍/👎, editar pergunta ----------
+
+/** Quanto tempo uma resposta leva para "digitar" (ms): ~16 ms por caractere, entre 0,6 s e 4,5 s. */
+export function duracaoStream(texto: string) {
+  return Math.min(4500, Math.max(600, texto.length * 16));
+}
+
+export interface TextoVisivel { texto: string; gerando: boolean; interrompida: boolean }
+
+/** Quanto do texto de uma resposta já apareceu (por palavra), a partir do relógio. */
+export function textoVisivel(m: MensagemChat, agora: number): TextoVisivel {
+  if (m.autor === 'usuario') return { texto: m.texto, gerando: false, interrompida: false };
+  const dur = duracaoStream(m.texto);
+  const corte = Math.min(m.interrompidaEm ?? agora, agora);
+  const frac = Math.max(0, Math.min(1, (corte - m.criadoEm) / dur));
+  const interrompida = m.interrompidaEm !== undefined && m.interrompidaEm < m.criadoEm + dur;
+  if (frac >= 1) return { texto: m.texto, gerando: false, interrompida: false };
+  // corta numa fronteira de palavra (sem quebrar markdown no meio de uma palavra)
+  const alvo = Math.floor(m.texto.length * frac);
+  const fim = m.texto.slice(alvo).search(/\s/);
+  const texto = m.texto.slice(0, fim < 0 ? m.texto.length : alvo + fim);
+  return { texto, gerando: !interrompida, interrompida };
+}
+
+/** Alguma resposta desta conversa ainda está sendo "digitada"? */
+export function gerandoNa(e: EstadoProjetos, conversaId: string, agora: number) {
+  return e.mensagens.some(m => m.conversaId === conversaId && m.criadoEm <= agora && textoVisivel(m, agora).gerando);
+}
+
+/** "Parar": congela as respostas desta conversa que estão sendo digitadas agora (o texto parcial fica). */
+export function pararGeracao(conversaId: string, agora = Date.now()) {
+  alterar(e => ({
+    ...e,
+    mensagens: e.mensagens.map(m => m.conversaId === conversaId && m.autor !== 'usuario' && m.criadoEm <= agora
+      && m.interrompidaEm === undefined && agora < m.criadoEm + duracaoStream(m.texto) ? { ...m, interrompidaEm: agora } : m),
+  }));
+}
+
+/** 👍 / 👎 (clicar de novo no mesmo tira a avaliação). */
+export function avaliarMensagem(id: string, valor: 'positiva' | 'negativa') {
+  alterar(e => ({ ...e, mensagens: e.mensagens.map(m => m.id === id ? { ...m, avaliacao: m.avaliacao === valor ? undefined : valor } : m) }));
+}
+
+/** Pode refazer? Só respostas de conversa comum da Sora (as do trabalho da equipe vêm do plano). */
+export const podeRefazer = (m: MensagemChat) => m.autor === 'sora' && m.origem === 'conversa';
+
+/** "Refazer": a Sora pensa de novo e responde com outra redação. */
+export function refazerResposta(id: string, agora = Date.now()) {
+  const m = estado.mensagens.find(x => x.id === id);
+  if (!m || !podeRefazer(m)) return;
+  const pergunta = [...estado.mensagens].filter(x => x.conversaId === m.conversaId && x.autor === 'usuario' && x.criadoEm <= m.criadoEm)
+    .sort((a, b) => b.criadoEm - a.criadoEm)[0];
+  const variante = (m.variante ?? 0) + 1;
+  const quando = agora + 900;
+  const projetoId = m.conversaId.startsWith('sora:') ? m.conversaId.slice(5) : '';
+  alterar(e => ({
+    ...e,
+    mensagens: e.mensagens.map(x => x.id === id ? {
+      ...x, texto: respostaConversa(pergunta?.texto ?? '', variante), variante, criadoEm: quando, interrompidaEm: undefined, avaliacao: undefined,
+    } : x),
+    projetos: e.projetos.map(q => q.id === projetoId && !q.agenteIds.length ? { ...q, marcos: { ...q.marcos, plano: quando, fim: quando } } : q),
+  }));
+}
+
+/** Pode editar esta pergunta? Mensagens do usuário em chats sem equipe e em chats diretos com agentes. */
+export function podeEditar(e: EstadoProjetos, m: MensagemChat) {
+  if (m.autor !== 'usuario') return false;
+  if (!m.conversaId.startsWith('sora:')) return !!e.agentes[m.conversaId];
+  const p = e.projetos.find(x => x.id === m.conversaId.slice(5));
+  return !!p && !p.agenteIds.length && !p.tarefas.length;
+}
+
+/** "Editar pergunta": troca o texto e refaz a conversa a partir dali (o que vinha depois é substituído). */
+/** Prévias (blob:) das imagens enviadas nesta sessão, por id do anexo. */
+const previasDaSessao = new Map<string, string>();
+export const previaDoAnexo = (id: string) => previasDaSessao.get(id);
+
+/**
+ * Envia com anexos: roda o envio e marca com os anexos as perguntas do usuário criadas por ele.
+ * Ex.: anexarEnvio(anexos, () => conversarComSora(texto)). Guarda só metadados no store.
+ */
+export function anexarEnvio<T>(anexos: (AnexoMsg & { urlPrevia?: string })[] | undefined, enviar: () => T): T {
+  if (!anexos?.length) return enviar();
+  const antes = new Set(estado.mensagens.map(m => m.id));
+  const r = enviar();
+  anexos.forEach(a => { if (a.urlPrevia) previasDaSessao.set(a.id, a.urlPrevia); });
+  const meta = anexos.map(({ id, nome, tipo, tamanho }) => ({ id, nome, tipo, tamanho }));
+  alterar(e => ({ ...e, mensagens: e.mensagens.map(m => !antes.has(m.id) && m.autor === 'usuario' ? { ...m, anexos: meta } : m) }));
+  return r;
+}
+
+export function editarPergunta(id: string, novoTexto: string, agora = Date.now()) {
+  const m = estado.mensagens.find(x => x.id === id);
+  const texto = novoTexto.trim();
+  if (!m || (!texto && !m.anexos?.length) || !podeEditar(estado, m)) return;
+  const anexos = m.anexos;
+  const conversa = m.conversaId;
+  const ehAgente = !conversa.startsWith('sora:');
+  alterar(e => ({
+    ...e,
+    mensagens: e.mensagens.filter(x => x.conversaId !== conversa || x.criadoEm < m.criadoEm),
+    execucoes: ehAgente ? e.execucoes.filter(x => x.agenteId !== conversa || x.tarefaId || x.inicio < m.criadoEm) : e.execucoes,
+  }));
+  if (ehAgente) { anexarEnvio(anexos, () => enviarParaAgente(conversa, texto, agora)); return; }
+  abrirProjeto(conversa.slice(5));
+  anexarEnvio(anexos, () => conversarComSora(texto, agora));
 }

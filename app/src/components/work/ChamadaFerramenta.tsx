@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PassoTrabalho, ResultadoPasso } from '../../types';
 import { SoraOrb } from '../mascot';
+import { AvisoPluginDesconectado, useErroSimulado } from '../erros';
 import { PecaCampanha } from '../ui/CampaignPiece';
 import { PluginMark } from '../ui/PluginMark';
 import type { Movimento } from '../../types';
@@ -43,6 +44,7 @@ export function ChamadaFerramenta({ passo, cor, movimento, agora }: { passo: Pas
   const p = pluginInfo(passo.ferramenta);
   const executando = passo.status === 'executando';
   const params = passo.parametros ?? {};
+  const pluginCaiu = useErroSimulado() === 'plugin' && executando && !!passo.ferramenta;
   return (
     <div className={`wk-tool wk-${passo.status}`}>
       <button type="button" className="wk-tool-head" onClick={() => setAberto(v => !v)} aria-expanded={aberto}>
@@ -60,6 +62,7 @@ export function ChamadaFerramenta({ passo, cor, movimento, agora }: { passo: Pas
       </button>
       <div className="wk-params" title={jsonCompacto(params)}>{jsonCompacto(params)}</div>
       {aberto && <pre className="wk-params-full">{JSON.stringify(params, null, 2)}</pre>}
+      {pluginCaiu && <AvisoPluginDesconectado plugin={p?.name ?? passo.ferramenta!} />}
       {passo.resultado && <ResultadoResumo resultado={passo.resultado} cor={cor} />}
     </div>
   );

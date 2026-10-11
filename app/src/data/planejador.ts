@@ -527,13 +527,39 @@ export function pedeTrabalho(texto: string) {
   return MODELOS.some(m => m.palavras.test(t)) && t.split(/\s+/).length >= 4;
 }
 
-/** Resposta da Sora quando a mensagem é só conversa (sem criar agentes). */
-export function respostaConversa(texto: string) {
+/**
+ * Resposta da Sora quando a mensagem é só conversa (sem criar agentes). Em markdown.
+ * `variante` escolhe outra redação (usado pelo "Refazer").
+ */
+export function respostaConversa(texto: string, variante = 0) {
   const t = texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  if (/^(oi|ola|ei|e ai|bom dia|boa tarde|boa noite)\b/.test(t)) return 'Oi! Eu sou a Sora. Me conte o que você precisa: posso só conversar ou montar uma equipe de agentes para fazer o trabalho.';
-  if (/obrigad|valeu/.test(t)) return 'Por nada! Se quiser, é só pedir a próxima tarefa.';
-  if (/o que (voce|vc) (faz|sabe)|quem e voce|como funciona|ajuda/.test(t)) return 'Eu entendo o seu pedido, monto um plano e crio agentes especializados para executar cada parte — pesquisa, criação, textos, código… Nada é publicado sem a sua aprovação. Experimente: “Crie uma campanha para…”.';
-  return 'Entendi. Quer que eu transforme isso em uma tarefa? Descreva o resultado que você espera e eu monto uma equipe de agentes para fazer.';
+  const pick = (opcoes: string[]) => opcoes[variante % opcoes.length];
+  if (!t.trim()) return pick([
+    'Recebi seus **anexos**. O que você quer que eu faça com eles? Posso **resumir**, **analisar** ou usar como **referência** para os agentes.',
+    'Anexos recebidos! Me diga o objetivo — por exemplo, *"crie posts a partir destas fotos"* — e eu monto o plano.',
+  ]);
+  if (/^(oi|ola|ei|e ai|bom dia|boa tarde|boa noite)\b/.test(t)) return pick([
+    'Oi! Eu sou a **Sora**. Me conte o que você precisa: posso só conversar ou montar uma **equipe de agentes** para fazer o trabalho.',
+    'Olá! Que bom te ver por aqui. Diga o que você quer fazer — eu cuido do **plano** e dos **agentes**.',
+    'Oi! Pronta para ajudar. Você pode, por exemplo:\n\n- pedir uma **campanha** completa;\n- pesquisar um **mercado**;\n- resumir seus **e-mails**.',
+  ]);
+  if (/obrigad|valeu/.test(t)) return pick([
+    'Por nada! Se quiser, é só pedir a próxima tarefa.',
+    'Imagina! Estou por aqui quando precisar. 🙂',
+  ]);
+  if (/c[o]digo|json|formato|exemplo de plano/.test(t)) return pick([
+    'Por baixo dos panos, um plano é mais ou menos assim:\n\n```json\n{\n  "titulo": "Campanha · Cafeteria",\n  "tarefas": [\n    { "titulo": "Pesquisar referências", "agente": "Atlas" },\n    { "titulo": "Criar peças", "agente": "Luna" },\n    { "titulo": "Organizar calendário", "agente": "Nina" }\n  ]\n}\n```\n\nVocê não precisa escrever nada disso — é só descrever o que quer.',
+    'Um exemplo de tarefa que eu entrego para um agente:\n\n```txt\nPesquise referências de campanhas de lançamento para cafeteria.\nFerramentas: Perplexity, Notion\n```',
+  ]);
+  if (/o que (voce|vc) (faz|sabe)|quem e voce|como funciona|ajuda/.test(t)) return pick([
+    'Eu funciono assim:\n\n1. **Entendo** o seu pedido;\n2. monto um **plano** em tarefas;\n3. crio **agentes** especializados para cada uma;\n4. coordeno o trabalho e te mostro tudo **ao vivo**;\n5. você **revisa** — nada é publicado sem a sua aprovação.\n\nExperimente: *“Crie uma campanha para…”*.',
+    'Alguns pedidos que funcionam bem:\n\n| Pedido | Equipe |\n|---|---|\n| Campanha de lançamento | pesquisa · criação · textos |\n| Site ou landing page | UX · design · código |\n| Pesquisa de mercado | coleta · análise · relatório |\n| Resumo de e-mails | triagem · resumo |\n\nÉ só descrever o que você quer.',
+  ]);
+  return pick([
+    'Entendi. Quer que eu transforme isso em uma **tarefa**? Descreva o resultado que você espera e eu monto uma equipe de agentes para fazer.',
+    'Posso ajudar com isso! Se você me disser **o que quer receber no fim** (um texto, uma pesquisa, peças…), eu organizo o plano e a equipe.',
+    'Anotado. Para eu montar a equipe certa, me conte:\n\n- **o objetivo**;\n- **para quem** é;\n- **até quando** precisa.',
+  ]);
 }
 
 /** Título curto de um chat a partir da primeira mensagem. */

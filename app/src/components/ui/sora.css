@@ -618,3 +618,38 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
   .suggestions button { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .sk, .chat-row.is-born > .b-tooltip-alvo > a, .task-card.task-skeleton { animation: none; } }
+
+/* E3 · contraste (item 57) e '…' com 44 px no celular (item 59) */
+.mobile-orb i { color: var(--surface-1); }
+.side-tabs button.is-on .side-count { color: var(--text-1); }
+@media (max-width: 767px) {
+  .chat-row-menu .gestao-menu-btn, .team-agent-menu .gestao-menu-btn, .gallery-menu .gestao-menu-btn, .topbar-identity .gestao-menu-btn { width: 44px; height: 44px; }
+}
+
+/* E3 · área da conversa com o botão "ir para o fim" por cima */
+.conversation-area { position: relative; min-height: 0; display: grid; }
+.conversation-area > .conversation-scroll { min-height: 0; }
+/* E3 · painel do chat do agente: mesmo painel recolhível do projeto */
+.agent-workspace { grid-template-columns: minmax(0, 1fr) 380px; }
+.agent-workspace.panel-collapsed { grid-template-columns: minmax(0, 1fr) 52px; }
+.side-body .agent-profile { padding: var(--sp-2) 0 var(--sp-3); }
+@media (min-width: 768px) and (max-width: 900px) {
+  .sora-workspace, .agent-workspace { grid-template-columns: minmax(0, 1fr) 300px; }
+  .sora-workspace.panel-collapsed, .agent-workspace.panel-collapsed { grid-template-columns: minmax(0, 1fr) 52px; }
+}
+/* E3 · rodapé da barra lateral: o nome da conta não corta mais */
+@media (min-width: 768px) {
+  .account { gap: var(--sp-2); }
+  .account > span:nth-child(2) { flex: 1; }
+  .account .account-settings, .account > button { flex: none; width: 30px; height: 30px; padding: 0; }
+  .account strong { font-size: var(--fs-13); }
+}
+/* E3: nome da conta não corta — quebra em até 2 linhas (título completo no title) */
+.account > span:nth-child(2) { flex: 1; }
+.account strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+/* E3: a coluna da conversa aceita arquivos arrastados (ZonaSoltar envolve conversa + composer) */
+.conversation > .conversation-drop { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.conversation:has(> .conversation-drop) { grid-template-rows: minmax(0, 1fr); }
+/* E3: pílula do painel no celular em uma linha (rótulo inteiro, resumo cede espaço) */
+.work-pill strong { flex: none; white-space: nowrap; }
+.work-pill span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

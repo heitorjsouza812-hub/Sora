@@ -1,6 +1,6 @@
 // Chat de um agente (de uma equipe ou avulso): o trabalho dele ao vivo + conversa direta.
 // À direita: abas "Trabalho" (painel de passos) e "Perfil" (orb, status, progresso, ferramentas).
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
@@ -11,10 +11,18 @@ import { PluginMark } from '../components/ui/PluginMark';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { ShimmerText } from '../components/ui/ShimmerText';
 import { useCelular } from '../components/ui/useMedia';
-import { PainelTrabalho, pluginInfo, TrabalhoDock } from '../components/work';
+import { PainelTrabalho, pluginInfo } from '../components/work';
+import { ZonaSoltar } from '../components/anexos';
+import { CardErroModelo, definirErroSimulado, useErroSimulado } from '../components/erros';
+import { PainelLateral } from '../components/layout/PainelLateral';
+import { usePainelLateral } from '../components/layout/usePainelLateral';
+import { ActivityIcon, TeamIcon } from '../components/ui/Icons';
+import { IrParaFim } from '../components/ui/IrParaFim';
+import { MensagemChat } from '../components/ui/MensagemChat';
+import { useRolagemFim } from '../components/ui/useRolagemFim';
 import { duracaoRoteiro } from '../data/planejador';
 import {
-  enviarParaAgente, estadoAgente, execucoesDoAgente, mensagensDa, passosDoAgente, useAgora, useProjetos,
+  anexarEnvio, enviarParaAgente, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararGeracao, passosDoAgente, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos,
 } from '../state/projetos';
 
@@ -60,11 +68,15 @@ export default function AgentChat() {
   const celular = useCelular();
   const a = e.agentes[id];
   const st = a ? estadoAgente(e, a.id, agora) : null;
-  const [aba, setAba] = useState<'trabalho' | 'perfil' | null>(params.get('painel') === 'trabalho' ? 'trabalho' : null);
-  const [sheet, setSheet] = useState(params.get('painel') === 'trabalho');
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const abaAtual = aba ?? (st?.status === 'trabalhando' ? 'trabalho' : 'perfil');
+  const painel = usePainelLateral('sora.painel.agente', 'trabalho');
+  const [folha, setFolha] = useState(params.get('painel') === 'trabalho');
+  const { setAba } = painel;
+  // "Ver trabalho" vindo de outra tela (?painel=trabalho) abre direto na aba Trabalho
+  useEffect(() => { if (params.get('painel') === 'trabalho') setAba('trabalho'); }, [params, setAba]);
+  const abaAtual = painel.aba;
+  const verTrabalho = () => { painel.setAba('trabalho'); painel.setRecolhido(false); setFolha(true); };
 
+  const erroModelo = useErroSimulado() === 'modelo';
   const itens: Item[] = [];
   if (a) {
     const xs = execucoesDoAgente(e, a.id).filter(x => x.inicio <= agora);
@@ -91,7 +103,7 @@ export default function AgentChat() {
           <div className="assistant-row agent-copy">
             <SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="working" glow={false} decorative seed={3} />
             <span><ShimmerText>{atual?.tipo === 'ferramenta' ? `${atual.texto}… (${atual.acao})` : atual?.texto ?? `${a.verbo}…`}</ShimmerText>
-              {!celular && <button type="button" className="see-work inline" onClick={() => setAba('trabalho')}>Ver passos</button>}</span>
+              {!celular && <button type="button" className="see-work inline" onClick={verTrabalho}>Ver passos</button>}</span>
           </div>
         ) });
       } else if (x.tarefaId) {
@@ -103,25 +115,37 @@ export default function AgentChat() {
         </> });
       }
     });
-    mensagensDa(e, a.id, agora).forEach(m => itens.push({
+    const todas = mensagensDa(e, a.id, agora);
+    // erro simulado do modelo: a resposta depois da última pergunta vira o card de erro
+    const pergunta = erroModelo ? todas.filter(m => m.autor === 'usuario').pop() : undefined;
+    if (pergunta) itens.push({
+      t: pergunta.criadoEm + 1, key: 'erro-modelo',
+      node: <CardErroModelo cor={a.cor} autor={a.nome} onTentarDeNovo={() => definirErroSimulado(null)} />,
+    });
+    (pergunta ? todas.filter(m => m.autor === 'usuario' || m.criadoEm <= pergunta.criadoEm) : todas).forEach(m => itens.push({
       t: m.criadoEm, key: m.id,
-      node: m.autor === 'usuario' ? <div className="user-message">{m.texto}</div>
-        : m.autor === 'sora' ? <div className="assistant-row"><SoraOrb size={34} color={e.sora.cor} state="coordinating" glow={false} decorative seed={72} /><p><strong>{e.sora.nome}</strong>&nbsp; {m.texto}</p></div>
-          : <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="idle" glow={false} decorative seed={5} /><p><strong className="agent-color">{a.nome}</strong>&nbsp; {m.texto}</p></div>,
+      node: m.autor === 'usuario' ? <MensagemChat m={m} agora={agora} />
+        : m.autor === 'sora'
+          ? <MensagemChat m={m} agora={agora} nome={e.sora.nome} avatar={<SoraOrb size={30} color={e.sora.cor} state="coordinating" glow={false} decorative seed={72} />} />
+          : <MensagemChat m={m} agora={agora} nome={a.nome} cor={a.cor}
+            avatar={<SoraOrb size={30} color={a.cor} movimento={a.tipoMovimento} state={textoVisivel(m, agora).gerando ? 'working' : 'idle'} glow={false} decorative seed={5} />} />,
     }));
   }
   itens.sort((x, y) => x.t - y.t);
-  const ultimo = itens[itens.length - 1]?.key;
-  useLayoutEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [ultimo, itens.length]);
+  const gerando = !!a && !erroModelo && gerandoNa(e, a.id, agora);
+  const assinatura = a ? mensagensDa(e, a.id, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0;
+  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
 
   if (id === 'sora') return <Navigate to="/chat/sora" replace />;
   if (!a || !st) return <Navigate to="/chat/sora" replace />;
 
   return (
-    <AppShell agenteId={a.id} menuItens={[{ rotulo: 'Ver trabalho', onClick: () => { setAba('trabalho'); setSheet(true); } }]}>
-      <div className="workspace-grid agent-workspace" style={{ '--agent': a.cor } as CSSProperties}>
+    <AppShell agenteId={a.id} menuItens={[{ rotulo: 'Ver trabalho', onClick: verTrabalho }]}>
+      <div className={`workspace-grid agent-workspace ${painel.recolhido ? 'panel-collapsed' : ''}`} style={{ '--agent': a.cor } as CSSProperties}>
         <main className="conversation" aria-label={`Conversa com ${a.nome}`}>
-          <div className="conversation-scroll agent-scroll" ref={scrollRef} aria-live="polite" aria-relevant="additions">
+          <ZonaSoltar className="conversation-drop">
+          <div className="conversation-area">
+          <div className="conversation-scroll agent-scroll" ref={rolagemRef} onScroll={aoRolar} aria-live="polite" aria-relevant="additions">
             {!itens.length && (
               <div className="agent-empty">
                 <SoraOrb size={112} color={a.cor} movimento={a.tipoMovimento} state="idle" seed={61} title={a.nome} />
@@ -129,27 +153,28 @@ export default function AgentChat() {
                 <p>{a.avulso ? `${a.funcao}. Mande uma mensagem e acompanhe os passos no painel Trabalho.` : 'O trabalho aparecerá aqui assim que a etapa anterior for concluída.'}</p>
               </div>
             )}
-            {itens.map(i => <div key={i.key} className="chat-item">{i.node}</div>)}
+            {itens.map(i => <div key={i.key} className="chat-item" data-chave={i.key}>{i.node}</div>)}
+          </div>
+          {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
           </div>
           <div className="chat-composer">
             <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'}
-              onSend={t => enviarParaAgente(a.id, t)} />
+              onSend={(t, anexos) => { anexarEnvio(anexos, () => enviarParaAgente(a.id, t)); seguirFim(); }}
+              gerando={gerando} onParar={() => pararGeracao(a.id)} />
           </div>
+          </ZonaSoltar>
         </main>
-        {!celular && (
-          <aside className="agent-panel card" aria-label={`Painel de ${a.nome}`}>
-            <div className="panel-tabs" role="tablist" aria-label="Painel do agente">
-              <button type="button" role="tab" aria-selected={abaAtual === 'trabalho'} className={abaAtual === 'trabalho' ? 'is-on' : ''} onClick={() => setAba('trabalho')}>
-                <i className={`wk-pulse ${st.status === 'trabalhando' ? 'is-live' : ''}`} aria-hidden="true" />Trabalho
-              </button>
-              <button type="button" role="tab" aria-selected={abaAtual === 'perfil'} className={abaAtual === 'perfil' ? 'is-on' : ''} onClick={() => setAba('perfil')}>Perfil</button>
-            </div>
-            {abaAtual === 'trabalho'
-              ? <PainelTrabalho agenteIds={[a.id]} agenteId={a.id} semSeletor className="panel-work" />
-              : <Perfil e={e} a={a} agora={agora} />}
-          </aside>
-        )}
-        {celular && <TrabalhoDock agenteIds={[a.id]} agenteId={a.id} semSeletor aberta={sheet} onAlternar={setSheet} />}
+        <PainelLateral
+          rotulo={`Painel de ${a.nome}`}
+          aba={abaAtual} onAba={painel.setAba} recolhido={painel.recolhido} onRecolher={painel.setRecolhido}
+          folhaAberta={folha} onFolha={setFolha}
+          resumo={st.status === 'trabalhando' ? `${a.verbo}…` : st.rotulo || a.funcao}
+          abas={[
+            { id: 'trabalho', rotulo: 'Trabalho', icone: <ActivityIcon />, vivo: st.status === 'trabalhando' ? a.cor : null,
+              conteudo: <PainelTrabalho agenteIds={[a.id]} agenteId={a.id} semSeletor className="side-work" /> },
+            { id: 'perfil', rotulo: 'Perfil', icone: <TeamIcon />, conteudo: <Perfil e={e} a={a} agora={agora} /> },
+          ]}
+        />
       </div>
     </AppShell>
   );

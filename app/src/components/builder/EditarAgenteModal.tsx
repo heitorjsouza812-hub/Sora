@@ -6,6 +6,7 @@ import { COR_SORA } from '../../data/planejador';
 import { definirModeloAgente, useModelos } from '../../state/modelos';
 import { atualizarAgente, atualizarSora, useProjetos } from '../../state/projetos';
 import { BottomSheet, Modal } from '../overlay';
+import { toast } from '../base';
 import { useCelular } from '../ui/useMedia';
 import { AgentConfigForm } from './AgentConfigForm';
 import { AgentPreview } from './AgentPreview';
@@ -37,6 +38,7 @@ export function EditarAgenteModal({ agenteId, onFechar }: EditarAgenteModalProps
       atualizarAgente(agenteId, { nome: r.nome.trim(), funcao: r.funcao.trim(), cor: r.cor, tipoMovimento: r.tipoMovimento, ferramentas: r.ferramentas, instrucoes: r.instrucoes });
       if (r.modelo) definirModeloAgente(agenteId, r.modelo.provedor, r.modelo.modelo);
     }
+    toast({ mensagem: sora ? `${r.nome.trim()} atualizada` : 'Agente salvo', tom: 'sucesso' });
     onFechar();
   };
   const titulo = sora ? `Personalizar ${e.sora.nome}` : `Editar ${ag?.nome ?? 'agente'}`;
