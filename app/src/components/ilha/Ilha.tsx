@@ -7,7 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { SoraOrb } from '../mascot';
 import { useProjetos } from '../../state/projetos';
 import { definirIlhaPrefs, useIlha, useIlhaPrefs, type VisaoIlha } from './ilhaEstado';
-import { abrirIlha, alternarIlha, fecharIlha, useIlhaUi } from './ilhaUi';
+import { abrirIlha, fecharIlha, useIlhaUi } from './ilhaUi';
 import { VisaoGeral } from './VisaoGeral';
 import { Aprovacao } from './Aprovacao';
 import { SeletorProjeto } from './SeletorProjeto';
@@ -151,7 +151,7 @@ export function Ilha() {
     if (!ui.aberta) abrirIlha(ui.vista === 'aprovacao' && !v.alerta ? 'inicio' : ui.vista, ui.agenteId ?? undefined);
   }, [ui.aberta, ui.vista, ui.agenteId, v.alerta]);
 
-  // pedidos externos (comando, atalho) fixam a ilha aberta
+  // pedidos externos (comando, atalho Ctrl/⌘+Shift+S) fixam a ilha aberta
   const ultimoPedido = useRef(ui.pedido);
   useEffect(() => {
     if (ui.pedido === ultimoPedido.current) return;
@@ -188,15 +188,9 @@ export function Ilha() {
     anterior.current = { projeto: projetoMostrado, n: concluidos };
   }, [concluidos, projetoMostrado, prefs.som]);
 
-  // ---------- Esc, clique fora, Ctrl/⌘+Shift+S ----------
+  // ---------- Esc e clique fora (Ctrl/⌘+Shift+S fica em comandos/Comandos.tsx) ----------
   useEffect(() => {
     const tecla = (ev: KeyboardEvent) => {
-      if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key.toLowerCase() === 's') {
-        ev.preventDefault();
-        porHover.current = false;
-        alternarIlha();
-        return;
-      }
       if (ev.key === 'Escape' && ui.aberta && !destacada) {
         // não fecha se um diálogo (modal) estiver por cima
         if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
