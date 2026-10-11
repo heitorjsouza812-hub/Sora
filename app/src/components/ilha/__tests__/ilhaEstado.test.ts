@@ -78,8 +78,57 @@ describe('visaoIlha', () => {
 });
 
 describe('preferências da Ilha', () => {
-  it('persiste as preferências e as recarrega em um novo módulo', async () => {
-    const preferencias = { visivel: false, som: false, esconderOciosa: true, projetoId: 'proj-escolhido' };
+  it('aplica o filtro, exclui ocultos e preserva a ordem dos agentes reais', () => {
+    const projeto = store.criarProjeto('Crie uma campanha para lançar minha cafeteria', AGORA);
+    const execucoes = store.lerEstado().execucoes.filter((execucao) => execucao.projetoId === projeto.id);
+    const duranteSegundoAgente = execucoes[1]!.inicio + 1;
+    const agentes = ilha.visaoIlha(store.lerEstado(), duranteSegundoAgente, projeto.id).agentes;
+    const trabalhando = agentes.find((agente) => agente.status === 'trabalhando')!;
+    const concluido = agentes.find((agente) => agente.status === 'concluido')!;
+    const aguardando = agentes.find((agente) => agente.status === 'aguardando')!;
+
+    expect(ilha.filtrarAgentes(agentes, { filtro: 'trabalhando', ocultos: [] }).map((agente) => agente.id)).toEqual([trabalhando.id]);
+    expect(ilha.filtrarAgentes(agentes, { filtro: 'concluidos', ocultos: [] }).map((agente) => agente.id)).toEqual([concluido.id]);
+    expect(ilha.filtrarAgentes(agentes, { filtro: 'todos', ocultos: [trabalhando.id] }).map((agente) => agente.id)).toEqual(
+      agentes.filter((agente) => agente.id !== trabalhando.id).map((agente) => agente.id),
+    );
+    expect(ilha.filtrarAgentes(agentes, { filtro: 'concluidos', ocultos: [concluido.id, aguardando.id] })).toEqual([]);
+  });
+
+  it('alterna agente oculto sem duplicar ids e persiste a preferência', () => {
+    ilha.alternarAgenteOculto('agente-1');
+    ilha.alternarAgenteOculto('agente-1');
+    ilha.alternarAgenteOculto('agente-2');
+
+    expect(ilha.lerIlhaPrefs().ocultos).toEqual(['agente-2']);
+    expect(JSON.parse(localStorage.getItem('sora.ilha.v1') ?? '{}')).toMatchObject({ ocultos: ['agente-2'] });
+  });
+
+  it('migra preferências antigas preenchendo os campos novos com os padrões', async () => {
+    const antigas = { visivel: false, som: false, esconderOciosa: true, projetoId: 'proj-antigo' };
+    localStorage.setItem('sora.ilha.v1', JSON.stringify(antigas));
+
+    vi.resetModules();
+    const migrada = await import('../ilhaEstado');
+
+    expect(migrada.lerIlhaPrefs()).toEqual({
+      ...antigas,
+      filtro: 'todos',
+      ocultos: [],
+      ilhaNoApp: false,
+    });
+  });
+
+  it('persiste e recarrega todas as preferências, inclusive as novas', async () => {
+    const preferencias = {
+      visivel: false,
+      som: false,
+      esconderOciosa: true,
+      projetoId: 'proj-escolhido',
+      filtro: 'concluidos' as const,
+      ocultos: ['agente-1'],
+      ilhaNoApp: true,
+    };
 
     ilha.definirIlhaPrefs(preferencias);
 
