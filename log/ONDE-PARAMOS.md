@@ -1,6 +1,6 @@
 # Onde paramos
 
-_Atualizado em 2026-10-10, ~23h._
+_Atualizado em 2026-10-10, ~23h20 — trabalho PAUSADO a pedido do Heitor._
 
 ## Estado atual
 
@@ -11,14 +11,16 @@ _Atualizado em 2026-10-10, ~23h._
   - Etapa 2: densidade, painel direito com abas Equipe/Trabalho/Entregas, tela "Projeto aprovado", estados vazios com modelos prontos, contraste WCAG e toque de 44 px.
   - Etapa 3: markdown, texto aparecendo aos poucos com botão Parar, ações por mensagem, anexos, Desfazer, Ctrl+K, créditos, estados de erro e testes unitários (Vitest).
 
-## Em andamento no momento deste registro
+## Onde exatamente paramos
 
-- Validação final da Parte B pelo validador (Vigia) + teste visual automático com Playwright (`toHaveScreenshot`, item 56).
-- Ajustes visuais finais: miniaturas das peças escuras demais e espaço sobrando no chat.
+- Todos os agentes foram **parados** e o dev server desligado. O repositório estava limpo e o build passando.
+- Os ajustes visuais finais (miniaturas das peças e espaçamento das entregas) foram **concluídos** (commit `4e5ab5f`).
+- O **teste visual automático** (Playwright `toHaveScreenshot`, item 56) foi criado e commitado pelo Vigia (`903a401`, `2c79f38`): `npm run test:visual`, com o dev server rodando.
+- **Faltou:** o veredito final do Vigia sobre a Parte B inteira (itens 28–60). A validação foi interrompida antes do relatório. Na próxima sessão, rodar: `npm run build`, `npx oxlint`, `npm test`, `node qa/e2e.mjs`, `npm run test:visual` e `node qa/contraste.mjs`, e conferir os itens novos no navegador.
 
 ## Próximos passos
 
-1. Fechar a validação da Parte B e corrigir o que aparecer.
+1. Rodar a validação final da Parte B (comandos acima), corrigir o que aparecer e mandar ao Lupa o resumo item a item (28–60).
 2. **Parte A (produto/negócio/back-end, itens 1–27 da lista):** NÃO iniciar sem o "sim" do Heitor. Inclui decidir o back-end, o nome (colide com o Sora da OpenAI), o nicho, a cobrança e mover o projeto para fora do OneDrive.
 3. **Plugins:** continuam congelados até o grupo decidir.
 
