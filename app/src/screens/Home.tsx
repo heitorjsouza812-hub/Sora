@@ -7,7 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
 import { MessageComposer } from '../components/ui/MessageComposer';
-import { criarProjeto, novoChat, useProjetos } from '../state/projetos';
+import { anexarEnvio, criarProjeto, novoChat, useProjetos } from '../state/projetos';
+import type { Anexo } from '../components/anexos';
 
 const sugestoes: [string, string][] = [
   ['Criar campanha', 'Crie uma campanha para lançar minha cafeteria: pesquise referências, prepare as peças e monte um calendário de posts.'],
@@ -39,7 +40,7 @@ export default function Home() {
   useEffect(() => { chegadaPendente = false; novoChat(); }, []);
   useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
 
-  const enviar = (pedido: string) => {
+  const enviar = (pedido: string, anexos: Anexo[] = []) => {
     if (enviado) return;
     setEnviado(true);
     setOuvindo(false);
@@ -48,7 +49,7 @@ export default function Home() {
       window.setTimeout(() => setPartindo(true), 650),
       window.setTimeout(() => {
         // a conversa (e o item em CHATS) só nasce agora, junto com a ida para o chat
-        const p = criarProjeto(pedido, undefined, { tipo: 'chat' });
+        const p = anexarEnvio(anexos, () => criarProjeto(pedido, undefined, { tipo: 'chat' }));
         navigate(`/projeto/${p.id}`);
       }, 1150),
     ];
