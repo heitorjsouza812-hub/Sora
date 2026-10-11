@@ -7,7 +7,8 @@
 //              (index.html?janela=ilha). Tamanho fixo ILHA_JANELA; fora do retângulo informado em
 //              informarRetanguloIlha os cliques atravessam para o que estiver embaixo.
 //
-// STUB do orquestrador: o Tear implementa com @tauri-apps/api mantendo estas assinaturas.
+import { invoke } from '@tauri-apps/api/core';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type Janela = 'web' | 'main' | 'ilha';
 
@@ -25,25 +26,97 @@ export const ILHA_JANELA = { largura: 800, altura: 460 } as const;
 export interface Retangulo { x: number; y: number; w: number; h: number }
 export interface MouseIlha { dentro: boolean; x: number; y: number }
 
+function ouvir<T>(evento: string, cb: (payload: T) => void): () => void {
+  if (!noDesktop) return () => {};
+  let ativo = true;
+  let remover: UnlistenFn | null = null;
+  void listen<T>(evento, ({ payload }) => cb(payload)).then((unlisten) => {
+    if (ativo) remover = unlisten;
+    else unlisten();
+  });
+  return () => {
+    ativo = false;
+    remover?.();
+  };
+}
+
 /** A janela da ilha informa onde a pílula/painel está desenhado (px lógicos, relativos à janela).
  *  Fora desse retângulo (+ margem) o Rust deixa os cliques atravessarem. */
-export async function informarRetanguloIlha(_r: Retangulo): Promise<void> {}
+export async function informarRetanguloIlha(r: Retangulo): Promise<void> {
+  if (noDesktop) await invoke('ilha_retangulo', { x: r.x, y: r.y, w: r.w, h: r.h });
+}
 
 /** Posição do cursor relativa à janela da ilha (o Rust envia ~30×/s enquanto a ilha está visível).
  *  Serve para o hover/mouse saindo e para a Sora olhar para o mouse mesmo com os cliques atravessando. */
-export function aoMouseIlha(_cb: (m: MouseIlha) => void): () => void { return () => {}; }
+export function aoMouseIlha(cb: (m: MouseIlha) => void): () => void {
+  return ouvir<MouseIlha>('ilha-mouse', cb);
+}
 
 /** Da janela da ilha: abre um caminho do app (ex. "/revisao/abc") na janela principal e a traz para frente. */
-export async function abrirNoApp(_caminho: string): Promise<void> {}
+export async function abrirNoApp(caminho: string): Promise<void> {
+  if (noDesktop) await invoke('navegar', { caminho });
+}
 
 /** Na janela principal: recebe os pedidos de navegação vindos da ilha. */
-export function aoNavegar(_cb: (caminho: string) => void): () => void { return () => {}; }
+export function aoNavegar(cb: (caminho: string) => void): () => void {
+  return ouvir<string>('sora-navegar', cb);
+}
 
 /** Mostra/esconde a janela da ilha (ex. preferência "Mostrar ilha"). */
-export async function definirIlhaVisivel(_visivel: boolean): Promise<void> {}
+export async function definirIlhaVisivel(visivel: boolean): Promise<void> {
+  if (noDesktop) await invoke('ilha_visivel', { visivel });
+}
 
 /** Na janela da ilha: atalho global Ctrl+Shift+S ou item da bandeja pediram para abrir/fechar a ilha. */
-export function aoAlternarIlha(_cb: () => void): () => void { return () => {}; }
+export function aoAlternarIlha(cb: () => void): () => void {
+  return ouvir<null>('ilha-alternar', cb);
+}
 
 /** Traz a janela principal para frente. */
-export async function mostrarApp(): Promise<void> {}
+export async function mostrarApp(): Promise<void> {
+  if (noDesktop) await invoke('mostrar_app');
+}
+
+// WebView2 nem sempre propaga `storage` entre duas WebViews do mesmo app. Reemitimos cada
+// mutação via eventos Tauri; os stores continuam usando o evento web e não conhecem esta ponte.
+interface ArmazenamentoTauri { chave: string; origem: string }
+type JanelaComPonte = Window & { __SORA_ARMAZENAMENTO_PONTE__?: boolean };
+
+function instalarPonteArmazenamento() {
+  if (!noDesktop || typeof window === 'undefined') return;
+  const janela = window as JanelaComPonte;
+  if (janela.__SORA_ARMAZENAMENTO_PONTE__) return;
+  janela.__SORA_ARMAZENAMENTO_PONTE__ = true;
+  const origem = crypto.randomUUID();
+  const originalSet = Storage.prototype.setItem;
+  const originalRemove = Storage.prototype.removeItem;
+  const originalClear = Storage.prototype.clear;
+  const anunciar = (chave: string) => { void emit<ArmazenamentoTauri>('sora-armazenamento', { chave, origem }); };
+
+  Storage.prototype.setItem = function setItem(chave, valor) {
+    originalSet.call(this, chave, valor);
+    if (this === window.localStorage) anunciar(chave);
+  };
+  Storage.prototype.removeItem = function removeItem(chave) {
+    originalRemove.call(this, chave);
+    if (this === window.localStorage) anunciar(chave);
+  };
+  Storage.prototype.clear = function clear() {
+    const chaves = this === window.localStorage ? Array.from({ length: this.length }, (_, i) => this.key(i)).filter((x): x is string => !!x) : [];
+    originalClear.call(this);
+    chaves.forEach(anunciar);
+  };
+
+  void listen<ArmazenamentoTauri>('sora-armazenamento', ({ payload }) => {
+    if (payload.origem === origem) return;
+    const valor = localStorage.getItem(payload.chave);
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: payload.chave,
+      newValue: valor,
+      storageArea: localStorage,
+      url: window.location.href,
+    }));
+  });
+}
+
+instalarPonteArmazenamento();
