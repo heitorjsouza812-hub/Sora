@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import {
   Badge, Button, Card, IconButton, Input, Select, Textarea, ToastProvider, Tooltip, useToast, type Tamanho, type Variante,
 } from '../components/base';
+import { PainelErrosDev } from '../components/erros';
 import '../components/base/catalogo.css';
 
 const VARIANTES: Variante[] = ['primario', 'secundario', 'fantasma', 'perigo'];
@@ -131,6 +132,10 @@ export default function Catalogo() {
 
         <Secao titulo="Toast" descricao="Fila (até 3 visíveis), aria-live, fecha sozinho e pausa no hover/foco; ação opcional “Desfazer”.">
           <Toasts />
+        </Secao>
+
+        <Secao titulo="Erros simulados" descricao="Painel DEV do Forja: liga e desliga falhas de conexão, modelo, plugin e créditos para ver os estados de erro.">
+          <PainelErrosDev />
         </Secao>
       </main>
     </ToastProvider>
