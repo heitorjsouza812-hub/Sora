@@ -7,7 +7,7 @@ import { useIlha } from './ilhaEstado';
 import './ilha-partes.css';
 
 function RotuloPasso({ passo }: { passo: PassoTrabalho }) {
-  return <>{passo.acao ?? passo.texto}</>;
+  return <span className={passo.acao ? 'ilha-agente__acao' : 'ilha-agente__texto-passo'}>{passo.acao ?? passo.texto}</span>;
 }
 
 function Resultado({ passo }: { passo: PassoTrabalho }) {
@@ -62,7 +62,7 @@ export function DetalheAgente({ agenteId, onVoltar }: { agenteId: string; onVolt
         <div className="ilha-agente__progresso"><span><b>Progresso</b><small>{agente.progresso}%</small></span><progress max="100" value={agente.progresso} aria-label={`Progresso de ${agente.nome}: ${agente.progresso}%`} /></div>
         <article className="ilha-agente__passo-atual">
           <span className="ilha-eyebrow">{passoAtual?.status === 'executando' ? 'Executando agora' : 'Último passo'}</span>
-          <h3>{passoAtual ? <RotuloPasso passo={passoAtual} /> : 'Aguardando o primeiro passo'}</h3>
+          <h3 className={!passoAtual ? 'ilha-agente__estado-vazio' : undefined}>{passoAtual ? <RotuloPasso passo={passoAtual} /> : 'Aguardando o primeiro passo'}</h3>
           {passoAtual?.texto && passoAtual.texto !== passoAtual.acao && <p>{passoAtual.texto}</p>}
           {passoAtual?.parametros && <><h4>Parâmetros</h4><pre>{JSON.stringify(passoAtual.parametros, null, 2)}</pre></>}
           {passoAtual && <><h4>Resultado</h4><Resultado passo={passoAtual} /></>}

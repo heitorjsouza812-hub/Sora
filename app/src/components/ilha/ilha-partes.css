@@ -67,9 +67,12 @@
 .ilha-agente__progresso progress::-moz-progress-bar { background: var(--ilha-agente); }
 .ilha-agente__passo-atual { min-height: 0; padding: var(--sp-3); overflow-y: auto; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--r-10); }
 .ilha-eyebrow { color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-.ilha-agente__passo-atual h3 { margin: 5px 0 var(--sp-2); color: var(--text-1); font: 600 var(--fs-14)/1.35 ui-monospace, Consolas, monospace; }
+.ilha-agente__passo-atual h3 { margin: 5px 0 var(--sp-2); color: var(--text-1); font: 600 var(--fs-14)/1.35 var(--font); }
+.ilha-agente__acao { font-family: ui-monospace, Consolas, monospace; }
+.ilha-agente__texto-passo { font-family: var(--font); }
+.ilha-agente__passo-atual h3.ilha-agente__estado-vazio { color: var(--text-2); font-family: var(--font); font-weight: 400; }
 .ilha-agente__passo-atual h4 { margin: var(--sp-3) 0 5px; color: var(--text-2); font-size: var(--fs-12); }
-.ilha-agente__passo-atual p { margin: 0; color: var(--text-2); font-size: var(--fs-12); line-height: 1.45; }
+.ilha-agente__passo-atual p { margin: 0; color: var(--text-2); font-family: var(--font); font-size: var(--fs-12); line-height: 1.45; }
 .ilha-agente__passo-atual pre { max-height: 92px; margin: 0; padding: var(--sp-2); overflow: auto; color: var(--text-1); background: var(--surface-3); border-radius: var(--r-6); font: 11px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
 .ilha-agente__resultado { display: grid; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-12); }
 .ilha-agente__resultado strong { color: var(--ok); }
