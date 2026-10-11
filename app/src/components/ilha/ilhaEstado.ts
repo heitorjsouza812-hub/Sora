@@ -22,10 +22,20 @@ export interface IlhaPrefs {
   esconderOciosa: boolean;
   /** projeto escolhido na aba de projetos; null = automático (o projeto aberto ou o que está rodando) */
   projetoId: string | null;
+  /** quais bonecos mostrar: todos, só os que estão trabalhando, ou só os concluídos */
+  filtro: FiltroAgentes;
+  /** ids de agentes que o usuário escondeu da ilha (botão "olho" em cada boneco) */
+  ocultos: string[];
+  /** no app de desktop (Tauri) a ilha vive numa janela própria no topo da tela; true = também mostrar dentro do app */
+  ilhaNoApp: boolean;
 }
 
+export type FiltroAgentes = 'todos' | 'trabalhando' | 'concluidos';
+
 const CHAVE = 'sora.ilha.v1';
-const PADRAO: IlhaPrefs = { visivel: true, som: true, esconderOciosa: false, projetoId: null };
+const PADRAO: IlhaPrefs = {
+  visivel: true, som: true, esconderOciosa: false, projetoId: null, filtro: 'todos', ocultos: [], ilhaNoApp: false,
+};
 
 function carregar(): IlhaPrefs {
   try {
@@ -46,6 +56,24 @@ export function definirIlhaPrefs(patch: Partial<IlhaPrefs>) {
 }
 function assinar(f: () => void) { ouvintes.add(f); return () => { ouvintes.delete(f); }; }
 export function useIlhaPrefs() { return useSyncExternalStore(assinar, lerIlhaPrefs, lerIlhaPrefs); }
+
+// sincroniza entre abas e entre as janelas do app de desktop (app principal + janela da ilha)
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', ev => { if (ev.key === CHAVE) { prefs = carregar(); ouvintes.forEach(f => f()); } });
+}
+
+/** Esconde/mostra um boneco na ilha. */
+export function alternarAgenteOculto(id: string) {
+  const ocultos = prefs.ocultos.includes(id) ? prefs.ocultos.filter(x => x !== id) : [...prefs.ocultos, id];
+  definirIlhaPrefs({ ocultos });
+}
+
+/** Aplica o filtro e os ocultos das preferências (função pura). A ordem é preservada. */
+export function filtrarAgentes(agentes: AgenteIlha[], p: Pick<IlhaPrefs, 'filtro' | 'ocultos'>): AgenteIlha[] {
+  return agentes.filter(a =>
+    !p.ocultos.includes(a.id) &&
+    (p.filtro === 'todos' || (p.filtro === 'trabalhando' ? a.status === 'trabalhando' : a.status === 'concluido')));
+}
 
 // ---------- visão derivada ----------
 
