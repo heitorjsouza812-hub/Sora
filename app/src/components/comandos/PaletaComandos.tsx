@@ -9,6 +9,8 @@ import { abrirProjeto, novoChat, todosAgentes, useProjetos } from '../../state/p
 import { SoraOrb } from '../mascot';
 import { empilharCamada } from '../overlay/camadas';
 import { normalizar } from '../projetos/util';
+import { definirIlhaPrefs, useIlhaPrefs } from '../ilha/ilhaEstado';
+import { abrirIlha } from '../ilha/ilhaUi';
 import { ATALHOS, MOD, alternarPainel, fecharPaleta } from './atalhos';
 import './comandos.css';
 
@@ -33,10 +35,13 @@ const IC = {
   plugin: 'M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5',
   painel: 'M4 4h16v16H4zM15 4v16',
   balao: 'M4 5h16v11H8l-4 4z',
+  ilha: 'M4 12h16M7 8h10M9 16h6',
+  som: 'M5 10v4h3l4 3V7L8 10zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
 };
 
 export function PaletaComandos() {
   const e = useProjetos();
+  const ilhaPrefs = useIlhaPrefs();
   const navigate = useNavigate();
   const [busca, setBusca] = useState('');
   const [ativo, setAtivo] = useState(0);
@@ -62,6 +67,9 @@ export function PaletaComandos() {
       { id: 'novo-projeto', grupo: 'Ações', rotulo: 'Novo projeto', icone: <Icone d={IC.pasta} />, busca: 'novo projeto equipe', executar: ir('/projetos') },
       { id: 'criar-agente', grupo: 'Ações', rotulo: 'Criar agente', icone: <Icone d={IC.agente} />, busca: 'criar agente novo construtor', executar: ir('/agentes/novo') },
       { id: 'painel', grupo: 'Ações', rotulo: 'Mostrar/esconder painel do projeto', icone: <Icone d={IC.painel} />, teclas: [MOD, '.'], busca: 'alternar painel lateral equipe trabalho', executar: () => { fecharPaleta(); alternarPainel(); } },
+      { id: 'ilha-abrir', grupo: 'Ações', rotulo: 'Abrir a Ilha da Sora', icone: <Icone d={IC.ilha} />, teclas: [MOD, 'Shift', 'S'], busca: 'ilha sora abrir agentes atividade', executar: () => { fecharPaleta(); definirIlhaPrefs({ visivel: true }); abrirIlha(); } },
+      { id: 'ilha-projeto', grupo: 'Ações', rotulo: 'Ilha: escolher projeto', icone: <Icone d={IC.pasta} />, busca: 'ilha selecionar escolher projeto', executar: () => { fecharPaleta(); definirIlhaPrefs({ visivel: true }); abrirIlha('projeto'); } },
+      { id: 'ilha-som', grupo: 'Ações', rotulo: `Ilha: som ${ilhaPrefs.som ? 'desligado' : 'ligado'}`, detalhe: ilhaPrefs.som ? 'Desligar avisos sonoros' : 'Ligar avisos sonoros', icone: <Icone d={IC.som} />, busca: 'ilha som audio ligar desligar', executar: () => { definirIlhaPrefs({ som: !ilhaPrefs.som }); fecharPaleta(); } },
       { id: 'configuracoes', grupo: 'Ações', rotulo: 'Configurações', icone: <Icone d={IC.engrenagem} />, busca: 'configuracoes ajustes conta modelos api', executar: ir('/configuracoes') },
       { id: 'plugins', grupo: 'Ações', rotulo: 'Plugins', icone: <Icone d={IC.plugin} />, busca: 'plugins ferramentas conectar', executar: ir('/plugins') },
     ];
@@ -78,7 +86,7 @@ export function PaletaComandos() {
     return [...acoes, ...conversas, ...agentes];
   // ir/navigate são estáveis o bastante para a vida curta da paleta
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e]);
+  }, [e, ilhaPrefs.som]);
 
   const termo = normalizar(busca.trim());
   const visiveis = useMemo(() => {

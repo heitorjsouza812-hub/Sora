@@ -8,6 +8,7 @@ export const MOD = ehMac ? '⌘' : 'Ctrl';
 export const ATALHOS: { teclas: string[]; acao: string }[] = [
   { teclas: [MOD, 'K'], acao: 'Paleta de comandos' },
   { teclas: [MOD, 'Shift', 'O'], acao: 'Novo chat' },
+  { teclas: [MOD, 'Shift', 'S'], acao: 'Ilha da Sora' },
   { teclas: [MOD, '.'], acao: 'Painel do projeto' },
   { teclas: ['/'], acao: 'Campo de mensagem' },
   { teclas: ['↑', '↓'], acao: 'Navegar' },

@@ -1,0 +1,119 @@
+.ilha-shimmer {
+  color: transparent;
+  background: linear-gradient(100deg, var(--text-3) 8%, var(--text-1) 45%, var(--text-3) 82%);
+  background-size: 220% 100%;
+  background-clip: text;
+  animation: ilha-shimmer 1.6s linear infinite;
+}
+@keyframes ilha-shimmer { to { background-position: -220% 0; } }
+
+/* Ticker */
+.ilha-ticker { display: grid; gap: 3px; min-width: 0; margin: var(--sp-3) 0 0; padding: 0; list-style: none; }
+.ilha-ticker__linha { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; min-height: 22px; color: var(--text-3); font-size: var(--fs-12); line-height: 1.35; }
+.ilha-ticker__linha > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ilha-ticker__linha--executando { color: var(--text-1); }
+.ilha-ticker__linha--erro { color: var(--danger); }
+.ilha-ticker__icone { display: grid; place-items: center; width: 16px; color: currentColor; font-weight: 700; }
+.ilha-ticker__linha small { color: var(--text-3); font-size: 10px; text-transform: uppercase; }
+.ilha-ticker--compacto { margin: 0; }
+.ilha-ticker-vazio { margin: var(--sp-3) 0 0; color: var(--text-3); font-size: var(--fs-12); }
+
+/* Seletor de projeto */
+.ilha-seletor { display: grid; gap: var(--sp-3); min-height: 0; }
+.ilha-seletor header h2 { margin: 0; font-size: var(--fs-20); font-weight: 620; }
+.ilha-seletor header p { margin: var(--sp-1) 0 0; color: var(--text-2); font-size: var(--fs-13); }
+.ilha-seletor__busca { display: grid; gap: var(--sp-1); color: var(--text-2); font-size: var(--fs-12); }
+.ilha-seletor__busca input { width: 100%; height: 38px; padding: 0 var(--sp-3); color: var(--text-1); background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--r-10); box-sizing: border-box; font: inherit; }
+.ilha-seletor__lista { display: grid; gap: 5px; min-height: 0; max-height: 218px; overflow-y: auto; outline: none; }
+.ilha-projeto-opcao { display: grid; grid-template-columns: minmax(140px, 1fr) auto 104px 92px; gap: var(--sp-3); align-items: center; width: 100%; min-height: 50px; padding: var(--sp-2) var(--sp-3); color: var(--text-1); text-align: left; background: var(--white-a03); border: 1px solid transparent; border-radius: var(--r-10); font: inherit; cursor: pointer; }
+.ilha-projeto-opcao:hover { background: var(--white-a06); }
+.ilha-projeto-opcao:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ilha-projeto-opcao[aria-selected="true"] { background: var(--white-a08); border-color: var(--line-strong); }
+.ilha-projeto-opcao--auto { grid-template-columns: 30px 1fr; }
+.ilha-projeto-opcao__marca { display: grid; place-items: center; width: 28px; height: 28px; color: var(--sora); background: var(--sora-soft); border-radius: 50%; }
+.ilha-projeto-opcao__texto, .ilha-projeto-opcao--auto > span:last-child { display: grid; gap: 2px; min-width: 0; }
+.ilha-projeto-opcao strong { overflow: hidden; font-size: var(--fs-13); font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+.ilha-projeto-opcao small, .ilha-projeto-opcao__status { color: var(--text-2); font-size: var(--fs-12); }
+.ilha-projeto-opcao__cores { display: flex; min-width: 38px; }
+.ilha-projeto-opcao__cores i { width: 9px; height: 9px; margin-left: -2px; border: 2px solid var(--surface-2); border-radius: 50%; }
+.ilha-projeto-opcao__status { white-space: nowrap; }
+.ilha-projeto-opcao__progresso { display: grid; grid-template-columns: minmax(44px, 1fr) 29px; gap: 5px; align-items: center; height: 4px; background: var(--white-a10); border-radius: var(--r-pill); }
+.ilha-projeto-opcao__progresso i { height: 4px; background: var(--ok); border-radius: inherit; }
+.ilha-projeto-opcao__progresso small { margin-left: -2px; }
+.ilha-seletor__vazio { padding: var(--sp-5); color: var(--text-2); text-align: center; }
+
+/* Detalhe do agente */
+.ilha-agente { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: var(--sp-4); min-height: 250px; }
+.ilha-agente__lateral { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: var(--sp-2) var(--sp-3) var(--sp-2) 0; border-right: 1px solid var(--line); }
+.ilha-voltar { min-height: 32px; margin-bottom: var(--sp-1); padding: 0; color: var(--text-2); background: none; border: 0; font: inherit; font-size: var(--fs-12); cursor: pointer; }
+.ilha-voltar:hover { color: var(--text-1); }
+.ilha-agente__identidade { margin: -3px 0 var(--sp-3); }
+.ilha-agente__identidade h2 { margin: 0; color: var(--ilha-agente); font-size: var(--fs-20); }
+.ilha-agente__identidade p { margin: 2px 0; color: var(--text-2); font-size: var(--fs-13); }
+.ilha-agente__identidade span { color: var(--text-1); font-size: var(--fs-12); }
+.ilha-agente__passos { display: grid; gap: 7px; width: 100%; margin: auto 0 0; padding: 0; list-style: none; }
+.ilha-agente__passos li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--sp-2); align-items: center; min-height: 22px; color: var(--text-3); font-size: var(--fs-12); }
+.ilha-agente__passos li[aria-current="step"] { color: var(--text-1); }
+.ilha-agente__passos li > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ilha-agente__check { display: grid; place-items: center; width: 16px; height: 16px; color: var(--surface-1); background: var(--text-3); border-radius: 50%; font-size: 10px; font-weight: 800; }
+.ilha-agente__check--concluido { background: var(--ok); }
+.ilha-agente__check--erro { color: var(--text-1); background: var(--danger); }
+.ilha-agente__principal { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--sp-3); min-width: 0; }
+.ilha-agente__progresso span { display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--text-2); font-size: var(--fs-12); }
+.ilha-agente__progresso b { color: var(--text-1); font-weight: 600; }
+.ilha-agente__progresso progress { width: 100%; height: 4px; overflow: hidden; appearance: none; background: var(--white-a10); border: 0; border-radius: var(--r-pill); }
+.ilha-agente__progresso progress::-webkit-progress-bar { background: var(--white-a10); }
+.ilha-agente__progresso progress::-webkit-progress-value { background: var(--ilha-agente); border-radius: var(--r-pill); }
+.ilha-agente__progresso progress::-moz-progress-bar { background: var(--ilha-agente); }
+.ilha-agente__passo-atual { min-height: 0; padding: var(--sp-3); overflow-y: auto; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--r-10); }
+.ilha-eyebrow { color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.ilha-agente__passo-atual h3 { margin: 5px 0 var(--sp-2); color: var(--text-1); font: 600 var(--fs-14)/1.35 ui-monospace, Consolas, monospace; }
+.ilha-agente__passo-atual h4 { margin: var(--sp-3) 0 5px; color: var(--text-2); font-size: var(--fs-12); }
+.ilha-agente__passo-atual p { margin: 0; color: var(--text-2); font-size: var(--fs-12); line-height: 1.45; }
+.ilha-agente__passo-atual pre { max-height: 92px; margin: 0; padding: var(--sp-2); overflow: auto; color: var(--text-1); background: var(--surface-3); border-radius: var(--r-6); font: 11px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+.ilha-agente__resultado { display: grid; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-12); }
+.ilha-agente__resultado strong { color: var(--ok); }
+.ilha-agente__resultado ul { display: grid; gap: 4px; margin: 0; padding-left: var(--sp-4); }
+.ilha-agente__resultado li small { display: block; color: var(--text-3); }
+.ilha-agente__imagens { display: flex; gap: var(--sp-2); overflow-x: auto; }
+.ilha-agente__imagens img { width: 72px; height: 52px; object-fit: cover; border-radius: var(--r-6); }
+.ilha-agente__sem-resultado { color: var(--text-3) !important; }
+.ilha-agente__acoes { display: grid; grid-template-columns: auto minmax(180px, 1fr); gap: var(--sp-2); align-items: end; }
+.ilha-botao { min-height: 38px; padding: 0 var(--sp-3); color: var(--text-1); background: var(--white-a06); border: 1px solid var(--line-strong); border-radius: var(--r-10); font: 600 var(--fs-12) var(--font); cursor: pointer; }
+.ilha-agente__acoes form { display: grid; gap: 3px; }
+.ilha-agente__acoes label { color: var(--text-3); font-size: 10px; }
+.ilha-agente__acoes form > div { display: grid; grid-template-columns: minmax(0, 1fr) 36px; overflow: hidden; background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: var(--r-10); }
+.ilha-agente__acoes input { min-width: 0; height: 36px; padding: 0 var(--sp-3); color: var(--text-1); background: transparent; border: 0; outline: 0; font: var(--fs-12) var(--font); }
+.ilha-agente__acoes form button { color: var(--text-inverse); background: var(--action); border: 0; font-size: var(--fs-16); }
+.ilha-agente__acoes form button:disabled { opacity: .35; }
+.ilha-agente-vazio { display: grid; place-items: center; min-height: 220px; color: var(--text-2); }
+
+/* Configurações da ilha */
+.cfg-ilha { display: grid; gap: var(--sp-3); }
+.cfg-ilha__linha { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); min-height: 58px; padding: var(--sp-3) var(--sp-4); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-10); }
+.cfg-ilha__linha > span:first-child { display: grid; gap: 3px; }
+.cfg-ilha__linha strong { font-size: var(--fs-14); }
+.cfg-ilha__linha small { color: var(--text-2); font-size: var(--fs-12); line-height: 1.4; }
+.cfg-ilha__linha select { min-width: 240px; height: 40px; padding: 0 var(--sp-3); color: var(--text-1); background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: var(--r-10); font: inherit; font-size: var(--fs-13); }
+.cfg-ilha__acoes { display: flex; gap: var(--sp-2); padding-top: var(--sp-2); }
+
+.ilha-destacada { margin: 0; color: var(--text-1); background: transparent; font-family: var(--font); overflow: hidden; }
+.ilha-destacada__raiz { width: 100vw; min-height: 100vh; }
+
+@media (max-width: 600px) {
+  .ilha-projeto-opcao { grid-template-columns: minmax(0, 1fr) auto; min-height: 60px; }
+  .ilha-projeto-opcao__status { grid-column: 1; }
+  .ilha-projeto-opcao__progresso { grid-column: 2; grid-row: 2; }
+  .ilha-agente { grid-template-columns: 1fr; }
+  .ilha-agente__lateral { display: grid; grid-template-columns: auto 70px 1fr; align-items: center; padding: 0 0 var(--sp-3); border-right: 0; border-bottom: 1px solid var(--line); }
+  .ilha-voltar { grid-column: 1 / -1; }
+  .ilha-agente__passos { grid-column: 1 / -1; margin-top: var(--sp-2); }
+  .ilha-agente__acoes { grid-template-columns: 1fr; }
+  .ilha-botao, .ilha-agente__acoes input, .ilha-agente__acoes form button { min-height: 44px; }
+  .cfg-ilha__linha { align-items: flex-start; flex-direction: column; }
+  .cfg-ilha__linha select { width: 100%; min-width: 0; height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ilha-shimmer { color: var(--text-1); background: none; animation: none; }
+}

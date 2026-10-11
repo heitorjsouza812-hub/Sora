@@ -6,6 +6,8 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { novoChat } from '../../state/projetos';
+import { definirIlhaPrefs, lerIlhaPrefs } from '../ilha/ilhaEstado';
+import { abrirIlha, alternarIlha } from '../ilha/ilhaUi';
 import { alternarPaleta, digitando, fecharPaleta, focarCampoMensagem, usePaletaAberta } from './atalhos';
 import { PaletaComandos } from './PaletaComandos';
 
@@ -20,6 +22,13 @@ export function Comandos() {
       const k = ev.key.toLowerCase();
       if (mod && !ev.shiftKey && !ev.altKey && k === 'k') { ev.preventDefault(); alternarPaleta(); return; }
       if (mod && ev.shiftKey && !ev.altKey && k === 'o') { ev.preventDefault(); fecharPaleta(); novoChat(); navigate('/'); return; }
+      if (mod && ev.shiftKey && !ev.altKey && k === 's') {
+        ev.preventDefault();
+        fecharPaleta();
+        if (!lerIlhaPrefs().visivel) { definirIlhaPrefs({ visivel: true }); abrirIlha(); }
+        else alternarIlha();
+        return;
+      }
       if (ev.key === '/' && !mod && !ev.altKey && !digitando(ev.target) && !document.querySelector('[aria-modal="true"]')) {
         if (focarCampoMensagem()) ev.preventDefault();
       }
