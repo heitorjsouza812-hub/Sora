@@ -97,7 +97,7 @@ async function flowAndReview(page) {
   await expectVisible(page, 'Plano', 8_000);
   await snap(page, 'g-reload');
 
-  await page.getByRole('button', { name: 'Trabalho', exact: true }).first().click();
+  await page.getByRole('tab', { name: /Trabalho/ }).first().click();
   await expectVisible(page, 'Sora pediu', 12_000);
   const tool = page.locator('.wk-tool').first();
   await tool.waitFor({ state: 'visible', timeout: 12_000 });
@@ -185,9 +185,16 @@ async function agents(page) {
   assert.match(avatarColor, /#00c4cc|rgb\(0,\s*196,\s*204\)/i, 'avatar da barra lateral deve receber a nova cor');
 
   await customRow.getByRole('button', { name: /opções/i }).click();
+  // apagar agente é imediato, com toast "Desfazer" (item 45)
   await page.getByRole('menuitem', { name: 'Apagar', exact: true }).click();
-  await page.getByRole('button', { name: 'Apagar', exact: true }).click();
-  assert.equal(await page.getByText('Vigia E2E', { exact: true }).count(), 0, 'agente apagado não pode permanecer na barra lateral');
+  await expectVisible(page, 'Agente apagado', 3_000);
+  assert.equal(await customRow.count(), 0, 'agente apagado não pode permanecer na barra lateral');
+  await page.locator('.b-toast').filter({ hasText: 'Agente apagado' }).getByRole('button', { name: 'Desfazer', exact: true }).click();
+  await customRow.waitFor({ state: 'visible', timeout: 3_000 });
+  await customRow.getByRole('button', { name: /opções/i }).click();
+  await page.getByRole('menuitem', { name: 'Apagar', exact: true }).click();
+  await expectVisible(page, 'Agente apagado', 3_000);
+  assert.equal(await customRow.count(), 0, 'agente apagado de novo não pode permanecer na barra lateral');
   await snap(page, 'd-agente-apagado');
 }
 

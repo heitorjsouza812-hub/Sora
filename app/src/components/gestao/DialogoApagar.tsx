@@ -1,14 +1,16 @@
 // Confirmação de "Apagar".
 // • Projeto: diz quantos agentes saem junto e oferece "Manter os agentes como avulsos".
 // • Agente: avisa em quais projetos ele participa (ele sai dessas equipes).
+// • Depois de confirmar, o toast também oferece "Desfazer" (apagar.ts).
 // • Sora: não pode ser apagada — o diálogo só explica.
 import { useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { removerAgente, removerProjeto, useProjetos } from '../../state/projetos';
+import { useProjetos } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
 import { Button } from '../base';
 import { Modal } from '../overlay';
 import type { AlvoGestao } from './acoes';
+import { apagarComDesfazer } from './apagar';
 import './gestao.css';
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
@@ -37,15 +39,7 @@ export function DialogoApagar({ alvo, onClose, onApagado }: { alvo: AlvoGestao; 
   const projetosDoAgente = agente ? e.projetos.filter((p) => p.agenteIds.includes(agente.id)) : [];
 
   const apagar = () => {
-    let aberto = false;
-    if (projeto) {
-      aberto = pathname.includes(projeto.id) || (pathname === '/chat/sora' && e.projetoAtivoId === projeto.id)
-        || (!manter && equipe.some((a) => pathname.includes(a.id)));
-      removerProjeto(projeto.id, { manterAgentes: manter });
-    } else if (agente) {
-      aberto = pathname.includes(agente.id);
-      removerAgente(agente.id);
-    }
+    const aberto = apagarComDesfazer(alvo, e, pathname, { manterAgentes: manter });
     onClose();
     onApagado?.();
     if (aberto) navigate('/');
@@ -55,8 +49,8 @@ export function DialogoApagar({ alvo, onClose, onApagado }: { alvo: AlvoGestao; 
     ? (equipe.length && !manter ? `Apagar o projeto e ${equipe.length === 1 ? 'o agente' : `os ${equipe.length} agentes`}?` : 'Apagar o projeto?')
     : `Apagar ${agente!.nome}?`;
   const descricao = projeto
-    ? `“${projeto.titulo}” — o chat, o plano, as entregas e o histórico de trabalho serão apagados. Não dá para desfazer.`
-    : `${agente!.funcao}. A conversa e o histórico de trabalho serão apagados. Não dá para desfazer.`;
+    ? `“${projeto.titulo}” — o chat, o plano, as entregas e o histórico de trabalho serão apagados. Você pode desfazer logo em seguida.`
+    : `${agente!.funcao}. A conversa e o histórico de trabalho serão apagados. Você pode desfazer logo em seguida.`;
 
   return (
     <Modal open onClose={onClose} size="sm" title={titulo} description={descricao}

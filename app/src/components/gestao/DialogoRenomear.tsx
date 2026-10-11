@@ -1,7 +1,7 @@
 // Renomear projeto, agente ou a própria Sora.
 import { useRef, useState } from 'react';
 import { atualizarAgente, atualizarSora, renomearProjeto, useProjetos } from '../../state/projetos';
-import { Button, Input } from '../base';
+import { Button, Input, toast } from '../base';
 import { Modal } from '../overlay';
 import type { AlvoGestao } from './acoes';
 import './gestao.css';
@@ -23,6 +23,7 @@ export function DialogoRenomear({ alvo, onClose }: { alvo: AlvoGestao; onClose: 
     if (projeto) renomearProjeto(projeto.id, limpo);
     else if (agente) atualizarAgente(agente.id, { nome: limpo });
     else atualizarSora({ nome: limpo });
+    toast({ mensagem: projeto ? (projeto.tipo === 'chat' ? 'Chat renomeado' : 'Projeto renomeado') : 'Agente renomeado', descricao: `Agora se chama “${limpo}”.`, tom: 'sucesso', duracao: 3500 });
     onClose();
   };
 

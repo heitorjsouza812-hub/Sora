@@ -1,0 +1,14 @@
+/* Indicador de créditos (rodapé da barra lateral) */
+.cr-indicador { display: grid; gap: 6px; width: 100%; padding: var(--sp-2) var(--sp-3); box-sizing: border-box; color: var(--text-2); text-decoration: none; border-radius: var(--r-10); transition: background var(--dur-fast); }
+.cr-indicador:hover { background: var(--white-a04); }
+.cr-indicador:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.cr-linha { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); font-size: var(--fs-12); }
+.cr-valor { color: var(--text-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cr-barra { display: block; height: var(--sp-1); overflow: hidden; background: var(--white-a07); border-radius: var(--r-pill); }
+.cr-barra i { display: block; height: 100%; background: var(--sora); border-radius: inherit; transition: width var(--dur-slow) ease; }
+.cr-indicador.is-acabando .cr-linha > span:first-child { color: var(--warn); font-weight: 600; }
+.cr-indicador.is-acabando .cr-barra i { background: var(--warn); }
+.cr-dica-titulo { display: block; margin-bottom: var(--sp-1); }
+.b-tooltip-alvo:has(> .cr-indicador) { display: flex; width: 100%; }
+@media (prefers-reduced-motion: reduce) { .cr-barra i { transition: none; } }
+@media (max-width: 767px) { .cr-indicador { min-height: 44px; } }

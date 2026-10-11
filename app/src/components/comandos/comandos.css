@@ -1,0 +1,35 @@
+/* Paleta de comandos (Ctrl/⌘+K) */
+.cmd-fundo { position: fixed; z-index: 140; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding: 12vh var(--sp-4) var(--sp-4); background: var(--scrim); animation: cmd-surgir var(--dur-fast) ease-out; }
+.cmd { display: flex; flex-direction: column; width: min(640px, 100%); max-height: min(640px, 80dvh); overflow: hidden; color: var(--text-1); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--r-16); box-shadow: var(--shadow-lg); }
+.cmd-busca { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4); border-bottom: 1px solid var(--line); }
+.cmd-busca svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--text-3); stroke-width: 1.8; stroke-linecap: round; }
+.cmd-busca input { flex: 1; min-width: 0; height: 56px; color: var(--text-1); background: transparent; border: 0; outline: 0; font: inherit; font-size: var(--fs-16); }
+.cmd-busca input::placeholder { color: var(--text-3); }
+.cmd kbd { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; color: var(--text-2); background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: var(--r-6); font: inherit; font-size: var(--fs-12); line-height: 1; }
+.cmd-lista { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-2); scrollbar-width: thin; }
+.cmd-grupo + .cmd-grupo { margin-top: var(--sp-2); }
+.cmd-grupo__titulo { padding: var(--sp-2) var(--sp-3) var(--sp-1); color: var(--text-3); font-size: var(--fs-12); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.cmd-op { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-10); cursor: pointer; }
+.cmd-op[aria-selected="true"] { background: var(--white-a07); box-shadow: inset 2px 0 0 var(--focus); }
+.cmd-op__icone { display: grid; flex: none; place-items: center; width: 28px; height: 28px; color: var(--text-2); }
+.cmd-op__icone svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cmd-op__texto { display: grid; flex: 1; min-width: 0; }
+.cmd-op__texto span, .cmd-op__texto small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cmd-op__texto span { font-size: var(--fs-14); }
+.cmd-op__texto small { color: var(--text-3); font-size: var(--fs-12); }
+.cmd-orb { display: grid; place-items: center; }
+.cmd-teclas { display: inline-flex; flex: none; gap: var(--sp-1); }
+.cmd-vazio { margin: 0; padding: var(--sp-8) var(--sp-4); color: var(--text-2); font-size: var(--fs-14); text-align: center; }
+.cmd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cmd-atalhos { padding: var(--sp-2) var(--sp-4) var(--sp-3); background: var(--surface-1); border-top: 1px solid var(--line); }
+.cmd-atalhos h2 { margin: 0 0 var(--sp-2); color: var(--text-3); font-size: var(--fs-12); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.cmd-atalhos ul { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-5); margin: 0; padding: 0; list-style: none; }
+.cmd-atalhos li { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-12); white-space: nowrap; }
+.cmd-atalhos kbd { min-width: 20px; height: 20px; }
+@keyframes cmd-surgir { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cmd-fundo { animation: none; } }
+@media (max-width: 767px) {
+  .cmd-fundo { padding: var(--sp-4); }
+  .cmd { max-height: 86dvh; }
+  .cmd-atalhos { display: none; }
+}
