@@ -18,6 +18,10 @@ _Atualizado em 2026-10-11 (noite) — **Sora desktop (Tauri)** com a ilha no top
 - O **teste visual automático** (Playwright `toHaveScreenshot`, item 56) foi criado e commitado pelo Vigia (`903a401`, `2c79f38`): `npm run test:visual`, com o dev server rodando.
 - **Faltou:** o veredito final do Vigia sobre a Parte B inteira (itens 28–60). A validação foi interrompida antes do relatório. Na próxima sessão, rodar: `npm run build`, `npx oxlint`, `npm test`, `node qa/e2e.mjs`, `npm run test:visual` e `node qa/contraste.mjs`, e conferir os itens novos no navegador.
 
+## Plano do backend — versão 2 (2026-10-11, noite)
+
+- `docs/plano-de-implementacao/` tem o plano revisado para combinar com o app (o que mudou: README da pasta). Próximo passo quando o Heitor disser "sim": fase 1 do backend + camada `src/api` e modo demonstração no app (seção 3 da especificação).
+
 ## Sora desktop + CHATS em pastas (2026-10-11, noite)
 
 - App instalável: `cd app && npm run desktop` (dev) ou `npm run desktop:build` → `src-tauri/target/release/bundle/nsis/Sora_0.1.0_x64-setup.exe` / `msi/Sora_0.1.0_x64_pt-BR.msi`. A ilha fica no topo da tela, por cima das outras janelas; cliques fora dela atravessam. Spec: `app/docs/sora-desktop.md`.
