@@ -1,5 +1,6 @@
 // Barra lateral: navegação (Novo chat, Projetos, Agentes, Plugins) + CHATS.
-// Ao abrir o app, CHATS está vazio. Cada conversa com a Sora e cada agente criado aparecem aqui.
+// Ao abrir o app, CHATS está vazio. Projeto com equipe → pasta (abre/fecha) com os agentes dentro;
+// conversa sem agentes → linha da Sora; agente independente → linha solta.
 import { useRef, useState, type CSSProperties, type JSX } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { SoraOrb } from '../mascot';
@@ -60,23 +61,76 @@ function LinhaChat({ p, onNavegar }: { p: ProjetoSora; onNavegar?: () => void })
   );
 }
 
+// pastas de projeto abertas (as pastas começam fechadas; o que o usuário abrir fica lembrado)
+const CHAVE_PASTAS = 'sora.pastas.v1';
+function lerPastasAbertas(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(CHAVE_PASTAS) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+function gravarPastaAberta(id: string, aberta: boolean) {
+  const ids = lerPastasAbertas().filter(x => x !== id);
+  try { localStorage.setItem(CHAVE_PASTAS, JSON.stringify(aberta ? [...ids, id] : ids)); } catch { /* sem armazenamento: só nesta sessão */ }
+}
+
+/** Projeto com equipe: uma pasta que abre/fecha, com os agentes dentro. */
+function PastaProjeto({ p, agentes, onNavegar }: { p: ProjetoSora; agentes: AgenteSora[]; onNavegar?: () => void }) {
+  const e = useProjetos();
+  const agora = useAgora();
+  const [aberta, setAberta] = useState(() => lerPastasAbertas().includes(p.id));
+  const fase = estadoProjeto(e, p, agora).fase;
+  const trabalhando = agentes.filter(a => estadoAgente(e, a.id, agora).status === 'trabalhando');
+  const resumo = fase === 'pensando' ? 'Pensando…'
+    : trabalhando.length ? `${agentes.length} agentes · ${trabalhando.length} trabalhando`
+    : fase === 'pronto' ? 'Pronto para revisar' : fase === 'aprovado' ? 'Aprovado' : `${agentes.length} agentes`;
+  const idFilhos = `pasta-${p.id}`;
+  const alternar = () => setAberta(v => { gravarPastaAberta(p.id, !v); return !v; });
+  return (
+    <div className={`chat-pasta ${aberta ? 'is-open' : ''} ${trabalhando.length ? 'is-working' : ''}`}>
+      <div className="chat-row chat-row-pasta">
+        <button type="button" className="pasta-toggle" aria-expanded={aberta} aria-controls={idFilhos}
+          aria-label={`${aberta ? 'Fechar' : 'Abrir'} a pasta ${p.titulo}`} onClick={alternar}>
+          {aberta
+            ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 18V7.5a2 2 0 0 1 2-2h4l2 2.2h6a2 2 0 0 1 2 2V11" /><path d="M3.5 18.5 6.4 12a1.6 1.6 0 0 1 1.5-1h12.4a1 1 0 0 1 .9 1.4l-2.6 5.7a1.6 1.6 0 0 1-1.5.9H4.2" /></svg>
+            : <FolderIcon />}
+          <i className="pasta-seta" aria-hidden="true" />
+        </button>
+        <NavLink to={`/projeto/${p.id}`} onClick={onNavegar}>
+          <span><strong>{p.titulo}</strong><small>{resumo}</small></span>
+          <span className="pasta-cores" aria-hidden="true">
+            {agentes.slice(0, 4).map(a => <i key={a.id} style={{ '--agent': a.cor } as CSSProperties}
+              className={estadoAgente(e, a.id, agora).status === 'trabalhando' ? 'is-working' : ''} />)}
+          </span>
+        </NavLink>
+        <MenuAgente agenteId={p.id} nome={p.titulo} className="chat-row-menu" semEditar itens={[
+          { rotulo: aberta ? 'Fechar pasta' : 'Abrir pasta', onClick: alternar },
+          { rotulo: 'Renomear', onClick: () => pedirRenomear({ tipo: 'projeto', id: p.id }) },
+          { rotulo: 'Apagar', perigo: true, onClick: () => pedirApagar({ tipo: 'projeto', id: p.id }) },
+        ]} />
+      </div>
+      <div id={idFilhos} className="pasta-filhos" role="group" aria-label={`Agentes de ${p.titulo}`} inert={!aberta}>
+        <div>{agentes.map(a => <LinhaAgente key={a.id} a={a} onNavegar={onNavegar} filho />)}</div>
+      </div>
+    </div>
+  );
+}
+
 /** Conteúdo de navegação (também usado no menu do celular). */
 export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
   const e = useProjetos();
   const agora = useAgora();
-  // grupos, mais recentes primeiro: cada chat seguido dos seus agentes; agentes de projetos e avulsos soltos
+  // mais recentes primeiro: projeto com equipe → pasta com os agentes dentro; conversa sem agentes → linha da Sora;
+  // agente independente (avulso, fora de qualquer equipe) → linha solta
   const nascidos = (ids: string[]) => ids.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a && a.criadoEm <= agora);
-  const grupos: { t: number; linhas: { k: string; el: JSX.Element }[] }[] = [];
+  const grupos: { t: number; k: string; el: JSX.Element }[] = [];
   for (const p of e.projetos) {
-    const ags = nascidos(p.agenteIds).map(a => ({ k: `a-${a.id}`, el: <LinhaAgente a={a} onNavegar={onNavegar} filho={p.tipo === 'chat'} /> }));
-    if (p.tipo === 'chat') grupos.push({ t: p.criadoEm, linhas: [{ k: `c-${p.id}`, el: <LinhaChat p={p} onNavegar={onNavegar} /> }, ...ags] });
-    else if (ags.length) grupos.push({ t: p.criadoEm, linhas: ags });
+    const ags = nascidos(p.agenteIds);
+    if (ags.length || p.agenteIds.length) grupos.push({ t: p.criadoEm, k: `p-${p.id}`, el: <PastaProjeto p={p} agentes={ags} onNavegar={onNavegar} /> });
+    else if (p.tipo === 'chat') grupos.push({ t: p.criadoEm, k: `c-${p.id}`, el: <LinhaChat p={p} onNavegar={onNavegar} /> });
   }
   const naEquipe = new Set(e.projetos.flatMap(p => p.agenteIds));
   for (const a of Object.values(e.agentes)) {
-    if (!naEquipe.has(a.id) && a.criadoEm <= agora) grupos.push({ t: a.criadoEm, linhas: [{ k: `a-${a.id}`, el: <LinhaAgente a={a} onNavegar={onNavegar} /> }] });
+    if (!naEquipe.has(a.id) && a.criadoEm <= agora) grupos.push({ t: a.criadoEm, k: `a-${a.id}`, el: <LinhaAgente a={a} onNavegar={onNavegar} /> });
   }
-  const itens = grupos.sort((x, y) => y.t - x.t).flatMap(g => g.linhas);
+  const itens = grupos.sort((x, y) => y.t - x.t);
   return (
     <>
       <nav className="main-nav" aria-label="Principal">

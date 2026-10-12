@@ -90,4 +90,14 @@ describe('state/projetos', () => {
     const recarregado = await import('../projetos');
     expect(recarregado.lerEstado().projetos[0]).toMatchObject({ id: projeto.id, titulo: 'Campanha persistida' });
   });
-});
+  it('modo agente independente: cria UM agente avulso (fora de equipes) que já começa a trabalhar', () => {
+    const ag = store.criarAgenteIndependente('Pesquise tendências de café gelado no Instagram', AGORA);
+    const estado = store.lerEstado();
+
+    expect(estado.projetos).toHaveLength(0);
+    expect(estado.agentes[ag.id]).toMatchObject({ avulso: true, projetoId: '', funcao: 'Pesquisa e referências' });
+    expect(estado.execucoes.filter(x => x.agenteId === ag.id)).toHaveLength(1);
+    expect(estado.mensagens.filter(m => m.conversaId === ag.id).map(m => m.autor)).toEqual(['usuario', ag.id]);
+    const x = estado.execucoes[0];
+    expect(store.estadoAgente(estado, ag.id, x.inicio + 1).status).toBe('trabalhando');
+  });});

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ClipboardEvent, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
 import { BorderBeam } from 'border-beam';
 import { VoiceBeam, useMicrophone, type VoiceBeamMotion } from 'voice-glow';
 import { useProjetos } from '../../state/projetos';
@@ -31,6 +31,8 @@ interface Props {
   /** resposta sendo gerada: Enviar vira Parar e Enter não envia */
   gerando?: boolean;
   onParar?: () => void;
+  /** controles extras na barra do campo, depois de "Ferramentas" (ex.: Equipe / Agente independente) */
+  extras?: ReactNode;
 }
 
 const processingMotion = (): VoiceBeamMotion => ({
@@ -50,7 +52,7 @@ const avisoMic: Record<string, string> = {
 
 export function MessageComposer({
   placeholder, onSend, initialValue = '', value: controlado, onValueChange, processing = false,
-  compact = false, tools = false, accent, onActivity, onMicChange, anexar = true, gerando = false, onParar,
+  compact = false, tools = false, accent, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras,
 }: Props) {
   const [interno, setInterno] = useState(initialValue);
   const value = controlado ?? interno;
@@ -179,6 +181,7 @@ export function MessageComposer({
               <button type="button" ref={toolsRef} className="tool-button" aria-haspopup="dialog" aria-expanded={toolsOpen} onClick={() => setToolsOpen((v) => !v)}>Ferramentas</button>
               <ToolsPopover open={toolsOpen} onClose={() => setToolsOpen(false)} anchorRef={toolsRef} plugins={pluginsConectados} />
             </>}
+            {extras}
             <span className="composer-spacer" />
             <button
               type="button"

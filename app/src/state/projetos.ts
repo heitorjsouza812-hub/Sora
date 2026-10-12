@@ -6,7 +6,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { PassoTrabalho, Status } from '../types';
 import {
-  COR_SORA, duracaoRoteiro, novoId, pedeTrabalho, planejar, respostaConversa, roteiroAvulso, tituloDoChat, verboPara as verboDe,
+  COR_SORA, agenteDeDescricao, duracaoRoteiro, novoId, pedeTrabalho, planejar, respostaConversa, roteiroAvulso, tituloDoChat, verboPara as verboDe,
   type AgenteSora, type EntregaGerada, type PassoRoteiro, type RascunhoAgente, type TarefaGerada,
 } from '../data/planejador';
 
@@ -306,6 +306,16 @@ export function criarProjeto(pedido: string, agora = Date.now(), opcoes: { tipo?
     return projeto;
   }
   return montarEquipe(null, pedido, agora, tipo);
+}
+
+/**
+ * Novo chat no modo "Agente independente": em vez de uma equipe, a Sora cria UM agente avulso a partir
+ * do pedido (aparece solto em CHATS) e ele já começa a trabalhar nesse pedido.
+ */
+export function criarAgenteIndependente(pedido: string, agora = Date.now()): AgenteSora {
+  const ag = salvarAgente(agenteDeDescricao(pedido, usados(estado)));
+  enviarParaAgente(ag.id, pedido, agora);
+  return ag;
 }
 
 /** Planeja e cria a equipe — num projeto novo ou dentro de um chat que já existe. */

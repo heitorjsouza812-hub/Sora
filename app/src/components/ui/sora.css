@@ -663,3 +663,47 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 .piece-strip .campaign-piece-copy strong, .piece-strip .campaign-piece-poster .campaign-piece-copy strong { font-size: clamp(9px, 15cqi, var(--fs-13)); line-height: 1.12; overflow-wrap: normal; word-break: keep-all; }
 /* a regra antiga .piece-strip img (33%) também pegava a foto DENTRO da peça: a foto cobre a miniatura toda */
 .piece-strip .campaign-piece img { width: 100%; height: 100%; border-radius: 0; }
+
+/* Pastas de projeto em CHATS: projeto com equipe = pasta que abre/fecha; agente independente = linha solta */
+.chat-pasta { display: grid; }
+.chat-row-pasta > a { padding-left: 46px; }
+.pasta-toggle { position: absolute; z-index: 1; top: 50%; left: 8px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; color: var(--text-2); border: 0; border-radius: var(--r-6); background: transparent; transform: translateY(-50%); cursor: pointer; transition: color .15s, background .15s; }
+.pasta-toggle:hover { color: var(--text); background: var(--white-a13); }
+.pasta-toggle { background: var(--white-a07); }
+.pasta-seta { position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface-1); }
+.pasta-seta::before { content: ''; position: absolute; inset: 3px 4px 3px 3px; border: solid var(--text-2); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform .28s cubic-bezier(.3,1.4,.5,1); }
+.chat-pasta.is-open .pasta-seta::before { transform: translate(-1px,-1px) rotate(45deg); }
+.pasta-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.pasta-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.chat-pasta.is-open .pasta-toggle { color: var(--text); }
+.chat-row-pasta > a > span:first-child { flex: 1; }
+.chat-row-pasta strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chat-nav a > span.pasta-cores { display: flex; flex: none; align-items: center; gap: 0; margin-left: auto; padding-left: 3px; }
+.pasta-cores i { width: 9px; height: 9px; margin-left: -3px; border: 2px solid var(--surface-1); border-radius: 50%; background: var(--agent); }
+.pasta-cores i.is-working { animation: pasta-pulsa 1.6s ease-in-out infinite; }
+.chat-row-pasta:hover .pasta-cores, .chat-row-pasta:focus-within .pasta-cores { opacity: 0; }
+@keyframes pasta-pulsa { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent) 35%, transparent); } }
+.pasta-filhos { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .32s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+.pasta-filhos > div { display: grid; gap: 2px; min-height: 0; overflow: hidden; }
+.chat-pasta.is-open .pasta-filhos { grid-template-rows: 1fr; opacity: 1; }
+.chat-pasta .chat-row.is-child { margin-left: 26px; }
+.mobile-nav .pasta-toggle { width: 44px; height: 44px; left: 0; }
+.mobile-nav .chat-row-pasta > a { padding-left: 52px; }
+.mobile-nav .chat-row-pasta .pasta-cores { margin-right: var(--sp-10); opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .pasta-filhos, .pasta-seta::before { transition: none; } .pasta-cores i.is-working { animation: none; } }
+
+/* Seletor do novo chat: Equipe x Agente independente */
+.modo-envio { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--white-a13); border-radius: var(--r-16); }
+.modo-envio button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 var(--sp-3); color: var(--text-2); font-size: var(--fs-13); border: 0; border-radius: 13px; background: transparent; cursor: pointer; transition: color .15s, background .2s; }
+.modo-envio button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+.modo-envio button:hover { color: var(--text); }
+.modo-envio button[aria-checked="true"] { color: var(--text); background: var(--white-a13); }
+.modo-envio button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+@media (min-width: 768px) { .modo-envio button { height: 36px; } }
+@media (max-width: 520px) {
+  .modo-envio { padding: 2px; }
+  .modo-envio button span { display: none; }
+  .modo-envio button { width: 34px; justify-content: center; padding: 0; }
+  .hero-composer .composer-actions { gap: 6px; }
+  .hero-composer .tool-button { min-width: 0; padding-inline: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
