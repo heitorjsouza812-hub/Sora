@@ -1,6 +1,6 @@
 # Onde paramos
 
-_Atualizado em 2026-10-11 — **Ilha da Sora** pronta (adaptação do Coucou; veja abaixo). Antes: revisão do front-end contra a especificação do backend (nenhum código alterado). Antes: 2026-10-10, ~23h20, trabalho pausado a pedido do Heitor._
+_Atualizado em 2026-10-11 (noite) — **Sora desktop (Tauri)** com a ilha no topo da tela do PC e **CHATS em pastas** + seletor Equipe/Agente independente (veja abaixo). Antes: **Ilha da Sora** pronta (adaptação do Coucou; veja abaixo). Antes: revisão do front-end contra a especificação do backend (nenhum código alterado). Antes: 2026-10-10, ~23h20, trabalho pausado a pedido do Heitor._
 
 ## Estado atual
 
@@ -17,6 +17,14 @@ _Atualizado em 2026-10-11 — **Ilha da Sora** pronta (adaptação do Coucou; ve
 - Os ajustes visuais finais (miniaturas das peças e espaçamento das entregas) foram **concluídos** (commit `4e5ab5f`).
 - O **teste visual automático** (Playwright `toHaveScreenshot`, item 56) foi criado e commitado pelo Vigia (`903a401`, `2c79f38`): `npm run test:visual`, com o dev server rodando.
 - **Faltou:** o veredito final do Vigia sobre a Parte B inteira (itens 28–60). A validação foi interrompida antes do relatório. Na próxima sessão, rodar: `npm run build`, `npx oxlint`, `npm test`, `node qa/e2e.mjs`, `npm run test:visual` e `node qa/contraste.mjs`, e conferir os itens novos no navegador.
+
+## Sora desktop + CHATS em pastas (2026-10-11, noite)
+
+- App instalável: `cd app && npm run desktop` (dev) ou `npm run desktop:build` → `src-tauri/target/release/bundle/nsis/Sora_0.1.0_x64-setup.exe` / `msi/Sora_0.1.0_x64_pt-BR.msi`. A ilha fica no topo da tela, por cima das outras janelas; cliques fora dela atravessam. Spec: `app/docs/sora-desktop.md`.
+- Ilha com animações novas e filtro Todos/Trabalhando/Concluídos + olho por agente.
+- CHATS: projeto com equipe = pasta (abre/fecha); agente independente = linha solta. Novo chat: seletor **Equipe | Agente independente**.
+- Validado: build, oxlint, 31 testes, `qa/e2e.mjs`, `qa/ilha.mjs`, `cargo clippy -D warnings`, instaladores gerados, e o exe testado de verdade (mouse real: hover abre, clique fora atravessa e fecha, console limpo).
+- Pendente: instalador sem assinatura digital (o Windows pode mostrar o aviso do SmartScreen); agentes externos reais (back-end, só com "sim" do Heitor).
 
 ## Ilha da Sora (2026-10-11)
 

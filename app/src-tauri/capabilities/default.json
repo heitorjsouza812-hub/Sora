@@ -5,6 +5,7 @@
   "windows": ["main", "ilha"],
   "permissions": [
     "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "core:event:allow-emit"
   ]
 }

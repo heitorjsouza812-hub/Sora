@@ -73,6 +73,7 @@ Modelo de entrada:
 - **Próximo passo:** decidir créditos x chaves próprias; criar a camada de API + eventos (com modo demonstração); onboarding com API obrigatória e Configurações reais; completar a especificação do backend (passos do painel Trabalho, aparência dos agentes, entregas e versões). Plugins seguem congelados.
 
 **Histórico**
+- **2026-10-11** — **Sora desktop (Tauri) + CHATS em pastas.** Time no Maestri: Tear (Codex) fez `app/src-tauri` e `src/desktop/ponte.ts`; Farol (Claude Opus) fez a janela da ilha, as animações e o filtro de agentes; Sentinela (Hermes) os testes (parou no limite de uso da OpenAI); o orquestrador fez as pastas em CHATS, o seletor Equipe/Agente independente e a validação no desktop (ilha no topo da tela, cliques atravessando, console limpo). Instaladores: `app/src-tauri/target/release/bundle/nsis/Sora_0.1.0_x64-setup.exe` e `.../msi/Sora_0.1.0_x64_pt-BR.msi`. Pendente: assinar o instalador; agentes externos reais (back-end).
 - **2026-10-11** — **Ilha da Sora** (adaptação do Coucou) feita por um time no Maestri: Farol (Claude Code Opus, núcleo), Tear (Codex GPT-5.6, peças/Configurações/atalhos), Sentinela (Hermes OpenAI, testes e QA). Build, lint, 27 testes, `qa/e2e.mjs` e `qa/ilha.mjs` passando. Arquivos: `app/src/components/ilha/**`, `app/docs/ilha-da-sora.md`, `AppShell.tsx`, `Configuracoes.tsx`, `components/comandos/*`, `app/qa/ilha.mjs`. Pendente: agentes externos reais (precisa back-end).
 - **2026-10-11** — Revisão do `app/` contra a especificação do backend: build, lint, testes e E2E passando; lista do que adicionar e consertar para ligar no backend. Nenhum código alterado. Arquivos: `log/2026-10-11.md`, `log/ONDE-PARAMOS.md`, `log/README.md`, `CLAUDE.md`, `AGENTS.md`. Pendente: tudo da lista; `npm run test:visual` no PC.
 - **2026-10-10** — Front-end do app construído com um time de agentes de IA no Maestri (detalhes em §7.6). Mudanças de produto pedidas no caminho: barra lateral vazia ao abrir, Sora grande na tela do 1º prompt, agentes criados pelo pedido e listados em CHATS, telas Projetos e Agentes, construtor de agente no estilo GPT builder, painel Trabalho, apagar/renomear, Configurações com APIs dos modelos. Arquivos: `app/**`, `CLAUDE.md`, `AGENTS.md`. Pendente: back-end, plugins reais, microfone real testado em celular.
@@ -280,7 +281,11 @@ npm install
 npm run dev          # http://localhost:5173
 npm run build        # checagem de tipos + build
 npx oxlint           # lint
+npm run desktop      # app de DESKTOP (Tauri) em modo dev — usa o dev server da porta 5173
+npm run desktop:build  # instaladores em src-tauri/target/release/bundle/{nsis,msi}/
 ```
+
+**Desktop (Tauri v2, desde 2026-10-11):** precisa do Rust (MSVC). Duas janelas: `main` (o app; fechar esconde na bandeja) e `ilha` (`index.html?janela=ilha`, transparente, sem borda, sempre no topo, presa no topo central da tela; fora da pílula os cliques atravessam). Bandeja (Abrir a Sora · Mostrar/ocultar a ilha · Sair), atalho global Ctrl+Shift+S, instância única. A ponte JS↔Rust é `src/desktop/ponte.ts` (no navegador vira no-op). Spec: `app/docs/sora-desktop.md`. Para inspecionar as WebViews: iniciar o exe com `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`.
 
 Tudo é **simulado no navegador** (sem back-end). Os dados ficam no `localStorage` (`sora.projetos.v1`, `sora.modelos.v1`). Para começar do zero: Configurações → Conta → **Apagar todos os dados**.
 
@@ -299,7 +304,9 @@ Tudo é **simulado no navegador** (sem back-end). Os dados ficam no `localStorag
 | `components/projetos/`, `gestao/` | Tela Projetos; diálogos Renomear/Apagar. |
 | `components/review/`, `overlay/` | Tela de revisão; Modal, BottomSheet, Popover e menus acessíveis. |
 | `components/layout/`, `ui/` | AppShell, barra lateral, composer (BorderBeam + VoiceBeam), cards, peças de campanha. |
-| `components/ilha/` | **Ilha da Sora** (adaptação do Coucou): pílula no topo com a Sora branca + os agentes rodando ("bonecos"), aba para escolher o projeto, detalhe do agente, aprovação. Spec: `app/docs/ilha-da-sora.md`. |
+| `components/ilha/` | **Ilha da Sora** (adaptação do Coucou): pílula no topo com a Sora branca + os agentes rodando ("bonecos"), aba para escolher o projeto, detalhe do agente, aprovação, filtro Todos/Trabalhando/Concluídos e "olho" por agente. No desktop, `IlhaDesktop.tsx` é a janela da ilha. Spec: `app/docs/ilha-da-sora.md`. |
+| `desktop/` | `ponte.ts` (comandos/eventos Tauri + sincronização do `localStorage` entre as duas janelas) e `PonteNavegacao.tsx` (a ilha pede "abrir /revisao/…" e a janela principal navega). |
+| `../src-tauri/` | Casca nativa Tauri v2 (`tauri.conf.json`, `src/lib.rs`: janelas, click-through por polling do cursor, bandeja, atalho global). |
 | `components/studio/` | Editor de agente antigo, ainda usado no Modal "Editar agente". O construtor novo fica em `builder/`. |
 
 Rotas: `/` · `/projeto/:id` · `/chat/:agenteId` · `/projetos` · `/agentes` · `/agentes/novo` · `/agentes/:id/editar` · `/revisao/:id` · `/configuracoes` · `/plugins` · `/celular` · `/lab/orb` (laboratório do mascote; `?solo=240&state=thinking&color=%23AC80FF` mostra um orb isolado).
@@ -316,13 +323,16 @@ Rotas: `/` · `/projeto/:id` · `/chat/:agenteId` · `/projetos` · `/agentes` �
 8. **Revisão:** "Revisar" abre as entregas; o usuário escolhe *Aprovar e publicar* ou *Pedir ajuste* (gera nova versão, com comparação).
 9. **Plugins: congelados de propósito.** A tela existe, mas não mexer até o grupo decidir.
 10. **Ilha da Sora** (2026-10-11, inspirada no Coucou — github.com/Louis-CFM/coucou): pílula preta fixa no topo de todas as telas com projeto. Compacta: Sora branca pequena (olha para o mouse) + "N trabalhando" + os agentes rodando como orbs coloridos. Expandida (hover, clique ou **Ctrl/⌘+Shift+S**): abas Início · **Projeto ▾** (escolhe qual projeto mostrar; padrão "Automático") · Abrir chat; Visão geral (Sora grande + ticker dos passos + pílulas dos agentes), detalhe do agente (passos, ferramenta, mensagem direta), **Aprovação** quando a equipe termina (Pedir ajuste N · Revisar R · Aprovar e publicar Y). Sons via WebAudio, botão "destacar" (janela Picture-in-Picture, Chrome/Edge), Configurações → aba **Ilha**. Preferências em `localStorage['sora.ilha.v1']`. Hoje mostra os agentes da Sora (simulados); ligar agentes externos (Claude Code, Codex, Hermes via hooks, como no Coucou) exige back-end — fica para depois.
+11. **App de desktop** (2026-10-11, autorizado pelo Heitor): a Sora vira programa instalável (Tauri). A ilha sai do navegador e fica no topo da tela do PC, por cima das outras janelas, como o notch do Coucou; dentro do app ela some (opção "Mostrar também dentro do app"). Animações novas na ilha (mola ao abrir, bonecos em cascata, halo nas cores dos agentes, pílula que "respira" no alerta) e **escolha de quais agentes ver** (Todos · Trabalhando · Concluídos + esconder agente pelo olho). Ainda front-end: nada de servidor, os agentes seguem simulados.
+12. **CHATS em pastas + Equipe x Agente independente** (2026-10-11): projeto com equipe aparece em CHATS como **pasta** (começa fechada; abre/fecha pela pasta ou pelo menu "…"; bolinhas nas cores dos agentes e resumo "3 agentes · 1 trabalhando"). Conversa sem agentes continua como linha da Sora. No Novo chat há o seletor **Equipe | Agente independente** (lembrado em `localStorage['sora.modo-envio.v1']`): *Equipe* = comportamento de sempre; *Agente independente* = a Sora cria **um** agente avulso a partir do pedido (`criarAgenteIndependente`), ele aparece **solto** em CHATS e já começa a trabalhar no chat dele.
 
 ### 7.4 Ferramentas de QA (`app/qa/`)
 
 - `node qa/shoot.mjs [rotas] [--wait ms]` → screenshots em 1440 e 390 px em `qa/shots/` + erros do console.
 - `node qa/shoot.mjs --flow` → digita um pedido e fotografa o fluxo a cada 3 s.
 - `node qa/e2e.mjs` → teste de ponta a ponta dos fluxos principais (criado pelo validador).
-- `node qa/ilha.mjs` → ponta a ponta da Ilha da Sora (screenshots em `qa/shots/ilha/`).
+- `node qa/ilha.mjs` → ponta a ponta da Ilha da Sora, inclusive o filtro de agentes (screenshots em `qa/shots/ilha/`).
+- Desktop: `cd src-tauri && cargo clippy -- -D warnings`; `npm run desktop:build`; para testar a janela da ilha de verdade, abrir o exe com a porta de depuração do WebView2 (§7.1) e conectar o Playwright por CDP.
 - `qa/ref/` → quadros da demo para comparar (gerados a partir do vídeo; não versionados).
 
 ### 7.5 Pendências / próximos passos
