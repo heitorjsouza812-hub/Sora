@@ -414,6 +414,7 @@ O app (`app/`) já existe e hoje simula tudo com um relógio em `app/src/state/p
 
 - O estado vem da API e dos eventos SSE. As telas só conhecem eventos.
 - **Sem modo demonstração** (decisão de 2026-10-14). A simulação por relógio (`state/projetos.ts`) e os dados de exemplo saem do app quando a camada `src/api/` entrar.
+- Para desenvolver sem gastar com modelos, o backend roda com o **modelo falso** (`SORA_MODELO_FALSO=1`, seção 8.5), que responde rápido e de graça seguindo o mesmo fluxo de eventos.
 
 Peças novas no app:
 
@@ -1125,7 +1126,7 @@ Os prompts e o conjunto de 100 pedidos do teste ficam com a equipe toda.
 | Ponta a ponta | Um pedido do início ao fim | `docker compose` completo, um provedor falso compatível com a API da OpenAI e um cliente que lê o canal SSE | A cada entrada na `main` |
 | Avaliação | Qualidade das decisões e das respostas | Os 100 pedidos do Sistema 1 e as 20 tarefas de cadeia, com modelos reais e a chave da equipe | Uma vez por semana e a cada mudança de prompt ou de catálogo |
 
-**Sem modelo falso no backend** (decisão de 2026-10-14): o backend sempre usa os modelos reais das APIs do usuário. Respostas simuladas existem só dentro de `backend/tests/` (fixtures com `GenericFakeChatModel` ou `mock_response`), para os testes rodarem sem custo; nunca em `app/`.
+**Modelo falso para desenvolver:** com `SORA_MODELO_FALSO=1`, o `llm/` troca todos os modelos por um `GenericFakeChatModel` com respostas prontas (triagem, plano, entregas e veredito de exemplo). O backend inteiro roda no PC sem chave e sem custo, emitindo os mesmos eventos do modo real. Nunca fica ligado em produção.
 
 Casos que não podem faltar:
 

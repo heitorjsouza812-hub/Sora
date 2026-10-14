@@ -8,7 +8,7 @@ A especificação técnica da fase 1 está em [Especificação do backend](02-es
 
 ## Ponto de partida: o que já existe
 
-O **app** (front-end) já está pronto em `app/`: React 19 + Vite + TypeScript, rodando no navegador e como **programa de desktop** (Tauri v2, em `app/src-tauri`). Hoje tudo nele é **simulado** por um relógio (`app/src/state/projetos.ts`). O backend deste plano substitui a simulação por dados reais. **Não existe modo demonstração** (decisão de 2026-10-14): a simulação sai do app quando a camada `src/api/` entrar, e o app passa a mostrar só o que o backend manda.
+O **app** (front-end) já está pronto em `app/`: React 19 + Vite + TypeScript, rodando no navegador e como **programa de desktop** (Tauri v2, em `app/src-tauri`). Hoje tudo nele é **simulado** por um relógio (`app/src/state/projetos.ts`). O backend deste plano substitui a simulação por dados reais. **Não existe modo demonstração** (decisão de 2026-10-14): a simulação sai do app quando a camada `src/api/` entrar, e o app passa a mostrar só o que o backend manda. Para desenvolver e testar sem gastar com modelos, o backend tem um **modelo falso** (seção 8.5 da especificação).
 
 O que o app já mostra e o backend precisa alimentar:
 
