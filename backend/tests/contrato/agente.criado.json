@@ -1,0 +1,12 @@
+{
+  "id": "1697040000005-0",
+  "event": "agente.criado",
+  "data": {
+    "agente_id": "44444444-4444-4444-8444-444444444444",
+    "tipo": "especialista",
+    "nome": "Ravi",
+    "funcao": "Pesquisa e referências",
+    "cor": "#56A8FF",
+    "movimento": "vibracao"
+  }
+}

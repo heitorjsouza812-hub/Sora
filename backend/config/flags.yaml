@@ -1,0 +1,22 @@
+# Flags: ligam e desligam recursos sem lançar versão (plano 01-plano.md, tabela de tecnologias;
+# especificação §7 "Como ligar no Sistema 1"). Lido por app/seletor/flags.py.
+# Na fase 4 isto passa para o GrowthBook.
+
+laya:
+  # Desliga o Laya na hora: com false, tudo volta para o modelo N1.
+  ativo: false
+  # desligado | sombra (fase 2: decide em paralelo, quem manda é o N1) | ligado (fase 3)
+  modo: desligado
+  # Confiança calibrada mínima para usar a decisão do Laya direto (proposta: 0,9).
+  limite_confianca: 0.9
+  # Se o laya-svc demorar mais que isto, o Sistema 1 segue só com o N1.
+  prazo_ms: 150
+
+sistema1:
+  # Fase 1: todo pedido fica em `roteamentos` com a decisão do N1 (dado de treino do Laya).
+  gravar_dados_de_treino: true
+
+revisor:
+  # Fase 3: revisor de ações (modelo) antes de ferramentas marcadas com "sim".
+  # O cartão fixo do `criar_agente` (fase 1) não depende desta flag.
+  acoes_ativo: false

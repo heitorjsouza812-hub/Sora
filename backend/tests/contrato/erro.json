@@ -1,0 +1,8 @@
+{
+  "id": "1697040000015-0",
+  "event": "erro",
+  "data": {
+    "codigo": "provedor_indisponivel",
+    "mensagem": "Nenhum modelo das suas APIs respondeu. Tente de novo em alguns minutos."
+  }
+}

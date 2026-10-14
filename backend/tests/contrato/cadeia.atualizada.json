@@ -1,0 +1,10 @@
+{
+  "id": "1697040000010-0",
+  "event": "cadeia.atualizada",
+  "data": {
+    "cadeia_id": "66666666-6666-4666-8666-666666666666",
+    "status": "concluida",
+    "tokens_usados": 18420,
+    "custo_usd": 0.0137
+  }
+}

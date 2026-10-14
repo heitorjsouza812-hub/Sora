@@ -1,0 +1,30 @@
+# Política do seletor de modelos (especificação §5, "Arquivo politica.yaml").
+# Os valores de limite são iniciais e devem ser ajustados com os testes.
+# Lido por app/seletor/politica.py.
+
+papeis:
+  sistema1: {nivel: N1, preferir: velocidade, capacidades: [json]}
+  resposta_direta: {nivel: N1, subir_se_dificuldade: 2}
+  sora: {nivel: N2, capacidades: [ferramentas]}
+  planejador: {nivel: N3, capacidades: [json]}
+  pesquisador: {nivel: N2, capacidades: [ferramentas]}
+  redator: {nivel: N2}
+  designer: {nivel: N2, capacidades: [ferramentas]}   # gerar_imagem usa o modelo de imagem escolhido à parte
+  imagem: {capacidades: [imagem]}
+  agente_individual: {nivel: N2, capacidades: [ferramentas]}
+  verificador: {nivel: N2, capacidades: [ferramentas], diferente_do_executor: true}
+  revisor: {nivel: N2, capacidades: [json], preferir_modelo: groq/openai/gpt-oss-safeguard-20b}
+  memoria_sintese: {nivel: N1, capacidades: [json]}
+  memoria_verificacao: {nivel: N1, capacidades: [json], diferente_de: memoria_sintese}
+
+dificuldade_para_nivel: {1: N1, 2: N2, 3: N3}
+prioridade_padrao: custo        # custo | velocidade | qualidade
+
+limites:
+  confianca_minima_s1: 0.7
+  cadeia: {rodadas: 3, passos: 10, tokens: 200000}
+  especialistas_por_cadeia: 5
+  agentes_individuais_por_usuario: 5
+  lembrete_apos_chamadas_sem_falar: 6
+  falhas_para_pausar_provedor: 3
+  pausa_provedor_minutos: 5

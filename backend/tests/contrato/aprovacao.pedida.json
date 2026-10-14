@@ -1,0 +1,11 @@
+{
+  "id": "1697040000012-0",
+  "event": "aprovacao.pedida",
+  "data": {
+    "aprovacao_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "resumo": "Criar o agente Leo (Revisão de textos)",
+    "dano": "nenhum",
+    "quem_recebe": null,
+    "expira_em": "2026-10-14T15:10:00Z"
+  }
+}

@@ -1,0 +1,29 @@
+"""Fixtures compartilhados pelos testes do backend; especificação §8.5."""
+
+import os
+from collections.abc import AsyncIterator
+
+import pytest
+from fastapi import FastAPI
+from httpx import AsyncClient
+
+# Valores fictícios só para o processo de teste carregar a configuração.
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://teste:teste@localhost/teste")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("CHAVE_MESTRA", "teste-chave-mestra")
+os.environ.setdefault("JWT_SEGREDO", "teste-jwt-segredo")
+
+from app.main import criar_aplicacao
+
+
+@pytest.fixture
+def aplicacao() -> FastAPI:
+    """Cria uma aplicação isolada para cada teste."""
+    return criar_aplicacao()
+
+
+@pytest.fixture
+async def cliente(aplicacao: FastAPI) -> AsyncIterator[AsyncClient]:
+    """Fornece um cliente HTTP assíncrono quando o transporte for implementado."""
+    raise NotImplementedError
+    yield  # pragma: no cover

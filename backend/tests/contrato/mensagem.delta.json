@@ -1,0 +1,8 @@
+{
+  "id": "1697040000001-0",
+  "event": "mensagem.delta",
+  "data": {
+    "mensagem_id": "22222222-2222-4222-8222-222222222222",
+    "texto": "Boa! Vou montar uma equipe "
+  }
+}

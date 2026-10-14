@@ -1,0 +1,18 @@
+{$DOMINIO:localhost} {
+    encode zstd gzip
+
+    handle /v1/* {
+        reverse_proxy api:8000
+    }
+
+    handle /health {
+        reverse_proxy api:8000
+    }
+
+    handle {
+        root * /srv/app
+        try_files {path} /index.html
+        file_server
+    }
+}
+

@@ -1,0 +1,12 @@
+{
+  "id": "1697040000007-0",
+  "event": "etapa.atualizada",
+  "data": {
+    "etapa_id": "77777777-7777-4777-8777-777777777771",
+    "status": "concluida",
+    "progresso": 100,
+    "modelo": "groq/openai/gpt-oss-120b",
+    "tokens": 3812,
+    "custo_usd": 0.0021
+  }
+}

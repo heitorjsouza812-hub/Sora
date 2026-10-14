@@ -1,0 +1,19 @@
+{
+  "id": "1697040000011-0",
+  "event": "pergunta",
+  "data": {
+    "pergunta_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "texto": "Qual o foco da campanha?",
+    "opcoes": [
+      {
+        "rotulo": "Café gelado",
+        "valor": "Foque no café gelado"
+      },
+      {
+        "rotulo": "Inauguração",
+        "valor": "Foque na inauguração"
+      }
+    ],
+    "resposta_livre": true
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "1697040000013-0",
+  "event": "aprovacao.resolvida",
+  "data": {
+    "aprovacao_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "status": "permitida"
+  }
+}

@@ -1,0 +1,113 @@
+# Catálogo de modelos conhecidos (especificação §5, "Catálogo de modelos").
+# Conferido em 2026-10-11. Mantido pela equipe e revisto todo mês (preços mudam).
+# Lido por app/seletor/catalogo.py.
+#
+# - nivel: N1 | N2 | N3 | especial. É uma PROPOSTA até o modelo passar no "Teste dos modelos" (§5).
+# - preco_entrada / preco_saida: US$ por 1 milhão de tokens, na faixa padrão de contexto.
+#   null = sob consulta ou vem do mapa de custos do LiteLLM (litellm.model_cost); 0 = grátis.
+# - contexto: null = o catálogo usa litellm.model_cost; só preenchido onde a especificação diz.
+# - capacidades: ferramentas | json | visao | imagem | embeddings. PROPOSTA inicial, não vem da
+#   especificação: conferir no teste e no mapa do LiteLLM antes de confiar.
+# - confirmar_nome: true = a especificação manda confirmar o nome na API do provedor.
+# - provedor: origem do modelo. xai, deepseek, zai e mistral não têm tipo próprio em
+#   `tipo_provedor`: chegam via OpenRouter ou API compatível com a da OpenAI.
+# - Modelo fora do catálogo entra como N2 e sem capacidades confirmadas (§5).
+
+versao: 1
+conferido_em: 2026-10-11
+
+modelos:
+  # ---- Groq
+  - {modelo: groq/openai/gpt-oss-20b, provedor: groq, nivel: N1, capacidades: [ferramentas, json],
+     uso: "Sistema 1, memória, resumos", preco_entrada: 0.075, preco_saida: 0.30}
+  - {modelo: groq/llama-3.1-8b-instant, provedor: groq, nivel: N1, capacidades: [ferramentas, json],
+     uso: "Sistema 1 reserva", preco_entrada: null, preco_saida: null}
+  - {modelo: groq/openai/gpt-oss-120b, provedor: groq, nivel: N2, capacidades: [ferramentas, json],
+     uso: "Sora, especialistas, verificador", preco_entrada: 0.15, preco_saida: 0.60}
+  - {modelo: groq/openai/gpt-oss-safeguard-20b, provedor: groq, nivel: especial, capacidades: [json],
+     uso: "Revisor de ações (prévia)", preco_entrada: 0.075, preco_saida: 0.30}
+  - {modelo: groq/meta-llama/llama-prompt-guard-2-86m, provedor: groq, nivel: especial, capacidades: [],
+     uso: "Detectar injeção de prompt (prévia)", preco_entrada: 0.04, preco_saida: 0.04}
+
+  # ---- OpenAI
+  - {modelo: openai/gpt-5.6-luna, provedor: openai, nivel: N1, capacidades: [ferramentas, json, visao],
+     uso: "Tarefas rápidas e baratas", preco_entrada: 0.20, preco_saida: 1.20}
+  - {modelo: openai/gpt-5.6-terra, provedor: openai, nivel: N2, capacidades: [ferramentas, json, visao],
+     uso: "Sora e especialistas", preco_entrada: 2.00, preco_saida: 12.00}
+  - {modelo: openai/gpt-5.6-sol, provedor: openai, nivel: N3, capacidades: [ferramentas, json, visao],
+     uso: "Planejador, código, raciocínio difícil", preco_entrada: 5.00, preco_saida: 30.00}
+
+  # ---- Anthropic
+  - {modelo: anthropic/claude-haiku-5-5, provedor: anthropic, nivel: N1, capacidades: [ferramentas, json, visao],
+     uso: "Tarefas rápidas e de alto volume", preco_entrada: 0.10, preco_saida: 0.50,
+     observacao: "Preço para prompt até 100 mil tokens"}
+  - {modelo: anthropic/claude-sonnet-5-5, provedor: anthropic, nivel: N2, capacidades: [ferramentas, json, visao],
+     uso: "Sora e especialistas", preco_entrada: 2, preco_saida: 10}
+  - {modelo: anthropic/claude-opus-5-5, provedor: anthropic, nivel: N3, capacidades: [ferramentas, json, visao],
+     uso: "Planejador e tarefas longas de agente", preco_entrada: 4, preco_saida: 20}
+  - {modelo: anthropic/claude-fable-5-1, provedor: anthropic, nivel: N3, capacidades: [ferramentas, json, visao],
+     uso: "Raciocínio muito exigente; o mais caro da lista", preco_entrada: 10, preco_saida: 50,
+     somente_se_escolhido: true}
+
+  # ---- Google
+  - {modelo: gemini/gemini-3.1-flash-lite, provedor: google, nivel: N1, capacidades: [ferramentas, json, visao],
+     uso: "Tarefas rápidas e baratas", preco_entrada: 0.25, preco_saida: 1.50}
+  - {modelo: gemini/gemini-3.8-flash, provedor: google, nivel: N2, capacidades: [ferramentas, json, visao],
+     uso: "Sora e especialistas", preco_entrada: 0.75, preco_saida: 3.75,
+     observacao: "Sobe para 1,50 / 7,50 em janeiro de 2027"}
+  - {modelo: gemini/gemini-3.1-pro-preview, provedor: google, nivel: N3, capacidades: [ferramentas, json, visao],
+     uso: "Planejador (prévia)", preco_entrada: 2, preco_saida: 12}
+
+  # ---- xAI
+  - {modelo: xai/grok-4.7, provedor: xai, nivel: N3, capacidades: [ferramentas, json, visao],
+     uso: "Planejador, código", contexto: 500000, preco_entrada: 2, preco_saida: 6}
+
+  # ---- DeepSeek
+  - {modelo: deepseek/deepseek-flash, provedor: deepseek, nivel: N1, capacidades: [ferramentas, json],
+     uso: "O mais usado no OpenRouter (V4.1 Flash)", contexto: 1000000,
+     preco_entrada: 0.15, preco_saida: 0.60, observacao: "Preço fora do pico; o dobro no pico"}
+  - {modelo: deepseek/deepseek-v4-pro, provedor: deepseek, nivel: N3, capacidades: [ferramentas, json],
+     uso: "Planejador e raciocínio", preco_entrada: 0.66, preco_saida: 1.98,
+     observacao: "Preço fora do pico; o dobro no pico"}
+
+  # ---- Z.ai (confirmar os nomes na API)
+  - {modelo: zai/glm-5.3-flash, provedor: zai, nivel: N1, capacidades: [ferramentas, json],
+     uso: "Tarefas rápidas", preco_entrada: 0.15, preco_saida: 0.50, confirmar_nome: true}
+  - {modelo: zai/glm-4.7-flash, provedor: zai, nivel: N1, capacidades: [ferramentas, json],
+     uso: "Opção gratuita", preco_entrada: 0, preco_saida: 0, confirmar_nome: true}
+  - {modelo: zai/glm-5.3, provedor: zai, nivel: N2, capacidades: [ferramentas, json],
+     uso: "Sora e especialistas", preco_entrada: 1.40, preco_saida: 4.40, confirmar_nome: true}
+
+  # ---- Mistral (confirmar o nome na API)
+  - {modelo: mistral/mistral-large-latest, provedor: mistral, nivel: N2, capacidades: [ferramentas, json],
+     uso: "Sora e especialistas", preco_entrada: 0.50, preco_saida: 1.50, confirmar_nome: true}
+
+  # ---- Ollama (local, grátis; roda na máquina do usuário)
+  - {modelo: ollama/llama3.1:8b, provedor: ollama, nivel: N1, capacidades: [ferramentas, json],
+     uso: "Conversas privadas, sem custo de API", preco_entrada: 0, preco_saida: 0}
+  - {modelo: ollama/qwen3:8b, provedor: ollama, nivel: N1, capacidades: [ferramentas, json],
+     uso: "Conversas privadas, sem custo de API", preco_entrada: 0, preco_saida: 0}
+  - {modelo: ollama/gemma4:e4b, provedor: ollama, nivel: N1, capacidades: [json],
+     uso: "Conversas privadas, sem custo de API", preco_entrada: 0, preco_saida: 0}
+  - {modelo: ollama/qwen3:14b, provedor: ollama, nivel: N2, capacidades: [ferramentas, json],
+     uso: "Conversas privadas que pedem mais raciocínio (GPU melhor)", preco_entrada: 0, preco_saida: 0}
+  - {modelo: ollama/gemma4:12b, provedor: ollama, nivel: N2, capacidades: [json],
+     uso: "Conversas privadas que pedem mais raciocínio (GPU melhor)", preco_entrada: 0, preco_saida: 0}
+  - {modelo: ollama/deepseek-r1:14b, provedor: ollama, nivel: N2, capacidades: [json],
+     uso: "Conversas privadas que pedem mais raciocínio (GPU melhor)", preco_entrada: 0, preco_saida: 0}
+  - {modelo: ollama/nomic-embed-text, provedor: ollama, nivel: especial, capacidades: [embeddings],
+     uso: "Vetores para a busca semântica (pgvector, fase 2)", preco_entrada: 0, preco_saida: 0}
+  - {modelo: ollama/mxbai-embed-large, provedor: ollama, nivel: especial, capacidades: [embeddings],
+     uso: "Vetores para a busca semântica (pgvector, fase 2)", preco_entrada: 0, preco_saida: 0}
+
+  # ---- Imagem (a especificação manda confirmar o nome atual na API; nomes abaixo são marcadores)
+  - {modelo: openai/MODELO-DE-IMAGEM-A-CONFIRMAR, provedor: openai, nivel: especial, capacidades: [imagem],
+     uso: "Designer: peças da campanha", preco_entrada: null, preco_saida: null,
+     observacao: "Preço por imagem", confirmar_nome: true}
+  - {modelo: gemini/MODELO-DE-IMAGEM-A-CONFIRMAR, provedor: google, nivel: especial, capacidades: [imagem],
+     uso: "Designer: peças da campanha", preco_entrada: null, preco_saida: null,
+     observacao: "Preço por imagem", confirmar_nome: true}
+
+# Modelos que aparecem só no OpenRouter (nome openrouter/<provedor>/<modelo>) entram como N2 até
+# passarem no teste: Xiaomi MiMo-V2.6-Flash, Tencent Hy4 (prévia), NVIDIA Nemotron 3 Ultra
+# (versão gratuita). Os demais do OpenRouter são cruzados pelo nome sem o prefixo "openrouter/".

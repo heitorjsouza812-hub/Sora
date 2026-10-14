@@ -1,0 +1,42 @@
+{
+  "id": "1697040000006-0",
+  "event": "cadeia.criada",
+  "data": {
+    "cadeia_id": "66666666-6666-4666-8666-666666666666",
+    "versao": 1,
+    "etapas": [
+      {
+        "etapa_id": "77777777-7777-4777-8777-777777777771",
+        "ordem": 1,
+        "especialista": "pesquisador",
+        "agente_id": "44444444-4444-4444-8444-444444444444",
+        "titulo": "Pesquisar referências",
+        "nivel": "N2",
+        "depende_de": []
+      },
+      {
+        "etapa_id": "77777777-7777-4777-8777-777777777772",
+        "ordem": 2,
+        "especialista": "redator",
+        "agente_id": "55555555-5555-4555-8555-555555555555",
+        "titulo": "Escrever as peças",
+        "nivel": "N2",
+        "depende_de": [
+          1
+        ]
+      },
+      {
+        "etapa_id": "77777777-7777-4777-8777-777777777773",
+        "ordem": 3,
+        "especialista": "verificador",
+        "agente_id": "56565656-5656-4565-8565-565656565656",
+        "titulo": "Conferir o resultado",
+        "nivel": "N2",
+        "depende_de": [
+          1,
+          2
+        ]
+      }
+    ]
+  }
+}

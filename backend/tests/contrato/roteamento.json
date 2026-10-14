@@ -1,0 +1,16 @@
+{
+  "id": "1697040000003-0",
+  "event": "roteamento",
+  "data": {
+    "modo": "cadeia",
+    "dificuldade": 2,
+    "especialistas": [
+      "pesquisador",
+      "redator",
+      "verificador"
+    ],
+    "nivel": "N2",
+    "provedor": "groq",
+    "modelo": "groq/openai/gpt-oss-20b"
+  }
+}

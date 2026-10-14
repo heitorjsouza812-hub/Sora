@@ -40,7 +40,7 @@ create type tipo_conversa as enum ('chat', 'projeto', 'agente');
 create type movimento as enum ('gira', 'vibracao', 'espiral', 'ondas');   -- os mesmos do app (src/types.ts)
 create type autor_msg as enum ('usuario', 'sora', 'agente', 'sistema');
 create type status_cadeia as enum ('planejando', 'executando', 'verificando', 'aguardando_usuario', 'concluida', 'falhou', 'cancelada');
-create type status_etapa as enum ('pendente', 'executando', 'aguardando_aprovacao', 'concluida', 'reprovada', 'falhou', 'cancelada');
+create type status_etapa as enum ('pendente', 'executando', 'aguardando_usuario', 'aguardando_aprovacao', 'concluida', 'reprovada', 'falhou', 'cancelada');
 create type status_aprovacao as enum ('pendente', 'permitida', 'negada', 'expirada');
 create type tipo_memoria as enum ('perfil', 'log');
 create type origem_memoria as enum ('explicita', 'sintese');
@@ -363,7 +363,7 @@ O app manda pedidos por HTTP e recebe tudo que a Sora faz por um canal SSE por c
 | `PATCH /v1/modelos/{id}` | `{nivel?, ativo?}` | modelo | 1 |
 | `PATCH /v1/preferencias` | `{prioridade: custo \| velocidade \| qualidade}` | 204 | 1 |
 
-Eventos do canal SSE. Cada evento tem `id` sequencial por conversa, e o app reconecta com `Last-Event-ID` para receber o que perdeu:
+Eventos do canal SSE. Cada evento tem como `id` o id do Redis Stream (texto, por exemplo `1697040000000-0`; o app trata como texto opaco), e o app reconecta com `Last-Event-ID` para receber o que perdeu:
 
 | Evento | Quando | Campos |
 | --- | --- | --- |
@@ -385,7 +385,7 @@ Eventos do canal SSE. Cada evento tem `id` sequencial por conversa, e o app reco
 | `erro` | Falha que o usuário precisa ver | `codigo, mensagem` |
 | `ping` | A cada 15 segundos | (vazio) |
 
-Como a API entrega os eventos: cada mudança é gravada num Redis Stream `eventos:{conversa_id}` com `XADD`, guardado por 24 horas. Os eventos de estado (`conversa.atualizada`, `agente.criado`, `cadeia.*`, `etapa.atualizada`, `passo`, `entrega`, `aprovacao.*`; o texto das mensagens não) também vão para `eventos:usuario:{usuario_id}`, que é o canal da Ilha e da barra lateral. A rota SSE lê o stream com `XREAD` a partir do `Last-Event-ID`. Ao abrir o app, ele primeiro busca o estado completo (`GET /v1/conversas`, `GET /v1/cadeias/{id}`) e depois só aplica eventos.
+Como a API entrega os eventos: cada mudança é gravada num Redis Stream `eventos:{conversa_id}` com `XADD`, guardado por 24 horas. Os eventos de estado (`conversa.atualizada`, `agente.criado`, `cadeia.*`, `etapa.atualizada`, `passo`, `entrega`, `aprovacao.*`; o texto das mensagens não) também vão para `eventos:usuario:{usuario_id}`, que é o canal da Ilha e da barra lateral. Nesse canal, todo evento leva também `conversa_id`, para o app saber a que conversa ele pertence. A rota SSE lê o stream com `XREAD` a partir do `Last-Event-ID`. Ao abrir o app, ele primeiro busca o estado completo (`GET /v1/conversas`, `GET /v1/cadeias/{id}`) e depois só aplica eventos.
 
 O que acontece num `POST /mensagens`:
 
@@ -401,7 +401,7 @@ O **Agente independente** do Novo chat é `POST /v1/agentes {descricao}` seguido
 Exemplo de evento:
 
 ```json
-id: 42
+id: 1697040000000-0
 event: etapa.atualizada
 data: {"etapa_id": "7c1e...", "status": "concluida", "progresso": 100, "modelo": "groq/openai/gpt-oss-120b", "tokens": 3812, "custo_usd": 0.0021}
 ```
