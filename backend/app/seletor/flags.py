@@ -8,9 +8,12 @@ Especificação: §7 "Como ligar no Sistema 1" (uma flag desliga o Laya na hora)
 from __future__ import annotations
 
 from enum import StrEnum
+from functools import cache
 from pathlib import Path
 
 from pydantic import BaseModel
+
+from app.seletor.politica import diretorio_config, ler_yaml
 
 
 class ModoLaya(StrEnum):
@@ -41,10 +44,12 @@ class Flags(BaseModel):
 
 
 def carregar_flags(caminho: Path | None = None) -> Flags:
-    """Lê e valida ``flags.yaml``."""
-    raise NotImplementedError
+    """Lê e valida ``flags.yaml``. Arquivo vazio ou campos ausentes usam os padrões."""
+    conteudo = ler_yaml(caminho or diretorio_config() / "flags.yaml")
+    return Flags.model_validate(conteudo or {})
 
 
+@cache
 def obter_flags() -> Flags:
-    """As flags do processo (releitura periódica fica para depois)."""
-    raise NotImplementedError
+    """As flags do processo (carregadas uma vez; reiniciar o processo para reler)."""
+    return carregar_flags()

@@ -1,5 +1,6 @@
 """Fixtures compartilhados pelos testes do backend; especificação §8.5."""
 
+import base64
 import os
 from collections.abc import AsyncIterator
 
@@ -10,7 +11,9 @@ from httpx import AsyncClient
 # Valores fictícios só para o processo de teste carregar a configuração.
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://teste:teste@localhost/teste")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
-os.environ.setdefault("CHAVE_MESTRA", "teste-chave-mestra")
+os.environ.setdefault(
+    "CHAVE_MESTRA", base64.b64encode(b"0123456789abcdef0123456789abcdef").decode()
+)
 os.environ.setdefault("JWT_SEGREDO", "teste-jwt-segredo")
 
 from app.main import criar_aplicacao

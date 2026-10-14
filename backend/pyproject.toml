@@ -39,8 +39,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "fakeredis>=2.40.0",
     "pytest>=8.4,<10",
     "pytest-asyncio>=1.1,<2",
+    "respx>=0.23.1",
     "ruff>=0.13,<1",
     "testcontainers[postgres,redis]>=4.13,<5",
 ]
@@ -55,6 +57,9 @@ packages = ["app"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
 asyncio_mode = "auto"
+markers = [
+    "integracao: precisa de Postgres e Redis reais (Docker); pula sozinho quando não há Docker",
+]
 testpaths = ["tests"]
 
 [tool.ruff]

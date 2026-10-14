@@ -12,17 +12,17 @@ from uuid import UUID
 
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
 
+from app.orquestrador.cadeia import chave_de_cancelamento
+
 if TYPE_CHECKING:
     from langgraph.runtime import Runtime
 
 
+__all__ = ["CadeiaCancelada", "MiddlewareCancelamento", "chave_de_cancelamento"]
+
+
 class CadeiaCancelada(Exception):
     """O usuário cancelou a cadeia."""
-
-
-def chave_de_cancelamento(cadeia_id: UUID) -> str:
-    """``cancelar:{cadeia_id}``."""
-    raise NotImplementedError
 
 
 class MiddlewareCancelamento(AgentMiddleware):

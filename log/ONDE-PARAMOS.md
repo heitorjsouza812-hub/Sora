@@ -61,3 +61,8 @@ _Atualizado em 2026-10-14 — **decisão: agentes em LangChain** (plano 2.1; vej
 - Antes de commitar: `npm run build`, `npx oxlint`, `npm test` e `node qa/e2e.mjs` (com o dev server rodando).
 - Não reverter `app/package.json`; avisar antes de rodar `npm install` quando houver mais de uma pessoa ou agente trabalhando.
 - Chaves de API **nunca** devem ir para o repositório nem ficar só no navegador em produção.
+
+## Backend — 2026-10-14 (noite)
+- Repositório em `C:\dev\sora`. Esqueleto do backend commitado (`8d7b2ed`) e validado pelo Vigia.
+- Etapa 3 (fundação): Alicerce (segurança, migração 0001, contas) e Trama (eventos/SSE, ler_pagina com SSRF, busca, estados da cadeia) PRONTOS. Bússola (modelo falso, seletor, Sistema 1, custo) PARCIAL: parou por limite de cota do Claude; faltam também 4 erros RUF001 em `app/sistema1/saida_json.py`.
+- Falta: terminar a Bússola, rodada de validação do Vigia, testes de integração (precisam do Docker Desktop), apagar `_trava_local` em `app/main.py` quando `verificar_modelo_falso_permitido` existir.

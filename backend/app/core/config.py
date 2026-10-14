@@ -1,6 +1,7 @@
 """Carrega variáveis de ambiente da fase 1; especificação §8.3."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,6 +12,7 @@ class Configuracao(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    ambiente: Literal["desenvolvimento", "teste", "producao"] = "desenvolvimento"
     database_url: str
     redis_url: str
     chave_mestra: SecretStr

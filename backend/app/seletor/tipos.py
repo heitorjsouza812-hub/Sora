@@ -60,10 +60,12 @@ class ProvedorSeletor(BaseModel):
     gasto_mes_usd: Decimal = Decimal(0)
 
     def em_pausa(self, agora: datetime) -> bool:
-        raise NotImplementedError
+        """True enquanto ``pausado_ate`` ainda não passou (3 falhas seguidas, §5)."""
+        return self.pausado_ate is not None and self.pausado_ate > agora
 
     def passou_do_teto(self) -> bool:
-        raise NotImplementedError
+        """True quando o gasto do mês chegou ao teto mensal do provedor (sem teto = nunca)."""
+        return self.teto_mensal_usd is not None and self.gasto_mes_usd >= self.teto_mensal_usd
 
 
 class ModeloCandidato(BaseModel):
@@ -78,6 +80,8 @@ class ModeloCandidato(BaseModel):
     preco_saida: Decimal | None = None
     velocidade_tps: int | None = None
     ativo: bool = True
+    # Do catálogo (``EntradaCatalogo.somente_se_escolhido``): só entra se o usuário o escolheu.
+    somente_se_escolhido: bool = False
 
 
 class ContextoSeletor(BaseModel):
@@ -88,4 +92,4 @@ class ContextoSeletor(BaseModel):
     conversa_privada: bool = False  # privada = só modelos locais (Ollama)
 
     def modelos_ativos(self) -> list[ModeloCandidato]:
-        raise NotImplementedError
+        return [modelo for modelo in self.modelos if modelo.ativo]

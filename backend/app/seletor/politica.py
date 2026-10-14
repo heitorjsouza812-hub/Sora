@@ -7,8 +7,12 @@ individuais, lembretes, pausa de provedor).
 
 from __future__ import annotations
 
+import os
+from functools import cache
 from pathlib import Path
+from typing import Any
 
+import yaml
 from pydantic import BaseModel, Field
 
 from app.modelos.enumeracoes import Nivel, Prioridade
@@ -52,14 +56,32 @@ class Politica(BaseModel):
 
 def diretorio_config() -> Path:
     """``backend/config`` ou o valor de ``SORA_CONFIG_DIR``."""
-    raise NotImplementedError
+    definido = os.environ.get(VARIAVEL_DIRETORIO_CONFIG)
+    if definido:
+        return Path(definido)
+    return Path(__file__).resolve().parents[2] / "config"
+
+
+def ler_yaml(caminho: Path) -> Any:
+    """Lê um arquivo YAML de configuração (UTF-8) com mensagem clara se faltar."""
+    if not caminho.is_file():
+        raise FileNotFoundError(f"Arquivo de configuração não encontrado: {caminho}")
+    return yaml.safe_load(caminho.read_text(encoding="utf-8"))
 
 
 def carregar_politica(caminho: Path | None = None) -> Politica:
     """Lê e valida o YAML. Levanta erro claro se faltar papel ou o valor for inválido."""
-    raise NotImplementedError
+    politica = Politica.model_validate(ler_yaml(caminho or diretorio_config() / "politica.yaml"))
+    faltando = sorted(p.value for p in PapelModelo if p not in politica.papeis)
+    if faltando:
+        raise ValueError(f"politica.yaml sem os papéis: {', '.join(faltando)}")
+    for papel, regra in politica.papeis.items():
+        if regra.diferente_de is not None and regra.diferente_de not in politica.papeis:
+            raise ValueError(f"politica.yaml: {papel.value} aponta para papel inexistente")
+    return politica
 
 
+@cache
 def obter_politica() -> Politica:
     """A política do processo (carregada uma vez, em cache)."""
-    raise NotImplementedError
+    return carregar_politica()
