@@ -1,6 +1,6 @@
 # Sora: plano de implementação (versão 2)
 
-Plano do backend da Sora e de como ele se liga ao app que já existe em `app/`. A versão 1 foi exportada do documento "Sora: plano de implementação" em 2026-10-11. A **versão 2** (2026-10-11, noite) corrige o que não fazia sentido diante do que já está no repositório.
+Plano do backend da Sora e de como ele se liga ao app que já existe em `app/`. **Versão atual: 2.1** (agentes em LangChain). A versão 1 foi exportada do documento "Sora: plano de implementação" em 2026-10-11. A **versão 2** (2026-10-11, noite) corrige o que não fazia sentido diante do que já está no repositório.
 
 | Parte | Arquivo |
 |---|---|
@@ -9,6 +9,17 @@ Plano do backend da Sora e de como ele se liga ao app que já existe em `app/`. 
 | Prompts da fase 1 | [03-prompts.md](03-prompts.md) |
 
 Diagramas: [fluxo de um pedido](img/fluxo-de-um-pedido.png) · [estados de uma cadeia](img/estados-de-uma-cadeia.png). A arquitetura agora é um diagrama Mermaid dentro do `01-plano.md` (o GitHub desenha sozinho). Os PDFs da versão 1 não foram trazidos porque ficaram desatualizados.
+
+## Versão 2.1 (2026-10-14): agentes em LangChain
+
+27. **Decisão:** os agentes da Sora (a Sora, os especialistas e os agentes individuais) são feitos em **LangChain 1.x**, com `create_agent` sobre o LangGraph. Detalhes na nova seção **6.1** da especificação.
+    - Os modelos continuam passando pelo LiteLLM, agora pelo `ChatLiteLLM` (pacote `langchain-litellm`).
+    - As ferramentas da seção 4 viram `@tool` do LangChain, com o mesmo esquema Pydantic.
+    - Pausa e retomada das etapas (cartões de pergunta, `criar_agente`, queda do worker) usam o checkpointer do LangGraph no próprio PostgreSQL.
+    - As peças de engenharia viram middleware: os prontos do LangChain (troca de modelo, limites de chamadas, erro de ferramenta, resumo) e os nossos (lembretes, loop, orçamento, cancelamento, passos, cerca).
+    - Continuam sendo código nosso: a fila ARQ, os estados da cadeia no banco, o seletor, o orçamento e os eventos SSE.
+    - Sem LangSmith e sem Deep Agents na fase 1.
+28. Atualizados para combinar: Stack, Arquitetura, Peças de engenharia e fase 1 em `01-plano.md`; seções 4, 6.1, 8.4 e 8.5 da especificação.
 
 ## O que mudou da versão 1 para a 2
 

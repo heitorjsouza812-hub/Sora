@@ -1,6 +1,6 @@
 # Sora: plano de implementação
 
-Oct 11, 2026 · @Heitor · **versão 2** (revisada para combinar com o app que já existe no repositório; o que mudou está no [README](README.md))
+Oct 11, 2026 · @Heitor · **versão 2.1** (versão 2 revisada para combinar com o app; na 2.1, de 2026-10-14, os agentes passam a ser feitos em LangChain. O que mudou está no [README](README.md))
 
 A Sora é uma agente principal com personalidade própria. Ela resolve pedidos sozinha ou montando outros agentes, e um modelo rápido (o Sistema 1) escolhe, entre as APIs que o usuário conectou, o modelo certo para cada tarefa. Este documento define o que vamos montar e como.
 
@@ -35,6 +35,7 @@ flowchart TB
     API["API<br/>HTTP + SSE, login e contas"]
     S1["Sistema 1<br/>triagem e roteamento, respostas rápidas"]
     ORQ["Orquestrador<br/>cadeias e agentes individuais, orçamento, verificador"]
+    AGT["Agentes em LangChain<br/>create_agent + middleware, checkpointer"]
   end
   subgraph Servicos["Serviços"]
     REV["Revisor de ações<br/>cartões de aprovação (fase 3)"]
@@ -44,18 +45,20 @@ flowchart TB
   subgraph Infra["Infraestrutura e modelos"]
     FILA["Fila e eventos<br/>Redis + ARQ"]
     BANCO["Banco<br/>PostgreSQL (+ pgvector na fase 2)"]
-    LLM["Modelos via LiteLLM<br/>APIs que o usuário conectou"]
+    LLM["Modelos via LiteLLM (ChatLiteLLM)<br/>APIs que o usuário conectou"]
     BUSCA["Busca na web<br/>API de busca (Tavily ou Brave)"]
   end
   WEB <--> API
   DESK <--> API
   API --> S1 --> ORQ
-  ORQ --> REV & MEM & FER
-  ORQ --> FILA & BANCO & LLM
+  ORQ --> AGT
+  AGT --> REV & MEM & FER
+  ORQ --> FILA & BANCO
+  AGT --> LLM & BANCO
   FER --> BUSCA
 ```
 
-O app conversa com a API em tempo real. O Sistema 1 faz a triagem de cada pedido e o orquestrador monta cadeias ou aciona agentes individuais. O trabalho longo roda na fila, fora da requisição. Celular e gatilhos externos (webhooks) entram nas fases 3 e 4.
+O app conversa com a API em tempo real. O Sistema 1 faz a triagem de cada pedido e o orquestrador monta cadeias ou aciona agentes individuais. Cada agente (a Sora, os especialistas e os individuais) é montado em LangChain. O trabalho longo roda na fila, fora da requisição. Celular e gatilhos externos (webhooks) entram nas fases 3 e 4.
 
 ## Fluxo de um pedido
 
@@ -276,7 +279,7 @@ A Sora nunca clica sozinha: ela delega o navegador e a tela a subagentes rápido
 
 ## Peças de engenharia
 
-Soluções pequenas para problemas que todo agente tem. Cada linha é um módulo do backend.
+Soluções pequenas para problemas que todo agente tem. Cada linha é um módulo do backend; quase todas viram middleware do LangChain (seção 6.1 da especificação).
 
 | Peça | Como funciona na Sora |
 | --- | --- |
@@ -302,7 +305,8 @@ Backend em Python, com bibliotecas abertas. Os nomes dos modelos ficam fora do c
 | Camada | Escolha | Para quê | Fase |
 | --- | --- | --- | --- |
 | API | FastAPI + Uvicorn, com SSE | Receber pedidos e transmitir as mensagens da Sora em tempo real | 1 |
-| Modelos | LiteLLM | Uma interface única para as APIs que o usuário conectar, com a chave dele em cada chamada | 1 |
+| Agentes | **LangChain 1.x** (`create_agent`, sobre o LangGraph) + `langgraph-checkpoint-postgres` | Laço de cada agente, ferramentas, saída estruturada, middleware e pausa/retomada das etapas | 1 |
+| Modelos | LiteLLM, ligado ao LangChain pelo `langchain-litellm` (`ChatLiteLLM`) | Uma interface única para as APIs que o usuário conectar, com a chave dele em cada chamada | 1 |
 | Validação | Pydantic | Saídas JSON do Sistema 1, do revisor e das ferramentas | 1 |
 | Tarefas de fundo | ARQ com Redis (atrás de uma função `enfileirar` nossa) | Rodar cadeias, síntese de memória e rotinas fora da requisição | 1 |
 | Banco | PostgreSQL 16 | Usuários, conversas, agentes, cadeias, entregas, aprovações e registro de ações | 1 |
@@ -342,6 +346,7 @@ Quatro fases. A fase 1 é o mínimo para demonstrar a Sora **de verdade** na FEB
 
 Backend:
 
+- [ ] Agentes em LangChain: `create_agent` por papel, ferramentas como `@tool`, checkpointer no PostgreSQL e o middleware das peças de engenharia (especificação 6.1)
 - [ ] Prompt base da Sora: personalidade, tom, ritmo de turno e regra de nunca inventar dados
 - [ ] Ferramenta única de fala: só o que passa por ela chega ao usuário
 - [ ] Roteador Sistema 1 com saída JSON e política de níveis N0 a N3

@@ -7,6 +7,7 @@ Esta pasta registra **o que foi feito** e **onde paramos**, para qualquer integr
 | [`ONDE-PARAMOS.md`](ONDE-PARAMOS.md) | **Leia primeiro.** Estado atual, o que está pendente e o próximo passo. |
 | [`2026-10-10.md`](2026-10-10.md) | Diário do dia 10/10/2026: tudo que foi construído, em ordem, com os commits. |
 | [`2026-10-11.md`](2026-10-11.md) | Revisão do front-end contra a especificação do backend: o que adicionar e consertar. |
+| [`2026-10-14.md`](2026-10-14.md) | Decisão de fazer os agentes em LangChain (plano versão 2.1). |
 
 ## Como registrar uma nova sessão
 

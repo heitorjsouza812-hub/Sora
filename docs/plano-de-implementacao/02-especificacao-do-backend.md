@@ -463,7 +463,7 @@ Peças novas no app:
 
 ## 4. Ferramentas
 
-Cada ferramenta é uma classe Pydantic. O backend só entrega a um agente as ferramentas listadas em `agentes.ferramentas` ou no papel do especialista, e o revisor de ações roda antes de toda ferramenta marcada com "sim".
+Cada ferramenta é uma classe Pydantic, entregue ao agente como ferramenta do LangChain (`@tool` com `args_schema` = a classe; veja 6.1). O backend só entrega a um agente as ferramentas listadas em `agentes.ferramentas` ou no papel do especialista, e o revisor de ações roda antes de toda ferramenta marcada com "sim".
 
 | Ferramenta | Parâmetros | Quem usa | Revisor | Fase |
 | --- | --- | --- | --- | --- |
@@ -721,6 +721,51 @@ Regras de execução:
 - **Progresso da etapa:** a barra do app precisa de um número. O worker estima `progresso` por passos: 10% ao começar, até 85% distribuídos pelas chamadas de ferramenta (contando com o limite de passos da etapa) e 100% no `entregar`. Não é tempo exato, mas nunca volta para trás.
 - **Falha de provedor:** cada chamada usa a lista do seletor (seção 5). Em erro 429, 5xx ou prazo estourado, o worker tenta o próximo modelo da lista sem perder a etapa, e a troca aparece na linha do tempo.
 - **Chave do usuário:** o worker decifra a chave só na hora da chamada, mantém em memória e nunca grava em log, evento ou mensagem.
+
+### 6.1 Agentes em LangChain
+
+**Decisão (2026-10-14):** os agentes da Sora são desenvolvidos em **LangChain 1.x**, com `create_agent` (que roda sobre o LangGraph). Isso vale para a Sora, os especialistas (Pesquisador, Redator, Designer, Verificador) e os agentes individuais. O planejador e o Sistema 1 também chamam o modelo pelo LangChain, com saída estruturada.
+
+O que fica com o LangChain e o que continua sendo código nosso:
+
+| LangChain | Código nosso |
+| --- | --- |
+| O laço de cada agente: modelo → ferramenta → modelo, até `entregar`, `veredito` ou `falar` | A fila ARQ e os jobs desta seção (`planejar_cadeia`, `avancar_cadeia`, `executar_etapa`…) |
+| As ferramentas da seção 4, como `@tool` com o esquema Pydantic | Os estados de `cadeias` e `etapas` no PostgreSQL, que continuam sendo a fonte da verdade |
+| A saída estruturada do Sistema 1, do planejador e do Verificador (`with_structured_output` ou `response_format`) | O seletor de modelo e o catálogo (seção 5) |
+| Pausar e retomar uma etapa, com o checkpointer no PostgreSQL | O orçamento de tokens no Redis, o cancelamento, os eventos SSE e as permissões por papel |
+| O middleware das peças de engenharia (tabela abaixo) | A cifra das chaves e os prompts em arquivo |
+
+A Sora não usa os subagentes prontos do LangChain (Deep Agents). A coordenação continua sendo a cadeia desta seção, para manter os limites (5 especialistas, 3 rodadas, 10 passos) e a regra de que só a Sora fala com o usuário.
+
+**Como uma etapa roda:**
+
+1. `executar_etapa(etapa_id)` pega a etapa (`UPDATE ... RETURNING`) e pede ao seletor a lista de modelos do papel.
+2. Cada modelo da lista vira um `ChatLiteLLM` (pacote `langchain-litellm`), com a chave e a URL do provedor do usuário. O LiteLLM continua sendo a ponte para os provedores, e o custo de cada chamada continua vindo dele.
+3. O worker monta o agente com `create_agent(model, tools, system_prompt, middleware, checkpointer)`, usando as ferramentas do papel (`FERRAMENTAS_POR_PAPEL`) e o prompt do arquivo em `prompts/`.
+4. O agente roda com `thread_id = "etapa:{etapa_id}"`. O checkpointer (`AsyncPostgresSaver`, pacote `langgraph-checkpoint-postgres`) grava cada passo no mesmo PostgreSQL, em tabelas próprias criadas pelo `setup()`.
+5. Quando o agente chama `entregar`, o job grava a entrega, marca a etapa como concluída e chama `avancar_cadeia`.
+
+**Pausas e retomada:**
+
+- `perguntar` (cartões de pergunta) e `criar_agente` (cartão fixo de aprovação) usam a interrupção do LangGraph. A etapa vai para `aguardando_usuario` ou `aguardando_aprovacao` e o job termina.
+- Quando o usuário responde, a API enfileira `executar_etapa` de novo, e o agente continua do ponto salvo com `Command(resume=resposta)`.
+- Se o worker cair no meio da etapa, o próximo retoma do último checkpoint, sem pagar de novo as chamadas que já terminaram.
+- Na fase 3, o revisor de ações usa o `HumanInTheLoopMiddleware` com o mesmo mecanismo.
+
+**Peças de engenharia → middleware:**
+
+| Peça (01-plano.md) | Como fica |
+| --- | --- |
+| Troca de provedor em 429, 5xx ou prazo | `ModelRetryMiddleware` + `ModelFallbackMiddleware`, com os modelos na ordem do seletor. A troca gera um evento na linha do tempo. |
+| Limite de passos da etapa | `ModelCallLimitMiddleware` e `ToolCallLimitMiddleware` (`run_limit`) |
+| Conserto de JSON | `ToolErrorMiddleware`: o erro de validação volta para o modelo tentar de novo uma vez. Na saída estruturada, `handle_errors` do `ToolStrategy`. |
+| Resumo de contexto (fase 2) | `SummarizationMiddleware` com um modelo N1 |
+| Lembretes automáticos, detector de loop, orçamento de tokens, cancelamento, evento `passo`, cerca de dado não confiável, saída grande em arquivo, prazo por ferramenta | Middleware nosso em `agentes/middleware/`, um arquivo por peça, usando os ganchos do LangChain (antes e depois do modelo e em volta de cada ferramenta) |
+
+**Versões:** fixar no `uv.lock`. Em 2026-10-14, as versões no PyPI eram `langchain` 1.4.6, `langchain-core` 1.6.10, `langgraph` 1.2.15, `langgraph-checkpoint-postgres` 3.1.3 e `langchain-litellm` 0.11.1. O checkpointer usa `psycopg` 3, então o backend tem dois drivers do PostgreSQL: `asyncpg` (SQLAlchemy) e `psycopg` (checkpointer).
+
+**Sem LangSmith na fase 1.** O monitoramento continua sendo o da fase 4 (OpenTelemetry e Langfuse, que tem integração com o LangChain).
 
 ## 7. Laya: decisões rápidas do Sistema 1
 
@@ -1029,12 +1074,13 @@ Publicação: GitHub Actions roda os testes (seção 8.5) em todo pull request. 
       core/           config, banco, Redis, segurança (argon2, JWT, cifra AES-GCM)
       modelos/        tabelas (SQLAlchemy 2) e esquemas (Pydantic)
       eventos/        Redis Stream e canais SSE (conversa e usuário)
-      llm/            chamada ao LiteLLM, custo, troca de provedor, geração de imagem
+      llm/            ChatLiteLLM (LangChain + LiteLLM), custo, troca de provedor, geração de imagem
       seletor/        catálogo, política e escolher_modelos
       sistema1/       regras, chamada ao N1 e, mais tarde, cliente do Laya
       orquestrador/   planejador, estados da cadeia, verificador, entregas e versões
-      agentes/        montagem dos prompts da Sora e dos especialistas, aparência, lembretes
-      ferramentas/    uma ferramenta por arquivo, a tabela de permissões por papel e os rótulos dos passos
+      agentes/        montagem dos agentes em LangChain (create_agent), prompts, aparência
+        middleware/   lembretes, loop, orçamento, cancelamento, passos, cerca, saídas grandes
+      ferramentas/    uma ferramenta por arquivo (@tool do LangChain), as permissões por papel e os rótulos dos passos
       revisor/        cartão de criar_agente (fase 1); revisor de ações (fase 3)
       busca/          interface ProvedorBusca, tavily.py, brave.py, searxng.py (dev), falso.py e ler_pagina.py
       memoria/        fase 2
@@ -1051,6 +1097,7 @@ Padrões do código:
 
 - Python 3.12, dependências com `uv`, formatação e lint com `ruff`.
 - Tudo assíncrono: FastAPI, SQLAlchemy 2 com `asyncpg`, `httpx` e ARQ.
+- Agentes em LangChain 1.x (`create_agent`), chamados sempre com `ainvoke`/`astream`. Nada de LangChain fora de `agentes/`, `ferramentas/`, `llm/`, `sistema1/` e `orquestrador/`.
 - Prompts são arquivos, nunca strings no meio do código. Mudou o prompt, muda a versão no nome e roda a avaliação.
 - Uma branch por tarefa, com pull request revisado por outra pessoa antes de entrar na `main`.
 - Nada de chave, token ou senha em código, teste ou log.
@@ -1072,7 +1119,7 @@ Os prompts e o conjunto de 100 pedidos do teste ficam com a equipe toda.
 | Tipo | O que testa | Como | Quando roda |
 | --- | --- | --- | --- |
 | Unitário | Seletor, revisor (parte de código), regras do Sistema 1, cifra das chaves, máquina de estados da cadeia, limites | Funções isoladas, com tabelas de casos | Todo pull request |
-| Integração | API, banco, fila e eventos funcionando juntos | Postgres e Redis de verdade em containers (`testcontainers`) e modelo falso com o `mock_response` do LiteLLM | Todo pull request |
+| Integração | API, banco, fila e eventos funcionando juntos | Postgres e Redis de verdade em containers (`testcontainers`) e modelo falso (`GenericFakeChatModel` do LangChain ou o `mock_response` do LiteLLM) | Todo pull request |
 | Ponta a ponta | Um pedido do início ao fim | `docker compose` completo, um provedor falso compatível com a API da OpenAI e um cliente que lê o canal SSE | A cada entrada na `main` |
 | Avaliação | Qualidade das decisões e das respostas | Os 100 pedidos do Sistema 1 e as 20 tarefas de cadeia, com modelos reais e a chave da equipe | Uma vez por semana e a cada mudança de prompt ou de catálogo |
 

@@ -1,6 +1,11 @@
 # Onde paramos
 
-_Atualizado em 2026-10-11 (noite) — **Sora desktop (Tauri)** com a ilha no topo da tela do PC e **CHATS em pastas** + seletor Equipe/Agente independente (veja abaixo). Antes: **Ilha da Sora** pronta (adaptação do Coucou; veja abaixo). Antes: revisão do front-end contra a especificação do backend (nenhum código alterado). Antes: 2026-10-10, ~23h20, trabalho pausado a pedido do Heitor._
+_Atualizado em 2026-10-14 — **decisão: agentes em LangChain** (plano 2.1; veja abaixo). Antes, 2026-10-11 (noite): **Sora desktop (Tauri)** com a ilha no topo da tela do PC e **CHATS em pastas** + seletor Equipe/Agente independente (veja abaixo). Antes: **Ilha da Sora** pronta (adaptação do Coucou; veja abaixo). Antes: revisão do front-end contra a especificação do backend (nenhum código alterado). Antes: 2026-10-10, ~23h20, trabalho pausado a pedido do Heitor._
+
+## Agentes em LangChain (2026-10-14)
+
+- Decidido: os agentes do backend são feitos em **LangChain 1.x** (`create_agent`). O plano passou para a **versão 2.1**; o que muda está na seção 6.1 da especificação e no README de `docs/plano-de-implementacao/`.
+- Fila ARQ, estados da cadeia no PostgreSQL, seletor, orçamento e eventos SSE continuam sendo código nosso.
 
 ## Estado atual
 
@@ -20,7 +25,7 @@ _Atualizado em 2026-10-11 (noite) — **Sora desktop (Tauri)** com a ilha no top
 
 ## Plano do backend — versão 2 (2026-10-11, noite)
 
-- `docs/plano-de-implementacao/` tem o plano revisado para combinar com o app (o que mudou: README da pasta). Próximo passo quando o Heitor disser "sim": fase 1 do backend + camada `src/api` e modo demonstração no app (seção 3 da especificação).
+- `docs/plano-de-implementacao/` tem o plano revisado para combinar com o app (agora versão 2.1, com os agentes em LangChain; o que mudou: README da pasta). Próximo passo quando o Heitor disser "sim": fase 1 do backend + camada `src/api` e modo demonstração no app (seção 3 da especificação).
 
 ## Sora desktop + CHATS em pastas (2026-10-11, noite)
 
