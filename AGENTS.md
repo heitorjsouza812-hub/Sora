@@ -70,7 +70,7 @@ Modelo de entrada:
 
 - **Papel:** _(preencher — ex.: produto / design / front-end)_
 - **Onde parou:** front-end da Sora pronto em `app/`, ainda simulado. Em 2026-10-11 revisou o front contra a especificação do backend (documento "Sora: plano de implementação"); a lista do que falta está em `log/2026-10-11.md`.
-- **Próximo passo:** decidir créditos x chaves próprias; criar a camada de API + eventos (com modo demonstração); onboarding com API obrigatória e Configurações reais; completar a especificação do backend (passos do painel Trabalho, aparência dos agentes, entregas e versões). Plugins seguem congelados.
+- **Próximo passo:** decidir créditos x chaves próprias; criar a camada de API + eventos (sem modo demonstração: a simulação sai do app); onboarding com API obrigatória e Configurações reais; completar a especificação do backend (passos do painel Trabalho, aparência dos agentes, entregas e versões). Plugins seguem congelados.
 
 **Histórico**
 - **2026-10-14** — **Decisão: agentes em LangChain.** Plano passou para a versão 2.1: `create_agent` sobre o LangGraph, ferramentas como `@tool`, `ChatLiteLLM` para os modelos, checkpointer no PostgreSQL e as peças de engenharia como middleware (especificação §6.1). Na fase 3, os conectores MCP entram pelo `langchain-mcp-adapters`. Fila, estados da cadeia, seletor e eventos continuam nossos. Arquivos: `docs/plano-de-implementacao/*`, `CLAUDE.md`, `AGENTS.md`, `log/`. Nenhum código alterado.

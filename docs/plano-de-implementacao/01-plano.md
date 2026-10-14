@@ -8,7 +8,7 @@ A especificação técnica da fase 1 está em [Especificação do backend](02-es
 
 ## Ponto de partida: o que já existe
 
-O **app** (front-end) já está pronto em `app/`: React 19 + Vite + TypeScript, rodando no navegador e como **programa de desktop** (Tauri v2, em `app/src-tauri`). Hoje tudo nele é **simulado** por um relógio (`app/src/state/projetos.ts`). O backend deste plano substitui a simulação por dados reais, e a simulação continua existindo como **modo demonstração** (sem internet e sem API, útil na FEBRACE).
+O **app** (front-end) já está pronto em `app/`: React 19 + Vite + TypeScript, rodando no navegador e como **programa de desktop** (Tauri v2, em `app/src-tauri`). Hoje tudo nele é **simulado** por um relógio (`app/src/state/projetos.ts`). O backend deste plano substitui a simulação por dados reais. **Não existe modo demonstração** (decisão de 2026-10-14): a simulação sai do app quando a camada `src/api/` entrar, e o app passa a mostrar só o que o backend manda. Para desenvolver e testar sem gastar com modelos, o backend tem um **modelo falso** (seção 8.5 da especificação).
 
 O que o app já mostra e o backend precisa alimentar:
 
@@ -94,7 +94,7 @@ Um modelo pequeno e rápido, o Sistema 1, lê todo pedido primeiro. Ele resolve 
 
 **As APIs são do usuário.** Ele conecta as que quiser (Groq, OpenAI, Anthropic, Google, OpenRouter, Ollama ou qualquer API compatível com a da OpenAI) e paga cada uma direto. O Sistema 1 decide o nível e as capacidades que o pedido precisa. Depois, um seletor escolhe entre os modelos conectados o melhor para aquele nível, pela prioridade do usuário: custo, velocidade ou qualidade. Se um provedor falhar, o seletor passa para o próximo. Os detalhes estão na seção 5 de Especificação do backend.
 
-**Sem API conectada**, o app funciona só no **modo demonstração** (a simulação de hoje). Pedidos reais exigem pelo menos uma API validada.
+**Sem API conectada**, o usuário não faz pedidos: o app leva para a tela de conectar a primeira API. Pedidos exigem pelo menos uma API validada.
 
 **Laya, a versão rápida do Sistema 1.** Na fase 1, a triagem é feita pelo modelo N1, e cada decisão é gravada como dado de treino (custa só uma linha no banco). Na fase 2, treinamos o Laya, um modelo aberto de decisão que responde em dezenas de milissegundos, e ele roda em modo sombra ao lado do N1. Na fase 3, o Laya passa a decidir quando está confiante, e o N1 fica com o resto e com as respostas em texto. O Laya é **opcional**: é um projeto pequeno, de um autor só, e a Sora funciona igual sem ele. Detalhes na seção 7 de Especificação do backend.
 
@@ -330,7 +330,6 @@ Backend em Python, com bibliotecas abertas. Os nomes dos modelos ficam fora do c
 ## Diferenciais da Sora
 
 - **Cadeia visível:** a pasta do projeto, o painel Trabalho e a Ilha mostram qual agente fez cada etapa, com qual modelo e a que custo. Isso funciona muito bem numa demonstração na FEBRACE.
-- **Funciona sem internet na demonstração:** o modo demonstração roda a mesma interface com a simulação, para o caso de a rede do evento falhar.
 - **No PC também:** o app de desktop deixa a Ilha no topo da tela, por cima de qualquer programa.
 - **Memória transparente:** o usuário vê, corrige e apaga o que a Sora lembra.
 - **Isolamento de verdade:** cada agente tem só as ferramentas e credenciais do seu papel.
@@ -368,12 +367,12 @@ Backend:
 
 App (o que muda no front, detalhado na seção 3 da especificação):
 
-- [ ] Camada `src/api/` (HTTP com token + SSE com `Last-Event-ID`) e um redutor de eventos; a simulação vira **modo demonstração** emitindo os mesmos eventos
-- [ ] Telas Entrar e Criar conta; onboarding "conecte sua primeira API" com a opção "ver demonstração"
+- [ ] Camada `src/api/` (HTTP com token + SSE com `Last-Event-ID`) e um redutor de eventos; a simulação por relógio (`state/projetos.ts`) sai do app
+- [ ] Telas Entrar e Criar conta; onboarding "conecte sua primeira API"
 - [ ] Configurações → Modelos de IA lendo e gravando no backend (chave nunca mais no `localStorage`), com prioridade custo/velocidade/qualidade e teto de gasto
 - [ ] Medidor de **Uso do mês** (US$ por provedor) no lugar dos créditos
 - [ ] Cartões de pergunta, chip de roteamento, modelo e custo por etapa, botão Cancelar a cadeia
-- [ ] "Aprovar e publicar" vira "Aprovar"; ferramentas simuladas (Figma, Canva, Instagram, Notion) só no modo demonstração
+- [ ] "Aprovar e publicar" vira "Aprovar"; ferramentas simuladas (Figma, Canva, Instagram, Notion) saem do app até os conectores da fase 3
 - [ ] Limite de 5 agentes individuais e "Salvar como agente" na pasta do projeto
 - [ ] App de desktop: guardar o token de renovação no cofre do sistema
 

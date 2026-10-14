@@ -25,7 +25,7 @@ _Atualizado em 2026-10-14 — **decisão: agentes em LangChain** (plano 2.1; vej
 
 ## Plano do backend — versão 2 (2026-10-11, noite)
 
-- `docs/plano-de-implementacao/` tem o plano revisado para combinar com o app (agora versão 2.1, com os agentes em LangChain; o que mudou: README da pasta). Próximo passo quando o Heitor disser "sim": fase 1 do backend + camada `src/api` e modo demonstração no app (seção 3 da especificação).
+- `docs/plano-de-implementacao/` tem o plano revisado para combinar com o app (agora versão 2.1, com os agentes em LangChain; o que mudou: README da pasta). Próximo passo quando o Heitor disser "sim": fase 1 do backend + camada `src/api` no app (seção 3 da especificação). **2026-10-14: o modo demonstração saiu do plano (versão 2.2) e o backend começou em `C:\dev\sora`.**
 
 ## Sora desktop + CHATS em pastas (2026-10-11, noite)
 

@@ -410,10 +410,11 @@ data: {"etapa_id": "7c1e...", "status": "concluida", "progresso": 100, "modelo":
 
 O app (`app/`) já existe e hoje simula tudo com um relógio em `app/src/state/projetos.ts`. Esta seção diz como ele passa a usar o backend sem refazer as telas.
 
-### 3.1 Dois modos no mesmo app
+### 3.1 Um modo só: o real
 
-- **Modo real:** o estado vem da API e dos eventos SSE.
-- **Modo demonstração:** a simulação de hoje continua, sem conta, sem API e sem internet (para a FEBRACE, se a rede cair). Ela passa a **emitir os mesmos eventos** do SSE, então as telas só conhecem eventos. Escolha por `VITE_MODO=demo` no build e pelo botão "Ver demonstração" no onboarding.
+- O estado vem da API e dos eventos SSE. As telas só conhecem eventos.
+- **Sem modo demonstração** (decisão de 2026-10-14). A simulação por relógio (`state/projetos.ts`) e os dados de exemplo saem do app quando a camada `src/api/` entrar.
+- Para desenvolver sem gastar com modelos, o backend roda com o **modelo falso** (`SORA_MODELO_FALSO=1`, seção 8.5), que responde rápido e de graça seguindo o mesmo fluxo de eventos.
 
 Peças novas no app:
 
@@ -422,7 +423,6 @@ Peças novas no app:
 | `src/api/cliente.ts` | `fetch` com o token de acesso, renovação automática no 401 e erros padronizados |
 | `src/api/eventos.ts` | SSE com `@microsoft/fetch-event-source` (manda o `Authorization`), reconexão com `Last-Event-ID` |
 | `src/state/aplicarEvento.ts` | Redutor: `(estado, evento) → estado`. É o único lugar que entende os eventos da seção 2 |
-| `src/state/demo.ts` | A simulação atual, reescrita para produzir eventos |
 
 ### 3.2 Nomes dos dois lados
 
@@ -438,16 +438,16 @@ Peças novas no app:
 | `aprovadoEm` | `conversas.aprovada_versao` | |
 | `Status` do agente (`aguardando, trabalhando, concluido, erro`) | derivado de `etapas.status` | `executando` → trabalhando; `concluida` → concluido; `falhou` → erro |
 | `state/modelos.ts` (chaves no `localStorage`) | `provedores` + `modelos_disponiveis` | A chave sai do navegador |
-| créditos (`state/creditos.ts`) | `GET /v1/uso` | Vira "Uso do mês" (US$ por provedor). Créditos só no modo demonstração |
+| créditos (`state/creditos.ts`) | `GET /v1/uso` | Vira "Uso do mês" (US$ por provedor). Créditos saem do app |
 
 ### 3.3 O que muda nas telas
 
-- **Onboarding:** Entrar / Criar conta → "Conecte sua primeira API" (com "Ver demonstração"). Sem provedor validado, pedidos reais recebem 412 e o app leva para essa tela.
+- **Onboarding:** Entrar / Criar conta → "Conecte sua primeira API" . Sem provedor validado, pedidos reais recebem 412 e o app leva para essa tela.
 - **Novo chat:** o seletor **Equipe | Agente independente** continua. Equipe → `POST /v1/conversas`. Agente independente → `POST /v1/agentes {descricao}` e depois a conversa com ele.
 - **Barra lateral:** a pasta do projeto lista os agentes de `agente.criado`; o resumo ("3 agentes · 1 trabalhando") vem de `etapa.atualizada`.
 - **Chat do projeto:** cartões de pergunta (`pergunta`), chip do roteamento (`roteamento`), botão Cancelar (enquanto a cadeia roda), sugestões ao fim.
 - **Página de um especialista** (`/chat/:id`): mostra o painel Trabalho dele; o campo de mensagem manda `para_agente_id` (correção de rota; quem responde é a Sora). Botão "Salvar como agente".
-- **Painel Trabalho:** passa a ler `passos`. Os nomes de ferramentas simulados (Figma, Canva, Instagram, Notion) ficam só no modo demonstração: no modo real aparecem as ferramentas de verdade (Busca na web, Ler página, Escrever arquivo, Gerar imagem).
+- **Painel Trabalho:** passa a ler `passos`. Os nomes de ferramentas simulados (Figma, Canva, Instagram, Notion) saem do app até a fase 3: aparecem só as ferramentas de verdade (Busca na web, Ler página, Escrever arquivo, Gerar imagem).
 - **Revisão:** lê `GET /v1/conversas/{id}/entregas`. O botão "Aprovar e publicar" vira **Aprovar** até existirem conectores (fase 3).
 - **Ilha da Sora:** lê o canal `GET /v1/eventos`. Nada muda na aparência.
 - **Configurações → Modelos de IA:** `GET/POST/PATCH/DELETE /v1/provedores`, `GET/PATCH /v1/modelos`, prioridade (`PATCH /v1/preferencias`) e teto de gasto. A tela mostra só os 4 últimos caracteres da chave.
@@ -604,7 +604,7 @@ Regras do seletor:
 - **Verificador e verificação de memória:** preferem outro provedor, senão outro modelo. Se o usuário só tiver um modelo, rodam nele e a linha do tempo avisa.
 - **Conversa privada:** quando o usuário marca uma conversa como privada, só entram modelos locais (Ollama).
 - **Falhas:** em limite de taxa (429), erro 5xx ou prazo estourado, o seletor passa para o próximo da lista. Um provedor com 3 falhas seguidas fica 5 minutos em pausa.
-- **Nenhuma API conectada:** não dá para fazer pedidos reais. O cadastro termina na tela de conectar a primeira API (com a opção "Ver demonstração", que abre o modo demonstração do app, sem backend), e a API recusa pedidos (erro 412) de quem não tem nenhum provedor validado.
+- **Nenhuma API conectada:** não dá para fazer pedidos reais. O cadastro termina na tela de conectar a primeira API, e a API recusa pedidos (erro 412) de quem não tem nenhum provedor validado.
 - **Imagem:** o Designer só entra no plano se houver um modelo ativo com a capacidade `imagem`; o seletor escolhe entre eles pela prioridade do usuário.
 
 Arquivo `politica.yaml`. Os valores de limite são iniciais e devem ser ajustados com os testes:
@@ -1112,7 +1112,7 @@ Divisão para a equipe de 3 pessoas:
 | --- | --- | --- |
 | 1 | `api`, `core`, `modelos`, `eventos`, `infra` | Contas, rotas, banco, canais SSE e deploy |
 | 2 | `llm`, `seletor`, `sistema1`, `revisor` + `app/src/api` e Configurações | Conexão das APIs, seletor, triagem e o app lendo provedores e modelos do backend |
-| 3 | `orquestrador`, `workers`, `agentes`, `ferramentas`, `busca` + `app/src/state/aplicarEvento.ts` | Cadeias de ponta a ponta, ferramentas, busca e o app lendo os eventos (modo real e demonstração) |
+| 3 | `orquestrador`, `workers`, `agentes`, `ferramentas`, `busca` + `app/src/state/aplicarEvento.ts` | Cadeias de ponta a ponta, ferramentas, busca e o app lendo os eventos |
 
 Os prompts e o conjunto de 100 pedidos do teste ficam com a equipe toda.
 ### 8.5 Testes
@@ -1126,13 +1126,15 @@ Os prompts e o conjunto de 100 pedidos do teste ficam com a equipe toda.
 | Ponta a ponta | Um pedido do início ao fim | `docker compose` completo, um provedor falso compatível com a API da OpenAI e um cliente que lê o canal SSE | A cada entrada na `main` |
 | Avaliação | Qualidade das decisões e das respostas | Os 100 pedidos do Sistema 1 e as 20 tarefas de cadeia, com modelos reais e a chave da equipe | Uma vez por semana e a cada mudança de prompt ou de catálogo |
 
+**Modelo falso para desenvolver:** com `SORA_MODELO_FALSO=1`, o `llm/` troca todos os modelos por um `GenericFakeChatModel` com respostas prontas (triagem, plano, entregas e veredito de exemplo). O backend inteiro roda no PC sem chave e sem custo, emitindo os mesmos eventos do modo real. Nunca fica ligado em produção.
+
 Casos que não podem faltar:
 
 - **Seletor:** nenhum modelo no nível pedido, provedor em pausa, teto de gasto estourado, conversa privada só com modelos locais, verificador num provedor diferente do executor e usuário com um modelo só.
 - **Revisor:** 30 ações rotuladas, incluindo comandos disfarçados (base64, nome trocado, divididos em partes). Meta: nenhuma ação externa ou destrutiva passa sem aprovação.
 - **Cadeia, ponta a ponta:** pedido aprovado de primeira; pedido reprovado e refeito um nível acima; cancelamento no meio; aprovação que expira; orçamento estourado; worker derrubado no meio de uma etapa e retomado sem pagar de novo.
 - **Eventos:** o app desconecta e reconecta com `Last-Event-ID` sem perder nem repetir eventos.
-- **Contrato com o app:** os exemplos de cada evento da seção 2 ficam em `backend/tests/contrato/*.json`. O backend valida que emite exatamente esse formato, e o app (Vitest) roda o `aplicarEvento` com os mesmos arquivos. O modo demonstração também é testado contra eles: se um lado mudar o formato, o teste do outro quebra.
+- **Contrato com o app:** os exemplos de cada evento da seção 2 ficam em `backend/tests/contrato/*.json`. O backend valida que emite exatamente esse formato, e o app (Vitest) roda o `aplicarEvento` com os mesmos arquivos. Se um lado mudar o formato, o teste do outro quebra.
 - **Desktop:** login com `X-Sora-Cliente: desktop` devolve o token de renovação no corpo; renovar com token já usado encerra a sessão; origem `http://tauri.localhost` passa no CORS e uma origem qualquer não.
 - **Revisão:** Pedir ajuste gera `versao + 1` só para o especialista certo; Aprovar grava `aprovada_versao`; a comparação devolve as duas versões.
 - **Limite de agentes:** o 6º agente individual (criar ou promover) recebe 409.

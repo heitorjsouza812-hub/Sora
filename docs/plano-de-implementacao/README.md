@@ -1,6 +1,6 @@
 # Sora: plano de implementação (versão 2)
 
-Plano do backend da Sora e de como ele se liga ao app que já existe em `app/`. **Versão atual: 2.1** (agentes em LangChain). A versão 1 foi exportada do documento "Sora: plano de implementação" em 2026-10-11. A **versão 2** (2026-10-11, noite) corrige o que não fazia sentido diante do que já está no repositório.
+Plano do backend da Sora e de como ele se liga ao app que já existe em `app/`. **Versão atual: 2.2** (2.1: agentes em LangChain; 2.2, de 2026-10-14: **sem modo demonstração**, veja abaixo). A versão 1 foi exportada do documento "Sora: plano de implementação" em 2026-10-11. A **versão 2** (2026-10-11, noite) corrige o que não fazia sentido diante do que já está no repositório.
 
 | Parte | Arquivo |
 |---|---|
@@ -21,6 +21,12 @@ Diagramas: [fluxo de um pedido](img/fluxo-de-um-pedido.png) · [estados de uma c
     - Sem LangSmith e sem Deep Agents na fase 1.
     - Na fase 3, os conectores MCP entram pelo `langchain-mcp-adapters`: as ferramentas dos servidores MCP viram `@tool` do agente, sem cliente MCP próprio.
 28. Atualizados para combinar: Stack (Agentes, Modelos e Conectores), Arquitetura, Peças de engenharia e as fases 1 e 3 em `01-plano.md`; seções 4, 6.1, 8.4 e 8.5 da especificação.
+
+## O que mudou na versão 2.2 (2026-10-14)
+
+- **O modo demonstração saiu**, por decisão do Heitor. O app terá um modo só, o real: a simulação por relógio (`app/src/state/projetos.ts`), os créditos e as ferramentas simuladas (Figma, Canva, Instagram, Notion) saem do app quando a camada `src/api/` entrar. O onboarding não tem mais "Ver demonstração".
+- Para desenvolver e testar sem chave e sem custo, o backend ganha o **modelo falso** (`SORA_MODELO_FALSO=1`, especificação 8.5).
+- Os itens abaixo que citam o modo demonstração (7, 17, 19 e 25) valem sem essa parte.
 
 ## O que mudou da versão 1 para a 2
 
