@@ -319,7 +319,7 @@ Backend em Python, com bibliotecas abertas. Os nomes dos modelos ficam fora do c
 | Busca semântica | pgvector no PostgreSQL | Buscar em memórias e conversas antigas | 2 |
 | Idioma | lingua-py | Detectar o idioma do usuário | 2 |
 | Decisões rápidas | Laya (laya-multilingual, Apache 2.0), opcional | Triagem do Sistema 1, checagem de injeção e filtro de memória | 2–3 |
-| Conectores | SDK MCP oficial em Python | Ferramentas externas e skills | 3 |
+| Conectores | `langchain-mcp-adapters` (MCP dentro do LangChain) | Ferramentas externas e skills: cada ferramenta de um servidor MCP vira um `@tool` do agente | 3 |
 | Parser de comandos | py-tree-sitter com a gramática de bash | Revisar comandos de terminal antes de rodar | 3 |
 | Navegador | Playwright, num container Docker com Xvfb e noVNC | Subagente de navegador e tela vista ao vivo | 3–4 |
 | Monitoramento | OpenTelemetry e Langfuse | Rastrear cada chamada de modelo, custo e erro | 4 |
@@ -393,7 +393,7 @@ App (o que muda no front, detalhado na seção 3 da especificação):
 
 - [ ] Revisor de ações com cartão de aprovação que expira
 - [ ] Permissões separadas por especialista e por agente individual
-- [ ] Conectores MCP e skills no formato SKILL.md (é aqui que Figma, Canva, Notion e Instagram ficam reais e "Aprovar e publicar" volta)
+- [ ] Conectores MCP pelo `langchain-mcp-adapters` (especificação 6.1) e skills no formato SKILL.md (é aqui que Figma, Canva, Notion e Instagram ficam reais e "Aprovar e publicar" volta)
 - [ ] Analista de dados e Executor de automações
 - [ ] Rotinas por horário e por evento, caladas quando não há novidade
 - [ ] Subagente de navegador rápido, escada de tentativas, passagem segura e detector de bloqueio

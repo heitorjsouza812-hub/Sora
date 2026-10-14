@@ -735,6 +735,7 @@ O que fica com o LangChain e o que continua sendo código nosso:
 | A saída estruturada do Sistema 1, do planejador e do Verificador (`with_structured_output` ou `response_format`) | O seletor de modelo e o catálogo (seção 5) |
 | Pausar e retomar uma etapa, com o checkpointer no PostgreSQL | O orçamento de tokens no Redis, o cancelamento, os eventos SSE e as permissões por papel |
 | O middleware das peças de engenharia (tabela abaixo) | A cifra das chaves e os prompts em arquivo |
+| Na fase 3, as ferramentas dos conectores MCP, pelo `langchain-mcp-adapters` | Quais servidores e ferramentas cada papel pode usar, e o revisor de ações antes de cada uma |
 
 A Sora não usa os subagentes prontos do LangChain (Deep Agents). A coordenação continua sendo a cadeia desta seção, para manter os limites (5 especialistas, 3 rodadas, 10 passos) e a regra de que só a Sora fala com o usuário.
 
@@ -764,6 +765,8 @@ A Sora não usa os subagentes prontos do LangChain (Deep Agents). A coordenaçã
 | Lembretes automáticos, detector de loop, orçamento de tokens, cancelamento, evento `passo`, cerca de dado não confiável, saída grande em arquivo, prazo por ferramenta | Middleware nosso em `agentes/middleware/`, um arquivo por peça, usando os ganchos do LangChain (antes e depois do modelo e em volta de cada ferramenta) |
 
 **Versões:** fixar no `uv.lock`. Em 2026-10-14, as versões no PyPI eram `langchain` 1.4.6, `langchain-core` 1.6.10, `langgraph` 1.2.15, `langgraph-checkpoint-postgres` 3.1.3 e `langchain-litellm` 0.11.1. O checkpointer usa `psycopg` 3, então o backend tem dois drivers do PostgreSQL: `asyncpg` (SQLAlchemy) e `psycopg` (checkpointer).
+
+**Conectores MCP (fase 3):** entram pelo pacote `langchain-mcp-adapters` (0.3.2 em 2026-10-14). O `MultiServerMCPClient` se liga aos servidores MCP que o usuário conectou, e o `get_tools()` devolve as ferramentas deles já como ferramentas do LangChain, prontas para o `create_agent`. Assim a Sora não precisa de um cliente MCP próprio. Continuam sendo nossos: a escolha das ferramentas por papel, a cerca de dado não confiável nos resultados e o revisor de ações antes de cada chamada. Observação: o LangChain 1.4 trouxe o `langchain.mcp` (ainda em beta) para substituir esse pacote. Na fase 3, conferir se ele saiu do beta e usar o que estiver estável.
 
 **Sem LangSmith na fase 1.** O monitoramento continua sendo o da fase 4 (OpenTelemetry e Langfuse, que tem integração com o LangChain).
 

@@ -19,7 +19,8 @@ Diagramas: [fluxo de um pedido](img/fluxo-de-um-pedido.png) · [estados de uma c
     - As peças de engenharia viram middleware: os prontos do LangChain (troca de modelo, limites de chamadas, erro de ferramenta, resumo) e os nossos (lembretes, loop, orçamento, cancelamento, passos, cerca).
     - Continuam sendo código nosso: a fila ARQ, os estados da cadeia no banco, o seletor, o orçamento e os eventos SSE.
     - Sem LangSmith e sem Deep Agents na fase 1.
-28. Atualizados para combinar: Stack, Arquitetura, Peças de engenharia e fase 1 em `01-plano.md`; seções 4, 6.1, 8.4 e 8.5 da especificação.
+    - Na fase 3, os conectores MCP entram pelo `langchain-mcp-adapters`: as ferramentas dos servidores MCP viram `@tool` do agente, sem cliente MCP próprio.
+28. Atualizados para combinar: Stack (Agentes, Modelos e Conectores), Arquitetura, Peças de engenharia e as fases 1 e 3 em `01-plano.md`; seções 4, 6.1, 8.4 e 8.5 da especificação.
 
 ## O que mudou da versão 1 para a 2
 
