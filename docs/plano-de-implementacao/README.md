@@ -25,7 +25,7 @@ Diagramas: [fluxo de um pedido](img/fluxo-de-um-pedido.png) · [estados de uma c
 ## O que mudou na versão 2.2 (2026-10-14)
 
 - **O modo demonstração saiu**, por decisão do Heitor. O app terá um modo só, o real: a simulação por relógio (`app/src/state/projetos.ts`), os créditos e as ferramentas simuladas (Figma, Canva, Instagram, Notion) saem do app quando a camada `src/api/` entrar. O onboarding não tem mais "Ver demonstração".
-- Para desenvolver e testar sem chave e sem custo, o backend ganha o **modelo falso** (`SORA_MODELO_FALSO=1`, especificação 8.5).
+- **Também não existe modelo falso no backend:** ele sempre usa os modelos reais das APIs do usuário. Respostas simuladas ficam só dentro dos testes automáticos (`backend/tests/`).
 - Os itens abaixo que citam o modo demonstração (7, 17, 19 e 25) valem sem essa parte.
 
 ## O que mudou da versão 1 para a 2
