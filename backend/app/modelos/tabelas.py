@@ -79,6 +79,10 @@ class Usuario(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+# Login e cadastro procuram por lower(email): sem este índice a consulta varre a tabela.
+Index("ix_usuarios_email_minusculo", func.lower(Usuario.email), unique=True)
+
+
 class Agente(Base):
     __tablename__ = "agentes"
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -96,7 +100,9 @@ class Agente(Base):
     ferramentas: Mapped[list[str]] = mapped_column(
         ARRAY(Text), default=list, server_default=text("'{}'")
     )
-    cadeia_id: Mapped[UUID | None] = mapped_column(ForeignKey("cadeias.id"))
+    cadeia_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("cadeias.id", use_alter=True, name="agentes_cadeia_id_fkey")
+    )
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     apagado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -145,6 +151,10 @@ class Roteamento(Base):
     confianca: Mapped[float] = mapped_column(Float)
     escalou: Mapped[bool] = mapped_column(default=False, server_default="false")
     latencia_ms: Mapped[int]
+    rotulo: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    fonte_rotulo: Mapped[str | None] = mapped_column(Text)
+    laya_saida: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    laya_latencia_ms: Mapped[int | None]
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -232,7 +242,7 @@ class Entrega(Base):
     tipo: Mapped[TipoEntrega] = mapped_column(enum_bd(TipoEntrega, "tipo_entrega"))
     titulo: Mapped[str] = mapped_column(Text)
     resumo: Mapped[str] = mapped_column(Text)
-    conteudo: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    conteudo: Mapped[dict[str, Any] | list[Any] | str] = mapped_column(JSONB)
     criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -388,6 +398,10 @@ class Sessao(Base):
     __tablename__ = "sessoes"
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    __table_args__ = (
+        Index("ix_sessoes_anterior_hash", "anterior_hash"),
+        Index("ix_sessoes_usuario_id", "usuario_id"),
+    )
     token_hash: Mapped[str] = mapped_column(Text, unique=True)
     anterior_hash: Mapped[str | None] = mapped_column(Text)
     cliente: Mapped[str] = mapped_column(Text, default="web", server_default="web")

@@ -136,18 +136,25 @@ def _nivel_do_papel(regra: PoliticaPapel, dificuldade: int, politica: Politica) 
 
 
 def _afastar_da_referencia(
-    modelos: list[ModeloCandidato], referencia: ModeloCandidato
+    modelos: list[ModeloCandidato],
+    referencia: ModeloCandidato,
+    acima: Sequence[ModeloCandidato] = (),
 ) -> list[ModeloCandidato]:
-    """Verificador e verificação de memória: outro provedor, senão outro modelo, senão o mesmo."""
-    outro_provedor = [m for m in modelos if m.provedor.id != referencia.provedor.id]
+    """Verificador e verificação de memória (§5): outro provedor, senão outro modelo, senão o mesmo.
+
+    Procura primeiro no nível escolhido (``modelos``) e, se não achar, nos níveis acima
+    (``acima``, já ordenados): um N3 de outro provedor serve melhor que o mesmo N2.
+    """
+    todos = [*modelos, *acima]
+    outro_provedor = [m for m in todos if m.provedor.id != referencia.provedor.id]
     outro_modelo = [
         m
-        for m in modelos
+        for m in todos
         if m.provedor.id == referencia.provedor.id and m.modelo != referencia.modelo
     ]
     mesmo = [
         m
-        for m in modelos
+        for m in todos
         if m.provedor.id == referencia.provedor.id and m.modelo == referencia.modelo
     ]
     return outro_provedor + outro_modelo + mesmo
@@ -194,6 +201,7 @@ def escolher_modelos(
 
     nivel = _nivel_do_papel(regra, dificuldade, politica)
     sem_escolha_explicita = [m for m in elegiveis if not m.somente_se_escolhido]
+    acima: list[ModeloCandidato] = []  # níveis acima do escolhido (só para o verificador)
 
     if nivel is None:
         # Papel sem nível (imagem): vale qualquer modelo com a capacidade exigida.
@@ -213,6 +221,12 @@ def escolher_modelos(
                     )
                 )
             lista = ordenar(do_nivel, prioridade, regra.preferir, regra.preferir_modelo)
+            acima = ordenar(
+                [m for m in na_escada if m.nivel in niveis_a_partir_de(candidato)[1:]],
+                prioridade,
+                regra.preferir,
+                regra.preferir_modelo,
+            )
             break
         else:
             if na_escada:
@@ -243,8 +257,18 @@ def escolher_modelos(
     if regra.diferente_de is not None:
         referencia = papel_irmao
     if referencia is not None and lista:
-        lista = _afastar_da_referencia(lista, referencia)
+        lista = _afastar_da_referencia(lista, referencia, acima)
         primeiro = lista[0]
+        if primeiro in acima:
+            avisos.append(
+                AvisoSeletor(
+                    tipo=TipoAviso.NIVEL_SUBIU,
+                    detalhe=(
+                        "Sem outro modelo no nível pedido; "
+                        f"a verificação sobe para o {primeiro.nivel}."
+                    ),
+                )
+            )
         if primeiro.provedor.id == referencia.provedor.id:
             igual = primeiro.modelo == referencia.modelo
             avisos.append(
@@ -255,7 +279,7 @@ def escolher_modelos(
                         else TipoAviso.VERIFICADOR_NO_MESMO_PROVEDOR
                     ),
                     detalhe=(
-                        "Só há um modelo disponível; a verificação roda nele."
+                        "Não há outro modelo disponível; a verificação roda no mesmo."
                         if igual
                         else "Só há modelos do mesmo provedor; a verificação usa outro modelo."
                     ),

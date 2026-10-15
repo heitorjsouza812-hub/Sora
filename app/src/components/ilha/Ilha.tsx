@@ -313,7 +313,7 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
     window.clearTimeout(timerAbrir.current);
     timerAbrir.current = window.setTimeout(() => {
       porHover.current = true;
-      abrirIlha(vistaParaAbrir, ui.agenteId ?? undefined);
+      abrirIlha(vistaParaAbrir, ui.agenteId ?? undefined, { porHover: true });
     }, HOVER_ABRIR);
   };
   const sairMouse = () => {

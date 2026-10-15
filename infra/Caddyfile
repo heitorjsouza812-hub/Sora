@@ -1,7 +1,31 @@
 {$DOMINIO:localhost} {
-    encode zstd gzip
+    header {
+        -Server
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), geolocation=(), payment=(), usb=()"
+        X-Frame-Options "DENY"
+        Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: wss:; media-src 'self' blob:; worker-src 'self' blob:"
+    }
+
+    # HSTS apenas quando a requisicao realmente chega por HTTPS e nao usa host local.
+    @https_real {
+        protocol https
+        not host localhost 127.0.0.1 ::1
+    }
+    header @https_real Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # SSE (Content-Type: text/event-stream): sem encode nem buffer; cada evento sai na hora.
+    # No Caddy, `*` no meio do caminho não atravessa `/`: por isso a rota da conversa é explícita.
+    @eventos path /v1/eventos /v1/eventos/* /v1/conversas/*/eventos /v1/conversas/*/eventos/*
+    handle @eventos {
+        reverse_proxy api:8000 {
+            flush_interval -1
+        }
+    }
 
     handle /v1/* {
+        encode zstd gzip
         reverse_proxy api:8000
     }
 
@@ -10,6 +34,7 @@
     }
 
     handle {
+        encode zstd gzip
         root * /srv/app
         try_files {path} /index.html
         file_server

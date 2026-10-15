@@ -32,6 +32,10 @@ CACHE_SEGUNDOS = 24 * 60 * 60
 PRAZO_SEGUNDOS = 15
 SEARXNG_PADRAO = "http://localhost:8888"
 
+SO_DESENVOLVIMENTO: frozenset[str] = frozenset({"falso", "searxng"})
+"""Provedores que não sobem em produção: o ``falso`` inventa fontes e o SearXNG é só para
+desenvolvimento local (§8.1)."""
+
 
 class ResultadoBusca(BaseModel):
     titulo: str
@@ -55,6 +59,25 @@ class LimiteDeBusca(ErroBusca):
     """Passou do limite de buscas da cadeia ou do usuário no dia."""
 
 
+class BuscaProibidaEmProducao(ErroBusca):
+    """``BUSCA_PROVEDOR`` de desenvolvimento (``falso``, ``searxng``) fora de dev/teste."""
+
+
+def verificar_busca_permitida(nome: str, ambiente: str) -> None:
+    """Recusa ``falso`` e ``searxng`` em produção (a mesma trava do modelo falso).
+
+    Falha fechada: qualquer ``AMBIENTE`` que não seja ``desenvolvimento`` ou ``teste`` conta
+    como produção. O worker chama na subida e ``obter_provedor`` chama de novo.
+    """
+    from app.core.config import ambiente_local
+
+    if nome.strip().lower() in SO_DESENVOLVIMENTO and not ambiente_local(ambiente):
+        raise BuscaProibidaEmProducao(
+            f"BUSCA_PROVEDOR={nome} é só para desenvolvimento. "
+            "Em produção use tavily ou brave e reinicie."
+        )
+
+
 def dominio(url: str) -> str:
     """Host da URL sem ``www.``."""
     host = urlsplit(url).hostname or ""
@@ -67,8 +90,17 @@ def obter_provedor(
     chave: str | None = None,
     base_url: str | None = None,
     cliente: httpx.AsyncClient | None = None,
+    ambiente: str | None = None,
 ) -> ProvedorBusca:
-    """Devolve o provedor configurado (``BUSCA_PROVEDOR`` e ``BUSCA_CHAVE``)."""
+    """Devolve o provedor configurado (``BUSCA_PROVEDOR`` e ``BUSCA_CHAVE``).
+
+    ``ambiente`` vem de ``AMBIENTE`` na configuração quando não é passado.
+    """
+    if ambiente is None:
+        from app.core.config import obter_configuracao
+
+        ambiente = obter_configuracao().ambiente
+    verificar_busca_permitida(nome, ambiente)
     if nome == "tavily":
         from app.busca.tavily import BuscaTavily
 

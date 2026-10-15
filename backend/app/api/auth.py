@@ -21,7 +21,9 @@ roteador = APIRouter(prefix="/auth", tags=["auth"])
 COOKIE_RENOVACAO = "sora_renovacao"
 CAMINHO_COOKIE = "/v1/auth"
 
-Sessao = Annotated[AsyncSession, Depends(obter_sessao)]
+# scope="function": o commit da sessão acontece ANTES de a resposta ser enviada. Com o escopo de
+# requisição, o cliente recebia 201/200 e o commit vinha depois (e podia falhar).
+Sessao = Annotated[AsyncSession, Depends(obter_sessao, scope="function")]
 RedisDep = Annotated[Redis, Depends(obter_redis)]
 ClienteCabecalho = Annotated[str | None, Header(alias=contas.CABECALHO_CLIENTE)]
 

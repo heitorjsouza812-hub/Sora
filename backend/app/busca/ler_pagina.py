@@ -21,6 +21,7 @@ import hashlib
 import ipaddress
 import socket
 from collections.abc import Awaitable, Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,12 @@ if TYPE_CHECKING:
 PRAZO_SEGUNDOS = 10
 MAX_REDIRECIONAMENTOS = 5
 MAX_BYTES = 5 * 1024 * 1024
+MAX_BYTES_HTML = 2 * 1024 * 1024
+"""O trafilatura gasta ~8 s por MB de HTML montado para isso; acima disto, recusa."""
+MAX_PAGINAS_PDF = 100
+PRAZO_EXTRACAO_SEGUNDOS = 15
+"""A extração roda numa thread (fora do laço de eventos) e tem prazo próprio (API-05)."""
+EXTRACOES_SIMULTANEAS = 2
 CACHE_SEGUNDOS = 24 * 60 * 60
 AGENTE_USUARIO = "SoraBot/0.1 (+https://github.com/heitorjsouza812-hub/Sora)"
 
@@ -198,14 +205,20 @@ class BackendSeguro(httpcore.AsyncNetworkBackend):
         await self._interno.sleep(seconds)
 
 
-def criar_cliente(resolver: Resolvedor = resolver_dns) -> httpx.AsyncClient:
-    """Cliente httpx da leitura: sem proxy do ambiente, sem seguir redirecionamento
-    sozinho (cada ``Location`` é conferido aqui) e com o ``BackendSeguro``."""
+def transporte_seguro(resolver: Resolvedor = resolver_dns) -> httpx.AsyncHTTPTransport:
+    """Transporte httpx que só conecta em IP público (``BackendSeguro``). Também usado no
+    teste de chave dos provedores de modelos (``app.llm.provedores``)."""
     transporte = httpx.AsyncHTTPTransport(retries=0)
     # O httpx não expõe a camada de rede; trocamos a do pool antes da primeira conexão.
     transporte._pool._network_backend = BackendSeguro(resolver)
+    return transporte
+
+
+def criar_cliente(resolver: Resolvedor = resolver_dns) -> httpx.AsyncClient:
+    """Cliente httpx da leitura: sem proxy do ambiente, sem seguir redirecionamento
+    sozinho (cada ``Location`` é conferido aqui) e com o ``BackendSeguro``."""
     return httpx.AsyncClient(
-        transport=transporte,
+        transport=transporte_seguro(resolver),
         follow_redirects=False,
         trust_env=False,
         timeout=httpx.Timeout(PRAZO_SEGUNDOS),
@@ -281,7 +294,7 @@ async def ler_pagina(
         if proprio:
             await cliente.aclose()
 
-    titulo, texto = extrair_texto(corpo, tipo, str(final))
+    titulo, texto = await extrair_texto_sem_travar(corpo, tipo, str(final))
     pagina = PaginaLida(url=url, url_final=str(final), titulo=titulo, texto=texto, tipo=tipo)
     if redis is not None:
         await redis.set(chave_cache(url), pagina.model_dump_json(), ex=CACHE_SEGUNDOS)
@@ -290,9 +303,34 @@ async def ler_pagina(
 
 # ---------- extração ----------
 
+_EXECUTOR_EXTRACAO = ThreadPoolExecutor(
+    max_workers=EXTRACOES_SIMULTANEAS, thread_name_prefix="extracao"
+)
+"""Threads só da extração: uma página que demore não ocupa o executor padrão do asyncio, e
+no máximo ``EXTRACOES_SIMULTANEAS`` extrações gastam CPU ao mesmo tempo."""
+
+
+async def extrair_texto_sem_travar(
+    conteudo: bytes, tipo: str, url: str, *, prazo: float = PRAZO_EXTRACAO_SEGUNDOS
+) -> tuple[str | None, str]:
+    """``extrair_texto`` numa thread, com prazo: o laço de eventos do worker segue livre.
+
+    No prazo estourado a thread termina sozinha (Python não interrompe threads), mas o
+    resultado é descartado e a ferramenta devolve erro.
+    """
+    laco = asyncio.get_running_loop()
+    tarefa = laco.run_in_executor(_EXECUTOR_EXTRACAO, extrair_texto, conteudo, tipo, url)
+    try:
+        return await asyncio.wait_for(tarefa, prazo)
+    except TimeoutError as erro:
+        raise ErroLeitura("A página demorou demais para ser lida.") from erro
+
 
 def _extrair_html(conteudo: bytes, url: str) -> tuple[str | None, str]:
     import trafilatura
+
+    if len(conteudo) > MAX_BYTES_HTML:
+        raise ErroLeitura("Página HTML grande demais para ler (mais de 2 MB).")
 
     documento = trafilatura.bare_extraction(conteudo, url=url, with_metadata=True)
     titulo = getattr(documento, "title", None) if documento is not None else None
@@ -306,6 +344,8 @@ def _extrair_pdf(conteudo: bytes) -> tuple[str | None, str]:
 
     try:
         leitor = PdfReader(BytesIO(conteudo))
+        if len(leitor.pages) > MAX_PAGINAS_PDF:
+            raise ErroLeitura(f"PDF com mais de {MAX_PAGINAS_PDF} páginas.")
         paginas = [(pagina.extract_text() or "").strip() for pagina in leitor.pages]
         titulo = leitor.metadata.title if leitor.metadata else None
     except (PdfReadError, ValueError, KeyError) as erro:

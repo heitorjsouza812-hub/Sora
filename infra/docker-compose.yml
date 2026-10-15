@@ -11,10 +11,18 @@ x-backend: &backend
     redis:
       condition: service_healthy
   restart: unless-stopped
+  networks: [interna]
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
 
 services:
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
     ports:
       - "80:80"
       - "443:443"
@@ -28,21 +36,24 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    networks: [interna]
 
   api:
     <<: *backend
-    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: >
+      uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --proxy-headers --forwarded-allow-ips=172.28.0.0/16
     volumes:
       - anexos:/srv/sora/arquivos
 
   worker:
     <<: *backend
-    command: uv run arq workers.configuracao.WorkerSettings
+    command: uv run --no-sync arq workers.configuracao.WorkerSettings
     volumes:
       - anexos:/srv/sora/arquivos
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.1-pg16@sha256:33198da2828a14c30348d2ccb4750833d5ed9a44c88d840a0e523d7417120337
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-sora}
       POSTGRES_USER: ${POSTGRES_USER:-sora}
@@ -55,9 +66,10 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    networks: [interna]
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.7-alpine@sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -67,6 +79,13 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    networks: [interna]
+
+networks:
+  interna:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
 
 volumes:
   anexos:

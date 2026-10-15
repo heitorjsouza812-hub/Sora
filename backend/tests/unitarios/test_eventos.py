@@ -17,14 +17,17 @@ from pydantic import BaseModel
 
 from app.eventos.sse import gerar_sse, mensagem_ping, mensagem_sse
 from app.eventos.streams import (
+    CODIGO_RECARREGAR,
     RETENCAO_SEGUNDOS,
     EventoLido,
+    aviso_de_recarga,
     canal_conversa,
     canal_usuario,
     id_minimo_retido,
     id_valido,
     ler_eventos,
     ler_lote,
+    perdeu_eventos,
     ponto_de_partida,
     publicar_evento,
 )
@@ -203,6 +206,83 @@ async def test_ler_eventos_acorda_com_evento_novo(redis: fakeredis.FakeAsyncRedi
     lido = await asyncio.wait_for(anext(leitor), timeout=3)
     assert lido is not None and lido.id == await tarefa
     await leitor.aclose()
+
+
+# ---------- Last-Event-ID mais velho que a retenção (rodada 3, item 17) ----------
+
+
+async def _stream_cortado(redis: fakeredis.FakeAsyncRedis) -> tuple[str, list[str]]:
+    """Um evento de mais de 24 h (que o app recebeu) e outro logo depois, que ele não viu:
+    os dois são cortados pelo ``MINID`` quando chega um evento novo."""
+    canal = canal_conversa(CONVERSA)
+    await redis.xadd(canal, {"event": "sugestoes", "data": "{}"}, id="1000-0")
+    await redis.xadd(canal, {"event": "sugestoes", "data": "{}"}, id="2000-0")  # perdido
+    novos = await _publicar_varios(redis, 2)
+    return "1000-0", novos
+
+
+async def test_last_event_id_cortado_avisa_para_recarregar(
+    redis: fakeredis.FakeAsyncRedis,
+) -> None:
+    canal = canal_conversa(CONVERSA)
+    visto, novos = await _stream_cortado(redis)
+    assert await perdeu_eventos(redis, canal, visto)
+
+    leitor = ler_eventos(redis, canal, visto, bloquear_ms=2_000)
+    aviso = await anext(leitor)
+    assert aviso is not None
+    assert aviso.evento == "erro" and aviso.dados["codigo"] == CODIGO_RECARREGAR
+    assert aviso.id == novos[-1]  # reconectar com esse id não repete o aviso
+    assert not await perdeu_eventos(redis, canal, aviso.id)
+
+    # segue do fim do stream, como uma conexão nova (o app recarregou o estado pela API)
+    depois = (await _publicar_varios(redis, 1))[0]
+    lido = await asyncio.wait_for(anext(leitor), timeout=3)
+    assert lido is not None and lido.id == depois
+    await leitor.aclose()
+
+
+async def test_last_event_id_cortado_no_sse(redis: fakeredis.FakeAsyncRedis) -> None:
+    visto, novos = await _stream_cortado(redis)
+    gerador = gerar_sse(redis, canal_conversa(CONVERSA), visto, bloquear_ms=10)
+    mensagem = await anext(gerador)
+    await gerador.aclose()
+    assert mensagem["event"] == "erro" and mensagem["id"] == novos[-1]
+    assert json.loads(mensagem["data"])["codigo"] == CODIGO_RECARREGAR
+
+
+async def test_stream_expirado_com_id_antigo_avisa(redis: fakeredis.FakeAsyncRedis) -> None:
+    canal = canal_conversa(uuid4())  # a chave sumiu (EXPIRE de 24 h)
+    assert await perdeu_eventos(redis, canal, "1000-0")
+    leitor = ler_eventos(redis, canal, "1000-0", bloquear_ms=10)
+    aviso = await anext(leitor)
+    assert aviso is not None and aviso.dados["codigo"] == CODIGO_RECARREGAR
+    assert aviso.id == "0-0"
+    await leitor.aclose()
+
+
+async def test_id_retido_ou_sem_id_nao_avisa(redis: fakeredis.FakeAsyncRedis) -> None:
+    canal = canal_conversa(CONVERSA)
+    ids = await _publicar_varios(redis, 3)
+    for valor in (ids[0], ids[1], ids[-1], None, "lixo", "0-0"):
+        assert not await perdeu_eventos(redis, canal, valor)
+    # stream vazio e id recente: a chave não expirou, nada se perdeu
+    assert not await perdeu_eventos(redis, canal_conversa(uuid4()), ids[-1])
+
+
+async def test_id_antigo_ainda_guardado_nao_avisa(redis: fakeredis.FakeAsyncRedis) -> None:
+    """Sem ``XADD`` novo, nada foi cortado: o id de mais de 24 h ainda está no stream."""
+    canal = canal_conversa(CONVERSA)
+    await redis.xadd(canal, {"event": "sugestoes", "data": "{}"}, id="1000-0")
+    await redis.xadd(canal, {"event": "sugestoes", "data": "{}"}, id="2000-0")
+    assert not await perdeu_eventos(redis, canal, "1000-0")
+    assert [e.id for e in await ler_lote(redis, canal, "1000-0")] == ["2000-0"]
+
+
+def test_aviso_de_recarga_bate_com_o_contrato() -> None:
+    exemplo = _exemplo(CONTRATO / "retomada" / "erro.json")
+    aviso = aviso_de_recarga(exemplo["id"])
+    assert {"id": aviso.id, "event": aviso.evento, "data": aviso.dados} == exemplo
 
 
 # ---------- SSE ----------

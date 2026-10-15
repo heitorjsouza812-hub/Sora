@@ -24,7 +24,6 @@ mentir. As classes do LangChain só são importadas na primeira vez que o modelo
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections.abc import Iterator
 from functools import cache
@@ -37,7 +36,7 @@ if TYPE_CHECKING:
 
 VARIAVEL_MODELO_FALSO = "SORA_MODELO_FALSO"
 AMBIENTES_DE_PRODUCAO = frozenset({"producao", "produção", "production", "prod"})
-_VALORES_LIGADOS = frozenset({"1", "true", "sim", "yes", "on"})
+AMBIENTES_LOCAIS = frozenset({"desenvolvimento", "teste"})
 
 # Papéis (política do seletor, §5) que ganham uma sequência de respostas prontas.
 PAPEIS_COM_RESPOSTA_PRONTA: tuple[str, ...] = (
@@ -60,18 +59,33 @@ class ModeloFalsoEmProducao(RuntimeError):
     """``SORA_MODELO_FALSO`` ligado num ambiente de produção."""
 
 
+def _em_producao(ambiente: str) -> bool:
+    """Falha fechada: só ``desenvolvimento`` e ``teste`` não contam como produção."""
+    texto = ambiente.strip().lower()
+    return texto in AMBIENTES_DE_PRODUCAO or texto not in AMBIENTES_LOCAIS
+
+
 def modelo_falso_ativo() -> bool:
-    """True quando ``SORA_MODELO_FALSO=1`` (ou ``true``/``sim``) está no ambiente."""
-    return os.environ.get(VARIAVEL_MODELO_FALSO, "").strip().lower() in _VALORES_LIGADOS
+    """True quando a configuração (``SORA_MODELO_FALSO``, ambiente ou ``.env``) liga o modelo falso.
+
+    Fonte única da verdade: ``Configuracao.sora_modelo_falso``, a mesma que a API e o worker usam
+    no startup. Em produção a fábrica recusa: se estiver ligado, levanta
+    ``ModeloFalsoEmProducao`` em vez de devolver um modelo real em silêncio.
+    """
+    from app.core.config import obter_configuracao
+
+    config = obter_configuracao()
+    verificar_modelo_falso_permitido(config.ambiente, config.sora_modelo_falso)
+    return config.sora_modelo_falso
 
 
 def verificar_modelo_falso_permitido(ambiente: str, ligado: bool) -> None:
     """Levanta ``ModeloFalsoEmProducao`` se o modelo falso estiver ligado em produção.
 
-    O startup do Alicerce chama com ``ambiente`` (ex.: ``"producao"``, ``"desenvolvimento"``) e
-    ``ligado`` (a configuração ``sora_modelo_falso``). Fora de produção, não faz nada.
+    A API (lifespan) e o worker (``ao_iniciar``) chamam com ``ambiente`` e ``ligado`` (a
+    configuração ``sora_modelo_falso``). Fora de desenvolvimento/teste, recusa.
     """
-    if ligado and ambiente.strip().lower() in AMBIENTES_DE_PRODUCAO:
+    if ligado and _em_producao(ambiente):
         raise ModeloFalsoEmProducao(
             f"{VARIAVEL_MODELO_FALSO} não pode ficar ligado em produção. "
             "Desligue a variável e reinicie."

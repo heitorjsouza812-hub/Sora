@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.modelos.enumeracoes import (
     AutorMensagem,
@@ -19,6 +19,18 @@ from app.modelos.enumeracoes import (
     TipoProvedor,
 )
 
+# Limites de entrada (API-07, VAL-06/07): corpo gigante não chega ao argon2 nem vira prompt.
+EMAIL_MAX = 254
+SENHA_MAX = 256
+NOME_MAX = 120
+TEXTO_MAX = 20_000
+CURTO_MAX = 2_000
+URL_MAX = 2_048
+TOKEN_MAX = 256
+ANEXOS_MAX = 20
+
+_EMAIL = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
 
 class EsquemaBase(BaseModel):
     """Base compatível com objetos ORM e nomes da API em PT-BR."""
@@ -27,19 +39,19 @@ class EsquemaBase(BaseModel):
 
 
 class CadastroEntrada(EsquemaBase):
-    nome: str
-    email: str
-    senha: str = Field(min_length=10)
-    convite: str | None = None
+    nome: str = Field(min_length=1, max_length=NOME_MAX)
+    email: str = Field(max_length=EMAIL_MAX, pattern=_EMAIL)
+    senha: str = Field(min_length=10, max_length=SENHA_MAX)
+    convite: str | None = Field(default=None, max_length=TOKEN_MAX)
 
 
 class LoginEntrada(EsquemaBase):
-    email: str
-    senha: str
+    email: str = Field(max_length=EMAIL_MAX)
+    senha: str = Field(max_length=SENHA_MAX)
 
 
 class RenovacaoEntrada(EsquemaBase):
-    token_renovacao: str | None = None
+    token_renovacao: str | None = Field(default=None, max_length=TOKEN_MAX)
 
 
 class TokensSaida(EsquemaBase):
@@ -55,28 +67,28 @@ class ContaSaida(EsquemaBase):
 
 
 class AgentePorDescricao(EsquemaBase):
-    descricao: str = Field(min_length=1)
+    descricao: str = Field(min_length=1, max_length=CURTO_MAX)
 
 
 class AgenteConfigurado(EsquemaBase):
-    nome: str = Field(min_length=1)
-    funcao: str
-    papel: str
-    cor: str | None = None
+    nome: str = Field(min_length=1, max_length=NOME_MAX)
+    funcao: str = Field(max_length=CURTO_MAX)
+    papel: str = Field(max_length=CURTO_MAX)
+    cor: str | None = Field(default=None, max_length=32)
     movimento: Movimento | None = None
-    ferramentas: list[str] = Field(default_factory=list)
+    ferramentas: list[str] = Field(default_factory=list, max_length=50)
 
 
 AgenteCriacao = Annotated[AgentePorDescricao | AgenteConfigurado, Field(union_mode="left_to_right")]
 
 
 class AgenteAtualizacao(EsquemaBase):
-    nome: str | None = None
-    funcao: str | None = None
-    papel: str | None = None
-    cor: str | None = None
+    nome: str | None = Field(default=None, max_length=NOME_MAX)
+    funcao: str | None = Field(default=None, max_length=CURTO_MAX)
+    papel: str | None = Field(default=None, max_length=CURTO_MAX)
+    cor: str | None = Field(default=None, max_length=32)
     movimento: Movimento | None = None
-    modelo_padrao: str | None = None
+    modelo_padrao: str | None = Field(default=None, max_length=NOME_MAX)
 
 
 class AgenteSaida(EsquemaBase):
@@ -91,8 +103,8 @@ class AgenteSaida(EsquemaBase):
 
 class ConversaCriacao(EsquemaBase):
     agente_id: UUID | None = None
-    texto: str
-    anexos: list[UUID] = Field(default_factory=list)
+    texto: str = Field(max_length=TEXTO_MAX)
+    anexos: list[UUID] = Field(default_factory=list, max_length=ANEXOS_MAX)
 
 
 class ConversaSaida(EsquemaBase):
@@ -106,12 +118,12 @@ class ConversaSaida(EsquemaBase):
 
 
 class RenomearConversaEntrada(EsquemaBase):
-    titulo: str = Field(min_length=1)
+    titulo: str = Field(min_length=1, max_length=NOME_MAX)
 
 
 class MensagemCriacao(EsquemaBase):
-    texto: str
-    anexos: list[UUID] = Field(default_factory=list)
+    texto: str = Field(max_length=TEXTO_MAX)
+    anexos: list[UUID] = Field(default_factory=list, max_length=ANEXOS_MAX)
     para_agente_id: UUID | None = None
 
 
@@ -131,7 +143,7 @@ class MensagemSaida(EsquemaBase):
 
 
 class AjusteEntrada(EsquemaBase):
-    texto: str
+    texto: str = Field(max_length=TEXTO_MAX)
     agente_id: UUID | None = None
 
 
@@ -140,7 +152,7 @@ class AprovacaoVersaoEntrada(EsquemaBase):
 
 
 class RespostaPerguntaEntrada(EsquemaBase):
-    valor: str
+    valor: str = Field(max_length=CURTO_MAX)
 
 
 class DecisaoAprovacaoEntrada(EsquemaBase):
@@ -148,17 +160,18 @@ class DecisaoAprovacaoEntrada(EsquemaBase):
 
 
 class ApagarContaEntrada(EsquemaBase):
-    senha: str
+    senha: str = Field(max_length=SENHA_MAX)
 
 
 class ProvedorCriacao(EsquemaBase):
     tipo: TipoProvedor
-    chave: str | None = None
-    base_url: str | None = None
+    chave: str | None = Field(default=None, max_length=CURTO_MAX)
+    base_url: str | None = Field(default=None, max_length=URL_MAX)
+    """Validada de novo em ``app.llm.provedores.validar_base_url`` (API-02)."""
 
 
 class ProvedorAtualizacao(EsquemaBase):
-    chave: str | None = None
+    chave: str | None = Field(default=None, max_length=CURTO_MAX)
     teto_mensal_usd: Decimal | None = None
 
 
@@ -205,7 +218,7 @@ class EntregaSaida(EsquemaBase):
     tipo: TipoEntrega
     titulo: str
     resumo: str
-    conteudo: dict[str, Any]
+    conteudo: dict[str, Any] | list[Any] | str
 
 
 class EntregasListaSaida(EsquemaBase):
@@ -239,7 +252,7 @@ class UsoSaida(EsquemaBase):
 
 
 class AnexoSaida(EsquemaBase):
-    anexo_id: UUID
+    anexo_id: UUID = Field(validation_alias=AliasChoices("anexo_id", "id"))
     nome: str
     tipo: str
     tamanho: int

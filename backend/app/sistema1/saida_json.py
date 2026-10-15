@@ -23,11 +23,11 @@ _BLOCO_DE_RACIOCINIO = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECA
 _CERCA_DE_CODIGO = re.compile(r"```(?:json|JSON)?\s*(.*?)```", re.DOTALL)
 _ASPAS_E_FECHAMENTO = {
     '"': '"',
-    "“": "”",
-    "”": "”",
+    chr(0x201C): chr(0x201D),  # aspas duplas curvas
+    chr(0x201D): chr(0x201D),
     "'": "'",
-    "‘": "’",
-    "’": "’",
+    chr(0x2018): chr(0x2019),  # aspas simples curvas
+    chr(0x2019): chr(0x2019),
 }
 _LITERAIS_DE_PYTHON = {"True": "true", "False": "false", "None": "null"}
 

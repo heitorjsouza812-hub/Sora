@@ -8,13 +8,16 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-# Valores fictícios só para o processo de teste carregar a configuração.
+# Valores fictícios só para o processo de teste carregar a configuração. Sem ``AMBIENTE`` a
+# configuração vale ``producao`` (segura por padrão), então os testes declaram ``teste``. O
+# ``JWT_SEGREDO`` tem 32+ bytes para os testes que trocam o ambiente para produção.
+os.environ.setdefault("AMBIENTE", "teste")
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://teste:teste@localhost/teste")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault(
     "CHAVE_MESTRA", base64.b64encode(b"0123456789abcdef0123456789abcdef").decode()
 )
-os.environ.setdefault("JWT_SEGREDO", "teste-jwt-segredo")
+os.environ.setdefault("JWT_SEGREDO", "jwt-local-dos-testes-0123456789abcdef0123")
 
 from app.main import criar_aplicacao
 

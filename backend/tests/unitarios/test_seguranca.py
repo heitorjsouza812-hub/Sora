@@ -2,6 +2,7 @@
 
 import base64
 from datetime import timedelta
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -40,21 +41,44 @@ def test_token_expirado_adulterado_ou_de_outro_segredo_e_recusado() -> None:
         seguranca.decodificar_token_acesso("lixo")
 
 
+USUARIO = UUID("11111111-1111-1111-1111-111111111111")
+
+
 def test_cifra_aes_gcm_ida_e_volta_com_nonce_novo_a_cada_vez() -> None:
-    a = seguranca.cifrar_segredo("gsk_chave-secreta")
-    b = seguranca.cifrar_segredo("gsk_chave-secreta")
+    a = seguranca.cifrar_segredo("gsk_chave-secreta", usuario_id=USUARIO, provedor="openai")
+    b = seguranca.cifrar_segredo("gsk_chave-secreta", usuario_id=USUARIO, provedor="openai")
     assert a != b
     assert b"gsk_chave-secreta" not in a
-    assert seguranca.decifrar_segredo(a) == "gsk_chave-secreta"
+    assert a[0] == seguranca.VERSAO_CHAVE
+    assert (
+        seguranca.decifrar_segredo(a, usuario_id=USUARIO, provedor="openai") == "gsk_chave-secreta"
+    )
 
 
 def test_cifra_detecta_adulteracao() -> None:
     from cryptography.exceptions import InvalidTag
 
-    cifrado = bytearray(seguranca.cifrar_segredo("segredo"))
+    cifrado = bytearray(seguranca.cifrar_segredo("segredo", usuario_id=USUARIO, provedor="openai"))
     cifrado[-1] ^= 1
     with pytest.raises(InvalidTag):
-        seguranca.decifrar_segredo(bytes(cifrado))
+        seguranca.decifrar_segredo(bytes(cifrado), usuario_id=USUARIO, provedor="openai")
+
+
+def test_cifra_amarrada_ao_usuario_e_ao_provedor() -> None:
+    from cryptography.exceptions import InvalidTag
+
+    cifrado = seguranca.cifrar_segredo("segredo", usuario_id=USUARIO, provedor="openai")
+    with pytest.raises(InvalidTag):
+        seguranca.decifrar_segredo(cifrado, usuario_id=uuid4(), provedor="openai")
+    with pytest.raises(InvalidTag):
+        seguranca.decifrar_segredo(cifrado, usuario_id=USUARIO, provedor="anthropic")
+
+
+def test_cifra_recusa_versao_de_chave_desconhecida() -> None:
+    cifrado = bytearray(seguranca.cifrar_segredo("segredo", usuario_id=USUARIO, provedor="openai"))
+    cifrado[0] = 99
+    with pytest.raises(ValueError):
+        seguranca.decifrar_segredo(bytes(cifrado), usuario_id=USUARIO, provedor="openai")
 
 
 def test_token_de_renovacao_tem_32_bytes_e_hash_sha256() -> None:

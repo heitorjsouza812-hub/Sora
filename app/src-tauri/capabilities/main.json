@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Janela principal: ouve sora-navegar e a ponte de armazenamento (sora-armazenamento, que ela também emite) e liga/desliga a ilha (ilha_visivel).",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit",
+    "allow-ilha-visivel"
+  ]
+}

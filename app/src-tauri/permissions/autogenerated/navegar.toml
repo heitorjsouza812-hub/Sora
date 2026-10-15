@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-navegar"
+description = "Enables the navegar command without any pre-configured scope."
+commands.allow = ["navegar"]
+
+[[permission]]
+identifier = "deny-navegar"
+description = "Denies the navegar command without any pre-configured scope."
+commands.deny = ["navegar"]

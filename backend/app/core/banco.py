@@ -21,7 +21,7 @@ def criar_motor(url: str) -> AsyncEngine:
 @lru_cache
 def fabrica_sessoes() -> async_sessionmaker[AsyncSession]:
     """Fábrica única de sessões, ligada ao banco da configuração."""
-    motor = criar_motor(obter_configuracao().database_url)
+    motor = criar_motor(obter_configuracao().database_url_sqlalchemy)
     return async_sessionmaker(motor, expire_on_commit=False)
 
 

@@ -52,14 +52,22 @@ export function aoMouseIlha(cb: (m: MouseIlha) => void): () => void {
   return ouvir<MouseIlha>('ilha-mouse', cb);
 }
 
+/** Só rotas internas do app (ex. "/revisao/abc"): uma única "/" no início, sem esquema, "//", barra invertida ou "..". */
+export function caminhoInternoValido(caminho: unknown): caminho is string {
+  return typeof caminho === 'string' && caminho.length <= 200 && /^\/(?!\/)[\w\-./?=&%#]*$/.test(caminho) && !caminho.includes('..');
+}
+
+/** Só chaves do próprio app atravessam a ponte de armazenamento entre janelas. */
+export const chaveDaSora = (chave: unknown): chave is string => typeof chave === 'string' && /^sora\.[\w.-]{1,80}$/.test(chave);
+
 /** Da janela da ilha: abre um caminho do app (ex. "/revisao/abc") na janela principal e a traz para frente. */
 export async function abrirNoApp(caminho: string): Promise<void> {
-  if (noDesktop) await invoke('navegar', { caminho });
+  if (noDesktop && caminhoInternoValido(caminho)) await invoke('navegar', { caminho });
 }
 
 /** Na janela principal: recebe os pedidos de navegação vindos da ilha. */
 export function aoNavegar(cb: (caminho: string) => void): () => void {
-  return ouvir<string>('sora-navegar', cb);
+  return ouvir<string>('sora-navegar', caminho => { if (caminhoInternoValido(caminho)) cb(caminho); });
 }
 
 /** Mostra/esconde a janela da ilha (ex. preferência "Mostrar ilha"). */
@@ -108,7 +116,7 @@ function instalarPonteArmazenamento() {
   };
 
   void listen<ArmazenamentoTauri>('sora-armazenamento', ({ payload }) => {
-    if (payload.origem === origem) return;
+    if (payload?.origem === origem || !chaveDaSora(payload?.chave)) return;
     const valor = localStorage.getItem(payload.chave);
     window.dispatchEvent(new StorageEvent('storage', {
       key: payload.chave,

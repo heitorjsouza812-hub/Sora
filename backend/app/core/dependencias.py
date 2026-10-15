@@ -17,13 +17,20 @@ esquema_bearer = HTTPBearer(
 
 
 async def usuario_atual(
+    requisicao: Request,
     credenciais: Annotated[HTTPAuthorizationCredentials, Depends(esquema_bearer)],
 ) -> UUID:
-    """Valida o JWT de `Authorization: Bearer` e devolve o id do usuário."""
+    """Valida o JWT de `Authorization: Bearer` e devolve o id do usuário.
+
+    Guarda o ``exp`` do token em ``request.state.token_expira_em`` (epoch): o SSE fecha o
+    stream quando o token vence (API-08/VAL-10).
+    """
     try:
         carga = decodificar_token_acesso(credenciais.credentials)
-        return UUID(carga["sub"])
-    except (ErroToken, KeyError, ValueError) as erro:
+        usuario_id = UUID(carga["sub"])
+        requisicao.state.token_expira_em = float(carga["exp"])
+        return usuario_id
+    except (ErroToken, KeyError, ValueError, TypeError) as erro:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Token de acesso inválido ou expirado.",

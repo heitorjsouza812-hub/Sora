@@ -15,7 +15,12 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
-from app.llm.provedores import ConfigProvedor, parametros_litellm
+from app.llm.provedores import (
+    ClienteLiteLLMProtegido,
+    ConfigProvedor,
+    parametros_litellm,
+    politica_de_rede,
+)
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -41,15 +46,21 @@ def criar_chat_model(
 
     from langchain_litellm import ChatLiteLLM
 
-    return ChatLiteLLM(
+    politica = politica_de_rede()
+    parametros = parametros_litellm(provedor, politica)
+    chat = ChatLiteLLM(
         model=modelo,
         temperature=temperatura,
         max_tokens=max_tokens,
         request_timeout=timeout_s,
         streaming=streaming,
         max_retries=0,
-        **parametros_litellm(provedor),
+        **parametros,
     )
+    if "api_base" in parametros and not politica.rede_local:
+        # URL escolhida pelo usuário: cada chamada confere o IP antes de sair (API-02).
+        chat.client = ClienteLiteLLMProtegido()
+    return chat
 
 
 def criar_modelos_na_ordem(

@@ -10,6 +10,11 @@ export interface EstadoIlhaUi {
   pedido: number;
 }
 
+export interface OpcoesAbrirIlha {
+  /** Hover abre temporariamente; não transforma a abertura em um pedido externo/fixado. */
+  porHover?: boolean;
+}
+
 let estado: EstadoIlhaUi = {
   aberta: false,
   vista: 'inicio',
@@ -25,12 +30,12 @@ const assinar = (ouvinte: () => void) => {
 };
 const ler = () => estado;
 
-export function abrirIlha(vista: VistaIlha = 'inicio', agenteId?: string): void {
+export function abrirIlha(vista: VistaIlha = 'inicio', agenteId?: string, opcoes: OpcoesAbrirIlha = {}): void {
   estado = {
     aberta: true,
     vista,
     agenteId: vista === 'agente' ? agenteId ?? null : null,
-    pedido: estado.pedido + 1,
+    pedido: estado.pedido + (opcoes.porHover ? 0 : 1),
   };
   avisar();
 }

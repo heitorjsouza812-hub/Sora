@@ -1,11 +1,11 @@
 """Senha argon2id, JWT de acesso, cifra AES-GCM e token de renovação; especificação §8.2."""
 
-import base64
 import hashlib
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 import jwt
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -68,24 +68,68 @@ def decodificar_token_acesso(token: str) -> dict[str, Any]:
         raise ErroToken("Token de acesso inválido ou expirado.") from erro
 
 
-def _chave_mestra() -> bytes:
-    bruta = obter_configuracao().chave_mestra.get_secret_value()
-    chave = base64.b64decode(bruta, validate=True)
-    if len(chave) != 32:
-        raise ValueError("CHAVE_MESTRA precisa ter 32 bytes em base64.")
+VERSAO_CHAVE = 1
+"""Versão padrão da chave mestra (``CHAVE_MESTRA_VERSAO``), gravada no 1º byte do texto cifrado."""
+
+
+def _chave_atual() -> tuple[int, bytes]:
+    config = obter_configuracao()
+    return config.chave_mestra_versao, config.chaveiro()[config.chave_mestra_versao]
+
+
+def _chave_da_versao(versao: int) -> bytes:
+    chave = obter_configuracao().chaveiro().get(versao)
+    if chave is None:
+        raise ValueError("Versão da chave de cifra desconhecida.")
     return chave
 
 
-def cifrar_segredo(valor: str) -> bytes:
-    """Cifra uma chave de provedor usando AES-GCM (nonce de 12 bytes + texto cifrado)."""
+def _aad(usuario_id: UUID, provedor: str) -> bytes:
+    return f"{usuario_id}:{provedor}".encode()
+
+
+def cifrar_segredo(valor: str, *, usuario_id: UUID, provedor: str) -> bytes:
+    """Cifra uma chave de provedor com AES-GCM.
+
+    Formato: ``versão da chave (1 byte) + nonce (12 bytes) + texto cifrado``. O AAD é
+    ``usuario_id:provedor``, então o texto cifrado de um usuário/provedor não decifra em outra
+    linha do banco (copiar a coluna entre contas não funciona). Cifra sempre com a chave atual.
+    """
+    versao, chave = _chave_atual()
     nonce = os.urandom(TAMANHO_NONCE)
-    return nonce + AESGCM(_chave_mestra()).encrypt(nonce, valor.encode(), None)
+    cifrado = AESGCM(chave).encrypt(nonce, valor.encode(), _aad(usuario_id, provedor))
+    return bytes([versao]) + nonce + cifrado
 
 
-def decifrar_segredo(valor: bytes) -> str:
-    """Decifra uma chave de provedor previamente protegida."""
-    nonce, cifrado = valor[:TAMANHO_NONCE], valor[TAMANHO_NONCE:]
-    return AESGCM(_chave_mestra()).decrypt(nonce, cifrado, None).decode()
+def decifrar_segredo(valor: bytes, *, usuario_id: UUID, provedor: str) -> str:
+    """Decifra o que ``cifrar_segredo`` gravou, exigindo o mesmo usuário e provedor.
+
+    A chave é escolhida pela versão do 1º byte (a atual ou uma de ``CHAVES_MESTRAS_ANTIGAS``).
+    """
+    if not valor:
+        raise ValueError("Versão da chave de cifra desconhecida.")
+    chave = _chave_da_versao(valor[0])
+    nonce = valor[1 : 1 + TAMANHO_NONCE]
+    cifrado = valor[1 + TAMANHO_NONCE :]
+    return AESGCM(chave).decrypt(nonce, cifrado, _aad(usuario_id, provedor)).decode()
+
+
+def precisa_recifrar(valor: bytes) -> bool:
+    """O texto cifrado usa uma chave que não é a atual?"""
+    return bool(valor) and valor[0] != obter_configuracao().chave_mestra_versao
+
+
+def recifrar_segredo(valor: bytes, *, usuario_id: UUID, provedor: str) -> bytes:
+    """Decifra com a chave da versão gravada e cifra de novo com a atual (migração da rotação).
+
+    Já na versão atual: devolve o mesmo valor. Depois de recifrar todas as linhas, a chave
+    antiga pode sair de ``CHAVES_MESTRAS_ANTIGAS``.
+    """
+    if not precisa_recifrar(valor):
+        decifrar_segredo(valor, usuario_id=usuario_id, provedor=provedor)  # confere integridade
+        return valor
+    texto = decifrar_segredo(valor, usuario_id=usuario_id, provedor=provedor)
+    return cifrar_segredo(texto, usuario_id=usuario_id, provedor=provedor)
 
 
 def hash_token(token: str) -> str:

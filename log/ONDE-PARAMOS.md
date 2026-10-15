@@ -1,6 +1,20 @@
 # Onde paramos
 
-_Atualizado em 2026-10-14 — **decisão: agentes em LangChain** (plano 2.1; veja abaixo). Antes, 2026-10-11 (noite): **Sora desktop (Tauri)** com a ilha no topo da tela do PC e **CHATS em pastas** + seletor Equipe/Agente independente (veja abaixo). Antes: **Ilha da Sora** pronta (adaptação do Coucou; veja abaixo). Antes: revisão do front-end contra a especificação do backend (nenhum código alterado). Antes: 2026-10-10, ~23h20, trabalho pausado a pedido do Heitor._
+_Atualizado em 2026-10-15 — **revisão de segurança concluída e validada**; APP-003 e hover da ilha corrigidos no Tauri real. Antes, 2026-10-14: agentes em LangChain (plano 2.1)._
+
+## Revisão de segurança (2026-10-15, time do Clausecurity)
+
+- Auditoria + correção em loop de backend, infra e app; tudo validado (detalhes em `log/2026-10-15.md` e na nota Maestri "Segurança — Achados").
+- Verde: backend ruff/format, pytest 795 passed / 2 skipped, pip-audit limpo; app build, oxlint, 82 testes, npm audit 0, clippy; stack Docker real (read-only, migrações, Caddy, backup/restauração); Tauri real por CDP.
+- Mudança para quem roda o backend: `AMBIENTE` agora é `producao` por padrão (no PC use `AMBIENTE=desenvolvimento`); em produção `CORS_ORIGENS` fica vazio (APP_URL + desktop). Rotação da chave mestra: `CHAVE_MESTRA_VERSAO` + `CHAVES_MESTRAS_ANTIGAS`.
+- Pendente para a próxima etapa: APP-001 (chaves de API saem do `localStorage` quando o app for ligado às rotas de provedores) e o worker (ainda esqueleto).
+
+## APP-003 no desktop real (2026-10-15)
+
+- Script reproduzível: `app/qa/desktop-capabilities.mjs` (configuração auxiliar: `app/qa/tauri-capabilities.config.json`).
+- OK: `ilha-mouse`, `ilha-alternar`, Ctrl+Shift+S, `sora-navegar`, três negações cruzadas de capabilities e consoles sem erros novos.
+- Corrigido: a abertura por hover não incrementa mais `ui.pedido`, portanto continua temporária e fecha 400 ms após o mouse sair. Aberturas externas permanecem fixadas.
+- Regressão em `app/src/components/ilha/__tests__/ilhaUi.test.tsx`; build OK, oxlint limpo, 82/82 testes e fumaça Tauri real integralmente verde. Nenhum commit foi criado.
 
 ## Agentes em LangChain (2026-10-14)
 
@@ -62,7 +76,7 @@ _Atualizado em 2026-10-14 — **decisão: agentes em LangChain** (plano 2.1; vej
 - Não reverter `app/package.json`; avisar antes de rodar `npm install` quando houver mais de uma pessoa ou agente trabalhando.
 - Chaves de API **nunca** devem ir para o repositório nem ficar só no navegador em produção.
 
-## Backend — 2026-10-14 (noite)
-- Repositório em `C:\dev\sora`. Esqueleto do backend commitado (`8d7b2ed`) e validado pelo Vigia.
-- Etapa 3 (fundação): Alicerce (segurança, migração 0001, contas) e Trama (eventos/SSE, ler_pagina com SSRF, busca, estados da cadeia) PRONTOS. Bússola (modelo falso, seletor, Sistema 1, custo) PARCIAL: parou por limite de cota do Claude; faltam também 4 erros RUF001 em `app/sistema1/saida_json.py`.
-- Falta: terminar a Bússola, rodada de validação do Vigia, testes de integração (precisam do Docker Desktop), apagar `_trava_local` em `app/main.py` quando `verificar_modelo_falso_permitido` existir.
+## Backend — fundação da fase 1 (2026-10-14 e 15)
+- Repositório em `C:\dev\sora`. Esqueleto do backend e da infra (`8d7b2ed`) validado pelo Vigia.
+- Etapa 3 (fundação) **concluída**: Alicerce (segurança, migrações 0001–0003, contas, infra), Trama (eventos/SSE, ler_pagina com SSRF, busca, estados da cadeia, arquivos sem path traversal, checkpointer) e Bússola (modelo falso, seletor, Sistema 1, custo e fábrica de modelos). Vigia: rodadas 1 a 3. Depois, a revisão de segurança do time do Clausecurity (acima).
+- **Próximo:** backend de ponta a ponta (conexão das APIs, prompt da Sora, worker com o modo Cadeia, especialistas em LangChain, middlewares, entregas com versões, passos, cartões de pergunta, agente independente, anexos, dados de treino do Laya); depois ligar o app (inclui tratar o erro `recarregar` do contrato em `tests/contrato/retomada/`).

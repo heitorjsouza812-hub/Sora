@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from app.eventos.tipos import TIPOS_EVENTOS_ESTADO, Evento, EventoEstado
+from app.eventos.tipos import TIPOS_EVENTOS_ESTADO, ErroEvento, Evento, EventoEstado
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
@@ -27,8 +27,17 @@ if TYPE_CHECKING:
 RETENCAO_SEGUNDOS = 24 * 60 * 60
 """Quanto tempo um evento fica no stream (§2)."""
 
-ID_DO_STREAM = re.compile(r"^\d+-\d+$")
+ID_DO_STREAM = re.compile(r"[0-9]+-[0-9]+")
+ID_TAMANHO_MAXIMO = 40
+"""Teto do ``Last-Event-ID``; um id real (13 dígitos de milissegundos + sequência) cabe nele."""
 INICIO_DO_STREAM = "0-0"
+
+CODIGO_RECARREGAR = "recarregar"
+"""``codigo`` do ``erro`` mandado quando o ``Last-Event-ID`` ficou mais velho que a retenção:
+o app busca o estado completo de novo pela API e segue aplicando eventos (§2, §8.5)."""
+MENSAGEM_RECARREGAR = (
+    "Algumas atualizações ficaram para trás enquanto você estava fora. Recarregando."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +77,16 @@ def id_minimo_retido(agora_ms: int | None = None) -> str:
 
 
 def id_valido(valor: str | None) -> bool:
-    """Diz se o valor tem o formato de id do Redis Stream (``<ms>-<seq>``)."""
-    return valor is not None and ID_DO_STREAM.match(valor) is not None
+    """Diz se o valor tem o formato de id do Redis Stream (``<ms>-<seq>``).
+
+    Só dígitos ASCII e no máximo 40 caracteres: um ``Last-Event-ID`` com milhares de dígitos
+    estouraria o ``int()`` dentro do gerador do SSE, já depois do 200 (VAL-18).
+    """
+    return (
+        valor is not None
+        and len(valor) <= ID_TAMANHO_MAXIMO
+        and ID_DO_STREAM.fullmatch(valor) is not None
+    )
 
 
 def _entrada(nome: str, dados: dict[str, object]) -> dict[str, str]:
@@ -131,6 +148,46 @@ async def ponto_de_partida(redis: Redis, canal: str, ultimo_evento_id: str | Non
     return await ultimo_id(redis, canal)
 
 
+def _ordem(id_do_stream: str) -> tuple[int, int]:
+    milissegundos, sequencia = id_do_stream.split("-")
+    return int(milissegundos), int(sequencia)
+
+
+async def primeiro_id(redis: Redis, canal: str) -> str | None:
+    """Id da entrada mais antiga que sobrou no stream, ou ``None`` se ele estiver vazio."""
+    entradas = await redis.xrange(canal, count=1)
+    return _texto(entradas[0][0]) if entradas else None
+
+
+async def perdeu_eventos(
+    redis: Redis, canal: str, ultimo_evento_id: str | None, *, agora_ms: int | None = None
+) -> bool:
+    """O ``Last-Event-ID`` é mais velho que o que o stream ainda guarda?
+
+    Se a entrada que o app recebeu por último já foi cortada (``MINID`` de 24 h), o que veio
+    logo depois dela pode ter sido cortado junto e o ``XREAD`` entregaria o resto sem aviso.
+    Stream vazio com um id de mais de 24 h: a chave expirou, e os eventos depois dele também.
+    ``0-0`` é o pedido explícito de "tudo o que houver" e nunca conta como perda.
+    """
+    if (
+        ultimo_evento_id is None
+        or not id_valido(ultimo_evento_id)
+        or ultimo_evento_id == INICIO_DO_STREAM
+    ):
+        return False
+    mais_antigo = await primeiro_id(redis, canal)
+    if mais_antigo is None:
+        return _ordem(ultimo_evento_id) < _ordem(id_minimo_retido(agora_ms))
+    return _ordem(ultimo_evento_id) < _ordem(mais_antigo)
+
+
+def aviso_de_recarga(id_do_stream: str) -> EventoLido:
+    """O ``erro`` com ``codigo: "recarregar"``. Leva o id do fim do stream: se o app reconectar
+    antes de recarregar, retoma dali e não recebe o aviso de novo."""
+    erro = ErroEvento(codigo=CODIGO_RECARREGAR, mensagem=MENSAGEM_RECARREGAR)
+    return EventoLido(id=id_do_stream, evento=erro.evento, dados=erro.model_dump(mode="json"))
+
+
 async def ler_lote(
     redis: Redis,
     canal: str,
@@ -162,8 +219,16 @@ async def ler_eventos(
 
     Entrega cada evento uma vez, na ordem. Quando ``bloquear_ms`` passa sem
     nada novo, entrega ``None`` (a hora do ``ping``).
+
+    Se o ``Last-Event-ID`` já passou da retenção (``perdeu_eventos``), entrega primeiro o
+    ``erro`` de ``codigo: "recarregar"`` e segue do fim do stream, como numa conexão nova: o
+    app recarrega o estado pela API em vez de aplicar um histórico com buracos.
     """
-    cursor = await ponto_de_partida(redis, canal, ultimo_evento_id)
+    if await perdeu_eventos(redis, canal, ultimo_evento_id):
+        cursor = await ultimo_id(redis, canal)
+        yield aviso_de_recarga(cursor)
+    else:
+        cursor = await ponto_de_partida(redis, canal, ultimo_evento_id)
     while True:
         lote = await ler_lote(redis, canal, cursor, bloquear_ms=bloquear_ms)
         if not lote:

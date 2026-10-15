@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ilha",
+  "description": "Janela da Ilha: ouve ilha-mouse, ilha-alternar e a ponte de armazenamento (sora-armazenamento, que ela também emite), informa o retângulo clicável (ilha_retangulo) e pede navegação na principal (navegar).",
+  "windows": ["ilha"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:event:allow-emit",
+    "allow-ilha-retangulo",
+    "allow-navegar"
+  ]
+}

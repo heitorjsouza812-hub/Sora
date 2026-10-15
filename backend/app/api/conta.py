@@ -4,12 +4,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import CAMINHO_COOKIE, COOKIE_RENOVACAO
 from app.core import contas
 from app.core.banco import obter_sessao
-from app.core.dependencias import usuario_atual
+from app.core.dependencias import obter_redis, usuario_atual
 from app.modelos.esquemas import ApagarContaEntrada, ContaSaida
 
 roteador = APIRouter(tags=["conta"])
@@ -18,7 +19,7 @@ roteador = APIRouter(tags=["conta"])
 @roteador.get("/eu")
 async def obter_eu(
     usuario_id: Annotated[UUID, Depends(usuario_atual)],
-    sessao: Annotated[AsyncSession, Depends(obter_sessao)],
+    sessao: Annotated[AsyncSession, Depends(obter_sessao, scope="function")],
 ) -> ContaSaida:
     """Retorna dados mínimos da conta e do onboarding."""
     usuario, tem_provedor = await contas.dados_da_conta(sessao, usuario_id)
@@ -35,8 +36,9 @@ async def apagar_conta(
     dados: ApagarContaEntrada,
     resposta: Response,
     usuario_id: Annotated[UUID, Depends(usuario_atual)],
-    sessao: Annotated[AsyncSession, Depends(obter_sessao)],
+    sessao: Annotated[AsyncSession, Depends(obter_sessao, scope="function")],
+    redis: Annotated[Redis, Depends(obter_redis)],
 ) -> None:
     """Apaga os dados pertencentes ao usuário após confirmar a senha."""
-    await contas.apagar_conta(sessao, usuario_id, dados.senha)
+    await contas.apagar_conta(sessao, usuario_id, dados.senha, redis=redis)
     resposta.delete_cookie(COOKIE_RENOVACAO, path=CAMINHO_COOKIE)

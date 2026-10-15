@@ -49,4 +49,18 @@ stream próprio, então os ids dos dois canais não se misturam.
 | `erro` | sim | não |
 | `ping` | sim | não há exemplo (sem dados; o SSE manda a cada 15 s nos dois canais) |
 
+## Retomada com `Last-Event-ID` vencido (`retomada/erro.json`)
+
+Os streams guardam 24 h. Se o app reconecta com um `Last-Event-ID` que já foi
+cortado (ou a chave do stream já expirou), o backend **não** entrega o resto
+com buracos: manda primeiro um `erro` com `codigo: "recarregar"`, **nos dois
+canais** e sem `conversa_id` (vale para o canal inteiro), e segue do fim do
+stream, como numa conexão nova. O `id` desse aviso é o do fim do stream: se o
+app reconectar antes de recarregar, não recebe o aviso de novo.
+
+O app, ao receber `codigo: "recarregar"`, busca o estado completo de novo
+(`GET /v1/conversas`, `GET /v1/cadeias/{id}`) e volta a aplicar só os eventos
+seguintes. Não mostra o texto como falha para o usuário. `Last-Event-ID: 0-0`
+é o pedido explícito de "tudo o que houver" e nunca gera o aviso.
+
 Dono: Trama (Pessoa 3).

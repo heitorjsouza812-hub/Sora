@@ -228,6 +228,57 @@ def test_provedor_desconhecido_e_erro() -> None:
         obter_provedor("google")
 
 
+# ---------- trava de produção (rodada 3, item 11) ----------
+
+
+@pytest.mark.parametrize("nome", ["falso", "searxng", "FALSO"])
+@pytest.mark.parametrize("ambiente", ["producao", "homologacao", ""])
+def test_busca_de_desenvolvimento_recusada_em_producao(nome: str, ambiente: str) -> None:
+    with pytest.raises(p.BuscaProibidaEmProducao, match="só para desenvolvimento"):
+        obter_provedor(nome, ambiente=ambiente)
+    with pytest.raises(p.BuscaProibidaEmProducao):
+        p.verificar_busca_permitida(nome, ambiente)
+
+
+@pytest.mark.parametrize("ambiente", ["desenvolvimento", "teste"])
+def test_busca_de_desenvolvimento_liberada_local(ambiente: str) -> None:
+    assert isinstance(obter_provedor("falso", ambiente=ambiente), BuscaFalsa)
+    assert isinstance(obter_provedor("searxng", ambiente=ambiente), BuscaSearxng)
+
+
+def test_busca_paga_vale_em_producao() -> None:
+    assert isinstance(obter_provedor("tavily", chave=CHAVE, ambiente="producao"), BuscaTavily)
+    p.verificar_busca_permitida("brave", "producao")
+
+
+def test_fabrica_le_o_ambiente_da_configuracao(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.core.config as config
+
+    falsa = type("Config", (), {"ambiente": "producao"})()
+    monkeypatch.setattr(config, "obter_configuracao", lambda: falsa)
+    with pytest.raises(p.BuscaProibidaEmProducao):
+        obter_provedor("falso")
+
+
+@pytest.mark.parametrize(
+    ("busca", "recusa"), [("falso", True), ("searxng", True), ("tavily", False)]
+)
+def test_worker_nao_sobe_com_busca_de_desenvolvimento_em_producao(
+    monkeypatch: pytest.MonkeyPatch, busca: str, recusa: bool
+) -> None:
+    from workers import configuracao
+
+    falsa = type(
+        "Config", (), {"ambiente": "producao", "sora_modelo_falso": False, "busca_provedor": busca}
+    )()
+    monkeypatch.setattr(configuracao, "obter_configuracao", lambda: falsa)
+    if recusa:
+        with pytest.raises(p.BuscaProibidaEmProducao):
+            configuracao.verificar_trava_de_producao()
+    else:
+        configuracao.verificar_trava_de_producao()
+
+
 # ---------- falso ----------
 
 

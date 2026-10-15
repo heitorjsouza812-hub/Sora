@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from arq.connections import RedisSettings
+
+from app.busca.provedor import verificar_busca_permitida
+from app.core.config import obter_configuracao
+from app.llm.falso import verificar_modelo_falso_permitido
 from workers.aprovacoes import expirar_aprovacao
 from workers.cadeia import (
     ajustar,
@@ -22,8 +27,19 @@ from workers.cadeia import (
 from workers.conversa import responder_direto
 
 
+def verificar_trava_de_producao() -> None:
+    """Mesma trava do lifespan da API: o worker não sobe em produção com o modelo falso nem
+    com uma busca só de desenvolvimento (``falso``, ``searxng``)."""
+    config = obter_configuracao()
+    verificar_modelo_falso_permitido(config.ambiente, config.sora_modelo_falso)
+    verificar_busca_permitida(config.busca_provedor, config.ambiente)
+
+
 async def ao_iniciar(ctx: dict[str, Any]) -> None:
-    """Abre banco, Redis e o checkpointer do LangGraph e guarda no ``ctx``."""
+    """Abre banco, Redis e o checkpointer do LangGraph e guarda no ``ctx``.
+
+    Antes de tudo, a trava de produção (é o worker quem chama os modelos)."""
+    verificar_trava_de_producao()
     raise NotImplementedError
 
 
@@ -33,8 +49,9 @@ async def ao_desligar(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    """Lida pelo ``arq``. ``redis_settings`` entra quando o ``app/core`` tiver a
-    configuração (``REDIS_URL``)."""
+    """Lida pelo ``arq``; o Redis vem de ``REDIS_URL``."""
+
+    redis_settings = RedisSettings.from_dsn(obter_configuracao().redis_url)
 
     functions: ClassVar[list[Any]] = [
         planejar_cadeia,

@@ -9,6 +9,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app.core.config import url_sqlalchemy
 from app.modelos import tabelas  # noqa: F401
 from app.modelos.base import Base
 
@@ -28,7 +29,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 if database_url := os.getenv("DATABASE_URL"):
-    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+    config.set_main_option("sqlalchemy.url", url_sqlalchemy(database_url).replace("%", "%%"))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ilha-visivel"
+description = "Enables the ilha_visivel command without any pre-configured scope."
+commands.allow = ["ilha_visivel"]
+
+[[permission]]
+identifier = "deny-ilha-visivel"
+description = "Denies the ilha_visivel command without any pre-configured scope."
+commands.deny = ["ilha_visivel"]

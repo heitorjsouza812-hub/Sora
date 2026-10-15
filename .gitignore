@@ -6,3 +6,11 @@ app/test-results/
 .maestri/
 app/qa/shots/
 app/qa/ref/
+
+# Segredos locais (manter apenas os modelos versionados).
+.env
+.env.*
+!.env.example
+!.env.exemplo
+!**/.env.example
+!**/.env.exemplo

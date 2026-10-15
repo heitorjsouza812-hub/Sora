@@ -7,10 +7,11 @@
 As duas retomam pelo cabeçalho ``Last-Event-ID``.
 """
 
-from typing import Annotated
+from collections.abc import AsyncIterator
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,15 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
-from app.eventos.sse import INTERVALO_PING_SEGUNDOS, gerar_sse, mensagem_ping
+from app.eventos.sse import (
+    INTERVALO_PING_SEGUNDOS,
+    VALIDADE_CONEXAO_SEGUNDOS,
+    encerrar_conexao,
+    gerar_sse,
+    mensagem_ping,
+    registrar_conexao,
+    renovar_conexao,
+)
 from app.eventos.streams import canal_conversa, canal_usuario
 from app.modelos.tabelas import Conversa
 
@@ -30,6 +39,7 @@ RESPOSTA_SSE: dict[int | str, dict[str, object]] = {
         "content": {"text/event-stream": {"schema": {"type": "string"}}},
     },
     404: {"description": "Conversa inexistente ou de outro usuário."},
+    429: {"description": "O usuário já tem o máximo de streams abertos."},
 }
 
 CABECALHOS_SSE = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
@@ -43,6 +53,48 @@ async def conversa_do_usuario(sessao: AsyncSession, conversa_id: UUID, usuario_i
     return (await sessao.execute(consulta)).scalar_one_or_none() is not None
 
 
+def validade_do_token(requisicao: Request) -> float | None:
+    """``exp`` do token de acesso guardado por ``usuario_atual`` (``None`` se não houver)."""
+    return getattr(requisicao.state, "token_expira_em", None)
+
+
+async def _transmitir(
+    redis: Redis,
+    canal: str,
+    ultimo_evento_id: str | None,
+    usuario_id: UUID,
+    expira_em: float | None,
+) -> EventSourceResponse:
+    """Reserva a vaga de stream do usuário (429 se cheio) e devolve o SSE que a libera ao
+    terminar; o stream acaba quando o token vence (API-01, API-08)."""
+    conexao = await registrar_conexao(redis, usuario_id)
+    if conexao is None:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Conexões de eventos demais abertas. Feche alguma aba e tente de novo.",
+            headers={"Retry-After": str(VALIDADE_CONEXAO_SEGUNDOS)},
+        )
+
+    async def renovar() -> None:
+        await renovar_conexao(redis, usuario_id, conexao)
+
+    async def fluxo() -> AsyncIterator[dict[str, Any]]:
+        try:
+            async for mensagem in gerar_sse(
+                redis, canal, ultimo_evento_id, expira_em=expira_em, a_cada_volta=renovar
+            ):
+                yield mensagem
+        finally:
+            await encerrar_conexao(redis, usuario_id, conexao)
+
+    return EventSourceResponse(
+        fluxo(),
+        headers=CABECALHOS_SSE,
+        ping=INTERVALO_PING_SEGUNDOS,
+        ping_message_factory=mensagem_ping,
+    )
+
+
 @roteador.get(
     "/conversas/{conversa_id}/eventos",
     response_class=EventSourceResponse,
@@ -51,18 +103,18 @@ async def conversa_do_usuario(sessao: AsyncSession, conversa_id: UUID, usuario_i
 async def eventos_da_conversa(
     conversa_id: UUID,
     usuario_id: Annotated[UUID, Depends(usuario_atual)],
-    sessao: Annotated[AsyncSession, Depends(obter_sessao)],
+    # scope="function": a sessão (e a conexão do pool) fecha antes do stream começar; com o
+    # padrão ("request") ela ficaria presa enquanto o SSE durasse (API-01).
+    sessao: Annotated[AsyncSession, Depends(obter_sessao, scope="function")],
     redis: Annotated[Redis, Depends(obter_redis)],
     ultimo_evento_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+    expira_em: Annotated[float | None, Depends(validade_do_token)] = None,
 ) -> EventSourceResponse:
     """Transmite eventos de uma conversa retomando do último identificador."""
     if not await conversa_do_usuario(sessao, conversa_id, usuario_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversa não encontrada.")
-    return EventSourceResponse(
-        gerar_sse(redis, canal_conversa(conversa_id), ultimo_evento_id),
-        headers=CABECALHOS_SSE,
-        ping=INTERVALO_PING_SEGUNDOS,
-        ping_message_factory=mensagem_ping,
+    return await _transmitir(
+        redis, canal_conversa(conversa_id), ultimo_evento_id, usuario_id, expira_em
     )
 
 
@@ -71,11 +123,9 @@ async def eventos_do_usuario(
     usuario_id: Annotated[UUID, Depends(usuario_atual)],
     redis: Annotated[Redis, Depends(obter_redis)],
     ultimo_evento_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+    expira_em: Annotated[float | None, Depends(validade_do_token)] = None,
 ) -> EventSourceResponse:
     """Transmite eventos de estado para a Ilha e a barra lateral."""
-    return EventSourceResponse(
-        gerar_sse(redis, canal_usuario(usuario_id), ultimo_evento_id),
-        headers=CABECALHOS_SSE,
-        ping=INTERVALO_PING_SEGUNDOS,
-        ping_message_factory=mensagem_ping,
+    return await _transmitir(
+        redis, canal_usuario(usuario_id), ultimo_evento_id, usuario_id, expira_em
     )

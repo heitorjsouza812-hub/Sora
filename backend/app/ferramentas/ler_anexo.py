@@ -1,5 +1,11 @@
 """Ferramenta ``ler_anexo`` (especificação §4; tabela ``anexos`` em §1). Só lê
 anexos do próprio usuário; o conteúdo entra na cerca ``<dado_externo>``.
+
+O modelo não passa caminho nenhum, só o ``anexo_id`` (UUID validado). As travas:
+a consulta filtra por ``anexos.usuario_id = contexto.usuario_id`` (anexo de
+outro usuário = "não encontrado") e o ``anexos.caminho`` salvo passa por
+``app.ferramentas.arquivos.caminho_do_anexo``, que confere o caminho resolvido
+dentro do volume de arquivos.
 """
 
 from __future__ import annotations

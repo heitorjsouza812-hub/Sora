@@ -7,6 +7,7 @@ LangChain em `registro.py` (§6.1).
 | Arquivo | O que tem |
 | --- | --- |
 | `base.py` | `ContextoFerramenta`, prazos e limite de 20.000 caracteres |
+| `arquivos.py` | Caminhos seguros: `validar_nome_arquivo` (sem pastas, `..`, NUL, reservados do Windows, ponto no início) e conferência do caminho resolvido dentro da pasta da cadeia e do volume |
 | `permissoes.py` | `FERRAMENTAS_POR_PAPEL`, ferramentas com revisor e com cerca |
 | `rotulos.py` | Rótulos dos passos do painel Trabalho ("Buscando: …"), parâmetros sem segredos |
 | `registro.py` | `ESQUEMAS` (nome → classe) e `criar_ferramentas()` |

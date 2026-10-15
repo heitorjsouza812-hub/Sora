@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ilha-retangulo"
+description = "Enables the ilha_retangulo command without any pre-configured scope."
+commands.allow = ["ilha_retangulo"]
+
+[[permission]]
+identifier = "deny-ilha-retangulo"
+description = "Denies the ilha_retangulo command without any pre-configured scope."
+commands.deny = ["ilha_retangulo"]

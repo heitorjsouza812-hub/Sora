@@ -18,6 +18,7 @@ from app.eventos.tipos import TIPOS_EVENTOS_ESTADO, Evento, EventoEstado
 
 PASTA = Path(__file__).parent
 PASTA_USUARIO = PASTA / "usuario"
+PASTA_RETOMADA = PASTA / "retomada"
 ID_DO_STREAM = re.compile(r"^\d+-\d+$")
 
 MODELOS: dict[str, type[BaseModel]] = {m.evento: m for m in typing.get_args(Evento)}
@@ -76,3 +77,14 @@ def test_evento_do_usuario_leva_conversa_id(caminho: Path) -> None:
         dados.pop("conversa_id")
     modelo = modelo_cls.model_validate(dados)
     assert modelo.model_dump(mode="json") == dados
+
+
+def test_aviso_de_recarga_nos_dois_canais() -> None:
+    """``Last-Event-ID`` mais velho que as 24 h: o mesmo ``erro`` nos dois canais, sem
+    ``conversa_id`` (vale para o canal inteiro). O app busca o estado de novo pela API."""
+    caminho = PASTA_RETOMADA / "erro.json"
+    exemplo = _ler(caminho)
+    _confere_envelope(exemplo, caminho)
+    modelo = MODELOS["erro"].model_validate(exemplo["data"])
+    assert modelo.model_dump(mode="json") == exemplo["data"]
+    assert exemplo["data"]["codigo"] == "recarregar"

@@ -106,9 +106,7 @@ def montar_prompt(pedido: str, contexto: ContextoTriagem) -> str:
 
     Preenche numa passada só: um ``{pedido}`` escrito dentro do texto do usuário não é trocado.
     """
-    agentes = "\n".join(
-        f"- {a.id}: {a.nome} ({a.funcao})" for a in contexto.agentes_individuais
-    )
+    agentes = "\n".join(f"- {a.id}: {a.nome} ({a.funcao})" for a in contexto.agentes_individuais)
     valores = {
         "tem_modelo_de_imagem": "sim" if contexto.tem_modelo_de_imagem else "não",
         "lista_de_agentes": agentes or "(nenhum)",
@@ -224,7 +222,8 @@ def _pos_processar(
     if agente is not None and agente not in {a.id for a in contexto.agentes_individuais}:
         agente = None
 
-    if modo is ModoTriagem.AGENTE_INDIVIDUAL and (agente is None or contexto.em_conversa_com_agente):
+    sem_agente = agente is None or contexto.em_conversa_com_agente
+    if modo is ModoTriagem.AGENTE_INDIVIDUAL and sem_agente:
         # Sem agente para rotear (ou conversa já com um agente): cadeia se houver especialistas.
         modo = ModoTriagem.CADEIA if especialistas else ModoTriagem.DIRETO
     if modo is not ModoTriagem.AGENTE_INDIVIDUAL:
@@ -316,7 +315,8 @@ async def triar(
             )
             avisos.extend(escalada.avisos)
             outros = [m for m in escalada.modelos if m.modelo != modelo.modelo]
-            texto, modelo = await chamador.chamar(outros or escalada.modelos, [HumanMessage(prompt)])
+            candidatos = outros or escalada.modelos
+            texto, modelo = await chamador.chamar(candidatos, [HumanMessage(prompt)])
             escalou = True
             saida, _ = validar_saida_com_conserto(texto)
 

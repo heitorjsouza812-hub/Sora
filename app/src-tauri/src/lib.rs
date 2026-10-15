@@ -99,16 +99,77 @@ fn definir_visibilidade<R: Runtime>(app: &AppHandle<R>, estado: &IlhaEstado, vis
 }
 
 #[tauri::command]
-fn ilha_retangulo(x: f64, y: f64, w: f64, h: f64, estado: State<'_, IlhaEstado>) {
+fn ilha_retangulo(
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    janela: WebviewWindow,
+    estado: State<'_, IlhaEstado>,
+) -> Result<(), String> {
+    if !janela_pode("ilha_retangulo", janela.label()) {
+        return Err("só a janela da ilha pode informar o retângulo".into());
+    }
+    let r = validar_retangulo(x, y, w, h).ok_or("retângulo inválido")?;
     *estado
         .retangulo
         .lock()
-        .expect("retângulo da ilha envenenado") = RetanguloIlha { x, y, w, h };
+        .expect("retângulo da ilha envenenado") = r;
+    Ok(())
+}
+
+/// Rejeita não finitos/negativos e limita o retângulo à janela da ilha (800×460).
+fn validar_retangulo(x: f64, y: f64, w: f64, h: f64) -> Option<RetanguloIlha> {
+    if ![x, y, w, h].iter().all(|v| v.is_finite() && *v >= 0.0) {
+        return None;
+    }
+    let x = x.min(ILHA_LARGURA);
+    let y = y.min(ILHA_ALTURA);
+    Some(RetanguloIlha {
+        x,
+        y,
+        w: w.min(ILHA_LARGURA - x),
+        h: h.min(ILHA_ALTURA - y),
+    })
+}
+
+/// Rota interna do app: "/" + caracteres simples; sem esquema, "//" ou "..".
+fn caminho_interno_valido(caminho: &str) -> bool {
+    caminho.len() <= 200
+        && caminho.starts_with('/')
+        && !caminho.starts_with("//")
+        && !caminho.contains("..")
+        && caminho
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./?=&%#".contains(c))
+}
+
+/// Qual janela pode chamar cada comando (segunda trava; a primeira são as capabilities
+/// `capabilities/main.json` e `capabilities/ilha.json`, que liberam os mesmos comandos). APP-003.
+const COMANDOS_POR_JANELA: &[(&str, &str)] = &[
+    ("ilha_retangulo", "ilha"),
+    ("navegar", "ilha"),
+    ("ilha_visivel", "main"),
+];
+
+fn janela_pode(comando: &str, label: &str) -> bool {
+    COMANDOS_POR_JANELA
+        .iter()
+        .any(|(c, janela)| *c == comando && *janela == label)
 }
 
 #[tauri::command]
-fn ilha_visivel(visivel: bool, app: AppHandle, estado: State<'_, IlhaEstado>) {
+fn ilha_visivel(
+    visivel: bool,
+    janela: WebviewWindow,
+    app: AppHandle,
+    estado: State<'_, IlhaEstado>,
+) -> Result<(), String> {
+    if !janela_pode("ilha_visivel", janela.label()) {
+        return Err("só a janela principal liga/desliga a ilha".into());
+    }
     definir_visibilidade(&app, &estado, visivel);
+    Ok(())
 }
 
 #[tauri::command]
@@ -117,9 +178,74 @@ fn mostrar_app(app: AppHandle) {
 }
 
 #[tauri::command]
-fn navegar(caminho: String, app: AppHandle) {
+fn navegar(caminho: String, janela: WebviewWindow, app: AppHandle) -> Result<(), String> {
+    if !janela_pode("navegar", janela.label()) {
+        return Err("só a ilha pede navegação".into());
+    }
+    if !caminho_interno_valido(&caminho) {
+        return Err("caminho inválido".into());
+    }
     mostrar_principal(&app);
     let _ = app.emit_to("main", "sora-navegar", caminho);
+    Ok(())
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn retangulo_rejeita_valores_ruins() {
+        assert!(validar_retangulo(100.0, 0.0, 600.0, 400.0).is_some());
+        assert!(validar_retangulo(f64::NAN, 0.0, 10.0, 10.0).is_none());
+        assert!(validar_retangulo(-1.0, 0.0, 10.0, 10.0).is_none());
+        let r = validar_retangulo(0.0, 0.0, 5000.0, 10.0).unwrap();
+        assert!(r.w <= ILHA_LARGURA);
+        assert!(validar_retangulo(0.0, 0.0, f64::INFINITY, 10.0).is_none());
+    }
+
+    #[test]
+    fn caminho_aceita_so_rotas_internas() {
+        assert!(caminho_interno_valido("/revisao/abc-1"));
+        assert!(!caminho_interno_valido("//evil.com"));
+        assert!(!caminho_interno_valido("https://evil.com"));
+        assert!(!caminho_interno_valido("javascript:alert(1)"));
+        assert!(!caminho_interno_valido("/a/../b"));
+        assert!(!caminho_interno_valido("/a\\b"));
+    }
+
+    #[test]
+    fn cada_comando_so_na_sua_janela() {
+        assert!(janela_pode("ilha_retangulo", "ilha"));
+        assert!(janela_pode("navegar", "ilha"));
+        assert!(janela_pode("ilha_visivel", "main"));
+        assert!(!janela_pode("ilha_retangulo", "main"));
+        assert!(!janela_pode("navegar", "main"));
+        assert!(!janela_pode("ilha_visivel", "ilha"));
+        assert!(!janela_pode("mostrar_app", "main"));
+        assert!(!janela_pode("mostrar_app", "ilha"));
+        assert!(!janela_pode("navegar", "outra"));
+    }
+
+    /// As capabilities liberam exatamente os comandos da tabela, uma por janela (APP-003).
+    #[test]
+    fn capabilities_batem_com_a_tabela() {
+        let main = include_str!("../capabilities/main.json");
+        let ilha = include_str!("../capabilities/ilha.json");
+        assert!(main.contains(r#""windows": ["main"]"#));
+        assert!(ilha.contains(r#""windows": ["ilha"]"#));
+        for (comando, janela) in COMANDOS_POR_JANELA {
+            let permissao = format!("\"allow-{}\"", comando.replace('_', "-"));
+            let (dono, outra) = if *janela == "main" { (main, ilha) } else { (ilha, main) };
+            assert!(dono.contains(&permissao), "{permissao} falta em {janela}");
+            assert!(!outra.contains(&permissao), "{permissao} sobrando na outra janela");
+        }
+        for cap in [main, ilha] {
+            assert!(!cap.contains("allow-mostrar-app"));
+            assert!(!cap.contains("core:default"));
+        }
+        assert!(!std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities/default.json")).exists());
+    }
 }
 
 fn geometria_monitor<R: Runtime>(app: &AppHandle<R>) -> Option<(i32, i32, u32, u32, u64)> {

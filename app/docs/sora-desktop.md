@@ -33,7 +33,7 @@ nada de servidor HTTP, nada de SDK de IA). O app web (`npm run dev`) tem que con
 - `tauri-plugin-single-instance`: abrir de novo só traz a janela principal.
 - Comandos: `ilha_retangulo`, `ilha_visivel(visivel)`, `mostrar_app`, `navegar(caminho)` (emite
   `sora-navegar` para "main" e mostra/foca a janela main).
-- `capabilities/default.json` com o mínimo para as duas janelas (core:event, core:window, os comandos).
+- Uma capability por janela (APP-003): `capabilities/main.json` (core:event + `ilha_visivel`) e `capabilities/ilha.json` (core:event + `ilha_retangulo` e `navegar`). Os comandos estão declarados no manifesto do app (`build.rs`), então só funcionam na janela que os libera; `mostrar_app` não é liberado para nenhuma (o front não usa). No Rust, `COMANDOS_POR_JANELA` confere a janela de novo (segunda trava) e um teste garante que as capabilities batem com essa tabela.
 - CSP: sem rede externa (as fontes já são locais).
 - **Implementar `src/desktop/ponte.ts`** (o stub já tem as assinaturas; não renomear).
 - **Sincronização entre janelas**: o store (`sora.projetos.v1`) e as prefs da ilha (`sora.ilha.v1`) usam
