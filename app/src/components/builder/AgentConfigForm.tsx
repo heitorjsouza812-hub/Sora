@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { CSSProperties } from 'react';
 import { COR_SORA, MOVIMENTOS, PALETA_AGENTES } from '../../data/planejador';
-import { PROVEDORES_MODELO, useModelos, type EscolhaModelo, type ProvedorModeloId } from '../../state/modelos';
+import { modelosAtivos, useModelos, type EscolhaModelo, type ProvedorModeloId } from '../../state/modelos';
 import { SoraOrb } from '../mascot';
 import type { RascunhoConstrutor } from './types';
 
@@ -17,7 +17,7 @@ export interface AgentConfigFormProps {
 export function AgentConfigForm({ rascunho: r, onChange, onExcluir, modo = 'agente' }: AgentConfigFormProps) {
   const modelos = useModelos();
   const set = <K extends keyof RascunhoConstrutor>(k: K, valor: RascunhoConstrutor[K]) => onChange({ ...r, [k]: valor });
-  const opcoesModelo = PROVEDORES_MODELO.flatMap(p => modelos.provedores[p.id].status === 'conectado' ? modelos.provedores[p.id].modelos.filter(m => m.habilitado).map(m => ({ p: p.id, m: m.id, label: `${p.nome} · ${m.id}` })) : []);
+  const opcoesModelo = modelosAtivos(modelos).map(({ provedor, modelo, definicao }) => ({ p: provedor, m: modelo.modelo, label: `${definicao.nome} · ${modelo.modelo}` }));
   const valorModelo = r.modelo ? `${r.modelo.provedor}::${r.modelo.modelo}` : '';
   if (modo === 'sora') {
     return <div className="bld-config bld-config-sora">

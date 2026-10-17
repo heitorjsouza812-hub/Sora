@@ -85,6 +85,24 @@ export async function mostrarApp(): Promise<void> {
   if (noDesktop) await invoke('mostrar_app');
 }
 
+/** Lê o token de renovação do cofre do sistema. Web e Ilha não acessam o cofre. */
+export async function cofreLer(): Promise<string | null> {
+  if (!noDesktop || janelaAtual !== 'main') return null;
+  return invoke<string | null>('cofre_ler');
+}
+
+/** Guarda o token de renovação exatamente como recebido do backend. */
+export async function cofreGravar(token: string): Promise<void> {
+  if (!noDesktop || janelaAtual !== 'main') return;
+  await invoke('cofre_gravar', { token });
+}
+
+/** Remove o token de renovação; apagar uma entrada inexistente também é sucesso. */
+export async function cofreApagar(): Promise<void> {
+  if (!noDesktop || janelaAtual !== 'main') return;
+  await invoke('cofre_apagar');
+}
+
 // WebView2 nem sempre propaga `storage` entre duas WebViews do mesmo app. Reemitimos cada
 // mutação via eventos Tauri; os stores continuam usando o evento web e não conhecem esta ponte.
 interface ArmazenamentoTauri { chave: string; origem: string }

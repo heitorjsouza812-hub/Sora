@@ -35,6 +35,20 @@ def test_token_anterior_e_reuso() -> None:
     assert contas.classificar_token(_sessao(), "antigo", AGORA) == "reutilizado"
 
 
+def test_token_anterior_dentro_da_janela_e_tolerado() -> None:
+    sessao = _sessao(expira_em=AGORA + seguranca.RENOVACAO_VALIDADE - timedelta(seconds=10))
+    assert contas.classificar_token(sessao, "antigo", AGORA) == "tolerado"
+
+
+def test_tolerancia_inclui_15_segundos_mas_nao_um_instante_a_mais() -> None:
+    no_limite = _sessao(
+        expira_em=AGORA + seguranca.RENOVACAO_VALIDADE - contas.JANELA_TOLERANCIA_RENOVACAO
+    )
+    fora = _sessao(expira_em=no_limite.expira_em - timedelta(microseconds=1))
+    assert contas.classificar_token(no_limite, "antigo", AGORA) == "tolerado"
+    assert contas.classificar_token(fora, "antigo", AGORA) == "reutilizado"
+
+
 @pytest.mark.parametrize(
     "sessao",
     [None, _sessao(encerrada_em=AGORA), _sessao(expira_em=AGORA - timedelta(seconds=1))],
@@ -132,7 +146,9 @@ def test_renovar_aceita_cookie_ou_corpo(
 
 def test_rotas_protegidas_exigem_bearer_valido(aplicacao_sem_infra: FastAPI) -> None:
     with TestClient(aplicacao_sem_infra) as c:
-        assert c.get("/v1/eu").status_code in (401, 403)
+        sem_token = c.get("/v1/eu")
+        assert sem_token.status_code == 401
+        assert sem_token.json() == {"detail": "Entre na sua conta para continuar."}
         ruim = c.get("/v1/eu", headers={"Authorization": "Bearer lixo"})
         assert ruim.status_code == 401
         expirado = seguranca.criar_token_acesso({"sub": str(uuid4())}, timedelta(seconds=-1))

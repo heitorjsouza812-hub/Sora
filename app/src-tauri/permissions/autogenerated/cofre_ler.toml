@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cofre-ler"
+description = "Enables the cofre_ler command without any pre-configured scope."
+commands.allow = ["cofre_ler"]
+
+[[permission]]
+identifier = "deny-cofre-ler"
+description = "Denies the cofre_ler command without any pre-configured scope."
+commands.deny = ["cofre_ler"]

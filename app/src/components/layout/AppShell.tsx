@@ -10,7 +10,7 @@ import { Comandos } from '../comandos';
 import { Ilha } from '../ilha';
 import { FaixaSemConexao } from '../erros';
 import { EditorAgenteHost, MenuAgente } from '../builder';
-import { Navegacao, Sidebar } from './Sidebar';
+import { ContaRodape, Navegacao, Sidebar } from './Sidebar';
 import { statusDaSora } from './useSoraStatus';
 
 export interface AppShellProps {
@@ -80,7 +80,10 @@ export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppSh
         {children}
       </section>
       <BottomSheet open={menu} onClose={() => setMenu(false)} title="Menu" className="mobile-nav-sheet">
-        <div className="mobile-nav"><Navegacao onNavegar={() => setMenu(false)} /></div>
+        <div className="mobile-nav">
+          <Navegacao onNavegar={() => setMenu(false)} />
+          <ContaRodape movel onNavegar={() => setMenu(false)} />
+        </div>
       </BottomSheet>
       <EditorAgenteHost />
       <GestaoHost />

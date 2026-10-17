@@ -74,6 +74,7 @@ Modelo de entrada:
 
 **Histórico**
 - **2026-10-17** — **Peças do Rakazo portadas para o backend** (github.com/elie222/rakazo, Apache 2.0), fases 1, 2 e 3: saltos entre agentes, catálogo preguiçoso de ferramentas, política de aprovação + juiz do revisor, compactação e busca no histórico, memória, agenda, pendências, habilidades, conectores MCP, Telegram, voz, navegador por texto, `executar_comando`, gráficos, DuckDuckGo (dev). Migração 0004, testes `test_rakazo_fase{1,2,3}.py`. Arquivos: `backend/app/**`, `docs/referencias/rakazo.md`, `log/2026-10-17.md`. Pendente: ligar no worker, `Vetorizador` da memória, sandboxes fora do servidor principal.
+- **2026-10-17** — **Etapa 2 concluída: app ligado ao backend.** Login real (cliente HTTP com token em memória e renovação, sessão, Entrar/Criar conta, gate, onboarding, Sair também no celular), Configurações → Modelos de IA nas rotas `/v1/provedores|modelos|preferencias` (APP-001 fechado: nenhuma chave no navegador), renovação no Credential Manager no desktop, CLI de convite. Time: Tecelã/Âncora (Codex), Lince (Hermes, validador). Validado: fluxo real 1440/390, e2e, ilha, Tauri real, 119 testes do app, 912 do backend. Arquivos: `app/src/api/**`, `app/src/state/{sessao,modelos}.ts`, `app/src/components/sessao/**`, `app/src-tauri/**`, `backend/app/cli.py`. Pendente: domínio real da API no CSP do Tauri antes do instalador final.
 - **2026-10-15** — **Backend: fundação da fase 1 pronta e revisada.** Repositório movido para `C:\dev\sora`. Plano 2.2: **sem modo demonstração** (o backend tem o modelo falso `SORA_MODELO_FALSO` só para desenvolver, barrado em produção). Time no Maestri (Alicerce, Bússola, Trama; Vigia como validador) fez o esqueleto de `backend/` e `infra/` e a fundação: contas e login (argon2id, JWT, renovação com detecção de reuso, desktop), cifra AES-GCM das chaves, migrações 0001–0003, eventos Redis Stream + SSE, busca e `ler_pagina` com proteção SSRF, seletor de modelos, Sistema 1 e estados da cadeia. O time do Clausecurity fez uma revisão de segurança em loop, validada com o Docker real (`log/2026-10-15.md`). 795 testes. README na raiz.
 - **2026-10-14** — **Decisão: agentes em LangChain.** Plano passou para a versão 2.1: `create_agent` sobre o LangGraph, ferramentas como `@tool`, `ChatLiteLLM` para os modelos, checkpointer no PostgreSQL e as peças de engenharia como middleware (especificação §6.1). Na fase 3, os conectores MCP entram pelo `langchain-mcp-adapters`. Fila, estados da cadeia, seletor e eventos continuam nossos. Arquivos: `docs/plano-de-implementacao/*`, `CLAUDE.md`, `AGENTS.md`, `log/`. Nenhum código alterado.
 - **2026-10-11** — **Plano de implementação versão 2** em `docs/plano-de-implementacao/`: o plano do backend (vindo do zip "sora-plano-de-implementacao") revisado para combinar com o app: SearXNG e Qdrant fora da fase 1 (busca por API Tavily/Brave; pgvector), login do desktop com token no cofre do sistema, seção 3 "Contrato com o app" (projetos, especialistas visíveis, passos, entregas e versões, Ilha, anexos, modo demonstração), agente individual básico e Designer na fase 1, créditos → "Uso do mês". Lista completa no README da pasta. Nenhum código alterado.
@@ -291,7 +292,7 @@ npm run desktop:build  # instaladores em src-tauri/target/release/bundle/{nsis,m
 
 **Desktop (Tauri v2, desde 2026-10-11):** precisa do Rust (MSVC). Duas janelas: `main` (o app; fechar esconde na bandeja) e `ilha` (`index.html?janela=ilha`, transparente, sem borda, sempre no topo, presa no topo central da tela; fora da pílula os cliques atravessam). Bandeja (Abrir a Sora · Mostrar/ocultar a ilha · Sair), atalho global Ctrl+Shift+S, instância única. A ponte JS↔Rust é `src/desktop/ponte.ts` (no navegador vira no-op). Spec: `app/docs/sora-desktop.md`. Para inspecionar as WebViews: iniciar o exe com `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`.
 
-Tudo é **simulado no navegador** (sem back-end). Os dados ficam no `localStorage` (`sora.projetos.v1`, `sora.modelos.v1`). Para começar do zero: Configurações → Conta → **Apagar todos os dados**.
+Chats, planejador, Trabalho e Ilha ainda são **simulados no navegador**. Na etapa 2, sessão e Configurações → Modelos de IA passaram a usar o backend. `sora.modelos.v1` guarda somente escolhas não secretas de modelos; chaves de API nunca ficam no `localStorage`. Para zerar os dados simulados: Configurações → Conta → **Apagar todos os dados**.
 
 ### 7.2 Estrutura (`app/src`)
 
@@ -299,7 +300,7 @@ Tudo é **simulado no navegador** (sem back-end). Os dados ficam no `localStorag
 |---|---|
 | `components/mascot/` | **Mascote**: `SoraOrb` (canvas de pontos, porte fiel da demo), `SoraThinking`, `orbEngine.ts`. Estados: `arriving · idle · listening · thinking · coordinating · working · done`. |
 | `state/projetos.ts` | **Store principal** (projetos, conversas, agentes, execuções, passos do painel Trabalho). O relógio é a fonte da verdade: status e % são calculados a partir do horário, então sobrevivem a recarregar a página. |
-| `state/modelos.ts` | Provedores de IA, chaves (mascaradas) e modelo padrão da Sora/de cada agente. |
+| `state/modelos.ts` | Cache dos provedores/modelos/preferência do backend; persiste localmente apenas modelos padrão e por agente, nunca chaves. |
 | `data/planejador.ts` | **Planejador simulado**: lê o pedido e escolhe um modelo de equipe (campanha, site, pesquisa, e-mails, vídeo ou genérico), com nomes, cores, movimentos, ferramentas e o roteiro de passos. |
 | `screens/` | `Home` (1º prompt), `SoraChat` (chat do projeto), `AgentChat`, `Projetos`, `Agentes` (galeria), `CriarAgente` (construtor), `Revisao`, `Configuracoes`, `Plugins`, `Mobile` (/celular), `OrbLab` (/lab/orb). |
 | `components/work/` | Painel **Trabalho** (prompt, chamadas de ferramenta, handoffs). |
@@ -323,7 +324,7 @@ Rotas: `/` · `/projeto/:id` · `/chat/:agenteId` · `/projetos` · `/agentes` �
 4. **Agentes** (barra lateral): galeria + **construtor no estilo GPT builder** (aba *Criar*, conversando com a Sora; aba *Configurar*, formulário; à direita, a prévia com chat de teste). O usuário troca **nome, cor, movimento, função, instruções, ferramentas e modelo**. Agente novo recebe uma cor livre da paleta, e nunca `#E2ECFF`, que é da Sora.
 5. **Painel Trabalho:** enquanto um agente trabalha, mostra ao vivo o **prompt** recebido, as **chamadas de ferramenta** (ex.: `figma.criar_frame`, com parâmetros e resultado) e as entregas passadas a outro agente.
 6. **Apagar/renomear** chats, projetos e agentes, com confirmação. A Sora não pode ser apagada.
-7. **Configurações → Modelos de IA:** conectar OpenAI, Anthropic, Gemini, xAI, DeepSeek, Mistral, OpenRouter, Ollama e qualquer API compatível com OpenAI; escolher o modelo padrão da Sora e dos agentes.
+7. **Configurações → Modelos de IA:** rotas reais do backend para OpenAI, Anthropic, Gemini, Groq, OpenRouter, Ollama e APIs compatíveis com OpenAI (xAI, DeepSeek e Mistral com URL pronta); teto/gasto, final da chave, nível/ativo, prioridade e modelos padrão. Chaves não são persistidas no navegador.
 8. **Revisão:** "Revisar" abre as entregas; o usuário escolhe *Aprovar e publicar* ou *Pedir ajuste* (gera nova versão, com comparação).
 9. **Plugins: congelados de propósito.** A tela existe, mas não mexer até o grupo decidir.
 10. **Ilha da Sora** (2026-10-11, inspirada no Coucou — github.com/Louis-CFM/coucou): pílula preta fixa no topo de todas as telas com projeto. Compacta: Sora branca pequena (olha para o mouse) + "N trabalhando" + os agentes rodando como orbs coloridos. Expandida (hover, clique ou **Ctrl/⌘+Shift+S**): abas Início · **Projeto ▾** (escolhe qual projeto mostrar; padrão "Automático") · Abrir chat; Visão geral (Sora grande + ticker dos passos + pílulas dos agentes), detalhe do agente (passos, ferramenta, mensagem direta), **Aprovação** quando a equipe termina (Pedir ajuste N · Revisar R · Aprovar e publicar Y). Sons via WebAudio, botão "destacar" (janela Picture-in-Picture, Chrome/Edge), Configurações → aba **Ilha**. Preferências em `localStorage['sora.ilha.v1']`. Hoje mostra os agentes da Sora (simulados); ligar agentes externos (Claude Code, Codex, Hermes via hooks, como no Coucou) exige back-end — fica para depois.
@@ -341,10 +342,10 @@ Rotas: `/` · `/projeto/:id` · `/chat/:agenteId` · `/projetos` · `/agentes` �
 
 ### 7.5 Pendências / próximos passos
 
-- **Back-end:** hoje o "Testar conexão" só confere o formato da chave e as respostas dos agentes são simuladas. Falta um servidor que chame os modelos de verdade e guarde as chaves com criptografia (**nunca** guardar chaves só no navegador em produção). **O plano está em `docs/plano-de-implementacao/` (versão 2.1, alinhada a este app):** FastAPI + **agentes em LangChain** (`create_agent`, decidido em 2026-10-14) + LiteLLM + ARQ/Redis + PostgreSQL, busca por API (Tavily ou Brave, sem SearXNG), contrato app↔backend na seção 3 da especificação (modo real × modo demonstração). Começar o backend só com o "sim" do Heitor.
+- **Etapa 2 concluída** (login real, Modelos de IA no backend, cofre do desktop). Próximo: worker de ponta a ponta (modo Cadeia, especialistas, SSE no chat, que ainda é simulado) e ligar as peças do Rakazo. Antes do instalador final: domínio real da API no CSP do `tauri.conf.json`.
 - **Plugins** reais (congelados).
 - Testar o microfone (VoiceBeam com `useMicrophone`) num celular de verdade, via https.
-- Contas/login e sincronização entre computador e celular.
+- Sincronização entre computador e celular.
 
 ### 7.6 Como o app foi feito (time de IA no Maestri)
 

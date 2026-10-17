@@ -7,6 +7,9 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:event:allow-emit",
-    "allow-ilha-visivel"
+    "allow-ilha-visivel",
+    "allow-cofre-ler",
+    "allow-cofre-gravar",
+    "allow-cofre-apagar"
   ]
 }

@@ -608,6 +608,10 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
   .mobile-nav .gestao-menu-btn { width: 44px; height: 44px; }
   .mobile-nav .chat-row:hover .status-dot, .mobile-nav .chat-row:focus-within .status-dot { opacity: 1; }
   .mobile-nav .status-dot { margin-right: var(--sp-10); }
+  .mobile-account { margin-top: var(--sp-6); padding: var(--sp-4) 0 0; }
+  .mobile-account .account-avatar { width: 40px; height: 40px; }
+  .mobile-account .account-settings { width: 44px; height: 44px; }
+  .mobile-account > .account-logout { width: auto; min-width: 64px; height: 44px; margin-left: 0; padding: 0 var(--sp-3); border-radius: var(--r-pill); color: var(--danger); background: var(--white-a06); font-weight: 600; }
   .work-pill { height: 44px; border-radius: var(--r-pill); }
   .side-sheet .side-tabs { position: sticky; top: 0; z-index: 1; }
   .side-sheet .side-tabs button { height: 44px; font-size: var(--fs-14); }

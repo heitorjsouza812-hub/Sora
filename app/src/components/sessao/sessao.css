@@ -1,0 +1,24 @@
+/* Entrar / Criar conta / onboarding "Conecte sua primeira API" (etapa 2). */
+.sessao-tela { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-6); padding: var(--sp-10) var(--sp-4); background: var(--bg); color: var(--text); }
+.sessao-tela h1 { margin: 0; font-size: clamp(var(--fs-24), 3vw, var(--fs-32)); font-weight: 400; letter-spacing: -.02em; text-align: center; }
+.sessao-tela .sessao-sub { margin: -12px 0 0; color: var(--text-2); font-size: var(--fs-14); text-align: center; max-width: 440px; line-height: 1.5; }
+.sessao-cartao { width: min(400px, 100%); display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-6); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-24); }
+.sessao-cartao form { display: flex; flex-direction: column; gap: var(--sp-4); }
+.sessao-abas { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--panel-2); border-radius: var(--r-pill); }
+.sessao-abas button { min-height: 36px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-2); font: inherit; font-size: var(--fs-14); cursor: pointer; }
+.sessao-abas button[aria-selected="true"] { background: var(--white-a10); color: var(--text); }
+.sessao-abas button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sessao-erro { margin: 0; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--danger-line); border-radius: var(--r-md); background: var(--danger-bg); color: var(--text); font-size: var(--fs-14); line-height: 1.45; }
+.sessao-nota { margin: 0; color: var(--text-3); font-size: var(--fs-13); text-align: center; }
+
+.onboarding { justify-content: flex-start; padding-top: max(var(--sp-12), 8vh); }
+.onboarding-lista { width: min(720px, 100%); display: flex; flex-direction: column; gap: var(--sp-3); }
+.onboarding-acoes { display: flex; flex-wrap: wrap; gap: var(--sp-3); justify-content: center; }
+
+.aviso-provedor { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-2) var(--sp-3); max-width: 560px; margin: -18px 0 26px; padding: var(--sp-2) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--text-2); font-size: var(--fs-13); text-align: center; }
+.aviso-provedor a { color: var(--text); font-weight: 600; }
+
+@media (max-width: 640px) {
+  .sessao-cartao { padding: var(--sp-5) var(--sp-4); border-radius: var(--r-16); }
+  .aviso-provedor { border-radius: var(--r-16); margin: -10px 0 18px; }
+}

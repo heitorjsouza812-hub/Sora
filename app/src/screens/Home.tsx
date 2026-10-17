@@ -11,6 +11,7 @@ import type { SVGProps } from 'react';
 import { TeamIcon } from '../components/ui/Icons';
 import { anexarEnvio, criarAgenteIndependente, criarProjeto, novoChat, useProjetos } from '../state/projetos';
 import type { Anexo } from '../components/anexos';
+import { AvisoSemProvedor } from '../components/sessao';
 
 const sugestoes: [string, string][] = [
   ['Criar campanha', 'Crie uma campanha para lançar minha cafeteria: pesquise referências, prepare as peças e monte um calendário de posts.'],
@@ -112,6 +113,7 @@ export default function Home() {
           />
         </div>
         <h1>Em que posso te ajudar hoje?</h1>
+        <AvisoSemProvedor />
         <div className="hero-composer">
           <MessageComposer
             placeholder={modo === 'agente' ? 'Descreva o que o agente deve fazer…' : `Peça qualquer coisa à ${sora.nome}…`}

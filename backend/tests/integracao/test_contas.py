@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core import contas, seguranca
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis
 from app.main import criar_aplicacao
@@ -123,7 +125,9 @@ async def test_login_web_e_desktop(cliente: AsyncClient) -> None:
     }
 
 
-async def test_renovacao_rotaciona_e_reuso_encerra_a_sessao(cliente: AsyncClient) -> None:
+async def test_renovacao_tolera_resposta_perdida_e_reuso_tardio_encerra(
+    cliente: AsyncClient,
+) -> None:
     await _cadastrar(cliente)
     login = await cliente.post(
         "/v1/auth/entrar",
@@ -136,14 +140,57 @@ async def test_renovacao_rotaciona_e_reuso_encerra_a_sessao(cliente: AsyncClient
     t2 = r2.json()["token_renovacao"]
     assert t2 and t2 != t1
 
-    reuso = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
+    recuperada = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
+    assert recuperada.status_code == 200
+    t3 = recuperada.json()["token_renovacao"]
+    assert t3 and t3 not in (t1, t2)
+
+    # Simula a última rotação fora da tolerância sem esperar 15 segundos no teste.
+    async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
+        sessao = await s.scalar(select(Sessao).where(Sessao.token_hash == seguranca.hash_token(t3)))
+        assert sessao is not None
+        sessao.expira_em -= contas.JANELA_TOLERANCIA_RENOVACAO + timedelta(seconds=1)
+        await s.commit()
+
+    reuso = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t2})
     assert reuso.status_code == 401
-    # a sessão inteira caiu: nem o token novo funciona mais
-    depois = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t2})
+    # A sessão inteira caiu e continua encerrada: nem o token atual funciona mais.
+    depois = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t3})
     assert depois.status_code == 401
     async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
         encerradas = await s.scalar(select(Sessao.encerrada_em).where(Sessao.token_hash != ""))
     assert encerradas is not None
+
+
+async def test_duas_renovacoes_concorrentes_usam_uma_unica_sessao(
+    cliente: AsyncClient,
+) -> None:
+    await _cadastrar(cliente)
+    login = await cliente.post(
+        "/v1/auth/entrar",
+        json={"email": "ana@exemplo.com", "senha": SENHA},
+        headers={"X-Sora-Cliente": "desktop"},
+    )
+    inicial = login.json()["token_renovacao"]
+
+    respostas = await asyncio.gather(
+        cliente.post("/v1/auth/renovar", json={"token_renovacao": inicial}),
+        cliente.post("/v1/auth/renovar", json={"token_renovacao": inicial}),
+    )
+
+    assert [resposta.status_code for resposta in respostas] == [200, 200]
+    devolvidos = {resposta.json()["token_renovacao"] for resposta in respostas}
+    assert None not in devolvidos
+    assert len(devolvidos) == 2
+    async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
+        sessoes = list((await s.scalars(select(Sessao))).all())
+    # O FOR UPDATE serializa as chamadas: a segunda gira a mesma linha. Um token devolvido fica
+    # atual e o outro fica como anterior por até 15 s; não nascem duas sessões independentes.
+    assert len(sessoes) == 1
+    assert sessoes[0].encerrada_em is None
+    assert {sessoes[0].token_hash, sessoes[0].anterior_hash} == {
+        seguranca.hash_token(token) for token in devolvidos
+    }
 
 
 async def test_sair_encerra_a_sessao(cliente: AsyncClient) -> None:

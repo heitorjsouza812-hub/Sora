@@ -1,7 +1,15 @@
 # Onde paramos
 
-_Atualizado em 2026-10-17 — **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; etapa 2 (ligar o app) em andamento. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
+_Atualizado em 2026-10-17 — **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; **etapa 2 (app ligado ao backend, login real, chaves fora do navegador) concluída**. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
 
+## Etapa 2 — app ligado ao backend (concluída em 2026-10-17)
+
+- **Login de verdade:** cliente HTTP `app/src/api/cliente.ts` (token só em memória, renovação única no 401, `ErroApi` em PT-BR), sessão `state/sessao.ts`, telas Entrar/Criar conta, gate em todas as rotas, onboarding "Conecte sua primeira API" (com Sair) e aviso na Home, conta + Sair na Sidebar e no menu do celular.
+- **Modelos de IA no backend:** `state/modelos.ts` é cache de `/v1/provedores`, `/v1/modelos`, `/v1/preferencias`; nenhuma chave no navegador (migração limpa `sora.modelos.v1`); Groq e compatíveis (xAI/DeepSeek/Mistral); nomes amigáveis dos modelos. **APP-001 fechado.**
+- **Desktop:** renovação no Credential Manager (`cofre_ler/gravar/apagar`, só a janela `main`), CSP com a API. Antes do instalador final: trocar `https://api.seu-dominio.com.br` no `tauri.conf.json` pela origem real.
+- **Dev:** `uv run python -m app.cli convite criar`, passo a passo em `backend/README.md`, `infra/docker-compose.dev.yml`; QA entra sozinho (`qa/entrar.mjs`).
+- **Validado pelo Lince** (`app/qa/lince-rodada{1,3}.md`, `lince-rodada2-tauri.md`): fluxo real 1440 e 390 px, e2e, ilha, Tauri real; app build/oxlint/119 testes; backend ruff/912 testes.
+- **Próximo:** worker de ponta a ponta (modo Cadeia, especialistas, SSE no chat — o chat ainda é simulado), ligar as peças do Rakazo no worker.
 ## Etapa 1 — conexão das APIs (2026-10-15 a 17)
 
 - Rotas `/v1/provedores` (testa a chave antes de salvar, cifra com AAD = id do provedor, duplicado 409, limite de 10 provedores e 10 testes/h), `/v1/modelos`, `/v1/preferencias`; `tem_provedor` exige provedor validado; dependência `exigir_provedor_validado` (412); ponte banco→seletor em `app/seletor/repositorio.py`. Especificação: `log/etapa1-conexao-apis.md`.

@@ -3,11 +3,14 @@ import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { logarTodoContexto } from './entrar.mjs';
 
 const BASE = 'http://localhost:5173';
 const qaDir = dirname(fileURLToPath(import.meta.url));
 const shots = join(qaDir, 'shots');
 const consoleEvents = [];
+// Erros 4xx da API que o cenário provoca de propósito (ex.: chave falsa → 422) não contam como erro de console.
+let api4xxEsperado = false;
 const failures = [];
 let shotNo = 0;
 
@@ -16,7 +19,9 @@ const name = (text) => new RegExp(text, 'i');
 
 function observe(page, viewport) {
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleEvents.push({ viewport, type: 'console', text: message.text(), url: page.url() });
+    if (message.type() !== 'error') return;
+    if (api4xxEsperado && /Failed to load resource: the server responded with a status of 4\d\d/.test(message.text())) return;
+    consoleEvents.push({ viewport, type: 'console', text: message.text(), url: page.url() });
   });
   page.on('pageerror', (error) => consoleEvents.push({ viewport, type: 'pageerror', text: error.message, url: page.url() }));
 }
@@ -29,6 +34,7 @@ async function snap(page, label) {
 async function goto(page, route) {
   const response = await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
   assert.ok(response?.ok(), `GET ${route} deveria responder 2xx`);
+  await page.waitForLoadState('networkidle');
   await page.waitForTimeout(200);
 }
 
@@ -36,6 +42,7 @@ async function reset(page) {
   await goto(page, '/');
   await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
   await page.waitForTimeout(250);
 }
 
@@ -93,6 +100,7 @@ async function flowAndReview(page) {
 
   const reloadUrl = page.url();
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
   assert.equal(page.url(), reloadUrl, 'recarregar no fluxo deve manter a rota do projeto');
   await expectVisible(page, 'Plano', 8_000);
   await snap(page, 'g-reload');
@@ -201,17 +209,20 @@ async function agents(page) {
 async function settings(page) {
   await reset(page);
   await goto(page, '/configuracoes');
-  await page.getByRole('button', { name: /OpenAI/i }).first().click();
-  await page.getByLabel('Chave da API').fill('sk-teste123');
-  await page.getByRole('button', { name: 'Testar conexão', exact: true }).click();
-  await expectVisible(page, 'Conectado', 10_000);
-  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
-  await expectVisible(page, 'Chave salva');
-  const cardText = await page.locator('.cfg-provider-card').filter({ has: page.getByRole('button', { name: /OpenAI/i }) }).first().innerText();
-  assert.ok(!cardText.includes('sk-teste123') && /\*|••|…/.test(cardText), 'a chave deve aparecer mascarada');
-  await page.getByRole('button', { name: 'Apagar todas as chaves', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Apagar chaves', exact: true }).click();
+  // Etapa 2: o backend testa a chave antes de salvar; chave falsa → erro PT-BR e nada guardado no navegador.
+  const card = page.locator('.cfg-provider-card').filter({ has: page.getByRole('button', { name: /OpenAI/i }) }).first();
+  await card.getByRole('button', { name: /OpenAI/i }).click();
+  await card.getByLabel('Chave da API').fill('sk-teste123');
+  api4xxEsperado = true;
+  await card.getByRole('button', { name: 'Testar e conectar', exact: true }).click();
+  const retorno = card.locator('.cfg-card-feedback');
+  await page.waitForFunction((el) => el && el.textContent.trim() && !el.textContent.includes('Falando com o servidor'), await retorno.elementHandle(), { timeout: 30_000 });
+  const textoRetorno = (await retorno.innerText()).trim();
+  assert.ok(!/conectada e modelos/i.test(textoRetorno), `chave falsa não pode conectar (retorno: ${textoRetorno})`);
   await expectVisible(page, 'Não conectado');
+  const armazenado = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
+  assert.ok(!armazenado.includes('sk-teste123'), 'nenhuma chave de API pode ficar no navegador');
+  api4xxEsperado = false;
   await snap(page, 'f-configuracoes');
 }
 
@@ -241,7 +252,7 @@ async function mobile(browser) {
 
 await mkdir(shots, { recursive: true });
 await Promise.all((await readdir(shots)).filter((file) => file.startsWith('e2e-') && file.endsWith('.png')).map((file) => rm(join(shots, file))));
-const browser = await chromium.launch({ headless: true });
+const browser = logarTodoContexto(await chromium.launch({ headless: true }));
 const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
 const desktop = await desktopContext.newPage();
 observe(desktop, '1440x900');

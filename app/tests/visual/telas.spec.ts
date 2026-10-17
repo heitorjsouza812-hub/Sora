@@ -1,14 +1,19 @@
 import { expect, test } from '@playwright/test';
+// Login da conta de QA antes de cada teste (backend local precisa estar rodando).
+import { entrarNoContexto } from '../../qa/entrar.mjs';
 
 const pedido = 'Crie uma campanha para lançar minha cafeteria';
 
 async function limparEstado(page: import('@playwright/test').Page) {
   await page.goto('/');
+  // Espera a renovação silenciosa terminar: navegar no meio dela gira o token sem o cookie novo chegar.
+  await page.waitForLoadState('networkidle');
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.setItem('sora.chegou', '1');
   });
   await page.reload();
+  await page.waitForLoadState('networkidle');
   await page.waitForFunction(() => Boolean(window.__sora));
   await page.addStyleTag({ content: '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}' });
 }
@@ -21,6 +26,7 @@ async function captura(page: import('@playwright/test').Page, nome: string) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await entrarNoContexto(page.context());
   await limparEstado(page);
 });
 

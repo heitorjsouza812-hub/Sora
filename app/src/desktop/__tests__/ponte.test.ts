@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { caminhoInternoValido, chaveDaSora } from '../ponte';
+import { caminhoInternoValido, chaveDaSora, cofreApagar, cofreGravar, cofreLer } from '../ponte';
 
 describe('ponte: validação', () => {
   it('aceita só rotas internas', () => {
@@ -9,5 +9,11 @@ describe('ponte: validação', () => {
   it('só chaves sora.* atravessam a ponte de storage', () => {
     expect(chaveDaSora('sora.projetos.v1')).toBe(true);
     for (const ruim of ['outra', '__proto__', 'sora.', undefined, 3]) expect(chaveDaSora(ruim)).toBe(false);
+  });
+
+  it('não acessa o cofre do sistema no navegador', async () => {
+    await expect(cofreLer()).resolves.toBeNull();
+    await expect(cofreGravar('token-opaco')).resolves.toBeUndefined();
+    await expect(cofreApagar()).resolves.toBeUndefined();
   });
 });

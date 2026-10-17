@@ -3,6 +3,7 @@ import { mkdir, readdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { logarTodoContexto } from './entrar.mjs';
 
 const BASE = 'http://localhost:5173';
 const qaDir = dirname(fileURLToPath(import.meta.url));
@@ -27,12 +28,14 @@ async function screenshot(nome) {
 
 async function limparDados() {
   const resposta = await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.waitForLoadState('networkidle');
   assert.ok(resposta?.ok(), 'a Home deveria responder 2xx');
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.clear();
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
 }
 
 async function criarProjeto() {
@@ -117,7 +120,7 @@ async function esperarAprovacao(dialogo) {
 await mkdir(shotsDir, { recursive: true });
 await Promise.all((await readdir(shotsDir)).filter((arquivo) => arquivo.endsWith('.png')).map((arquivo) => rm(join(shotsDir, arquivo))));
 
-const browser = await chromium.launch({ headless: true });
+const browser = logarTodoContexto(await chromium.launch({ headless: true }));
 const contexto = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
 page = await contexto.newPage();
 observarConsole(page);

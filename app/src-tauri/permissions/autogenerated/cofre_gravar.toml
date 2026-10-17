@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cofre-gravar"
+description = "Enables the cofre_gravar command without any pre-configured scope."
+commands.allow = ["cofre_gravar"]
+
+[[permission]]
+identifier = "deny-cofre-gravar"
+description = "Denies the cofre_gravar command without any pre-configured scope."
+commands.deny = ["cofre_gravar"]

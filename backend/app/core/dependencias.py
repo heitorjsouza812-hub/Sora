@@ -15,18 +15,25 @@ esquema_bearer = HTTPBearer(
     scheme_name="BearerAuth",
     bearerFormat="JWT",
     description="Token de acesso emitido por /v1/auth/entrar ou /v1/auth/renovar.",
+    auto_error=False,
 )
 
 
 async def usuario_atual(
     requisicao: Request,
-    credenciais: Annotated[HTTPAuthorizationCredentials, Depends(esquema_bearer)],
+    credenciais: Annotated[HTTPAuthorizationCredentials | None, Depends(esquema_bearer)],
 ) -> UUID:
     """Valida o JWT de `Authorization: Bearer` e devolve o id do usuário.
 
     Guarda o ``exp`` do token em ``request.state.token_expira_em`` (epoch): o SSE fecha o
     stream quando o token vence (API-08/VAL-10).
     """
+    if credenciais is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Entre na sua conta para continuar.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         carga = decodificar_token_acesso(credenciais.credentials)
         usuario_id = UUID(carga["sub"])

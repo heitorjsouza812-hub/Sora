@@ -15,6 +15,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 const ILHA_LARGURA: f64 = 800.0;
 const ILHA_ALTURA: f64 = 460.0;
 const MARGEM: f64 = 8.0;
+const COFRE_SERVICO: &str = "com.sora.desktop";
+const COFRE_USUARIO: &str = "token-renovacao";
 
 #[derive(Clone, Copy, Default)]
 struct RetanguloIlha {
@@ -150,6 +152,9 @@ const COMANDOS_POR_JANELA: &[(&str, &str)] = &[
     ("ilha_retangulo", "ilha"),
     ("navegar", "ilha"),
     ("ilha_visivel", "main"),
+    ("cofre_ler", "main"),
+    ("cofre_gravar", "main"),
+    ("cofre_apagar", "main"),
 ];
 
 fn janela_pode(comando: &str, label: &str) -> bool {
@@ -175,6 +180,49 @@ fn ilha_visivel(
 #[tauri::command]
 fn mostrar_app(app: AppHandle) {
     mostrar_principal(&app);
+}
+
+fn entrada_cofre() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(COFRE_SERVICO, COFRE_USUARIO)
+        .map_err(|erro| format!("não foi possível acessar o cofre do sistema: {erro}"))
+}
+
+#[tauri::command]
+fn cofre_ler(janela: WebviewWindow) -> Result<Option<String>, String> {
+    if !janela_pode("cofre_ler", janela.label()) {
+        return Err("só a janela principal pode ler o cofre".into());
+    }
+    match entrada_cofre()?.get_password() {
+        Ok(token) => Ok(Some(token)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(erro) => Err(format!("não foi possível ler o cofre do sistema: {erro}")),
+    }
+}
+
+#[tauri::command]
+fn cofre_gravar(token: String, janela: WebviewWindow) -> Result<(), String> {
+    if !janela_pode("cofre_gravar", janela.label()) {
+        return Err("só a janela principal pode gravar no cofre".into());
+    }
+    if token.is_empty() {
+        return Err("o token de renovação não pode ser vazio".into());
+    }
+    entrada_cofre()?
+        .set_password(&token)
+        .map_err(|erro| format!("não foi possível gravar no cofre do sistema: {erro}"))
+}
+
+#[tauri::command]
+fn cofre_apagar(janela: WebviewWindow) -> Result<(), String> {
+    if !janela_pode("cofre_apagar", janela.label()) {
+        return Err("só a janela principal pode apagar o cofre".into());
+    }
+    match entrada_cofre()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(erro) => Err(format!(
+            "não foi possível apagar o cofre do sistema: {erro}"
+        )),
+    }
 }
 
 #[tauri::command]
@@ -236,15 +284,28 @@ mod testes {
         assert!(ilha.contains(r#""windows": ["ilha"]"#));
         for (comando, janela) in COMANDOS_POR_JANELA {
             let permissao = format!("\"allow-{}\"", comando.replace('_', "-"));
-            let (dono, outra) = if *janela == "main" { (main, ilha) } else { (ilha, main) };
+            let (dono, outra) = if *janela == "main" {
+                (main, ilha)
+            } else {
+                (ilha, main)
+            };
             assert!(dono.contains(&permissao), "{permissao} falta em {janela}");
-            assert!(!outra.contains(&permissao), "{permissao} sobrando na outra janela");
+            assert!(
+                !outra.contains(&permissao),
+                "{permissao} sobrando na outra janela"
+            );
         }
         for cap in [main, ilha] {
             assert!(!cap.contains("allow-mostrar-app"));
             assert!(!cap.contains("core:default"));
         }
-        assert!(!std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities/default.json")).exists());
+        assert!(
+            !std::path::Path::new(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/capabilities/default.json"
+            ))
+            .exists()
+        );
     }
 }
 
@@ -391,7 +452,10 @@ pub fn run() {
             ilha_retangulo,
             ilha_visivel,
             mostrar_app,
-            navegar
+            navegar,
+            cofre_ler,
+            cofre_gravar,
+            cofre_apagar
         ])
         .setup(move |app| {
             posicionar_ilha(app.handle());

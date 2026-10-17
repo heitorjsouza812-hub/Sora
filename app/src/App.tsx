@@ -1,7 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from './components/base';
-import { SoraOrb } from './components/mascot';
 import Home from './screens/Home';
 import SoraChat from './screens/SoraChat';
 import AgentChat from './screens/AgentChat';
@@ -10,6 +9,7 @@ import Projetos from './screens/Projetos';
 import Revisao from './screens/Revisao';
 import Plugins from './screens/Plugins';
 import { PonteNavegacao } from './desktop/PonteNavegacao';
+import { GateSessao, TelaCarregando } from './components/sessao';
 import './components/ui/sora.css';
 
 // Telas menos visitadas: carregadas sob demanda.
@@ -20,13 +20,12 @@ const OrbLab = import.meta.env.DEV ? lazy(() => import('./screens/OrbLab')) : nu
 const Mobile = import.meta.env.DEV ? lazy(() => import('./screens/Mobile')) : null;
 const Catalogo = import.meta.env.DEV ? lazy(() => import('./screens/Catalogo')) : null;
 
-const carregando = <main className="orb-route-loading"><SoraOrb size={96} state="thinking" title="Carregando" /></main>;
-
 // Rotas: / (Novo chat) · /projeto/:projetoId (chat da Sora / projeto) · /projetos · /agentes (galeria)
 //        /agentes/novo · /agentes/:id/editar (construtor) · /chat/:agente · /revisao/:projetoId
 //        /configuracoes · /plugins · [DEV] /celular · /lab/orb · /lab/ui (catálogo de componentes)
+// Sem login, GateSessao mostra Entrar no lugar de qualquer rota (exceto /lab/* em DEV).
 function AppRoutes() {
-  return <Suspense fallback={carregando}><Routes>
+  return <Suspense fallback={<TelaCarregando />}><Routes>
     <Route path="/" element={<Home />} />
     <Route path="/projeto/:projetoId" element={<SoraChat />} />
     <Route path="/chat/sora" element={<SoraChat />} />
@@ -46,5 +45,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <BrowserRouter><AppRoutes /><PonteNavegacao /><ToastProvider /></BrowserRouter>;
+  return <BrowserRouter><GateSessao><AppRoutes /><PonteNavegacao /></GateSessao><ToastProvider /></BrowserRouter>;
 }

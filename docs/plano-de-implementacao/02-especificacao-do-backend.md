@@ -937,7 +937,7 @@ class ProvedorBusca(Protocol):
 | Token de acesso | JWT assinado com `JWT_SEGREDO`, válido por 15 minutos, guardado só na memória do app |
 | Token de renovação no navegador | Valor aleatório de 32 bytes, válido por 30 dias, num cookie `httpOnly`, `Secure` e `SameSite=Lax`. Funciona porque o app web e a API ficam no mesmo site (ex.: `app.sora…` e `api.sora…`). No banco fica só o hash |
 | Token de renovação no desktop | O app Tauri roda em `http://tauri.localhost`, que é outro site: o navegador não manda o cookie `Lax`. Por isso, com o cabeçalho `X-Sora-Cliente: desktop`, a API devolve o token de renovação **no corpo** e o app guarda no **cofre do sistema** (Credential Manager no Windows, via plugin de keyring do Tauri), nunca no `localStorage`. A renovação manda o token no corpo |
-| Renovação | Cada renovação troca o token por um novo. Se um token já usado aparecer de novo, a sessão inteira é encerrada, porque é sinal de roubo |
+| Renovação | Cada renovação troca o token por um novo. O token imediatamente anterior tem uma tolerância configurável de 15 segundos: se a resposta da primeira rotação se perder, reapresentá-lo dentro dessa janela gira a mesma sessão de novo e devolve outro par. Depois da janela, o reuso encerra a sessão inteira como sinal de roubo. Renovações concorrentes são serializadas com `FOR UPDATE`: não criam sessões paralelas; a última rotação deixa apenas o token atual e o anterior temporariamente tolerado |
 | Sair | Encerra a sessão no banco e apaga o cookie (no desktop, apaga do cofre) |
 | CORS | Liberar só o domínio do app web, `http://tauri.localhost` e `tauri://localhost`, com `credentials` |
 | Confirmação de e-mail (fase 2) | Link com token de uso único, válido por 24 horas |

@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import { logarTodoContexto } from './entrar.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -348,7 +349,7 @@ async function main() {
   await mkdir(shotsDir, { recursive: true });
 
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = logarTodoContexto(await chromium.launch({ headless: true }));
     created = options.flow
       ? await runFlow(browser, options, diagnostics)
       : options.agentes

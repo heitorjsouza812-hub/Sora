@@ -4,7 +4,7 @@
 import { useRef, useState, type CSSProperties, type JSX } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { SoraOrb } from '../mascot';
-import { usuario } from '../../data/mock';
+import { sair, useSessao } from '../../state/sessao';
 import { estadoAgente, estadoProjeto, novoChat, useAgora, useProjetos, type AgenteSora, type ProjetoSora } from '../../state/projetos';
 import { pedirApagar, pedirRenomear } from '../gestao';
 import { AccountMenu } from '../review/AccountMenu';
@@ -149,11 +149,39 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
   );
 }
 
-export function Sidebar() {
-  const { sora } = useProjetos();
+/** Identidade e ações da conta, compartilhadas pela Sidebar e pelo menu móvel. */
+export function ContaRodape({ onNavegar, movel = false }: { onNavegar?: () => void; movel?: boolean }) {
   const [conta, setConta] = useState(false);
   const contaRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
+  const { usuario } = useSessao();
+  const nome = usuario?.nome || 'Sua conta';
+  const email = usuario?.email ?? '';
+
+  const encerrar = () => {
+    onNavegar?.();
+    novoChat();
+    void sair().then(() => navigate('/'));
+  };
+
+  return (
+      <div className={`account ${movel ? 'mobile-account' : ''}`}>
+        <span className="account-avatar" aria-hidden="true">{nome.slice(0, 1).toUpperCase()}</span>
+        <span><strong title={nome}>{nome}</strong><small title={email}>{email}</small></span>
+        <NavLink to="/configuracoes" className="account-settings" aria-label="Configurações" title="Configurações" onClick={onNavegar}><GearIcon /></NavLink>
+        {movel
+          ? <button className="account-logout" type="button" onClick={encerrar}>Sair</button>
+          : <>
+              <button ref={contaRef} type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={conta} onClick={() => setConta(v => !v)}>•••</button>
+              <AccountMenu open={conta} onClose={() => setConta(false)} anchorRef={contaRef} empresa={nome} plano={email}
+                onSelect={a => { if (a === 'plugins') navigate('/plugins'); if (a === 'configuracoes') navigate('/configuracoes'); if (a === 'sair') encerrar(); }} />
+            </>}
+      </div>
+  );
+}
+
+export function Sidebar() {
+  const { sora } = useProjetos();
   return (
     <aside className="sidebar" aria-label="Navegação principal">
       <NavLink to="/" className="brand" aria-label="Sora, novo chat" onClick={() => novoChat()}>
@@ -161,14 +189,7 @@ export function Sidebar() {
       </NavLink>
       <div className="sidebar-scroll"><Navegacao /></div>
       <IndicadorCreditos />
-      <div className="account">
-        <span className="account-avatar" aria-hidden="true">{usuario.empresa.slice(0, 1)}</span>
-        <span><strong title={usuario.empresa}>{usuario.empresa}</strong><small>{usuario.plano}</small></span>
-        <NavLink to="/configuracoes" className="account-settings" aria-label="Configurações" title="Configurações"><GearIcon /></NavLink>
-        <button ref={contaRef} type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={conta} onClick={() => setConta(v => !v)}>•••</button>
-        <AccountMenu open={conta} onClose={() => setConta(false)} anchorRef={contaRef} empresa={usuario.empresa} plano={usuario.plano}
-          onSelect={a => { if (a === 'plugins') navigate('/plugins'); if (a === 'configuracoes') navigate('/configuracoes'); if (a === 'sair') { novoChat(); navigate('/'); } }} />
-      </div>
+      <ContaRodape />
     </aside>
   );
 }
