@@ -8,6 +8,7 @@ from app.api import (
     aprovacoes,
     auth,
     cadeias,
+    canais,
     conta,
     conversas,
     entregas,
@@ -35,6 +36,7 @@ for roteador in (
     modelos.roteador,
     preferencias.roteador,
     uso.roteador,
+    canais.roteador,
 ):
     roteador_v1.include_router(roteador)
 

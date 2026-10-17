@@ -8,6 +8,8 @@ Esta pasta registra **o que foi feito** e **onde paramos**, para qualquer integr
 | [`2026-10-10.md`](2026-10-10.md) | Diário do dia 10/10/2026: tudo que foi construído, em ordem, com os commits. |
 | [`2026-10-11.md`](2026-10-11.md) | Revisão do front-end contra a especificação do backend: o que adicionar e consertar. |
 | [`2026-10-14.md`](2026-10-14.md) | Decisão de fazer os agentes em LangChain (plano versão 2.1). |
+| [`2026-10-15.md`](2026-10-15.md) | Fundação do backend da fase 1 e revisão de segurança. |
+| [`2026-10-17.md`](2026-10-17.md) | Peças do Rakazo portadas para o backend (fases 1, 2 e 3). |
 
 ## Como registrar uma nova sessão
 

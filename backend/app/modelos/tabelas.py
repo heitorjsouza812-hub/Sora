@@ -124,6 +124,9 @@ class Conversa(Base):
     atualizada_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # 0004: compactação do histórico (app/memoria/compactacao.py)
+    resumo_compactado: Mapped[str | None] = mapped_column(Text)
+    compactado_ate: Mapped[int | None]
 
 
 class Mensagem(Base):
@@ -140,6 +143,8 @@ class Mensagem(Base):
     visivel: Mapped[bool] = mapped_column(default=True, server_default="true")
     responde_a: Mapped[UUID | None] = mapped_column(ForeignKey("mensagens.id"))
     criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # 0004: salto da corrente de mensagens entre agentes (app/orquestrador/saltos.py)
+    salto: Mapped[int] = mapped_column(default=0, server_default="0")
 
 
 class Roteamento(Base):
@@ -427,3 +432,89 @@ class TokenEmail(Base):
     token_hash: Mapped[str] = mapped_column(Text, unique=True)
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     usado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ---------- 0004: peças adaptadas do Rakazo (docs/referencias/rakazo.md) ----------
+
+
+class Rotina(Base):
+    """Lembretes e pedidos agendados (``app/rotinas``)."""
+
+    __tablename__ = "rotinas"
+    __table_args__ = (Index("ix_rotinas_ativa_proxima_execucao", "ativa", "proxima_execucao"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"))
+    conversa_id: Mapped[UUID | None] = mapped_column(ForeignKey("conversas.id"))
+    titulo: Mapped[str] = mapped_column(Text)
+    pedido: Mapped[str] = mapped_column(Text)
+    tipo: Mapped[str] = mapped_column(Text)
+    expressao: Mapped[str | None] = mapped_column(Text)
+    fuso: Mapped[str] = mapped_column(
+        Text, default="America/Sao_Paulo", server_default="America/Sao_Paulo"
+    )
+    proxima_execucao: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ultima_execucao: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    silencioso: Mapped[bool] = mapped_column(default=False, server_default="false")
+    ativa: Mapped[bool] = mapped_column(default=True, server_default="true")
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Pendencia(Base):
+    """Trabalho aberto do agente (``app/pendencias``)."""
+
+    __tablename__ = "pendencias"
+    __table_args__ = (Index("ix_pendencias_agente_id_status", "agente_id", "status"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"))
+    titulo: Mapped[str] = mapped_column(Text)
+    notas: Mapped[str] = mapped_column(Text, default="", server_default="")
+    status: Mapped[str] = mapped_column(Text, default="aberta", server_default="aberta")
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    atualizada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Habilidade(Base):
+    """Receitas SKILL.md do usuário (``app/habilidades``)."""
+
+    __tablename__ = "habilidades"
+    __table_args__ = (UniqueConstraint("usuario_id", "nome"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    nome: Mapped[str] = mapped_column(Text)
+    descricao: Mapped[str] = mapped_column(Text)
+    conteudo: Mapped[str] = mapped_column(Text)
+    origem: Mapped[str] = mapped_column(Text, default="usuario", server_default="usuario")
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    atualizada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Conector(Base):
+    """Servidores MCP do usuário (``app/conectores``). Cabeçalhos cifrados com a chave mestra."""
+
+    __tablename__ = "conectores"
+    __table_args__ = (UniqueConstraint("usuario_id", "nome"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    nome: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text)
+    cabecalhos_cifrados: Mapped[bytes | None] = mapped_column(LargeBinary)
+    ativo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CanalVinculado(Base):
+    """Chat de um aplicativo de mensagens ligado à conta (``app/canais``)."""
+
+    __tablename__ = "canais_vinculados"
+    __table_args__ = (UniqueConstraint("canal", "chat_id"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    canal: Mapped[str] = mapped_column(Text)
+    chat_id: Mapped[str] = mapped_column(Text)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

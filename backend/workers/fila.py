@@ -19,6 +19,11 @@ NomeJob = Literal[
     "ajustar",
     "responder_direto",
     "expirar_aprovacao",
+    # adaptados do Rakazo (docs/referencias/rakazo.md)
+    "executar_rotina",
+    "compactar_historico",
+    "responder_canal",
+    "reconciliar_travados",
 ]
 
 

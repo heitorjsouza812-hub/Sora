@@ -24,7 +24,7 @@ from pydantic import BaseModel, ValidationError
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
-NomeProvedor = Literal["tavily", "brave", "searxng", "falso"]
+NomeProvedor = Literal["tavily", "brave", "searxng", "duckduckgo", "falso"]
 
 LIMITE_POR_CADEIA = 20
 LIMITE_POR_USUARIO_DIA = 300
@@ -32,9 +32,9 @@ CACHE_SEGUNDOS = 24 * 60 * 60
 PRAZO_SEGUNDOS = 15
 SEARXNG_PADRAO = "http://localhost:8888"
 
-SO_DESENVOLVIMENTO: frozenset[str] = frozenset({"falso", "searxng"})
-"""Provedores que não sobem em produção: o ``falso`` inventa fontes e o SearXNG é só para
-desenvolvimento local (§8.1)."""
+SO_DESENVOLVIMENTO: frozenset[str] = frozenset({"falso", "searxng", "duckduckgo"})
+"""Provedores que não sobem em produção: o ``falso`` inventa fontes, o SearXNG é só para
+desenvolvimento local (§8.1) e o DuckDuckGo HTML não é uma API (limita quem busca muito)."""
 
 
 class ResultadoBusca(BaseModel):
@@ -113,6 +113,10 @@ def obter_provedor(
         from app.busca.searxng import BuscaSearxng
 
         return BuscaSearxng(base_url or SEARXNG_PADRAO, cliente=cliente)
+    if nome == "duckduckgo":
+        from app.busca.duckduckgo import BuscaDuckDuckGo
+
+        return BuscaDuckDuckGo(cliente=cliente)
     if nome == "falso":
         from app.busca.falso import BuscaFalsa
 

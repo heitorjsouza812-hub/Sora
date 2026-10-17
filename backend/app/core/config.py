@@ -128,6 +128,13 @@ class Configuracao(BaseSettings):
     pasta_arquivos: Path = Path("arquivos")
     """Volume dos anexos (``/srv/sora/arquivos`` no contêiner, relativo a ``/srv/sora``).
     ``anexos.caminho`` é relativo a esta pasta."""
+    telegram_token_bot: SecretStr | None = None
+    """Token do bot da Sora no Telegram (``app/canais/telegram.py``). Vazio: canal desligado."""
+    telegram_segredo_webhook: SecretStr | None = None
+    """Segredo que o Telegram manda em ``X-Telegram-Bot-Api-Secret-Token``."""
+    sandbox_provedor: Literal["nenhum", "docker"] = "nenhum"
+    """Onde roda ``executar_comando`` (``app/computador``). ``nenhum`` desliga a ferramenta."""
+    sandbox_imagem: str = "python:3.12-slim"
 
     @field_validator("sora_modelo_falso", mode="before")
     @classmethod

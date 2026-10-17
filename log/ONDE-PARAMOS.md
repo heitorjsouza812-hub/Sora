@@ -1,6 +1,13 @@
 # Onde paramos
 
-_Atualizado em 2026-10-15 — **revisão de segurança concluída e validada**; APP-003 e hover da ilha corrigidos no Tauri real. Antes, 2026-10-14: agentes em LangChain (plano 2.1)._
+_Atualizado em 2026-10-17 — **peças do Rakazo portadas para o backend** (fases 1, 2 e 3). Antes, 2026-10-15: revisão de segurança concluída e validada._
+
+## Peças do Rakazo (2026-10-17)
+
+- Mapa completo, licença (Apache 2.0) e o que ficou de fora: [`docs/referencias/rakazo.md`](../docs/referencias/rakazo.md). Diário: `log/2026-10-17.md`.
+- Novo no backend: saltos entre agentes, catálogo preguiçoso de ferramentas, política de aprovação + juiz do revisor, compactação e busca no histórico, memória, agenda/rotinas, pendências, habilidades SKILL.md, conectores MCP, Telegram, voz, navegador por texto, `executar_comando` (Docker), gráficos e busca DuckDuckGo (só dev). Migração `0004_pecas_do_rakazo`.
+- Verde: ruff, format e pytest (testes novos em `backend/tests/unitarios/test_rakazo_fase{1,2,3}.py`).
+- Próximo: ligar essas peças no worker (ainda esqueleto), escolher o `Vetorizador` da memória, sandboxes num host separado antes de produção e rodar `tests/integracao` com Docker.
 
 ## Revisão de segurança (2026-10-15, time do Clausecurity)
 
