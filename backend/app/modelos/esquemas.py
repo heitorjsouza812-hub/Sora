@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr
 
 from app.modelos.enumeracoes import (
     AutorMensagem,
@@ -165,13 +165,13 @@ class ApagarContaEntrada(EsquemaBase):
 
 class ProvedorCriacao(EsquemaBase):
     tipo: TipoProvedor
-    chave: str | None = Field(default=None, max_length=CURTO_MAX)
+    chave: SecretStr | None = Field(default=None, max_length=CURTO_MAX)
     base_url: str | None = Field(default=None, max_length=URL_MAX)
     """Validada de novo em ``app.llm.provedores.validar_base_url`` (API-02)."""
 
 
 class ProvedorAtualizacao(EsquemaBase):
-    chave: str | None = Field(default=None, max_length=CURTO_MAX)
+    chave: SecretStr | None = Field(default=None, max_length=CURTO_MAX)
     teto_mensal_usd: Decimal | None = None
 
 

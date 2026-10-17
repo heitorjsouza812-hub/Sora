@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -32,10 +33,20 @@ async def tratar_erro_conta(_: Request, erro: ErroConta) -> JSONResponse:
     return JSONResponse({"detail": erro.detalhe}, erro.status_code, headers=erro.headers)
 
 
+async def tratar_erro_validacao(_: Request, erro: RequestValidationError) -> JSONResponse:
+    """Devolve metadados úteis sem ecoar senhas, chaves ou qualquer entrada do usuário."""
+    detalhes = [
+        {campo: item[campo] for campo in ("loc", "msg", "type") if campo in item}
+        for item in erro.errors()
+    ]
+    return JSONResponse({"detail": detalhes}, status_code=422)
+
+
 def criar_aplicacao() -> FastAPI:
     """Cria a aplicação HTTP e registra as rotas públicas da fase 1."""
     aplicacao = FastAPI(title="Sora Backend", version="0.1.0", lifespan=ciclo_de_vida)
     aplicacao.add_exception_handler(ErroConta, tratar_erro_conta)
+    aplicacao.add_exception_handler(RequestValidationError, tratar_erro_validacao)
     aplicacao.add_middleware(
         CORSMiddleware,
         allow_origins=obter_configuracao().origens_cors,

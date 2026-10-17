@@ -303,15 +303,26 @@ async def sair(sessao: AsyncSession, token: str | None) -> None:
         await sessao.flush()
 
 
+async def tem_provedor_validado(sessao: AsyncSession, usuario_id: UUID) -> bool:
+    """Há alguma API de modelos do usuário testada (``validado_em``) e não apagada?"""
+    encontrado = await sessao.scalar(
+        select(Provedor.id)
+        .where(
+            Provedor.usuario_id == usuario_id,
+            Provedor.validado_em.is_not(None),
+            Provedor.apagado_em.is_(None),
+        )
+        .limit(1)
+    )
+    return encontrado is not None
+
+
 async def dados_da_conta(sessao: AsyncSession, usuario_id: UUID) -> tuple[Usuario, bool]:
-    """Usuário e se já conectou alguma API de modelos."""
+    """Usuário e se já conectou (e validou) alguma API de modelos."""
     usuario = await sessao.get(Usuario, usuario_id)
     if usuario is None:
         raise ErroCredenciais("Conta não encontrada.")
-    tem_provedor = await sessao.scalar(
-        select(Provedor.id).where(Provedor.usuario_id == usuario_id, Provedor.apagado_em.is_(None))
-    )
-    return usuario, tem_provedor is not None
+    return usuario, await tem_provedor_validado(sessao, usuario_id)
 
 
 def apagar_arquivos_do_usuario(raiz: Path, usuario_id: UUID, caminhos: Sequence[str]) -> None:
