@@ -46,6 +46,66 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
 """Ferramentas da fase 1: nome → esquema dos argumentos."""
 
 
+def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
+    """Fases 2 e 3, adaptadas do Rakazo (``docs/referencias/rakazo.md``).
+
+    Ficam fora de ``ESQUEMAS`` até cada uma ser ligada no worker; a política de aprovação
+    de cada nome está em ``app/revisor/politica.py``.
+    """
+    from app.computador import ExecutarComando
+    from app.conectores.servidores import AdicionarServidorMCP
+    from app.ferramentas.catalogo_tarefas import CatalogoTarefas
+    from app.ferramentas.enviar_para_agente import EnviarParaAgente
+    from app.ferramentas.gerar_grafico import GerarGrafico
+    from app.ferramentas.historico import BuscarHistorico, LerHistorico
+    from app.ferramentas.propor_instrucoes import ProporInstrucoes
+    from app.habilidades import (
+        ApagarHabilidade,
+        AtualizarHabilidade,
+        CriarHabilidade,
+        LerHabilidade,
+    )
+    from app.memoria.servico import BuscarMemoria, EsquecerMemoria, Lembrar
+    from app.navegador import NavegadorAbrir, NavegadorAgir, NavegadorLer
+    from app.pendencias import (
+        AdicionarPendencia,
+        AtualizarPendencia,
+        ConcluirPendencia,
+        ListarPendencias,
+        RemoverPendencia,
+    )
+    from app.rotinas.agenda import Agendar, CancelarAgendamento, ListarAgendamentos
+
+    return {
+        "buscar_memoria": BuscarMemoria,
+        "lembrar": Lembrar,
+        "esquecer_memoria": EsquecerMemoria,
+        "enviar_para_agente": EnviarParaAgente,
+        "buscar_historico": BuscarHistorico,
+        "ler_historico": LerHistorico,
+        "catalogo_tarefas": CatalogoTarefas,
+        "propor_instrucoes": ProporInstrucoes,
+        "agendar": Agendar,
+        "listar_agendamentos": ListarAgendamentos,
+        "cancelar_agendamento": CancelarAgendamento,
+        "adicionar_pendencia": AdicionarPendencia,
+        "listar_pendencias": ListarPendencias,
+        "atualizar_pendencia": AtualizarPendencia,
+        "concluir_pendencia": ConcluirPendencia,
+        "remover_pendencia": RemoverPendencia,
+        "ler_habilidade": LerHabilidade,
+        "criar_habilidade": CriarHabilidade,
+        "atualizar_habilidade": AtualizarHabilidade,
+        "apagar_habilidade": ApagarHabilidade,
+        "gerar_grafico": GerarGrafico,
+        "adicionar_servidor_mcp": AdicionarServidorMCP,
+        "executar_comando": ExecutarComando,
+        "navegador_abrir": NavegadorAbrir,
+        "navegador_ler": NavegadorLer,
+        "navegador_agir": NavegadorAgir,
+    }
+
+
 def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[BaseTool]:
     """Monta as ferramentas pedidas como ``@tool`` do LangChain, presas ao contexto."""
     raise NotImplementedError

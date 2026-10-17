@@ -31,8 +31,16 @@ PREFIXO_FERRAMENTAS_NAVEGADOR = "navegador_"
 
 
 def exige_revisao(ferramenta: str) -> bool:
-    """True para as ferramentas marcadas com "sim" na especificação."""
-    raise NotImplementedError
+    """True para as ferramentas marcadas com "sim" na especificação.
+
+    Também vale para ferramentas de conector (``mcp__…``) que não parecem só leitura; a
+    tabela completa está em ``app/revisor/politica.py``.
+    """
+    from app.revisor.politica import Politica, politica_da_ferramenta
+
+    if ferramenta in FERRAMENTAS_REVISADAS:
+        return True
+    return politica_da_ferramenta(ferramenta) is Politica.REVISOR
 
 
 async def regra_permite(

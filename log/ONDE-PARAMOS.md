@@ -1,12 +1,19 @@
 # Onde paramos
 
-_Atualizado em 2026-10-17 — **etapa 1 do backend (conexão das APIs) concluída**; etapa 2 (ligar o app) em andamento. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
+_Atualizado em 2026-10-17 — **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; etapa 2 (ligar o app) em andamento. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
 
 ## Etapa 1 — conexão das APIs (2026-10-15 a 17)
 
 - Rotas `/v1/provedores` (testa a chave antes de salvar, cifra com AAD = id do provedor, duplicado 409, limite de 10 provedores e 10 testes/h), `/v1/modelos`, `/v1/preferencias`; `tem_provedor` exige provedor validado; dependência `exigir_provedor_validado` (412); ponte banco→seletor em `app/seletor/repositorio.py`. Especificação: `log/etapa1-conexao-apis.md`.
 - Validado em 2026-10-17 com Docker: ruff limpo, pytest **835 passed / 2 skipped** (commit `76efd9b`).
 - **Próximo:** etapa 2 — ligar o app (login, Configurações → Modelos de IA no backend, chaves fora do `localStorage`, APP-001). Especificação: `log/etapa2-app-provedores.md`.
+
+## Peças do Rakazo (2026-10-17)
+
+- Mapa completo, licença (Apache 2.0) e o que ficou de fora: [`docs/referencias/rakazo.md`](../docs/referencias/rakazo.md). Diário: `log/2026-10-17.md`.
+- Novo no backend: saltos entre agentes, catálogo preguiçoso de ferramentas, política de aprovação + juiz do revisor, compactação e busca no histórico, memória, agenda/rotinas, pendências, habilidades SKILL.md, conectores MCP, Telegram, voz, navegador por texto, `executar_comando` (Docker), gráficos e busca DuckDuckGo (só dev). Migração `0004_pecas_do_rakazo`.
+- Verde: ruff, format e pytest (testes novos em `backend/tests/unitarios/test_rakazo_fase{1,2,3}.py`).
+- Próximo: ligar essas peças no worker (ainda esqueleto), escolher o `Vetorizador` da memória, sandboxes num host separado antes de produção e rodar `tests/integracao` com Docker.
 
 ## Revisão de segurança (2026-10-15, time do Clausecurity)
 

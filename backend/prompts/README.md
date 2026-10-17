@@ -21,6 +21,10 @@ Mudou o prompt: crie a versão seguinte (`.v2.md`), troque em
 | `lembrete_inicio_turno.v1.md`, `lembrete_silencio.v1.md`, `lembrete_entrega.v1.md` | Lembretes automáticos | `agentes/middleware/lembretes.py` |
 | `cerca_dado_externo.v1.md` | Cerca `<dado_externo>` | `agentes/prompts.py` (`cercar`) |
 | `aviso_dado_externo.v1.md` | Trecho sobre `<dado_externo>` que vai no prompt de todo agente | montagem dos agentes |
+| `juiz_rapido.v1.md` | Instrução de sistema do revisor rodando como juiz rápido (JSON estrito) | `app/revisor/juiz.py` |
+| `compactacao_historico.v1.md` | Resumo cumulativo da conversa | `app/memoria/compactacao.py` |
+
+Os dois últimos vieram do Rakazo (`docs/referencias/rakazo.md`) e ainda não estão no `03-prompts.md`.
 
 Atenção: vários prompts têm JSON com `{ }` literais. O preenchimento troca só
 as chaves conhecidas (`{pedido}`, `{perfil_do_agente}`…), nunca `str.format`.
