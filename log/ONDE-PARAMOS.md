@@ -1,6 +1,12 @@
 # Onde paramos
 
-_Atualizado em 2026-10-15 — **revisão de segurança concluída e validada**; APP-003 e hover da ilha corrigidos no Tauri real. Antes, 2026-10-14: agentes em LangChain (plano 2.1)._
+_Atualizado em 2026-10-17 — **etapa 1 do backend (conexão das APIs) concluída**; etapa 2 (ligar o app) em andamento. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
+
+## Etapa 1 — conexão das APIs (2026-10-15 a 17)
+
+- Rotas `/v1/provedores` (testa a chave antes de salvar, cifra com AAD = id do provedor, duplicado 409, limite de 10 provedores e 10 testes/h), `/v1/modelos`, `/v1/preferencias`; `tem_provedor` exige provedor validado; dependência `exigir_provedor_validado` (412); ponte banco→seletor em `app/seletor/repositorio.py`. Especificação: `log/etapa1-conexao-apis.md`.
+- Validado em 2026-10-17 com Docker: ruff limpo, pytest **835 passed / 2 skipped** (commit `76efd9b`).
+- **Próximo:** etapa 2 — ligar o app (login, Configurações → Modelos de IA no backend, chaves fora do `localStorage`, APP-001). Especificação: `log/etapa2-app-provedores.md`.
 
 ## Revisão de segurança (2026-10-15, time do Clausecurity)
 
