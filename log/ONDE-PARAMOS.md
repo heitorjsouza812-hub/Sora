@@ -6,7 +6,8 @@ _Atualizado em 2026-11-01 — **peças inspiradas no OpenBot escritas do zero no
 
 - OpenBot é **PolyForm Noncommercial**: nada foi copiado; tudo foi reescrito em Python a partir da documentação de arquitetura deles. Mapa, licença e o que ficou de fora: [`docs/referencias/openbot.md`](../docs/referencias/openbot.md). Diário: `log/2026-11-01.md`.
 - Novo no backend: `app/contexto` (medidor + compactar antes do turno), `app/filas` (FIFO por agente com pausa, pistas paralelas, edição, recuperação após queda), `app/correio` (respostas, reações, arquivos e imagens entre agentes com cópia e hash), `app/canais_equipe` (canal com líder, responsável por tarefa, delegação, Parar/Retomar/Reatribuir/Cancelar/Arquivar/Restaurar), `app/navegador/{perfis,abas,persistente}` (perfis com login cifrado, abas que sobrevivem ao turno, "assumir aba", captura e console). Migração `0005`, rotas em `app/api/equipe.py`, eventos em `app/eventos/equipe.py`.
-- Verde: ruff, format, pytest **932 passed** (`tests/unitarios/test_pecas_openbot.py`).
+- Verde: ruff, format, pytest **937 passed** (`tests/unitarios/test_pecas_openbot.py`).
+- Revisão no mesmo dia: 3 bugs de canais (filha que falha trava a mãe, resultado perdido, pingue-pongue em transferir) e 3 menores corrigidos. **Decidir:** política do navegador com perfil logado (`log/2026-11-01.md`).
 - **Próximo:** repositórios no banco + ligar no worker (junto com o worker de ponta a ponta), telas no app.
 
 ## Etapa 2 — app ligado ao backend (concluída em 2026-10-17)

@@ -460,8 +460,17 @@ class ServicoCanais:
         mudancas = Mudancas()
         if tarefa.revisao != revisao or tarefa.status is not StatusTarefa.RODANDO:
             return mudancas
-        if await self._tem_filhas_abertas(tarefa):
+        filhas = await self._filhas(tarefa)
+        if any(t.status in ABERTAS for t in filhas):
             tarefa.status = StatusTarefa.AGUARDANDO_FILHAS
+        elif any(
+            t.status in (StatusTarefa.CONCLUIDA, StatusTarefa.FALHOU)
+            and t.atualizada_em >= tarefa.atualizada_em
+            for t in filhas
+        ):
+            # Uma filha terminou durante este turno: o dono ainda não viu o resultado dela,
+            # então ganha mais um turno em vez de a tarefa fechar sem ele.
+            tarefa.status = StatusTarefa.NA_FILA
         else:
             tarefa.status = StatusTarefa.CONCLUIDA
         tarefa.atualizada_em = _agora()
@@ -481,6 +490,9 @@ class ServicoCanais:
         tarefa.atualizada_em = _agora()
         await self._armazem.gravar_tarefa(tarefa)
         mudancas.tarefas.append(tarefa)
+        # O dono da tarefa-mãe precisa saber da falha (o pacote mostra "Delegada a …: falhou");
+        # sem isso a mãe ficaria em aguardando_filhas para sempre.
+        await self._acordar_pai(tarefa, mudancas)
         return mudancas
 
     async def recuperar_apos_queda(self) -> list[TarefaCanal]:
@@ -559,6 +571,11 @@ class ServicoCanais:
             raise ErroCanal("A tarefa já é sua.")
         if para_agente not in canal.membros or para_agente not in disponiveis:
             raise ErroCanal("Só dá para transferir a membros deste canal que estão disponíveis.")
+        if para_agente == tarefa.delegada_por:
+            raise ErroCanal(
+                "Não devolva a tarefa para quem te passou. Termine com o que tem e "
+                "registre o resultado, ou diga o que bloqueia."
+            )
         tarefa.dono_id = para_agente
         tarefa.delegada_por = por_agente
         tarefa.revisao += 1

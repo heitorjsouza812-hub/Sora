@@ -36,6 +36,11 @@ def _escapar(texto: str) -> str:
     return texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _atributo(texto: str) -> str:
+    """Escapa também as aspas: valor de atributo não pode fechar a tag nem criar outro."""
+    return _escapar(texto).replace('"', "&quot;")
+
+
 def _cortar(texto: str, limite: int = MAX_CARACTERES_MENSAGEM) -> str:
     texto = texto.strip()
     return texto if len(texto) <= limite else texto[:limite] + " [… cortado]"
@@ -85,7 +90,7 @@ def montar_pacote(
             return nomes.get(m.agente_id, "Agente")
         return "Sora"
 
-    partes = [f'<canal nome="{_escapar(canal.nome)}">']
+    partes = [f'<canal nome="{_atributo(canal.nome)}">']
     if canal.proposito:
         partes.append(f"Propósito: {_escapar(canal.proposito)}")
     if canal.instrucoes:

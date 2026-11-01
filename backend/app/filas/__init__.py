@@ -328,7 +328,10 @@ class FilaAgente:
         for item in await self._armazem.itens(agente_id):
             if item.de_agente_id == de_agente_id and item.status is StatusItem.NA_FILA:
                 await self._mudar(
-                    item, status=StatusItem.CANCELADO, motivo="interrompido_pelo_remetente"
+                    item,
+                    status=StatusItem.CANCELADO,
+                    motivo="interrompido_pelo_remetente",
+                    terminado_em=_agora(),
                 )
                 total += 1
         return total

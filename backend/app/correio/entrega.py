@@ -26,6 +26,11 @@ def _escapar(texto: str) -> str:
     return texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _atributo(texto: str) -> str:
+    """Escapa também as aspas: valor de atributo não pode fechar a tag nem criar outro."""
+    return _escapar(texto).replace('"', "&quot;")
+
+
 @dataclass(frozen=True, slots=True)
 class MensagemCitada:
     id: UUID
@@ -53,14 +58,14 @@ def montar_entrada(
     transferencias: Sequence[Transferencia] = (),
 ) -> Entrada:
     partes = [
-        f'<mensagem_de_colega de="{_escapar(remetente)}" id="{mensagem_id}">',
+        f'<mensagem_de_colega de="{_atributo(remetente)}" id="{mensagem_id}">',
     ]
     if citada is not None:
         trecho = " ".join(citada.texto.split())
         if len(trecho) > MAX_CITACAO:
             trecho = trecho[:MAX_CITACAO] + "…"
         partes.append(
-            f'<responde_a id="{citada.id}" autor="{_escapar(citada.autor)}">'
+            f'<responde_a id="{citada.id}" autor="{_atributo(citada.autor)}">'
             f"{_escapar(trecho)}</responde_a>"
         )
     partes.append(_escapar(texto.strip()))

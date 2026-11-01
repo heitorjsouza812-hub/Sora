@@ -55,14 +55,15 @@ class Reacao:
         return (self.mensagem_id, self.autor, self.agente_id, self.emoji)
 
 
+_SELETOR_VARIACAO = "\ufe0f"
+
+
 def normalizar_emoji(emoji: str) -> str:
-    bruto = emoji.strip()
-    if bruto in EMOJIS_PERMITIDOS:
-        return bruto
-    # "❤" sem o seletor de variação vira "❤️"
-    com_variacao = bruto + "️"
-    if com_variacao in EMOJIS_PERMITIDOS:
-        return com_variacao
+    """Aceita o emoji com ou sem o seletor de variação (U+FE0F), como cada teclado manda."""
+    bruto = emoji.strip().replace(_SELETOR_VARIACAO, "")
+    for permitido in EMOJIS_PERMITIDOS:
+        if permitido.replace(_SELETOR_VARIACAO, "") == bruto:
+            return permitido
     raise ErroFerramenta(
         "Essa reação não está disponível. Use uma destas: " + " ".join(EMOJIS_PERMITIDOS)
     )
