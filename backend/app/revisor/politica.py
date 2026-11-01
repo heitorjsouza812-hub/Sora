@@ -63,6 +63,18 @@ LIVRES: frozenset[str] = frozenset(
         # fase 3: navegar e ler não enviam nada
         "navegador_abrir",
         "navegador_ler",
+        # navegador persistente, reações e canais de equipe (docs/referencias/openbot.md):
+        # tudo fica dentro da Sora; a aba só é lida ou fechada, e o usuário vê o canal
+        "navegador_abas",
+        "navegador_fechar_aba",
+        "navegador_capturar",
+        "navegador_console",
+        "navegador_pedir_ajuda",
+        "reagir",
+        "canal_historico",
+        "canal_delegar",
+        "canal_transferir",
+        "canal_resultado",
         # meta-ferramentas do catálogo: a execução decide pela ferramenta de verdade
         "conectores_buscar_ferramentas",
         "conectores_carregar_ferramenta",
@@ -98,6 +110,9 @@ SEGURAS_SEM_SUPERVISAO: frozenset[str] = frozenset(
         "ver_especialista",
         "navegador_abrir",
         "navegador_ler",
+        "navegador_abas",
+        "navegador_console",
+        "canal_historico",
         "gerar_grafico",
         "conectores_buscar_ferramentas",
         "conectores_carregar_ferramenta",

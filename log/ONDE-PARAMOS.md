@@ -1,6 +1,13 @@
 # Onde paramos
 
-_Atualizado em 2026-10-17 — **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; **etapa 2 (app ligado ao backend, login real, chaves fora do navegador) concluída**. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
+_Atualizado em 2026-11-01 — **peças inspiradas no OpenBot escritas do zero no backend** (contexto, filas, correio, canais de equipe, navegador persistente; migração 0005). Antes, 2026-10-17: **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; **etapa 2 (app ligado ao backend, login real, chaves fora do navegador) concluída**. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
+
+## Peças inspiradas no OpenBot (2026-11-01)
+
+- OpenBot é **PolyForm Noncommercial**: nada foi copiado; tudo foi reescrito em Python a partir da documentação de arquitetura deles. Mapa, licença e o que ficou de fora: [`docs/referencias/openbot.md`](../docs/referencias/openbot.md). Diário: `log/2026-11-01.md`.
+- Novo no backend: `app/contexto` (medidor + compactar antes do turno), `app/filas` (FIFO por agente com pausa, pistas paralelas, edição, recuperação após queda), `app/correio` (respostas, reações, arquivos e imagens entre agentes com cópia e hash), `app/canais_equipe` (canal com líder, responsável por tarefa, delegação, Parar/Retomar/Reatribuir/Cancelar/Arquivar/Restaurar), `app/navegador/{perfis,abas,persistente}` (perfis com login cifrado, abas que sobrevivem ao turno, "assumir aba", captura e console). Migração `0005`, rotas em `app/api/equipe.py`, eventos em `app/eventos/equipe.py`.
+- Verde: ruff, format, pytest **932 passed** (`tests/unitarios/test_pecas_openbot.py`).
+- **Próximo:** repositórios no banco + ligar no worker (junto com o worker de ponta a ponta), telas no app.
 
 ## Etapa 2 — app ligado ao backend (concluída em 2026-10-17)
 

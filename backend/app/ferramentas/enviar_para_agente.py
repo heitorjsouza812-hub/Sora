@@ -7,6 +7,11 @@ Descrição e regras adaptadas do Rakazo (github.com/elie222/rakazo, Apache-2.0)
 A entrega é assíncrona e não encerra o turno. Cada envio carrega o salto da corrente
 (``app/orquestrador/saltos.py``): mensagem do usuário zera; passou de 6 trocas seguidas entre
 agentes, a entrega é recusada.
+
+Extensão própria da Sora (2026-11-01, ideia vista no OpenBot; ver ``docs/referencias/openbot.md``):
+a mensagem pode **responder** a outra (``responde_a``), levar **anexos** (imagens e arquivos,
+conferidos em ``app/correio/transferencias.py``) e dizer se **espera resposta**. Sem esses
+campos o comportamento é o de antes.
 """
 
 from __future__ import annotations
@@ -33,6 +38,18 @@ class EnviarParaAgente(BaseModel):
     agente_id: UUID = Field(description="Id do agente de destino (da lista de colegas).")
     texto: str = Field(min_length=1, max_length=MAX_CARACTERES_MENSAGEM)
     prioridade: bool = Field(default=False, description="Interrompe o que o agente está fazendo.")
+    responde_a: UUID | None = Field(
+        default=None, description="Id da mensagem que você está respondendo, se houver."
+    )
+    anexos: list[UUID] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Ids de anexos (imagens ou arquivos) que você recebeu ou criou e quer passar.",
+    )
+    espera_resposta: bool = Field(
+        default=True,
+        description="False para avisos que não pedem resposta (o colega não precisa responder).",
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +61,9 @@ class EnvioPreparado:
     salto: int
     chave_entrega: str
     """Evita entregar duas vezes se o job repetir (``mensagens`` com o mesmo nonce)."""
+    responde_a: UUID | None = None
+    anexos: tuple[UUID, ...] = ()
+    espera_resposta: bool = True
 
 
 def preparar_envio(
@@ -62,6 +82,8 @@ def preparar_envio(
     texto = args.texto.strip()
     if not texto:
         raise ErroFerramenta("A mensagem está vazia.")
+    if len(set(args.anexos)) != len(args.anexos):
+        raise ErroFerramenta("O mesmo anexo apareceu duas vezes.")
     salto = conferir_envio(salto_de_origem)
     return EnvioPreparado(
         de_agente_id=contexto.agente_id,
@@ -70,6 +92,9 @@ def preparar_envio(
         prioridade=args.prioridade,
         salto=salto,
         chave_entrega=f"agente:{contexto.agente_id}:{chamada_id}",
+        responde_a=args.responde_a,
+        anexos=tuple(args.anexos),
+        espera_resposta=args.espera_resposta,
     )
 
 

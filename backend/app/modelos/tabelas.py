@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     Date,
     DateTime,
     Enum,
@@ -105,6 +106,15 @@ class Agente(Base):
     )
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     apagado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 0005: fila (app/filas) e navegador persistente (app/navegador/perfis.py)
+    fila_pausada: Mapped[bool] = mapped_column(default=False, server_default="false")
+    limite_tarefas: Mapped[int] = mapped_column(default=2, server_default="2")
+    perfil_navegador: Mapped[str] = mapped_column(
+        Text, default="compartilhado", server_default="compartilhado"
+    )
+    perfil_navegador_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("perfis_navegador.id", use_alter=True, name="agentes_perfil_navegador_id_fkey")
+    )
 
 
 class Conversa(Base):
@@ -518,3 +528,188 @@ class CanalVinculado(Base):
     canal: Mapped[str] = mapped_column(Text)
     chat_id: Mapped[str] = mapped_column(Text)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ---------- 0005: peças inspiradas no OpenBot, escritas pela Sora ----------
+# (docs/referencias/openbot.md)
+
+
+class FilaMensagem(Base):
+    """Fila FIFO de cada agente (``app/filas``). Sobrevive a quedas do worker."""
+
+    __tablename__ = "fila_mensagens"
+    __table_args__ = (
+        UniqueConstraint("agente_id", "seq"),
+        UniqueConstraint("agente_id", "chave"),
+        Index("ix_fila_mensagens_agente_id_status", "agente_id", "status"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"))
+    seq: Mapped[int]
+    pista: Mapped[str] = mapped_column(Text, default="principal", server_default="principal")
+    origem: Mapped[str] = mapped_column(Text)
+    texto: Mapped[str] = mapped_column(Text)
+    anexos: Mapped[list[UUID]] = mapped_column(
+        ARRAY(Uuid(as_uuid=True)), default=list, server_default=text("'{}'")
+    )
+    de_agente_id: Mapped[UUID | None] = mapped_column(ForeignKey("agentes.id"))
+    responde_a: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    salto: Mapped[int] = mapped_column(default=0, server_default="0")
+    chave: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, default="na_fila", server_default="na_fila")
+    em_edicao_por: Mapped[str | None] = mapped_column(Text)
+    motivo: Mapped[str | None] = mapped_column(Text)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    iniciado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terminado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Reacao(Base):
+    """Reações em mensagens de conversa ou de canal (``app/correio/reacoes.py``)."""
+
+    __tablename__ = "reacoes"
+    __table_args__ = (
+        UniqueConstraint(
+            "mensagem_id", "autor", "agente_id", "emoji", postgresql_nulls_not_distinct=True
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    mensagem_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True))
+    autor: Mapped[str] = mapped_column(Text)
+    agente_id: Mapped[UUID | None] = mapped_column(ForeignKey("agentes.id"))
+    emoji: Mapped[str] = mapped_column(Text)
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TransferenciaArquivo(Base):
+    """Arquivo passado de um agente para outro, com cópia e hash (``app/correio``)."""
+
+    __tablename__ = "transferencias_arquivo"
+    __table_args__ = (Index("ix_transferencias_arquivo_para_agente_id", "para_agente_id"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    anexo_id: Mapped[UUID] = mapped_column(ForeignKey("anexos.id"))
+    de_agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"))
+    para_agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"))
+    nome: Mapped[str] = mapped_column(Text)
+    tipo: Mapped[str] = mapped_column(Text)
+    tamanho: Mapped[int] = mapped_column(BigInteger)
+    imagem: Mapped[bool] = mapped_column(default=False, server_default="false")
+    status: Mapped[str] = mapped_column(Text, default="pendente", server_default="pendente")
+    sha256: Mapped[str | None] = mapped_column(Text)
+    novo_anexo_id: Mapped[UUID | None] = mapped_column(ForeignKey("anexos.id"))
+    erro: Mapped[str | None] = mapped_column(Text)
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CanalEquipe(Base):
+    """Chat compartilhado entre o usuário e vários agentes (``app/canais_equipe``)."""
+
+    __tablename__ = "canais_equipe"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    nome: Mapped[str] = mapped_column(Text)
+    proposito: Mapped[str] = mapped_column(Text, default="", server_default="")
+    instrucoes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    lider_id: Mapped[UUID | None] = mapped_column(ForeignKey("agentes.id"))
+    resumo: Mapped[str | None] = mapped_column(Text)
+    resumo_ate_seq: Mapped[int | None]
+    pedidos_sem_lider: Mapped[list[UUID]] = mapped_column(
+        ARRAY(Uuid(as_uuid=True)), default=list, server_default=text("'{}'")
+    )
+    arquivado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MembroCanal(Base):
+    __tablename__ = "membros_canal"
+    canal_id: Mapped[UUID] = mapped_column(ForeignKey("canais_equipe.id"), primary_key=True)
+    agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"), primary_key=True)
+    ordem: Mapped[int] = mapped_column(default=0, server_default="0")
+    entrou_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MensagemCanalTabela(Base):
+    __tablename__ = "mensagens_canal"
+    __table_args__ = (UniqueConstraint("canal_id", "seq"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    canal_id: Mapped[UUID] = mapped_column(ForeignKey("canais_equipe.id"))
+    seq: Mapped[int]
+    autor: Mapped[str] = mapped_column(Text)
+    agente_id: Mapped[UUID | None] = mapped_column(ForeignKey("agentes.id"))
+    tipo: Mapped[str] = mapped_column(Text, default="mensagem", server_default="mensagem")
+    texto: Mapped[str] = mapped_column(Text)
+    responde_a: Mapped[UUID | None] = mapped_column(ForeignKey("mensagens_canal.id"))
+    tarefa_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("tarefas_canal.id", use_alter=True, name="mensagens_canal_tarefa_id_fkey")
+    )
+    anexos: Mapped[list[UUID]] = mapped_column(
+        ARRAY(Uuid(as_uuid=True)), default=list, server_default=text("'{}'")
+    )
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TarefaCanalTabela(Base):
+    __tablename__ = "tarefas_canal"
+    __table_args__ = (Index("ix_tarefas_canal_canal_id_status", "canal_id", "status"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    canal_id: Mapped[UUID] = mapped_column(ForeignKey("canais_equipe.id"))
+    pedido_id: Mapped[UUID] = mapped_column(ForeignKey("mensagens_canal.id"))
+    dono_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"))
+    instrucao: Mapped[str] = mapped_column(Text)
+    raiz_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True))
+    pai_id: Mapped[UUID | None] = mapped_column(ForeignKey("tarefas_canal.id"))
+    delegada_por: Mapped[UUID | None] = mapped_column(ForeignKey("agentes.id"))
+    status: Mapped[str] = mapped_column(Text, default="na_fila", server_default="na_fila")
+    motivo: Mapped[str | None] = mapped_column(Text)
+    revisao: Mapped[int] = mapped_column(default=1, server_default="1")
+    seguimentos: Mapped[list[UUID]] = mapped_column(
+        ARRAY(Uuid(as_uuid=True)), default=list, server_default=text("'{}'")
+    )
+    resultado: Mapped[str | None] = mapped_column(Text)
+    erro: Mapped[str | None] = mapped_column(Text)
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    atualizada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class PerfilNavegador(Base):
+    """Perfil nomeado do navegador persistente (``app/navegador/perfis.py``)."""
+
+    __tablename__ = "perfis_navegador"
+    __table_args__ = (UniqueConstraint("usuario_id", "nome"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    nome: Mapped[str] = mapped_column(Text)
+    cor: Mapped[str] = mapped_column(Text)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EstadoNavegador(Base):
+    """Cookies e ``localStorage`` de uma partição, cifrados com a chave mestra."""
+
+    __tablename__ = "estados_navegador"
+    particao: Mapped[str] = mapped_column(Text, primary_key=True)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    estado_cifrado: Mapped[bytes] = mapped_column(LargeBinary)
+    atualizado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AbaNavegador(Base):
+    """Abas abertas, para voltarem depois de reiniciar (``app/navegador/abas.py``)."""
+
+    __tablename__ = "abas_navegador"
+    __table_args__ = (Index("ix_abas_navegador_agente_id", "agente_id"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"))
+    particao: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(Text, default="about:blank", server_default="about:blank")
+    titulo: Mapped[str] = mapped_column(Text, default="", server_default="")
+    aberta_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    usada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

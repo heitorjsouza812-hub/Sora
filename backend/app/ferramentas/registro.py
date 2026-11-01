@@ -52,8 +52,11 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     Ficam fora de ``ESQUEMAS`` até cada uma ser ligada no worker; a política de aprovação
     de cada nome está em ``app/revisor/politica.py``.
     """
+    # Peças inspiradas no OpenBot, escritas pela Sora (``docs/referencias/openbot.md``).
+    from app.canais_equipe.ferramentas import FERRAMENTAS_DO_CANAL
     from app.computador import ExecutarComando
     from app.conectores.servidores import AdicionarServidorMCP
+    from app.correio.reacoes import ReagirMensagem
     from app.ferramentas.catalogo_tarefas import CatalogoTarefas
     from app.ferramentas.enviar_para_agente import EnviarParaAgente
     from app.ferramentas.gerar_grafico import GerarGrafico
@@ -67,6 +70,13 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     )
     from app.memoria.servico import BuscarMemoria, EsquecerMemoria, Lembrar
     from app.navegador import NavegadorAbrir, NavegadorAgir, NavegadorLer
+    from app.navegador.abas import (
+        NavegadorAbas,
+        NavegadorCapturar,
+        NavegadorConsole,
+        NavegadorFecharAba,
+        NavegadorPedirAjuda,
+    )
     from app.pendencias import (
         AdicionarPendencia,
         AtualizarPendencia,
@@ -103,6 +113,13 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
         "navegador_abrir": NavegadorAbrir,
         "navegador_ler": NavegadorLer,
         "navegador_agir": NavegadorAgir,
+        "navegador_abas": NavegadorAbas,
+        "navegador_fechar_aba": NavegadorFecharAba,
+        "navegador_capturar": NavegadorCapturar,
+        "navegador_console": NavegadorConsole,
+        "navegador_pedir_ajuda": NavegadorPedirAjuda,
+        "reagir": ReagirMensagem,
+        **FERRAMENTAS_DO_CANAL,
     }
 
 

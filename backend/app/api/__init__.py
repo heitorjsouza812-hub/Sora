@@ -12,6 +12,7 @@ from app.api import (
     conta,
     conversas,
     entregas,
+    equipe,
     eventos,
     modelos,
     perguntas,
@@ -37,6 +38,7 @@ for roteador in (
     preferencias.roteador,
     uso.roteador,
     canais.roteador,
+    equipe.roteador,
 ):
     roteador_v1.include_router(roteador)
 

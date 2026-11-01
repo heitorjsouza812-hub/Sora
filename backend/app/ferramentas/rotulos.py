@@ -40,6 +40,12 @@ NOME_EXIBIDO: dict[str, str] = {
     "gerar_grafico": "Gráfico",
     "agendar": "Agenda",
     "ler_habilidade": "Habilidade",
+    "navegador_capturar": "Navegador",
+    "navegador_console": "Navegador",
+    "reagir": "Reação",
+    "canal_delegar": "Canal",
+    "canal_transferir": "Canal",
+    "canal_resultado": "Canal",
 }
 """Nome técnico (``acao``) → nome mostrado (``ferramenta``) no evento ``passo``."""
 
@@ -103,6 +109,16 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "navegador_abrir": lambda a: f"Abrindo: {_site(a.get('url'))}",
     "navegador_ler": lambda _: "Lendo a página",
     "navegador_agir": lambda _: "Usando a página",
+    "navegador_abas": lambda _: "Conferindo as abas abertas",
+    "navegador_fechar_aba": lambda _: "Fechando uma aba",
+    "navegador_capturar": lambda _: "Capturando a tela da página",
+    "navegador_console": lambda _: "Lendo o console da página",
+    "navegador_pedir_ajuda": lambda a: f"Pedindo sua ajuda: {_detalhe(a.get('motivo'))}",
+    "reagir": lambda a: f"Reagindo com {_detalhe(a.get('emoji'))}",
+    "canal_historico": lambda _: "Lendo o histórico do canal",
+    "canal_delegar": lambda a: f"Delegando: {_detalhe(a.get('instrucao'))}",
+    "canal_transferir": lambda _: "Passando a tarefa para um colega",
+    "canal_resultado": lambda _: "Entregando o resultado no canal",
 }
 
 _CONECTOR = re.compile(r"^mcp__(.+?)__(.+)$")
