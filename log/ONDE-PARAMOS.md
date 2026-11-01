@@ -1,6 +1,13 @@
 # Onde paramos
 
-_Atualizado em 2026-11-01 — **peças inspiradas no OpenBot escritas do zero no backend** (contexto, filas, correio, canais de equipe, navegador persistente; migração 0005). Antes, 2026-10-17: **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; **etapa 2 (app ligado ao backend, login real, chaves fora do navegador) concluída**. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
+_Atualizado em 2026-11-01 — **navegador por árvore adaptado do agent-desktop** (refs conferidas, ações com verificação, esperas, lote) e, no mesmo dia, **peças inspiradas no OpenBot escritas do zero no backend** (contexto, filas, correio, canais de equipe, navegador persistente; migração 0005). Antes, 2026-10-17: **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; **etapa 2 (app ligado ao backend, login real, chaves fora do navegador) concluída**. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
+
+## Navegador por árvore — agent-desktop (2026-11-01)
+
+- agent-desktop (Vercel Labs) é **Apache 2.0**; trouxemos o modelo (observar → agir numa ref → conferir) para o Chromium da Sora, escrito em Python + JS, sem cópia literal. Mapa e licença: [`docs/referencias/agent-desktop.md`](../docs/referencias/agent-desktop.md). Diário: `log/2026-11-01.md`.
+- Novo: `backend/app/navegador/arvore/` e as ferramentas `navegador_observar|procurar|elemento|esperar|acao|tecla|lote`; prompt `navegador_arvore.v1`.
+- Verde: ruff, format, pytest **969 passed** (32 novos em `test_navegador_arvore.py`, com Chromium real).
+- **Próximo:** ligar no worker no lugar de `navegador_ler`/`navegador_agir`; rastro no painel Trabalho; cursor colorido na transmissão da aba.
 
 ## Peças inspiradas no OpenBot (2026-11-01)
 

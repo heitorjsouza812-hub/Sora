@@ -23,8 +23,9 @@ Mudou o prompt: crie a versão seguinte (`.v2.md`), troque em
 | `aviso_dado_externo.v1.md` | Trecho sobre `<dado_externo>` que vai no prompt de todo agente | montagem dos agentes |
 | `juiz_rapido.v1.md` | Instrução de sistema do revisor rodando como juiz rápido (JSON estrito) | `app/revisor/juiz.py` |
 | `compactacao_historico.v1.md` | Resumo cumulativo da conversa | `app/memoria/compactacao.py` |
+| `navegador_arvore.v1.md` | Como usar o navegador por árvore (observar → agir → conferir, quando repetir) | agentes com as ferramentas `navegador_*` (`app/navegador/arvore`) |
 
-Os dois últimos vieram do Rakazo (`docs/referencias/rakazo.md`) e ainda não estão no `03-prompts.md`.
+`juiz_rapido` e `compactacao_historico` vieram do Rakazo (`docs/referencias/rakazo.md`); `navegador_arvore` foi escrito pela Sora para o navegador adaptado do agent-desktop (`docs/referencias/agent-desktop.md`). Nenhum dos três está no `03-prompts.md` ainda.
 
 Atenção: vários prompts têm JSON com `{ }` literais. O preenchimento troca só
 as chaves conhecidas (`{pedido}`, `{perfil_do_agente}`…), nunca `str.format`.

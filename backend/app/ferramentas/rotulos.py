@@ -42,6 +42,13 @@ NOME_EXIBIDO: dict[str, str] = {
     "ler_habilidade": "Habilidade",
     "navegador_capturar": "Navegador",
     "navegador_console": "Navegador",
+    "navegador_observar": "Navegador",
+    "navegador_procurar": "Navegador",
+    "navegador_elemento": "Navegador",
+    "navegador_acao": "Navegador",
+    "navegador_tecla": "Navegador",
+    "navegador_esperar": "Navegador",
+    "navegador_lote": "Navegador",
     "reagir": "Reação",
     "canal_delegar": "Canal",
     "canal_transferir": "Canal",
@@ -114,11 +121,45 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "navegador_capturar": lambda _: "Capturando a tela da página",
     "navegador_console": lambda _: "Lendo o console da página",
     "navegador_pedir_ajuda": lambda a: f"Pedindo sua ajuda: {_detalhe(a.get('motivo'))}",
+    # navegador por árvore (docs/referencias/agent-desktop.md); o texto digitado nunca aparece
+    "navegador_observar": lambda a: (
+        "Lendo uma parte da página" if a.get("raiz") else "Lendo a página"
+    ),
+    "navegador_procurar": lambda a: (
+        f"Procurando na página: {_detalhe(a.get('nome') or a.get('texto') or a.get('papel'))}"
+    ),
+    "navegador_elemento": lambda _: "Conferindo um elemento da página",
+    "navegador_acao": lambda a: _ACOES_NAVEGADOR.get(str(a.get("acao")), "Usando a página"),
+    "navegador_tecla": lambda a: f"Apertando {_detalhe(a.get('tecla'))}",
+    "navegador_esperar": lambda _: "Esperando a página",
+    "navegador_lote": lambda a: (
+        f"Fazendo {_plural(len(a.get('passos') or []), 'passo', 'passos')} na página"
+    ),
     "reagir": lambda a: f"Reagindo com {_detalhe(a.get('emoji'))}",
     "canal_historico": lambda _: "Lendo o histórico do canal",
     "canal_delegar": lambda a: f"Delegando: {_detalhe(a.get('instrucao'))}",
     "canal_transferir": lambda _: "Passando a tarefa para um colega",
     "canal_resultado": lambda _: "Entregando o resultado no canal",
+}
+
+_ACOES_NAVEGADOR = {
+    "clicar": "Clicando na página",
+    "clique_duplo": "Clicando duas vezes na página",
+    "clique_direito": "Abrindo um menu na página",
+    "pairar": "Passando o mouse na página",
+    "focar": "Indo para um campo da página",
+    "digitar": "Digitando na página",
+    "definir_valor": "Preenchendo um campo",
+    "limpar": "Limpando um campo",
+    "selecionar": "Escolhendo uma opção",
+    "marcar": "Marcando uma opção",
+    "desmarcar": "Desmarcando uma opção",
+    "alternar": "Trocando uma opção",
+    "expandir": "Abrindo uma seção",
+    "recolher": "Fechando uma seção",
+    "rolar": "Rolando a página",
+    "rolar_ate": "Rolando até um elemento",
+    "arrastar": "Arrastando na página",
 }
 
 _CONECTOR = re.compile(r"^mcp__(.+?)__(.+)$")

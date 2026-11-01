@@ -70,6 +70,12 @@ LIVRES: frozenset[str] = frozenset(
         "navegador_capturar",
         "navegador_console",
         "navegador_pedir_ajuda",
+        # navegador por árvore (docs/referencias/agent-desktop.md): ler, procurar e esperar não
+        # mudam a página; navegador_acao, navegador_tecla e navegador_lote vão para o revisor
+        "navegador_observar",
+        "navegador_procurar",
+        "navegador_elemento",
+        "navegador_esperar",
         "reagir",
         "canal_historico",
         "canal_delegar",
@@ -112,6 +118,10 @@ SEGURAS_SEM_SUPERVISAO: frozenset[str] = frozenset(
         "navegador_ler",
         "navegador_abas",
         "navegador_console",
+        "navegador_observar",
+        "navegador_procurar",
+        "navegador_elemento",
+        "navegador_esperar",
         "canal_historico",
         "gerar_grafico",
         "conectores_buscar_ferramentas",

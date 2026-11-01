@@ -41,6 +41,8 @@ VERSOES: dict[str, int] = {
     # Adaptados do Rakazo (docs/referencias/rakazo.md):
     "compactacao_historico": 1,
     "juiz_rapido": 1,
+    # Navegador por árvore, adaptado do agent-desktop (docs/referencias/agent-desktop.md):
+    "navegador_arvore": 1,
 }
 """Versão em uso de cada prompt; o arquivo é ``{nome}.v{versao}.md``."""
 

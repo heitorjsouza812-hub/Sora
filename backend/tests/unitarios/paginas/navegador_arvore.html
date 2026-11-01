@@ -1,0 +1,33 @@
+<title>Cadastro</title>
+<nav aria-label="Principal"><a href="#a">Início</a><a href="#b">Planos</a></nav>
+<h1>Cadastro</h1>
+<div><div><div><form aria-label="Cadastro">
+  <label for="nome">Nome</label><input id="nome" name="nome">
+  <label>Senha <input type="password" name="senha"></label>
+  <label><input type="checkbox" id="termos"> Aceito os termos</label>
+  <label for="plano">Plano</label><select id="plano"><option>Grátis</option><option>Pro</option></select>
+  <details><summary>Mais opções</summary><p>Escondido</p></details>
+  <button type="button" id="enviar" disabled>Enviar</button>
+</form></div></div></div>
+<ul id="lista"><li><button>Apagar</button> A</li><li><button>Apagar</button> B</li></ul>
+<div id="capa" aria-label="Aviso de cookies"
+  style="position:fixed;inset:0;background:#0006;display:none"><button
+  onclick="this.parentElement.style.display='none'">Aceitar</button></div>
+<div role="combobox" aria-label="Cidade" aria-expanded="false" tabindex="0" id="cb"
+  onclick="lb.hidden=false;this.setAttribute('aria-expanded','true')">Escolha</div>
+<div role="listbox" id="lb" hidden>
+  <div role="option" onclick="cb.setAttribute('aria-valuetext','Recife');lb.hidden=true">Recife</div>
+  <div role="option" onclick="cb.setAttribute('aria-valuetext','Natal');lb.hidden=true">Natal</div>
+</div>
+<sora-sombra></sora-sombra>
+<p id="saida"></p>
+<div style="height:2400px"></div>
+<button id="fim" onclick="saida.textContent='fim!'">Lá embaixo</button>
+<script>
+  termos.addEventListener('change', (e) => { enviar.disabled = !e.target.checked; });
+  enviar.addEventListener('click', () => { saida.textContent = 'Enviado!'; });
+  customElements.define('sora-sombra', class extends HTMLElement {
+    constructor() { super(); this.attachShadow({mode: 'open'}).innerHTML =
+      '<button onclick="document.getElementById(\'saida\').textContent=\'sombra!\'">Na sombra</button>'; }
+  });
+</script>

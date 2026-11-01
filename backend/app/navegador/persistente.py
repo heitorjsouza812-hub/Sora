@@ -80,6 +80,16 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         pagina.on("console", lambda m: self._ao_console(aba.id, m.type, m.text))
         self._paginas[aba.id] = pagina
 
+    def pagina(self, aba: Aba) -> Any:
+        """Página carregada da aba (para o navegador por árvore, ``app/navegador/arvore``).
+
+        Chame depois de ``GerenteAbas.usar``, que recarrega a aba se ela foi descarregada.
+        """
+        pagina = self._paginas.get(aba.id)
+        if pagina is None:
+            raise ErroFerramenta("Essa aba não está carregada. Use a aba de novo.")
+        return pagina
+
     async def navegar(self, aba: Aba, url: str) -> tuple[str, str]:
         try:
             await validar_destino(url)
