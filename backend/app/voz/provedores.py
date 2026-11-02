@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 import httpx
 
+from app.busca.ler_pagina import EnderecoBloqueado
 from app.core.redacao import sanitizar_erro
 
 NomeVoz = Literal["openai", "elevenlabs", "cartesia", "fish"]
@@ -68,6 +69,8 @@ class _Base:
         cliente = self._cliente or httpx.AsyncClient(timeout=PRAZO_SEGUNDOS, trust_env=False)
         try:
             resposta = await cliente.request(metodo, f"{self.api}{caminho}", **kwargs)  # type: ignore[arg-type]
+        except EnderecoBloqueado as erro:
+            raise ErroVoz(f"O endereço da voz ({self.nome}) aponta para a rede interna.") from erro
         except httpx.TimeoutException as erro:
             raise ErroVoz(f"A voz ({self.nome}) demorou demais {acao}.") from erro
         except httpx.HTTPError as erro:

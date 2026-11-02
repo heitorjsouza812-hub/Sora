@@ -36,6 +36,8 @@ async def test_producao_com_busca_falsa_nao_sobe(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setenv("AMBIENTE", "producao")
     monkeypatch.setenv("BUSCA_PROVEDOR", "falso")
+    # O .env de desenvolvimento liga o modelo falso; sem isto a outra trava dispara primeiro.
+    monkeypatch.setenv("SORA_MODELO_FALSO", "0")
     with pytest.raises(BuscaProibidaEmProducao):
         async with ciclo_de_vida(FastAPI()):
             pass

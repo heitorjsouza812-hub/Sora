@@ -202,3 +202,25 @@ async def test_dois_workers_nao_duplicam_a_ocorrencia(mundo: Mundo) -> None:
     async with mundo.fabrica() as sessao:
         total = await sessao.scalar(select(func.count()).select_from(RotinaExecucao))
         assert total is not None
+
+
+async def test_reentrega_da_mesma_ocorrencia_nao_duplica(mundo: Mundo) -> None:
+    from workers.fila import enfileirar
+
+    await mundo.iniciar_worker()
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, "rot-f@exemplo.com")
+        r = await criar(cliente, auth, titulo="Reentregue", daqui_segundos=1)
+        ocorrencia = r["proxima_execucao"]
+
+        async def terminou() -> list[dict]:
+            return [e for e in await execucoes(cliente, auth, r["id"]) if e["concluida_em"]]
+
+        assert len(await esperar(terminou)) == 1
+        # o mesmo evento chega de novo com outro id de job (fila reiniciada, resultado expirado)
+        await enfileirar(
+            "executar_rotina", id_job="reentrega-de-teste", rotina_id=r["id"], ocorrencia=ocorrencia
+        )
+        await asyncio.sleep(6)
+        assert len(await execucoes(cliente, auth, r["id"])) == 1
+        assert len(await texto_das_mensagens(mundo.fabrica, r["id"])) == 1

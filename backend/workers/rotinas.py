@@ -15,10 +15,11 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.eventos.rotinas import RotinaExecutada
 from app.eventos.streams import publicar_evento
@@ -122,10 +123,26 @@ async def executar_rotina(
             return None
         execucao = await sessao.get(RotinaExecucao, UUID(execucao_id)) if execucao_id else None
         if execucao is None:
+            # Idempotente por ocorrência: o id da execução sai da rotina + ocorrência, então a
+            # reentrega do mesmo job (ou um segundo worker) bate na chave primária e desiste.
+            nova_id = (
+                uuid5(
+                    NAMESPACE_URL,
+                    f"rotina:{rotina.id}:{int(datetime.fromisoformat(ocorrencia).timestamp())}",
+                )
+                if ocorrencia and not manual
+                else uuid4()
+            )
+            if await sessao.get(RotinaExecucao, nova_id) is not None:
+                return None
             execucao = RotinaExecucao(
-                id=uuid4(), rotina_id=rotina.id, usuario_id=rotina.usuario_id, iniciada_em=inicio
+                id=nova_id, rotina_id=rotina.id, usuario_id=rotina.usuario_id, iniciada_em=inicio
             )
             sessao.add(execucao)
+            try:
+                await sessao.flush()
+            except IntegrityError:
+                return None
         elif execucao.status != "executando" or execucao.concluida_em is not None:
             return None  # reentrega do mesmo job
         rotina.ultima_execucao = inicio

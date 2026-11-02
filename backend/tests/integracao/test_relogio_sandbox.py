@@ -16,6 +16,14 @@ from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
 pytestmark = pytest.mark.integracao
 
 
+@pytest.fixture(autouse=True)
+def _config_limpa():
+    """Nenhum teste daqui deixa a configuração de produção no cache para os seguintes."""
+    obter_configuracao.cache_clear()
+    yield
+    obter_configuracao.cache_clear()
+
+
 def _ctx(**extra) -> ContextoFerramenta:
     return ContextoFerramenta(usuario_id=uuid4(), agente_id=uuid4(), conversa_id=uuid4(), **extra)
 

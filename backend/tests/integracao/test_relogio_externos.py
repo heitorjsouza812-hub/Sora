@@ -394,3 +394,76 @@ async def test_voz_com_a_chave_do_usuario(mundo: Mundo) -> None:
     finally:
         servidor.should_exit = True
         await tarefa
+
+
+async def test_voz_nao_alcanca_a_rede_interna(
+    mundo: Mundo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SSRF pela ``base_url`` da voz: recusada na validação e, se a validação for enganada
+    (DNS rebinding), recusada na hora de conectar, sem devolver corpo nenhum."""
+    from sqlalchemy import select as sel
+
+    from app.api import voz as api_voz
+    from app.core.seguranca import cifrar_segredo
+    from app.llm.provedores import PoliticaRede
+    from app.modelos.enumeracoes import TipoProvedor
+    from app.modelos.tabelas import Provedor, Usuario
+
+    chamadas: list[str] = []
+    interno = FastAPI()
+
+    @interno.post("/v1/audio/speech")
+    async def fala(req: Request) -> dict:
+        chamadas.append("speech")
+        return {"segredo": "corpo-interno"}
+
+    @interno.post("/v1/audio/transcriptions")
+    async def transcricao(req: Request) -> dict:
+        chamadas.append("transcricao")
+        return {"text": "corpo-interno"}
+
+    porta = _porta_livre()
+    servidor = uvicorn.Server(
+        uvicorn.Config(interno, host="127.0.0.1", port=porta, log_level="warning")
+    )
+    tarefa = asyncio.create_task(servidor.serve())
+    while not servidor.started:  # noqa: ASYNC110
+        await asyncio.sleep(0.05)
+    monkeypatch.setattr(
+        api_voz, "politica_de_rede", lambda: PoliticaRede(producao=False, rede_local=False)
+    )
+    try:
+        async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as cliente:
+            auth = await entrar(cliente, mundo.fabrica, "ext-v@exemplo.com")
+            async with mundo.fabrica() as sessao:
+                usuario = await sessao.scalar(
+                    sel(Usuario).where(Usuario.email == "ext-v@exemplo.com")
+                )
+                prov = Provedor(
+                    usuario_id=usuario.id,
+                    tipo=TipoProvedor.COMPATIVEL_OPENAI,
+                    base_url=f"http://127.0.0.1:{porta}/v1",
+                )
+                sessao.add(prov)
+                await sessao.flush()
+                prov.chave_cifrada = cifrar_segredo(
+                    "sk-chave-do-usuario", usuario_id=usuario.id, provedor=str(prov.id)
+                )
+                await sessao.commit()
+            audio = {"audio": ("fala.webm", b"audio-de-mentira", "audio/webm")}
+            # 1) validação recusa
+            falar = await cliente.post("/v1/voz/falar", headers=auth, json={"texto": "oi"})
+            assert falar.status_code == 422, falar.text
+            # 2) validação enganada (rebinding): o transporte recusa ao conectar
+            monkeypatch.setattr(
+                api_voz, "validar_base_url", lambda _t, base, _p, *a: base.rstrip("/")
+            )
+            falar = await cliente.post("/v1/voz/falar", headers=auth, json={"texto": "oi"})
+            transcrever = await cliente.post("/v1/voz/transcrever", headers=auth, files=audio)
+            for r in (falar, transcrever):
+                assert r.status_code == 502, r.text
+                assert "corpo-interno" not in r.text and "sk-chave" not in r.text
+            assert chamadas == []
+    finally:
+        servidor.should_exit = True
+        await tarefa

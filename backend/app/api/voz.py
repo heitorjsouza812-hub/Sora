@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -14,10 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.banco import obter_sessao
 from app.core.dependencias import usuario_atual
+from app.llm.provedores import (
+    DestinoBloqueado,
+    criar_cliente_listagem,
+    politica_de_rede,
+    validar_base_url,
+)
 from app.modelos.enumeracoes import TipoProvedor
 from app.modelos.tabelas import Provedor
 from app.seletor.repositorio import config_do_provedor
-from app.voz.provedores import MAX_BYTES_AUDIO, ErroVoz, VozOpenAI
+from app.voz.provedores import MAX_BYTES_AUDIO, PRAZO_SEGUNDOS, ErroVoz, VozOpenAI
 from app.voz.texto import falavel
 
 roteador = APIRouter(prefix="/voz", tags=["voz"])
@@ -53,9 +60,18 @@ async def _voz_do_usuario(sessao: AsyncSession, usuario_id: UUID) -> VozOpenAI:
             "Conecte uma chave da OpenAI em Configurações → Modelos de IA para usar a voz.",
         )
     config = await config_do_provedor(sessao, usuario_id, provedor_id)
-    voz = VozOpenAI(config.api_key.get_secret_value() if config.api_key else "")
-    if config.base_url:
-        voz.api = config.base_url.rstrip("/")
+    politica = politica_de_rede()
+    try:
+        base = validar_base_url(config.tipo, config.base_url, politica)
+    except DestinoBloqueado as erro:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(erro)) from erro
+    # Mesmo transporte dos provedores: conecta só em IP público, conferido na hora da conexão
+    # (anti DNS rebinding), sem seguir redirecionamento nem proxy do ambiente.
+    cliente = criar_cliente_listagem(politica)
+    cliente.timeout = httpx.Timeout(PRAZO_SEGUNDOS, connect=10.0)
+    voz = VozOpenAI(config.api_key.get_secret_value() if config.api_key else "", cliente=cliente)
+    if base:
+        voz.api = base
     return voz
 
 
