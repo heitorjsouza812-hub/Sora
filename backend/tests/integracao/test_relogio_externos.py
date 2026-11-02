@@ -320,3 +320,77 @@ async def test_telegram_vinculo_conversa_e_desvinculo(
         assert (
             await cliente.delete(f"/v1/canais/telegram/vinculos/{vinculos[0]['id']}", headers=auth)
         ).status_code == 404
+
+
+# ---------------------------------------------------------------- voz
+
+
+async def test_voz_com_a_chave_do_usuario(mundo: Mundo) -> None:
+    from sqlalchemy import select as sel
+
+    from app.core.seguranca import cifrar_segredo
+    from app.modelos.enumeracoes import TipoProvedor
+    from app.modelos.tabelas import Provedor, Usuario
+
+    recebido: dict[str, Any] = {}
+    app = FastAPI()
+
+    @app.post("/v1/audio/speech")
+    async def fala(req: Request):
+        from fastapi.responses import Response
+
+        recebido["auth"] = req.headers["authorization"]
+        recebido["corpo"] = await req.json()
+        return Response(b"ID3-audio-de-mentira", media_type="audio/mpeg")
+
+    @app.post("/v1/audio/transcriptions")
+    async def transcricao(req: Request) -> dict:
+        recebido["auth_t"] = req.headers["authorization"]
+        recebido["bytes"] = len(await req.body())
+        return {"text": "texto transcrito"}
+
+    porta = _porta_livre()
+    servidor = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=porta, log_level="warning")
+    )
+    tarefa = asyncio.create_task(servidor.serve())
+    while not servidor.started:  # noqa: ASYNC110
+        await asyncio.sleep(0.05)
+    try:
+        async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as cliente:
+            auth = await entrar(cliente, mundo.fabrica, "ext-e@exemplo.com")
+            sem = await cliente.post("/v1/voz/falar", headers=auth, json={"texto": "oi"})
+            assert sem.status_code == 404
+            async with mundo.fabrica() as sessao:
+                usuario = await sessao.scalar(
+                    sel(Usuario).where(Usuario.email == "ext-e@exemplo.com")
+                )
+                prov = Provedor(
+                    usuario_id=usuario.id,
+                    tipo=TipoProvedor.COMPATIVEL_OPENAI,
+                    base_url=f"http://127.0.0.1:{porta}/v1",
+                )
+                sessao.add(prov)
+                await sessao.flush()
+                prov.chave_cifrada = cifrar_segredo(
+                    "sk-chave-do-usuario", usuario_id=usuario.id, provedor=str(prov.id)
+                )
+                await sessao.commit()
+            r = await cliente.post(
+                "/v1/voz/falar", headers=auth, json={"texto": "**Olá**, tudo bem?"}
+            )
+            assert r.status_code == 200 and r.content == b"ID3-audio-de-mentira"
+            assert r.headers["content-type"].startswith("audio/mpeg")
+            assert recebido["auth"] == "Bearer sk-chave-do-usuario"
+            assert "**" not in recebido["corpo"]["input"]
+            t = await cliente.post(
+                "/v1/voz/transcrever",
+                headers=auth,
+                files={"audio": ("fala.webm", b"\x1aE\xdf\xa3audio", "audio/webm")},
+            )
+            assert t.status_code == 200 and t.json() == {"texto": "texto transcrito"}
+            assert recebido["auth_t"] == "Bearer sk-chave-do-usuario"
+            assert "sk-chave" not in t.text
+    finally:
+        servidor.should_exit = True
+        await tarefa

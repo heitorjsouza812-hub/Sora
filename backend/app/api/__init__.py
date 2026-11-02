@@ -23,6 +23,7 @@ from app.api import (
     provedores,
     rotinas,
     uso,
+    voz,
 )
 
 roteador_v1 = APIRouter()
@@ -47,6 +48,7 @@ for roteador in (
     rotinas.roteador,
     conectores.roteador,
     habilidades.roteador,
+    voz.roteador,
 ):
     roteador_v1.include_router(roteador)
 

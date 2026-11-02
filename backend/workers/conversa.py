@@ -80,6 +80,7 @@ async def _responder_direto_sem_fila(ctx: dict[str, Any], mensagem_id: str) -> N
     """Roda a Sora (ou o agente individual) e manda o texto pelos eventos
     ``mensagem.*``, terminando com ``sugestoes``. Quem põe na fila: a API."""
     from app.agentes import ContextoAgente
+    from app.agentes.ancora import aplicar_habilidade_forcada
     from app.ferramentas.base import ContextoFerramenta
     from app.ferramentas.falar import Falar, falar
     from app.orquestrador.modelos import modelos_do_papel
@@ -127,7 +128,11 @@ async def _responder_direto_sem_fila(ctx: dict[str, Any], mensagem_id: str) -> N
         )
         return
     await _rodar_e_falar(
-        ctx, contexto, modelos, antes=antes, entrada={"messages": [HumanMessage(texto)]}
+        ctx,
+        contexto,
+        modelos,
+        antes=antes,
+        entrada={"messages": [HumanMessage(await aplicar_habilidade_forcada(usuario_id, texto))]},
     )
 
 

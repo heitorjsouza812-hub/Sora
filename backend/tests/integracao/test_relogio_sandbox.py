@@ -46,7 +46,7 @@ async def test_sem_rede_por_padrao(docker_ligado) -> None:
 async def test_prazo_estourado_remove_o_conteiner(docker_ligado) -> None:
     saida = await executar_comando(ExecutarComando(comando="sleep 60", prazo_segundos=1), _ctx())
     assert "prazo estourado" in saida
-    vivos = subprocess.run(  # noqa: S603
+    vivos = subprocess.run(  # noqa: ASYNC221
         ["docker", "ps", "-q", "--filter", "label=sora.sandbox=1"],
         capture_output=True,
         text=True,
