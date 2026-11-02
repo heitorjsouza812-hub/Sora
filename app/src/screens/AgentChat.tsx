@@ -6,6 +6,8 @@ import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
 import { abrirEditorAgente } from '../components/builder';
 import { EntregaCard } from '../components/ui/EntregaCard';
+import { MedidorContexto } from '../components/equipe/MedidorContexto';
+import { FilaDoAgente } from '../components/equipe/FilaDoAgente';
 import { CartaoPendencia } from '../components/pendencias/Pendencias';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { PluginMark } from '../components/ui/PluginMark';
@@ -54,6 +56,8 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
         })}
         {!a.ferramentas.length && <p className="tools-empty">Sem ferramentas: este agente só conversa.</p>}
       </div>
+      <MedidorContexto agenteId={a.id} />
+      <FilaDoAgente agenteId={a.id} />
       {a.instrucoes && <><p className="eyebrow tools-label">Instruções</p><p className="agent-instructions">{a.instrucoes}</p></>}
       <button type="button" className="st-btn-ghost agent-edit" onClick={() => abrirEditorAgente(a.id)}>Editar agente</button>
     </div>

@@ -5,3 +5,6 @@ export const pluginInfo = (nome?: string) => PLUGIN_ICONS.find(p => p.name === n
 
 /** Duração legível em PT-BR: 2400 → "2,4 s". */
 export const duracao = (ms: number) => `${(ms / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: ms < 10000 ? 1 : 0 })} s`;
+
+/** Passo de uma ferramenta `navegador_*` (rastro, captura e "assumir aba"). */
+export const ehPassoNavegador = (p: { acao?: string; ferramenta?: string }) => /^navegador_/.test(p.acao ?? p.ferramenta ?? '');

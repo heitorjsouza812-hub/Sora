@@ -1,11 +1,20 @@
 import type { Movimento, PassoTrabalho } from '../types';
-import type { AgenteSora, EntregaGerada, EstadoProjetos, Execucao, ProjetoSora, TarefaGerada } from './projetos';
+import type { RevisaoDominio, AgenteSora, EntregaGerada, EstadoProjetos, Execucao, ProjetoSora, TarefaGerada } from './projetos';
 import type { EventoSse } from '../api/eventos';
 
 type Dados = Record<string, unknown>;
 const texto = (v: unknown) => typeof v === 'string' ? v : '';
 const numero = (v: unknown, padrao = 0) => typeof v === 'number' ? v : padrao;
 const lista = (v: unknown) => Array.isArray(v) ? v : [];
+
+function revisaoDominioDe(d: Dados): RevisaoDominio {
+  const perfil = (d.perfil && typeof d.perfil === 'object' ? d.perfil : {}) as Dados;
+  const opcoes = (lista(d.opcoes) as Dados[]).map(o => ({ rotulo: texto(o.rotulo), valor: (texto(o.valor) === 'negar' ? 'negar' : 'sempre_permitir') as 'negar' | 'sempre_permitir' }));
+  return {
+    dominio: texto(d.dominio), url: texto(d.url), perfil: { tipo: texto(perfil.tipo), nome: texto(perfil.nome) || null }, agenteId: texto(d.agente_id) || null,
+    opcoes: opcoes.length ? opcoes : [{ rotulo: 'Aprovar domínio', valor: 'sempre_permitir' }, { rotulo: 'Negar', valor: 'negar' }],
+  };
+}
 
 function atualizarProjeto(estado: EstadoProjetos, conversaId: string, fn: (p: ProjetoSora) => ProjetoSora): EstadoProjetos {
   return { ...estado, projetos: estado.projetos.map(p => p.id === conversaId ? fn(p) : p) };
@@ -41,6 +50,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     return { ...estado, pendencias: [...(estado.pendencias ?? []), {
       tipo: 'aprovacao', id, conversaId, resumo: texto(d.resumo), dano: texto(d.dano), quemRecebe: texto(d.quem_recebe) || null,
       expiraEm: Date.parse(texto(d.expira_em)) || 0, desde: evento.recebidoEm,
+      ...(d.tipo === 'aprovar_dominio' ? { revisaoDominio: revisaoDominioDe(d) } : {}),
     }] };
   }
   if (evento.tipo === 'aprovacao.resolvida') return { ...estado, pendencias: (estado.pendencias ?? []).filter(p => p.id !== texto(d.aprovacao_id)) };

@@ -5,7 +5,8 @@ import { AvisoPluginDesconectado, useErroSimulado } from '../erros';
 import { PecaCampanha } from '../ui/CampaignPiece';
 import { PluginMark } from '../ui/PluginMark';
 import type { Movimento } from '../../types';
-import { duracao, pluginInfo } from './util';
+import { duracao, ehPassoNavegador, pluginInfo } from './util';
+import { RastroNavegador } from './RastroNavegador';
 
 
 /** JSON compacto numa linha (ex.: {consulta: "café", limite: 8}). */
@@ -64,6 +65,7 @@ export function ChamadaFerramenta({ passo, cor, movimento, agora }: { passo: Pas
       {aberto && <pre className="wk-params-full">{JSON.stringify(params, null, 2)}</pre>}
       {pluginCaiu && <AvisoPluginDesconectado plugin={p?.name ?? passo.ferramenta!} />}
       {passo.resultado && <ResultadoResumo resultado={passo.resultado} cor={cor} />}
+      {ehPassoNavegador(passo) && <RastroNavegador passo={passo} />}
     </div>
   );
 }

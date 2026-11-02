@@ -112,3 +112,15 @@
   .wk-drawer-body { transition: none; }
 }
 
+
+/* Rastro do navegador (etapa 4) */
+.wk-nav { display: grid; gap: 6px; margin-top: 6px; }
+.wk-nav-pagina { display: grid; gap: 2px; font-size: 13px; }
+.wk-nav-pagina small, .wk-nav-aba-url { color: var(--text-3, #8B93A3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-nav-rastro { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 12px; padding: 6px 8px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 8px; }
+.wk-nav-rastro code { word-break: break-all; }
+.wk-nav-falha { border-color: rgba(255, 120, 120, .4); }
+.wk-nav-captura { max-width: 100%; border-radius: 8px; border: 1px solid var(--line, rgba(255,255,255,.08)); }
+.wk-nav-aba { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; }
+.wk-nav-ajuda { margin: 0; font-size: 13px; color: var(--text-1, #F2F5FB); }
+.wk-nav-erro { color: #ff9b9b; }

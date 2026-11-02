@@ -50,4 +50,7 @@ export interface ResultadoPasso {
   links?: { titulo: string; dominio: string }[];
   imagens?: string[];                   // URLs (ou vazio → miniatura gerada na cor do agente)
   itens?: string[];                     // linhas de texto (títulos, tópicos…)
+  // navegador (Leme): último segmento redigido, aba e captura
+  rastro?: { esquema?: string; momento_ms?: number; comando: string; args?: string[]; ok: boolean; duracao_ms?: number; codigo?: string; entrega?: string };
+  url?: string; titulo?: string; anexo_id?: string; nome?: string;
 }

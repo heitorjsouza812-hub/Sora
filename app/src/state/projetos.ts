@@ -3,6 +3,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { api, ErroApi } from '../api/cliente';
 import { acompanharEventos, type EventoSse } from '../api/eventos';
+import { receberEventoEquipe } from './equipe';
 import { enviarAnexo } from '../api/anexos';
 import type { Anexo } from '../components/anexos';
 import type { Movimento, PassoTrabalho, Status } from '../types';
@@ -50,8 +51,10 @@ export interface EstadoProjetos {
 /** Algo que a equipe espera do usuário: pergunta (inclui o orçamento estourado: Continuar/Parar) ou aprovação. */
 export type Pendencia = (
   | { tipo: 'pergunta'; texto: string; opcoes: { rotulo: string; valor: string }[]; respostaLivre: boolean }
-  | { tipo: 'aprovacao'; resumo: string; dano: string; quemRecebe: string | null; expiraEm: number }
+  | { tipo: 'aprovacao'; resumo: string; dano: string; quemRecebe: string | null; expiraEm: number; revisaoDominio?: RevisaoDominio }
 ) & { id: string; conversaId: string; desde: number; enviando?: boolean; erro?: string };
+/** Cartão `aprovar_dominio` (Leme): o agente quer abrir um domínio novo num perfil com login salvo. */
+export interface RevisaoDominio { dominio: string; url: string; perfil: { tipo: string; nome: string | null }; agenteId: string | null; opcoes: { rotulo: string; valor: 'sempre_permitir' | 'negar' }[] }
 export type FaseProjeto = 'pensando' | 'conversa' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado' | 'erro';
 
 interface ConversaApi { id: string; agente_id: string; tipo: 'chat' | 'projeto' | 'agente'; titulo: string | null; aprovada_versao: number | null; criada_em: string; atualizada_em: string }
@@ -98,6 +101,7 @@ const controladoresConversa = new Map<string, AbortController>();
 let iniciando: Promise<void> | null = null;
 
 function receber(evento: EventoSse) {
+  receberEventoEquipe(evento);
   alterar(e => ({ ...aplicarEvento(e, evento), erroEventos: undefined }));
   if (evento.tipo === 'entrega' || (evento.tipo === 'cadeia.atualizada' && evento.dados.status === 'concluida')) {
     const conversaId = String(evento.dados.conversa_id ?? '');

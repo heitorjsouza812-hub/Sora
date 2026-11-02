@@ -1,0 +1,42 @@
+.eq-contexto, .eq-fila { display: grid; gap: 8px; margin-top: 16px; }
+.eq-nota { margin: 0; color: var(--text-2, #8B93A3); font-size: 13px; line-height: 1.5; }
+.eq-erro { margin: 0; color: #ff9b9b; font-size: 13px; }
+.eq-fila ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.eq-fila li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; font-size: 13px; }
+.eq-previa { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eq-fila li small { color: var(--text-3, #6B7280); }
+.eq-item-acoes { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 6px; align-items: center; }
+.eq-item-acoes button { background: none; border: 1px solid var(--line, rgba(255,255,255,.08)); color: inherit; border-radius: 8px; padding: 4px 8px; cursor: pointer; font: inherit; font-size: 12px; }
+
+/* Tela Canais */
+.eq-pagina { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 16px; min-height: 0; flex: 1; }
+.eq-lista { display: grid; align-content: start; gap: 10px; }
+.eq-lista ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.eq-lista li button { width: 100%; text-align: left; display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 12px; background: var(--panel, #0F1115); color: inherit; cursor: pointer; font: inherit; }
+.eq-lista li button[aria-current='page'] { border-color: rgba(255,255,255,.3); }
+.eq-lista small { color: var(--text-3, #6B7280); }
+.eq-abas { display: flex; gap: 6px; }
+.eq-abas button { flex: 1; padding: 8px; border-radius: 999px; border: 1px solid var(--line, rgba(255,255,255,.08)); background: none; color: inherit; cursor: pointer; font: inherit; }
+.eq-abas button[aria-pressed='true'] { background: #EEF2FA; color: #0B0D12; }
+.eq-novo { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 12px; }
+.eq-novo fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.eq-membro { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.eq-membro i { width: 10px; height: 10px; border-radius: 50%; }
+.eq-detalhe { display: grid; grid-template-rows: auto auto 1fr auto; gap: 12px; min-height: 0; }
+.eq-detalhe header { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.eq-detalhe header h2 { margin: 0; font-size: 18px; }
+.eq-detalhe header small { flex: 1; color: var(--text-2, #8B93A3); }
+.eq-tarefas { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.eq-tarefa { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; padding: 8px 10px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; font-size: 13px; }
+.eq-tarefa select { background: var(--panel-2, #14161B); color: inherit; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 8px; padding: 4px; }
+.eq-mensagens { list-style: none; margin: 0; padding: 0; display: grid; align-content: start; gap: 10px; overflow-y: auto; }
+.eq-msg { display: grid; gap: 2px; font-size: 14px; }
+.eq-msg p { margin: 0; white-space: pre-wrap; }
+.eq-atividade p { color: var(--text-2, #8B93A3); font-size: 13px; }
+.eq-reacoes { display: flex; gap: 4px; }
+.eq-reacoes button { background: none; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 999px; padding: 1px 8px; cursor: pointer; color: inherit; font-size: 12px; }
+.eq-reacoes button[aria-pressed='true'] { border-color: rgba(255,255,255,.4); }
+.eq-envio { display: flex; gap: 8px; align-items: end; }
+.eq-envio > :first-child { flex: 1; }
+.eq-vazio { display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--text-2, #8B93A3); }
+@media (max-width: 720px) { .eq-pagina { grid-template-columns: 1fr; } }

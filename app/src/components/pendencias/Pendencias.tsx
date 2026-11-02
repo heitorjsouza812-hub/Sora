@@ -44,7 +44,33 @@ function CartaoPergunta({ p, cor }: { p: PerguntaP; cor: string }) {
   );
 }
 
+const PERFIL_ROTULO: Record<string, string> = { compartilhado: 'perfil compartilhado', agente: 'perfil do agente', nomeado: 'perfil' };
+
+/** Domínio novo num perfil com login salvo: o agente só continua depois que o usuário aprovar o domínio. */
+function CartaoDominio({ p, cor }: { p: AprovacaoP; cor: string }) {
+  const r = p.revisaoDominio!;
+  const perfil = `${PERFIL_ROTULO[r.perfil.tipo] ?? 'perfil'}${r.perfil.nome ? ` “${r.perfil.nome}”` : ''}`;
+  return (
+    <section className="pend-card" aria-label="Revisão de domínio" data-pendencia="dominio">
+      <Cabeca rotulo="Um agente quer abrir um site novo" cor={cor} />
+      <p className="pend-texto">{p.resumo || `Abrir ${r.dominio} no ${perfil}.`}</p>
+      <p className="pend-dano"><b>Domínio:</b> <code>{r.dominio}</code></p>
+      <p className="pend-dano"><b>Endereço:</b> <code className="pend-url">{r.url}</code></p>
+      <p className="pend-dano"><b>Perfil com login salvo:</b> {perfil}</p>
+      {p.dano && <p className="pend-dano"><b>O que pode acontecer:</b> {p.dano}</p>}
+      <div className="pend-acoes" role="group" aria-label="Decisão">
+        {r.opcoes.map(o => (
+          <Button key={o.valor} tamanho="M" variante={o.valor === 'negar' ? 'perigo' : 'primario'} disabled={p.enviando} onClick={() => void decidirAprovacao(p.id, o.valor)}>{o.rotulo}</Button>
+        ))}
+      </div>
+      {p.expiraEm > 0 && <p className="pend-nota">Sem resposta até {new Date(p.expiraEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}, o pedido é recusado.</p>}
+      {p.erro && <p className="pend-erro" role="alert">{p.erro}</p>}
+    </section>
+  );
+}
+
 function CartaoAprovacao({ p, cor }: { p: AprovacaoP; cor: string }) {
+  if (p.revisaoDominio) return <CartaoDominio p={p} cor={cor} />;
   return (
     <section className="pend-card" aria-label="Pedido de aprovação" data-pendencia="aprovacao">
       <Cabeca rotulo="Preciso da sua aprovação" cor={cor} />

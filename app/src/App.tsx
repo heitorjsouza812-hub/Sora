@@ -8,6 +8,7 @@ import Agentes from './screens/Agentes';
 import Projetos from './screens/Projetos';
 import Revisao from './screens/Revisao';
 import Plugins from './screens/Plugins';
+import Canais from './screens/Canais';
 import { PonteNavegacao } from './desktop/PonteNavegacao';
 import { GateSessao, TelaCarregando } from './components/sessao';
 import './components/ui/sora.css';
@@ -36,6 +37,8 @@ function AppRoutes() {
     <Route path="/agentes/:id/editar" element={<CriarAgente />} />
     <Route path="/revisao/:projetoId" element={<Revisao />} />
     <Route path="/configuracoes" element={<Configuracoes />} />
+    <Route path="/canais" element={<Canais />} />
+    <Route path="/canais/:canalId" element={<Canais />} />
     <Route path="/plugins" element={<Plugins />} />
     {Mobile && <Route path="/celular" element={<Mobile />} />}
     {OrbLab && <Route path="/lab/orb" element={<OrbLab />} />}
