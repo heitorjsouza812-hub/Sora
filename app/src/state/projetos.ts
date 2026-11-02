@@ -95,14 +95,29 @@ function mensagemDaApi(m: MensagemApi): MensagemChat {
 
 let controladorGeral: AbortController | null = null;
 const controladoresConversa = new Map<string, AbortController>();
+const errosEventosPorCanal = new Map<string, string>();
 let iniciando: Promise<void> | null = null;
 
 function receber(evento: EventoSse) {
-  alterar(e => ({ ...aplicarEvento(e, evento), erroEventos: undefined }));
+  alterar(e => aplicarEvento(e, evento));
   if (evento.tipo === 'entrega' || (evento.tipo === 'cadeia.atualizada' && evento.dados.status === 'concluida')) {
     const conversaId = String(evento.dados.conversa_id ?? '');
     if (conversaId) void carregarEntregas(conversaId);
   }
+}
+
+function mensagemDoErroEventos(erro: unknown): string {
+  if (erro instanceof ErroApi && erro.status === 429) {
+    return 'Há muitas abas ou recargas abertas. Feche outras abas e aguarde um minuto; a Sora tentará reconectar.';
+  }
+  return erro instanceof Error ? erro.message : 'Canal de eventos interrompido.';
+}
+
+function definirErroEventos(canal: string, erro?: unknown) {
+  if (erro === undefined) errosEventosPorCanal.delete(canal);
+  else errosEventosPorCanal.set(canal, mensagemDoErroEventos(erro));
+  const mensagem = errosEventosPorCanal.values().next().value as string | undefined;
+  alterar(e => e.erroEventos === mensagem ? e : { ...e, erroEventos: mensagem });
 }
 
 const mapaDeEntregas = (lista: EntregasApi['entregas']): Record<string, EntregaGerada> => Object.fromEntries(lista.map(x => [x.agente_id || x.id, { ...x, agenteId: x.agente_id ?? undefined, conteudo: x.conteudo, ...(typeof x.conteudo === 'object' && x.conteudo ? x.conteudo as object : {}) } as EntregaGerada]));
@@ -133,15 +148,21 @@ export function comparacaoDeVersao(e: EstadoProjetos, p: ProjetoSora): { agente:
 export function acompanharConversa(conversaId: string): void {
   if (!conversaId || controladoresConversa.has(conversaId)) return;
   for (const [id, ativo] of controladoresConversa) {
-    if (id !== conversaId) { ativo.abort(); controladoresConversa.delete(id); }
+    if (id !== conversaId) { ativo.abort(); controladoresConversa.delete(id); definirErroEventos(`conversa:${id}`); }
   }
   const controlador = new AbortController(); controladoresConversa.set(conversaId, controlador);
+  const canal = `conversa:${conversaId}`;
   void acompanharEventos(`/v1/conversas/${conversaId}/eventos`, {
     signal: controlador.signal,
     aoEvento: evento => receber({ ...evento, dados: { conversa_id: conversaId, ...evento.dados } }),
-    aoConectar: () => alterar(e => ({ ...e, erroEventos: undefined })),
-    aoErro: erro => alterar(e => ({ ...e, erroEventos: erro instanceof Error ? erro.message : 'Canal de eventos interrompido.' })),
-  }).finally(() => controladoresConversa.delete(conversaId));
+    aoConectar: () => definirErroEventos(canal),
+    aoErro: erro => definirErroEventos(canal, erro),
+  }).finally(() => {
+    if (controladoresConversa.get(conversaId) === controlador) {
+      controladoresConversa.delete(conversaId);
+      definirErroEventos(canal);
+    }
+  });
 }
 
 export function iniciarProjetos(): Promise<void> {
@@ -157,13 +178,17 @@ export function iniciarProjetos(): Promise<void> {
     void acompanharEventos('/v1/eventos', {
       signal: controladorGeral.signal,
       aoEvento: receber,
-      aoConectar: () => alterar(e => ({ ...e, erroEventos: undefined })),
-      aoErro: erro => alterar(e => ({ ...e, erroEventos: erro instanceof Error ? erro.message : 'Canal de eventos interrompido.' })),
+      aoConectar: () => definirErroEventos('geral'),
+      aoErro: erro => definirErroEventos('geral', erro),
     });
   })().catch(erro => { alterar(e => ({ ...e, carregando: false, erro: erro instanceof Error ? erro.message : 'Não foi possível carregar as conversas.' })); throw erro; }).finally(() => { iniciando = null; });
   return iniciando;
 }
-export function encerrarProjetos() { controladorGeral?.abort(); controladorGeral = null; for (const c of controladoresConversa.values()) c.abort(); controladoresConversa.clear(); }
+export function encerrarProjetos() {
+  controladorGeral?.abort(); controladorGeral = null;
+  for (const c of controladoresConversa.values()) c.abort();
+  controladoresConversa.clear(); errosEventosPorCanal.clear();
+}
 
 export function progressoExecucao(x: Execucao, _agora: number) { return x.progresso; }
 export function passosDaExecucao(x: Execucao, _agora: number): PassoTrabalho[] { return x.roteiro; }
