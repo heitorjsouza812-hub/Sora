@@ -318,14 +318,15 @@ def montar_catalogo(
     prefixo: str = "conectores",
     rotulo: str = "dos conectores",
     antes_de_executar: AntesDeExecutar | None = None,
+    limite_direto: int = LIMITE_DIRETO,
 ) -> list[BaseTool]:
-    """Devolve as ferramentas direto (até 20) ou as três meta-ferramentas."""
+    """Devolve as ferramentas direto (até ``limite_direto``, 20) ou as três meta-ferramentas."""
     from langchain_core.tools import StructuredTool
 
     if prefixo.startswith("mcp_"):
         # A Anthropic recusa nomes ``mcp_…`` (um sublinhado) em alguns endpoints.
         raise ValueError("Prefixo do catálogo não pode começar com 'mcp_'.")
-    if len(ferramentas) <= LIMITE_DIRETO:
+    if len(ferramentas) <= limite_direto:
         return list(ferramentas)
 
     catalogo = CatalogoFerramentas(ferramentas)

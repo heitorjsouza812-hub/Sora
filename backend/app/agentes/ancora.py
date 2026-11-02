@@ -39,17 +39,15 @@ _CONVERSA = (
     "enviar_para_agente",
 )
 
+# Conjunto enxuto: cada esquema vai em toda chamada, e planos gratuitos limitam os tokens por
+# minuto. Histórico, habilidades e edição de pendência ficam com a Sora e o agente individual.
 _ESPECIALISTA = (
     "buscar_memoria",
     "lembrar",
-    "buscar_historico",
-    "ler_historico",
     "catalogo_tarefas",
     "adicionar_pendencia",
     "listar_pendencias",
-    "atualizar_pendencia",
     "concluir_pendencia",
-    "ler_habilidade",
 )
 
 FERRAMENTAS_DA_ANCORA: dict[str, tuple[str, ...]] = {
@@ -129,6 +127,31 @@ async def blocos_do_turno(contexto: ContextoAgente) -> str:
     return "\n\n".join(partes)
 
 
+NAVEGADOR_DIRETO = (
+    "navegador_abrir",
+    "navegador_observar",
+    "navegador_acao",
+    "navegador_procurar",
+)
+"""Só estas quatro vão no prompt; as outras nove ferramentas do navegador ficam sob demanda."""
+
+
+def navegador_preguicoso(ferramentas: list, contexto: ContextoAgente) -> list:
+    """Das ferramentas do navegador, abrir/observar/agir/procurar direto; o resto, no catálogo
+    (``navegador_buscar_ferramentas`` / ``carregar`` / ``executar``). Cada execução continua
+    passando pela política e pelo juiz com o nome de verdade."""
+    diretas = [f for f in ferramentas if f.name in NAVEGADOR_DIRETO]
+    resto = [f for f in ferramentas if f.name.startswith("navegador_") and f not in diretas]
+    outras = [f for f in ferramentas if f not in diretas and f not in resto]
+    if not resto:
+        return ferramentas
+    return [
+        *outras,
+        *diretas,
+        *_catalogo_revisado(resto, contexto, "navegador", "do navegador", limite_direto=0),
+    ]
+
+
 def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
     """Ferramentas dos conectores: até 20 vão direto; acima disso, pelo catálogo preguiçoso.
 
@@ -136,6 +159,18 @@ def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
     (a meta-ferramenta de execução não decide nada), então leitura roda e escrita pede juiz ou
     cartão como se fosse direta.
     """
+    if not conectores:
+        return []
+    return _catalogo_revisado(conectores, contexto, "conectores", "dos conectores")
+
+
+def _catalogo_revisado(
+    conectores: list,
+    contexto: ContextoAgente,
+    prefixo: str,
+    rotulo: str,
+    limite_direto: int = 20,
+) -> list:
     import hashlib
     import json
 
@@ -143,8 +178,6 @@ def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
     from app.ferramentas.catalogo_preguicoso import montar_catalogo
     from app.revisor.execucao import conferir_acao
 
-    if not conectores:
-        return []
     ferramenta_ctx = ContextoFerramenta(
         usuario_id=contexto.usuario_id,
         agente_id=contexto.agente_id,
@@ -170,7 +203,13 @@ def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
         if retorno is not None:
             raise ErroFerramenta(retorno)
 
-    return montar_catalogo(conectores, antes_de_executar=antes)
+    return montar_catalogo(
+        conectores,
+        prefixo=prefixo,
+        rotulo=rotulo,
+        antes_de_executar=antes,
+        limite_direto=limite_direto,
+    )
 
 
 async def aplicar_habilidade_forcada(usuario_id: UUID, texto: str) -> str:

@@ -37,12 +37,21 @@ def montar_middleware(
     itens: list[AgentMiddleware] = list(
         montar_middleware_de_troca(modelos, ao_trocar=contexto.dependencias.ao_trocar_modelo)
     )
+    from app.agentes.middleware.limite_provedor import MiddlewareLimiteDoProvedor
+
+    # Por dentro da nova tentativa e da troca: espera o limite do plano em vez de trocar de modelo.
+    itens.append(MiddlewareLimiteDoProvedor(ao_esperar=contexto.dependencias.ao_esperar_limite))
     itens.extend(middleware_de_limites(max_chamadas_modelo=10, max_chamadas_ferramenta=10))
     itens.extend(
         [middleware_de_conserto(), MiddlewareLoop(), MiddlewarePrazoFerramenta(), MiddlewareCerca()]
     )
     if contexto.papel in {"sora", "individual"}:
+        from app.agentes.middleware.encerra_depois_de_falar import (
+            MiddlewareEncerraDepoisDeFalar,
+        )
+
         itens.append(MiddlewareLembretes())
+        itens.append(MiddlewareEncerraDepoisDeFalar())
     if contexto.cadeia_id is not None and contexto.dependencias.esta_cancelada is not None:
         itens.append(
             MiddlewareCancelamento(

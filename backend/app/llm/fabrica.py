@@ -55,6 +55,9 @@ def criar_chat_model(
         request_timeout=timeout_s,
         streaming=streaming,
         max_retries=0,
+        # O cliente da OpenAI por baixo refaz 429 sozinho (2 vezes, escondido); quem espera o
+        # limite e conta as tentativas é o MiddlewareLimiteDoProvedor.
+        model_kwargs={"max_retries": 0},
         **parametros,
     )
     if "api_base" in parametros and not politica.rede_local:

@@ -655,8 +655,10 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
             registro.warning(
                 "etapa %s falhou (%s): %s", etapa.id, type(erro).__name__, str(erro)[:300]
             )
+            from app.llm.limite import MENSAGEM_LIMITE, limite_do_provedor
+
             etapa.status = StatusEtapa.FALHOU
-            etapa.erro = ERRO_SEGURO_DA_ETAPA
+            etapa.erro = MENSAGEM_LIMITE if limite_do_provedor(erro) else ERRO_SEGURO_DA_ETAPA
             await sessao.commit()
             await _publicar(ctx, cadeia, _evento_etapa(etapa, 100))
             await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))

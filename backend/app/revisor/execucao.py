@@ -41,7 +41,12 @@ VALIDADE_DO_CARTAO = timedelta(minutes=10)
 CUIDAM_DO_PROPRIO_CARTAO: set[str] = {"criar_agente"}
 """Ferramentas que abrem o próprio cartão. Quem criar outra com cartão próprio acrescenta aqui."""
 
-PREFIXOS_PROPRIOS = ("conectores_executar_ferramenta",)
+PREFIXOS_PROPRIOS = (
+    "conectores_executar_ferramenta",
+    "navegador_executar_ferramenta",
+    "navegador_buscar_ferramentas",
+    "navegador_carregar_ferramenta",
+)
 """A meta-ferramenta de execução do catálogo preguiçoso é revisada com o nome da ferramenta de
 verdade, no gancho do catálogo.
 

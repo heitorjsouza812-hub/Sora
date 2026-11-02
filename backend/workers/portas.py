@@ -148,7 +148,18 @@ def construir_dependencias(
     async def ao_trocar_modelo(troca: Any) -> None:
         """§6 "Falha de provedor": a troca aparece na linha do tempo (passo de pensamento)."""
         destino = troca.para_modelo or "nenhum modelo disponível"
-        texto = f"Troquei de modelo: {troca.de_modelo} → {destino}"
+        await _passo_de_pensamento(
+            f"Troquei de modelo: {troca.de_modelo} → {destino}",
+            {"motivo": str(getattr(troca.motivo, "value", troca.motivo))},
+        )
+
+    async def ao_esperar_limite(segundos: int) -> None:
+        """Limite por minuto do provedor: a espera aparece na linha do tempo."""
+        await _passo_de_pensamento(
+            "Aguardando o limite do provedor", {"motivo": "limite_de_taxa", "segundos": segundos}
+        )
+
+    async def _passo_de_pensamento(texto: str, resultado: dict[str, Any]) -> None:
         passo = Passo(
             id=uuid4(),
             etapa_id=etapa_id,
@@ -156,7 +167,7 @@ def construir_dependencias(
             tipo=TipoPasso.PENSAMENTO,
             texto=texto,
             status=StatusPasso.CONCLUIDO.value,
-            resultado={"motivo": str(getattr(troca.motivo, "value", troca.motivo))},
+            resultado=resultado,
             iniciado_em=datetime.now(UTC),
             concluido_em=datetime.now(UTC),
         )
@@ -189,6 +200,7 @@ def construir_dependencias(
         salvar_saida=salvar_saida,
         ler_mensagens_pendentes=ambiente.ler_mensagens_pendentes,
         ao_trocar_modelo=ao_trocar_modelo if com_passo else None,
+        ao_esperar_limite=ao_esperar_limite if com_passo else None,
     )
 
 

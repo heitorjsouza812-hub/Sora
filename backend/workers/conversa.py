@@ -152,6 +152,16 @@ MENSAGEM_FALHA = (
 )
 
 
+async def _ja_falou_neste_turno(ctx: dict[str, Any], conversa_id: Any, antes: int | None) -> bool:
+    if antes is None:
+        return False
+    async with ctx["sessoes"]() as sessao:
+        depois = await sessao.scalar(
+            select(func.count()).select_from(Mensagem).where(Mensagem.conversa_id == conversa_id)
+        )
+    return (depois or 0) > antes
+
+
 async def _rodar_e_falar(
     ctx: dict[str, Any],
     contexto: Any,
@@ -180,9 +190,20 @@ async def _rodar_e_falar(
             entrada=entrada,
             resposta=resposta,
         )
-    except Exception:
+    except Exception as erro:
+        from app.llm.limite import MENSAGEM_LIMITE, limite_do_provedor
+
         registro.exception("o agente da conversa %s falhou", contexto.conversa_id)
-        await falar(Falar(texto=MENSAGEM_FALHA), ferramenta)
+        if await _ja_falou_neste_turno(ctx, contexto.conversa_id, antes):
+            # O usuário já tem a resposta: um aviso de falha agora a contradiria. Fica no log.
+            registro.warning(
+                "falha depois da resposta; sem aviso ao usuário (%s)", type(erro).__name__
+            )
+        else:
+            await falar(
+                Falar(texto=MENSAGEM_LIMITE if limite_do_provedor(erro) else MENSAGEM_FALHA),
+                ferramenta,
+            )
         await publicar_evento(
             ctx["redis_eventos"],
             SugestoesEvento(itens=[]),

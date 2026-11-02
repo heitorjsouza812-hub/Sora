@@ -77,6 +77,7 @@ class DependenciasAgente:
 
     esta_cancelada: Callable[[UUID], Awaitable[bool]] | None = None
     ao_trocar_modelo: Callable[[EventoTroca], Awaitable[None]] | None = None
+    ao_esperar_limite: Callable[[int], Awaitable[None]] | None = None
     orcamento_tokens: int | None = None
     reservar_tokens: Callable[[UUID, int, int], Awaitable[bool]] | None = None
     corrigir_tokens: Callable[[UUID, int, int], Awaitable[None]] | None = None
@@ -108,6 +109,15 @@ class ContextoAgente:
     """Rotina sem ninguém olhando (Relógio): só ferramentas seguras, navegador efêmero."""
     thread_proprio: str | None = None
     """Thread do checkpointer só desta execução (rotina); senão vale a da conversa/etapa."""
+
+
+_AVISO_NAVEGADOR_SOB_DEMANDA = (
+    "\n\nNo prompt só estão `navegador_abrir`, `navegador_observar`, `navegador_acao` e "
+    "`navegador_procurar`. As outras (esperar, elemento, tecla, lote, abas, fechar_aba, "
+    "capturar, console, pedir_ajuda) ficam sob demanda: `navegador_buscar_ferramentas` lista, "
+    "`navegador_carregar_ferramenta` mostra os parâmetros e `navegador_executar_ferramenta` roda "
+    "pelo id."
+)
 
 
 def nomes_das_ferramentas(contexto: ContextoAgente) -> list[str]:
@@ -156,7 +166,7 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     nomes = nomes_das_ferramentas(contexto)
     instrucoes = montar_instrucoes(nomes)
     if any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes):
-        instrucoes += "\n\n" + carregar_prompt("navegador_arvore")
+        instrucoes += "\n\n" + carregar_prompt("navegador_arvore") + _AVISO_NAVEGADOR_SOB_DEMANDA
     return f"{prompt}\n\n{instrucoes}"
 
 
@@ -204,8 +214,10 @@ async def montar_agente(
             sem_supervisao=contexto.sem_supervisao,
         ),
     )
-    from app.agentes.ancora import catalogo_dos_conectores
+    from app.agentes.ancora import catalogo_dos_conectores, navegador_preguicoso
     from app.conectores.carregar import ferramentas_dos_conectores
+
+    ferramentas = navegador_preguicoso(ferramentas, contexto)
 
     ferramentas += catalogo_dos_conectores(
         await ferramentas_dos_conectores(

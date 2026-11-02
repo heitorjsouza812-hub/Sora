@@ -20,6 +20,8 @@ from uuid import UUID
 import httpx
 from pydantic import BaseModel
 
+from app.llm.limite import ErroLimiteDoProvedor
+
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
@@ -94,6 +96,8 @@ def classificar_erro(erro: BaseException) -> MotivoTroca | None:
     for _ in range(_PROFUNDIDADE_MAXIMA_DA_CAUSA):
         if atual is None:
             break
+        if isinstance(atual, ErroLimiteDoProvedor):
+            return None  # o limite do plano não cedeu: outro modelo do mesmo plano falharia igual
         motivo = _classificar_um(atual)
         if motivo is not None:
             return motivo
