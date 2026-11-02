@@ -33,7 +33,7 @@ async def servidor_mcp(tmp_path: Path) -> AsyncIterator[tuple[str, Path]]:
     chamadas = tmp_path / "chamadas.txt"
     chamadas.write_text("")
     porta = _porta_livre()
-    processo = subprocess.Popen(
+    processo = subprocess.Popen(  # noqa: ASYNC220
         [sys.executable, str(SERVIDOR), str(porta), str(chamadas)]
     )
     try:
