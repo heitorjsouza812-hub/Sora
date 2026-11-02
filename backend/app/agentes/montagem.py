@@ -27,6 +27,22 @@ PapelAgente = Literal[
     "sora", "pesquisador", "redator", "designer", "verificador", "individual", "canal"
 ]
 
+FERRAMENTAS_NAVEGADOR = (
+    "navegador_abrir",
+    "navegador_abas",
+    "navegador_fechar_aba",
+    "navegador_capturar",
+    "navegador_console",
+    "navegador_pedir_ajuda",
+    "navegador_observar",
+    "navegador_procurar",
+    "navegador_elemento",
+    "navegador_esperar",
+    "navegador_acao",
+    "navegador_tecla",
+    "navegador_lote",
+)
+
 FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
     "sora": (
         "falar",
@@ -38,10 +54,10 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "parar_especialista",
         "ler_anexo",
     ),
-    "pesquisador": ("buscar_web", "ler_pagina", "ler_anexo", "entregar"),
+    "pesquisador": ("buscar_web", "ler_pagina", "ler_anexo", *FERRAMENTAS_NAVEGADOR, "entregar"),
     "redator": ("ler_anexo", "escrever_arquivo", "entregar"),
     "designer": ("ler_anexo", "gerar_imagem", "entregar"),
-    "verificador": ("buscar_web", "ler_pagina", "ler_anexo", "veredito"),
+    "verificador": ("buscar_web", "ler_pagina", "ler_anexo", *FERRAMENTAS_NAVEGADOR, "veredito"),
     "individual": (
         "falar",
         "perguntar",
@@ -49,6 +65,7 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "buscar_web",
         "ler_pagina",
         "escrever_arquivo",
+        *FERRAMENTAS_NAVEGADOR,
     ),
     "canal": ("canal_historico", "canal_delegar", "canal_transferir", "canal_resultado"),
 }
@@ -136,7 +153,11 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     else:
         trecho = carregar_prompt(f"especialista_{contexto.papel}")
         prompt = preencher(carregar_prompt("especialista_comum"), trecho_do_papel=trecho, **valores)
-    return f"{prompt}\n\n{montar_instrucoes(nomes_das_ferramentas(contexto))}"
+    nomes = nomes_das_ferramentas(contexto)
+    instrucoes = montar_instrucoes(nomes)
+    if any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes):
+        instrucoes += "\n\n" + carregar_prompt("navegador_arvore")
+    return f"{prompt}\n\n{instrucoes}"
 
 
 async def _prompt_do_turno(contexto: ContextoAgente) -> str:

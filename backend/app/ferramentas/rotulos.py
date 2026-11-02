@@ -222,6 +222,8 @@ def resumir_resultado(acao: str, resultado: Any) -> dict[str, Any]:
         except ValueError:
             dados = None
     if isinstance(dados, dict):
+        if isinstance(dados.get("resumo"), str) and not isinstance(resultado, dict):
+            saida["resumo"] = _detalhe(limpar_texto_sensivel(dados["resumo"]))
         for chave in CAMPOS_EXTRAS_DO_PASSO:
             if chave in dados:
                 saida[chave] = dados[chave]

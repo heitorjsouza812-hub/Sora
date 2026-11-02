@@ -61,7 +61,11 @@ def canal_usuario(usuario_id: UUID) -> str:
 
 def eh_evento_de_estado(evento: Evento) -> bool:
     """Informa, pela lista central, se o evento também pertence ao canal do usuário."""
-    return evento.evento in TIPOS_EVENTOS_ESTADO
+    if evento.evento in TIPOS_EVENTOS_ESTADO:
+        return True
+    from app.eventos.equipe import TIPOS_EVENTOS_EQUIPE
+
+    return evento.evento in TIPOS_EVENTOS_EQUIPE
 
 
 def enriquecer_evento_do_usuario(evento: EventoEstado, conversa_id: UUID) -> dict[str, object]:

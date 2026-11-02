@@ -155,6 +155,12 @@ class AprovacaoPedida(EventoBase):
     dano: str
     quem_recebe: str | None
     expira_em: datetime
+    tipo: str | None = None
+    dominio: str | None = None
+    url: str | None = None
+    perfil: dict[str, Any] | None = None
+    agente_id: UUID | None = None
+    opcoes: list[dict[str, str]] | None = None
 
 
 class AprovacaoResolvida(EventoBase):
