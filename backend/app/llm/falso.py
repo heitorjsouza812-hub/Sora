@@ -429,6 +429,10 @@ def classe_modelo_falso() -> type[BaseChatModel]:
         ) -> ChatResult:
             if self.papel == "sistema1":
                 resposta = _triagem_para(messages)
+            elif self.papel == "rotina":
+                from app.rotinas.falso import resposta_da_rotina
+
+                resposta = resposta_da_rotina(messages)
             elif self.papel == "planejador":
                 resposta = _texto(_plano_json(gatilhos_do_texto(_texto_das_mensagens(messages))))
             else:

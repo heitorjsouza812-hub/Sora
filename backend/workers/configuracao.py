@@ -30,6 +30,7 @@ from workers.cadeia import (
 )
 from workers.conversa import responder_direto, retomar_conversa
 from workers.fila import configurar_fila
+from workers.rotinas import disparar_rotinas, executar_rotina
 from workers.travados import reconciliar_travados
 
 
@@ -80,9 +81,11 @@ class WorkerSettings:
         retomar_conversa,
         expirar_aprovacao,
         reconciliar_travados,
+        executar_rotina,
     ]
     cron_jobs: ClassVar[list[Any]] = [
-        cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False)
+        cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),
+        cron(disparar_rotinas, second={0, 10, 20, 30, 40, 50}, run_at_startup=True),
     ]
     on_startup = ao_iniciar
     on_shutdown = ao_desligar
