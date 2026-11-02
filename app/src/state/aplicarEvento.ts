@@ -53,7 +53,9 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
   }
   if (evento.tipo === 'mensagem.fim') {
     const id = texto(d.mensagem_id);
-    return { ...estado, mensagens: estado.mensagens.map(m => m.id === id ? { ...m, gerando: false } : m) };
+    // A resposta terminou: some o "pensando". Cobre a falha da triagem, em que o backend só publica mensagem.*.
+    const fechado = { ...estado, mensagens: estado.mensagens.map(m => m.id === id ? { ...m, gerando: false } : m) };
+    return atualizarProjeto(fechado, conversaId, p => p.mensagensPendentes ? { ...p, mensagensPendentes: false } : p);
   }
   if (evento.tipo === 'roteamento') return atualizarProjeto(estado, conversaId, p => ({ ...p, roteamento: texto(d.modo) as ProjetoSora['roteamento'], mensagensPendentes: false }));
 

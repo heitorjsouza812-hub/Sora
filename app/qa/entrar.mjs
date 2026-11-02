@@ -42,13 +42,13 @@ async function postar(request, caminho, dados) {
 }
 
 /** Entra (criando a conta de QA se faltar) usando o `request` do contexto, que divide os cookies com as páginas. */
-export async function entrarNoContexto(contexto, { pularOnboarding = true } = {}) {
+export async function entrarNoContexto(contexto, { pularOnboarding = true, email = QA_EMAIL } = {}) {
   const { request } = contexto;
-  let r = await postar(request, '/v1/auth/entrar', { email: QA_EMAIL, senha: QA_SENHA });
+  let r = await postar(request, '/v1/auth/entrar', { email, senha: QA_SENHA });
   if (r.status === 401) {
-    const c = await postar(request, '/v1/auth/cadastrar', { nome: QA_NOME, email: QA_EMAIL, senha: QA_SENHA, convite: conviteDoCli() });
+    const c = await postar(request, '/v1/auth/cadastrar', { nome: QA_NOME, email, senha: QA_SENHA, convite: conviteDoCli() });
     if (c.status !== 201) throw new Error(`Cadastro da conta de QA falhou (${c.status}): ${JSON.stringify(c.corpo)}`);
-    r = await postar(request, '/v1/auth/entrar', { email: QA_EMAIL, senha: QA_SENHA });
+    r = await postar(request, '/v1/auth/entrar', { email, senha: QA_SENHA });
   }
   if (r.status !== 200) {
     const dica = r.status >= 500 || r.status === 404 ? ' O backend está rodando na porta 8000?' : '';

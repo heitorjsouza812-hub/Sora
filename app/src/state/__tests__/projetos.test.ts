@@ -56,6 +56,14 @@ describe('aplicarEvento', () => {
     expect(e.mensagens).toEqual([expect.objectContaining({ id: 'msg-1', texto: 'Tudo pronto.', gerando: false })]);
   });
 
+  it('mensagem.fim limpa o "pensando" quando a triagem falha e só há mensagem.*', () => {
+    let e = aplicarEvento({ ...estado(), projetos: [{ ...estado().projetos[0]!, mensagensPendentes: true }] }, evento('mensagem.inicio', { mensagem_id: 'aviso', autor: 'sora' }));
+    expect(e.projetos[0]?.mensagensPendentes).toBe(true);
+    e = aplicarEvento(e, evento('mensagem.delta', { mensagem_id: 'aviso', texto: 'Não consegui falar com o seu modelo.' }, 1));
+    e = aplicarEvento(e, evento('mensagem.fim', { mensagem_id: 'aviso' }, 2));
+    expect(e.projetos[0]?.mensagensPendentes).toBe(false);
+  });
+
   it('usa o relógio do servidor (id do Redis Stream) como horário do evento', () => {
     expect(horarioDoEvento('1730518324070-3')).toBe(1730518324070);
     vi.setSystemTime(AGORA);

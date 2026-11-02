@@ -38,3 +38,8 @@
 .bld-modal-actions .bld-restore { margin-right: auto; color: var(--focus); border-color: transparent; }
 @media (max-width: 767px) { .bld-edit { grid-template-columns: 1fr; } .bld-edit-preview .bld-preview { min-height: 360px; } }
 
+
+.bld-indisponivel { display: grid; place-items: center; }
+.bld-indisponivel-corpo { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); max-width: 420px; padding: var(--sp-8) var(--sp-5); text-align: center; }
+.bld-indisponivel-corpo h2 { margin: 0; font-size: var(--fs-18, 18px); font-weight: 600; color: var(--text-1); }
+.bld-indisponivel-corpo p { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }

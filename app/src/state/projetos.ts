@@ -78,7 +78,8 @@ function agenteDaApi(a: AgenteApi): AgenteSora {
 }
 function projetoDaApi(c: ConversaApi): ProjetoSora {
   const criadoEm = Date.parse(c.criada_em);
-  return { id: c.id, tipo: c.tipo === 'projeto' ? 'projeto' : 'chat', titulo: c.titulo || 'Nova conversa', pedido: '', modelo: '', assunto: c.titulo || '', resposta: '', criadoEm, tarefas: [], agenteIds: [], entregas: {}, marcos: { plano: criadoEm, nascimentos: [], trabalho: criadoEm, fim: criadoEm }, aprovadoEm: c.aprovada_versao ? Date.parse(c.atualizada_em) : undefined, aprovadaVersao: c.aprovada_versao, versao: 1 };
+  return { id: c.id, tipo: c.tipo === 'projeto' ? 'projeto' : 'chat', titulo: c.titulo || 'Nova conversa', pedido: '', modelo: '', assunto: c.titulo || '', resposta: '', criadoEm, tarefas: [], agenteIds: [], entregas: {}, // fim = 0: só um evento ao vivo (cadeia.atualizada concluída) marca o fim; projeto carregado do servidor não é "acabou de terminar".
+    marcos: { plano: criadoEm, nascimentos: [], trabalho: criadoEm, fim: 0 }, aprovadoEm: c.aprovada_versao ? Date.parse(c.atualizada_em) : undefined, aprovadaVersao: c.aprovada_versao, versao: 1 };
 }
 function mensagemDaApi(m: MensagemApi): MensagemChat {
   const autor = m.autor === 'agente' && m.agente_id ? m.agente_id : m.autor === 'usuario' ? 'usuario' : 'sora';
@@ -253,7 +254,7 @@ const previasDaSessao = new Map<string, string>();
 export const previaDoAnexo = (id: string) => previasDaSessao.get(id);
 export async function anexarEnvio<T>(anexos: Anexo[] | undefined, enviar: (anexos: Anexo[]) => Promise<T>): Promise<T> { (anexos ?? []).forEach(a => { if (a.urlPrevia) previasDaSessao.set(a.id, a.urlPrevia); }); return enviar(anexos ?? []); }
 
-if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__sora = { limparTudo, lerEstado, novoChat, abrirProjeto, iniciarProjetos };
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__sora = { limparTudo, lerEstado, novoChat, abrirProjeto, iniciarProjetos, removerProjeto, removerAgente };
 export function _aplicarEventoParaTestes(evento: EventoSse) { receber(evento); }
 export function _reiniciarProjetosParaTestes() { encerrarProjetos(); estado = { ...inicial(), carregando: false }; notificar(); }
 export function _definirEstadoParaTestes(snapshot: EstadoProjetos) { estado = snapshot; notificar(); }
