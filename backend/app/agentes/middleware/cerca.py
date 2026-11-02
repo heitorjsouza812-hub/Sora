@@ -12,6 +12,11 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
+from langchain_core.messages import ToolMessage
+
+from app.agentes.prompts import cercar
+
+FERRAMENTAS_COM_CERCA = frozenset({"buscar_web", "ler_pagina", "ler_anexo", "chamar_conector"})
 
 
 class MiddlewareCerca(AgentMiddleware):
@@ -22,4 +27,10 @@ class MiddlewareCerca(AgentMiddleware):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[Any]],
     ) -> Any:
-        raise NotImplementedError
+        resultado = await handler(request)
+        nome = request.tool_call["name"]
+        if nome not in FERRAMENTAS_COM_CERCA or not isinstance(resultado, ToolMessage):
+            return resultado
+        if not isinstance(resultado.content, str):
+            return resultado
+        return resultado.model_copy(update={"content": cercar(resultado.content, nome)})

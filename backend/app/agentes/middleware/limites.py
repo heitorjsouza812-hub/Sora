@@ -16,4 +16,11 @@ def middleware_de_limites(
     max_chamadas_modelo: int, max_chamadas_ferramenta: int
 ) -> list[AgentMiddleware]:
     """Os dois limites configurados para uma execução da etapa."""
-    raise NotImplementedError
+    if max_chamadas_modelo < 1 or max_chamadas_ferramenta < 1:
+        raise ValueError("Os limites de chamadas precisam ser positivos.")
+    from langchain.agents.middleware import ModelCallLimitMiddleware, ToolCallLimitMiddleware
+
+    return [
+        ModelCallLimitMiddleware(run_limit=max_chamadas_modelo, exit_behavior="error"),
+        ToolCallLimitMiddleware(run_limit=max_chamadas_ferramenta, exit_behavior="error"),
+    ]

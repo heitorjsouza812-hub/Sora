@@ -53,21 +53,45 @@ class Aparencia:
 
 def escolher_nome(em_uso: set[str]) -> str:
     """O primeiro nome livre de ``NOMES_AGENTES`` (nunca "Sora")."""
-    raise NotImplementedError
+    normalizados = {nome.casefold().strip() for nome in em_uso}
+    try:
+        return next(nome for nome in NOMES_AGENTES if nome.casefold() not in normalizados)
+    except StopIteration as erro:
+        raise ValueError("Não há nome de agente livre.") from erro
 
 
 def escolher_cor(em_uso: set[str]) -> str:
     """A primeira cor livre de ``PALETA_AGENTES`` (nunca ``COR_SORA``)."""
-    raise NotImplementedError
+    normalizadas = {cor.upper() for cor in em_uso}
+    try:
+        return next(cor for cor in PALETA_AGENTES if cor.upper() not in normalizadas)
+    except StopIteration as erro:
+        raise ValueError("Não há cor de agente livre.") from erro
 
 
 def aparencia_do_especialista(
     papel: str, nomes_em_uso: set[str], cores_em_uso: set[str]
 ) -> Aparencia:
     """Aparência completa de um especialista novo na cadeia."""
-    raise NotImplementedError
+    try:
+        perfil = APARENCIA_POR_PAPEL[papel]
+    except KeyError as erro:
+        raise ValueError(f"Papel de especialista desconhecido: {papel!r}.") from erro
+    return Aparencia(
+        nome=escolher_nome(nomes_em_uso),
+        funcao=perfil["funcao"],
+        cor=escolher_cor(cores_em_uso),
+        movimento=Movimento(perfil["movimento"]),
+    )
 
 
 def movimento_do_individual(funcao: str) -> Movimento:
     """Movimento de um agente individual criado a partir do pedido."""
-    raise NotImplementedError
+    texto = funcao.casefold()
+    if any(palavra in texto for palavra in ("pesquis", "dados", "analis")):
+        return Movimento.VIBRACAO
+    if any(palavra in texto for palavra in ("design", "visual", "imagem", "vídeo", "video")):
+        return Movimento.ESPIRAL
+    if any(palavra in texto for palavra in ("texto", "reda", "conteúdo", "conteudo", "planej")):
+        return Movimento.ONDAS
+    return Movimento.GIRA

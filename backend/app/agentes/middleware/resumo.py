@@ -14,4 +14,6 @@ if TYPE_CHECKING:
 
 def middleware_de_resumo(modelo_n1: BaseChatModel) -> AgentMiddleware:
     """Resumo do histórico quando o contexto enche (fase 2)."""
-    raise NotImplementedError
+    from langchain.agents.middleware import SummarizationMiddleware
+
+    return SummarizationMiddleware(modelo_n1, trigger=("fraction", 0.8), keep=("messages", 20))
