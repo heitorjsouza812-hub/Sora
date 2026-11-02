@@ -314,6 +314,12 @@ class ServicoArvore:
     def esquecer_aba(self, aba_id: UUID) -> None:
         self._por_aba.pop(aba_id, None)
 
+    def ultimo_rastro(self, aba_id: UUID) -> dict[str, Any] | None:
+        guardado = self._por_aba.get(aba_id)
+        if guardado is None or not guardado[1].rastro.eventos:
+            return None
+        return dict(guardado[1].rastro.eventos[-1])
+
     async def executar(self, nome: str, args: BaseModel, contexto: ContextoFerramenta) -> Resposta:
         comando = COMANDO_DA_FERRAMENTA.get(nome)
         if comando is None:

@@ -68,8 +68,18 @@ class Aba:
 class RevisaoNavegacaoNecessaria(ErroFerramenta):
     """A navegação fica parada até o revisor aprovar o domínio para este perfil."""
 
-    def __init__(self, dominio: str) -> None:
+    def __init__(
+        self,
+        dominio: str,
+        *,
+        aba_id: UUID | None = None,
+        url: str | None = None,
+        particao: str | None = None,
+    ) -> None:
         self.dominio = dominio
+        self.aba_id = aba_id
+        self.url = url
+        self.particao = particao
         super().__init__(f"O perfil tem login salvo; o domínio novo {dominio!r} exige revisão.")
 
 
@@ -161,7 +171,9 @@ class GerenteAbas:
             dominios_aprovados=aprovados,
         )
         if politica is Politica.REVISOR:
-            raise RevisaoNavegacaoNecessaria(dominio_registravel(url))
+            raise RevisaoNavegacaoNecessaria(
+                dominio_registravel(url), aba_id=aba.id, url=url, particao=aba.particao
+            )
         url_final, titulo = await self._motor.navegar(aba, url)
         return self._gravar(replace(aba, url=url_final, titulo=titulo[:200], usada_em=_agora()))
 
@@ -220,6 +232,13 @@ class GerenteAbas:
     def devolver(self, aba_id: UUID, usuario_id: UUID) -> Aba:
         aba = self._da_conta(aba_id, usuario_id)
         return self._gravar(replace(aba, assumida_pelo_usuario=False, usada_em=_agora()))
+
+    def sincronizar_pagina(self, aba_id: UUID, *, url: str, titulo: str) -> Aba:
+        """Atualiza o registro depois de uma ação por árvore navegar a página."""
+        aba = self._abas[aba_id]
+        return self._gravar(
+            replace(aba, url=url, titulo=titulo[:200], usada_em=_agora(), carregada=True)
+        )
 
     async def fechar_pelo_usuario(self, aba_id: UUID, usuario_id: UUID) -> None:
         await self._remover(self._da_conta(aba_id, usuario_id))

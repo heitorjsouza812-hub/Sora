@@ -162,9 +162,10 @@ def _triagem_json(*, direto: bool) -> str:
 
 
 GATILHOS = ("pergunta", "aprovacao", "orcamento")
-_GATILHO = re.compile(
-    r"\[(pergunta|aprovacao|orcamento|memoria|pendencia|catalogo|historico)\]"
-)
+_GATILHO = re.compile(r"\[(pergunta|aprovacao|orcamento|memoria|pendencia|catalogo|historico)\]")
+
+
+_GATILHO_NAVEGADOR = re.compile(r"\[navegador:(\S+?)\]")
 
 
 def gatilhos_do_texto(texto: str) -> list[str]:
@@ -172,7 +173,7 @@ def gatilhos_do_texto(texto: str) -> list[str]:
     return list(dict.fromkeys(_GATILHO.findall(texto)))
 
 
-def _plano_json(gatilhos: list[str] | None = None) -> str:
+def _plano_json(gatilhos: list[str] | None = None, pedido: str = "") -> str:
     from app.modelos.enumeracoes import Nivel
     from app.orquestrador.planejador import EtapaPlano, Plano
 
@@ -185,7 +186,8 @@ def _plano_json(gatilhos: list[str] | None = None) -> str:
                 especialista="pesquisador",
                 nivel=Nivel.N2,
                 tarefa="Pesquisar referências sobre o pedido do usuário."
-                + "".join(f" [{g}]" for g in (gatilhos or []) if g != "orcamento"),
+                + "".join(f" [{g}]" for g in (gatilhos or []) if g != "orcamento")
+                + "".join(f" [navegador:{u}]" for u in _GATILHO_NAVEGADOR.findall(pedido)),
                 pronto_quando="Há pelo menos duas referências com link.",
             ),
             EtapaPlano(
@@ -369,9 +371,6 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
     return None
 
 
-_GATILHO_NAVEGADOR = re.compile(r"\[navegador:(\S+?)\]")
-
-
 def _gatilho_do_navegador(mensagens: list[BaseMessage], tarefa: str) -> AIMessage | None:
     """Gatilho ``[navegador:URL]`` (Leme): abre a URL (de novo, se o domínio acabou de ser
     aprovado), observa a página como árvore e captura a tela, uma ferramenta por vez."""
@@ -387,9 +386,12 @@ def _gatilho_do_navegador(mensagens: list[BaseMessage], tarefa: str) -> AIMessag
         return _chamada("navegador_abrir", {"url": achou.group(1)})
     if "Aba aberta" not in aberturas[-1] and "aba_id" not in aberturas[-1]:
         return None  # negado ou falhou: o agente segue para a entrega
+    aba = re.search(r"aba_id\W+([0-9a-f-]{36})", aberturas[-1])
     for nome in ("navegador_observar", "navegador_capturar"):
         if nome not in feitas:
-            return _chamada(nome, {})
+            return _chamada(
+                nome, {"aba_id": aba.group(1)} if nome == "navegador_capturar" and aba else {}
+            )
     return None
 
 
@@ -494,7 +496,12 @@ def classe_modelo_falso() -> type[BaseChatModel]:
 
                 resposta = resposta_da_rotina(messages)
             elif self.papel == "planejador":
-                resposta = _texto(_plano_json(gatilhos_do_texto(_texto_das_mensagens(messages))))
+                resposta = _texto(
+                    _plano_json(
+                        gatilhos_do_texto(_texto_das_mensagens(messages)),
+                        _texto_das_mensagens(messages),
+                    )
+                )
             else:
                 resposta = _gatilho_pendente(self.papel, messages)
                 if resposta is None:

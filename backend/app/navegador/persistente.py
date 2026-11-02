@@ -45,6 +45,7 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         self._contextos: dict[str, Any] = {}
         self._estados: dict[str, dict[str, Any] | None] = {}
         self._bloqueios: dict[str, str] = {}
+        self._urls_bloqueadas: dict[str, str] = {}
         """Último domínio barrado por revisão em cada partição (para o erro certo no goto)."""
         self._paginas: dict[UUID, Any] = {}
 
@@ -107,6 +108,7 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             dominios_aprovados=dominios_aprovados(estado),
         ):
             self._bloqueios[particao_] = dominio_registravel(url)
+            self._urls_bloqueadas[particao_] = url
             await rota.abort("blockedbyclient")
             return
         await rota.continue_()
@@ -145,6 +147,7 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
                         dominios_aprovados=dominios_aprovados(estado),
                     ):
                         self._bloqueios[particao] = dominio_registravel(alvo)
+                        self._urls_bloqueadas[particao] = alvo
                         await sessao.send(
                             "Fetch.failRequest",
                             {"requestId": id_, "errorReason": "BlockedByClient"},
@@ -189,6 +192,7 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             raise ErroFerramenta(f"Endereço recusado: {erro}") from erro
         pagina = self._paginas[aba.id]
         self._bloqueios.pop(aba.particao, None)
+        self._urls_bloqueadas.pop(aba.particao, None)
         for tentativa in (1, 2):
             try:
                 await pagina.goto(url, wait_until="domcontentloaded", timeout=PRAZO_NAVEGACAO_MS)
@@ -196,7 +200,10 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             except Exception as erro:
                 if dominio := self._bloqueios.pop(aba.particao, None):
                     # redirecionamento para domínio não aprovado: pede revisão, não erro genérico
-                    raise RevisaoNavegacaoNecessaria(dominio) from erro
+                    alvo = self._urls_bloqueadas.pop(aba.particao, url)
+                    raise RevisaoNavegacaoNecessaria(
+                        dominio, aba_id=aba.id, url=alvo, particao=aba.particao
+                    ) from erro
                 # depois de um salto barrado o Chromium ainda está indo para a página de erro
                 if tentativa == 1 and "interrupted by another navigation" in str(erro):
                     await asyncio.sleep(0.3)
@@ -216,6 +223,7 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             contexto = self._contextos.pop(aba.particao, None)
             self._estados.pop(aba.particao, None)
             self._bloqueios.pop(aba.particao, None)
+            self._urls_bloqueadas.pop(aba.particao, None)
             if contexto is not None:
                 await contexto.close()
 
@@ -244,6 +252,28 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         estado = com_dominio_aprovado(self._estados.get(aba.particao), dominio)
         self._estados[aba.particao] = estado
         await self._gravar_estado(aba.particao, estado)
+
+    async def recarregar_estado(self, aba: Aba) -> None:
+        """Relê metadados persistidos pela API (por exemplo, aprovação de domínio)."""
+        if not aba.perfil_efemero:
+            await self.recarregar_estado_da_particao(aba.particao)
+
+    async def recarregar_estado_da_particao(self, particao_: str) -> None:
+        if particao_.startswith("efemero-"):
+            return
+        estado = await self._ler_estado(particao_)
+        if estado is not None:
+            self._estados[particao_] = estado
+
+    def consumir_revisao(self, aba: Aba) -> RevisaoNavegacaoNecessaria | None:
+        """Converte clique/redirecionamento barrado em pedido de revisão do orquestrador."""
+        dominio = self._bloqueios.pop(aba.particao, None)
+        if dominio is None:
+            return None
+        url = self._urls_bloqueadas.pop(aba.particao, aba.url)
+        return RevisaoNavegacaoNecessaria(
+            dominio, aba_id=aba.id, url=url, particao=aba.particao
+        )
 
     async def salvar_estados(self) -> None:
         for particao_, contexto in self._contextos.items():
