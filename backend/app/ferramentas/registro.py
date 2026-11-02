@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from app.canais_equipe.ferramentas import FERRAMENTAS_DO_CANAL
+from app.correio.reacoes import ReagirMensagem
 from app.ferramentas.base import ContextoFerramenta
 from app.ferramentas.buscar_web import BuscarWeb
 from app.ferramentas.criar_agente import CriarAgente
@@ -42,6 +44,8 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
     "entregar": Entregar,
     "veredito": Veredito,
     "criar_agente": CriarAgente,
+    "reagir": ReagirMensagem,
+    **FERRAMENTAS_DO_CANAL,
 }
 """Ferramentas da fase 1: nome → esquema dos argumentos."""
 
@@ -58,6 +62,11 @@ from app.ferramentas.pecas_registro import registrar as _registrar_ancora  # noq
 
 _registrar_ancora(ESQUEMAS, MODULO_DA_FERRAMENTA)
 
+# Leme (etapa 4): navegador persistente por árvore no worker.
+from app.ferramentas.navegador_registro import registrar as _registrar_leme  # noqa: E402
+
+_registrar_leme(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
 
 def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     """Fases 2 e 3, adaptadas do Rakazo (``docs/referencias/rakazo.md``).
@@ -66,10 +75,8 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     de cada nome está em ``app/revisor/politica.py``.
     """
     # Peças inspiradas no OpenBot, escritas pela Sora (``docs/referencias/openbot.md``).
-    from app.canais_equipe.ferramentas import FERRAMENTAS_DO_CANAL
     from app.computador import ExecutarComando
     from app.conectores.servidores import AdicionarServidorMCP
-    from app.correio.reacoes import ReagirMensagem
     from app.ferramentas.catalogo_tarefas import CatalogoTarefas
     from app.ferramentas.enviar_para_agente import EnviarParaAgente
     from app.ferramentas.gerar_grafico import GerarGrafico
@@ -132,8 +139,6 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
         "navegador_capturar": NavegadorCapturar,
         "navegador_console": NavegadorConsole,
         "navegador_pedir_ajuda": NavegadorPedirAjuda,
-        "reagir": ReagirMensagem,
-        **FERRAMENTAS_DO_CANAL,
         # navegador por árvore, adaptado do agent-desktop (docs/referencias/agent-desktop.md)
         **FERRAMENTAS_DA_ARVORE,
     }
@@ -177,4 +182,6 @@ def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[Ba
     return [montar(nome) for nome in dict.fromkeys(nomes)]
 
 
-FERRAMENTAS_QUE_ENCERRAM: frozenset[str] = frozenset({"entregar", "veredito"})
+FERRAMENTAS_QUE_ENCERRAM: frozenset[str] = frozenset(
+    {"entregar", "veredito", "canal_transferir", "canal_resultado"}
+)
