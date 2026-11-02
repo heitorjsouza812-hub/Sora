@@ -810,3 +810,149 @@ async def test_conteudo_da_entrega_chega_no_prompt_da_etapa_seguinte(
     ) // 4
     print(f"primeiro pedido do redator com entrega cortada: ~{tokens} tokens de entrada")
     assert tokens < 4000, tokens
+
+
+async def test_verificador_recebe_o_resumo_dos_passos_das_etapas(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rodada 9: o Verificador via só a entrega e reprovava por "falta evidência" de navegação
+    e captura. Agora o prompt dele traz os passos de verdade (ferramenta, status, URL/título,
+    anexo) e diz que são evidência válida."""
+    import app.agentes as pacote_agentes
+    from app.agentes.montagem import montar_prompt_de_sistema
+    from app.modelos.enumeracoes import (
+        AutorMensagem,
+        Movimento,
+        StatusCadeia,
+        StatusEtapa,
+        TipoConversa,
+        TipoPasso,
+    )
+    from app.modelos.tabelas import Etapa, Mensagem, Usuario
+    from workers.cadeia import PASSOS_MAXIMO_NO_PROMPT, _rodar_verificador
+
+    cliente, fabrica, redis = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-verificador@exemplo.com")
+    async with fabrica() as sessao:
+        usuario = await sessao.scalar(
+            select(Usuario).where(Usuario.email == "ancora-verificador@exemplo.com")
+        )
+        sora = await sessao.scalar(
+            select(Agente).where(Agente.usuario_id == usuario.id, Agente.tipo == TipoAgente.SORA)
+        )
+        conversa = Conversa(
+            usuario_id=usuario.id, agente_id=sora.id, tipo=TipoConversa.PROJETO, titulo="c"
+        )
+        sessao.add(conversa)
+        await sessao.flush()
+        pedido = Mensagem(
+            conversa_id=conversa.id,
+            autor=AutorMensagem.USUARIO,
+            conteudo="Abra a IANA e tire uma captura",
+            anexos=[],
+            visivel=True,
+        )
+        sessao.add(pedido)
+        await sessao.flush()
+        cadeia = Cadeia(
+            usuario_id=usuario.id,
+            conversa_id=conversa.id,
+            pedido_id=pedido.id,
+            status=StatusCadeia.EXECUTANDO,
+            plano={"objetivo": "IANA", "requisitos": ["Usou o navegador"], "etapas": []},
+            orcamento_tokens=50_000,
+        )
+        sessao.add(cadeia)
+        await sessao.flush()
+        agentes = []
+        for nome, papel in (("Davi", "pesquisador"), ("Vera", "verificador")):
+            agente = Agente(
+                usuario_id=usuario.id,
+                tipo=TipoAgente.ESPECIALISTA,
+                nome=nome,
+                funcao=papel,
+                papel=papel,
+                cor="#46E8A8",
+                movimento=Movimento.VIBRACAO,
+                nivel_padrao="N2",
+                ferramentas=[],
+                cadeia_id=cadeia.id,
+            )
+            sessao.add(agente)
+            agentes.append(agente)
+        await sessao.flush()
+        pesquisa = Etapa(
+            cadeia_id=cadeia.id,
+            ordem=1,
+            depende_de=[],
+            especialista="pesquisador",
+            agente_id=agentes[0].id,
+            titulo="Navegar",
+            nivel="N2",
+            tarefa="Abra a IANA",
+            status=StatusEtapa.CONCLUIDA,
+        )
+        verificacao = Etapa(
+            cadeia_id=cadeia.id,
+            ordem=2,
+            depende_de=[1],
+            especialista="verificador",
+            agente_id=agentes[1].id,
+            titulo="Verificar",
+            nivel="N2",
+            tarefa="Confira",
+            status=StatusEtapa.EXECUTANDO,
+        )
+        sessao.add_all([pesquisa, verificacao])
+        await sessao.flush()
+        anexo = str(uuid4())
+        for ferramenta, resultado in (
+            ("navegador_abrir", {"url": "https://www.iana.org/domains", "titulo": "IANA"}),
+            ("navegador_procurar", {"resumo": "1 link"}),
+            ("navegador_acao", {"resumo": "clicou", "url": "https://www.iana.org/reserved"}),
+            ("navegador_acao", {"resumo": "clicou", "url": "https://www.iana.org/reserved"}),
+            (
+                "navegador_capturar",
+                {"anexo_id": anexo, "nome": "captura.png", "tipo": "image/png"},
+            ),
+            ("falar", {"resumo": "não conta"}),
+        ):
+            sessao.add(
+                Passo(
+                    etapa_id=pesquisa.id,
+                    agente_id=agentes[0].id,
+                    tipo=TipoPasso.FERRAMENTA,
+                    texto=ferramenta,
+                    ferramenta=ferramenta,
+                    acao=ferramenta,
+                    resultado=resultado,
+                    status="concluido",
+                )
+            )
+        await sessao.commit()
+
+    capturado: dict = {}
+
+    async def falso(*, contexto, **_):
+        capturado["contexto"] = contexto
+        raise RuntimeError("parar aqui")
+
+    monkeypatch.setattr(pacote_agentes, "montar_e_rodar_agente", falso)
+    ctx = {"redis_eventos": redis, "sessoes": fabrica, "checkpointer": None}
+    async with fabrica() as sessao:
+        cadeia_viva = await sessao.get(Cadeia, cadeia.id)
+        etapa_ver = await sessao.get(Etapa, verificacao.id)
+        with pytest.raises(RuntimeError, match="parar aqui"):
+            await _rodar_verificador(ctx, sessao, cadeia_viva, etapa_ver)
+
+    passos = capturado["contexto"].valores_do_prompt["passos"]
+    assert "Etapa 1 (Navegar)" in passos
+    assert "navegador_abrir [concluido] url=https://www.iana.org/domains, titulo=IANA" in passos
+    assert "navegador_acao [concluido] url=https://www.iana.org/reserved (x2)" in passos
+    assert "navegador_capturar [concluido]" in passos and "anexo gerado" in passos
+    assert "captura.png" in passos and "image/png" in passos
+    assert "falar" not in passos
+    assert len(passos) <= PASSOS_MAXIMO_NO_PROMPT + 20
+    prompt = montar_prompt_de_sistema(capturado["contexto"])
+    assert "navegador_capturar" in prompt and "evidência válida" in prompt

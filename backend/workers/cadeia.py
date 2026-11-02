@@ -44,7 +44,7 @@ from app.modelos.enumeracoes import (
     TipoAgente,
     TipoEntrega,
 )
-from app.modelos.tabelas import Agente, Cadeia, Conversa, Entrega, Etapa, Mensagem
+from app.modelos.tabelas import Agente, Cadeia, Conversa, Entrega, Etapa, Mensagem, Passo
 from app.orquestrador.cadeia import EtapaResumo, decidir_avanco, pegar_etapa, retomar_etapa
 from app.orquestrador.planejador import Plano, titulo_da_etapa, validar_plano
 from workers.fila import enfileirar
@@ -801,6 +801,64 @@ async def executar_etapa(ctx: dict[str, Any], etapa_id: str, resposta: Any | Non
     await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
 
 
+PASSOS_MAXIMO_NO_PROMPT = 3000
+PASSOS_POR_ETAPA = 25
+PASSOS_IGNORADOS = {"falar", "perguntar", "entregar", "veredito"}
+
+
+def formatar_passos(etapas: list[Any], passos: list[Any]) -> str:
+    """Resumo compacto do que cada etapa FEZ (ferramenta, status, URL/título, anexos).
+
+    O Verificador só via a entrega; isto é o registro do sistema e vale como evidência. Passos
+    repetidos em sequência são agrupados e o total é limitado (``PASSOS_MAXIMO_NO_PROMPT``).
+    """
+    por_etapa: dict[Any, list[Any]] = {}
+    for passo in passos:
+        por_etapa.setdefault(passo.etapa_id, []).append(passo)
+    linhas: list[str] = []
+    for etapa in etapas:
+        feitos = [
+            p
+            for p in por_etapa.get(etapa.id, [])
+            if p.ferramenta and p.ferramenta not in PASSOS_IGNORADOS
+        ]
+        if not feitos:
+            continue
+        linhas.append(f"Etapa {etapa.ordem} ({etapa.titulo}):")
+        vistos = 0
+        anterior: str | None = None
+        repeticoes = 0
+        for passo in feitos:
+            resultado = passo.resultado or {}
+            detalhes = [
+                f"{chave}={str(resultado[chave])[:80]}"
+                for chave in ("url", "titulo", "nome", "tipo")
+                if resultado.get(chave)
+            ]
+            if resultado.get("anexo_id"):
+                detalhes.append("anexo gerado")
+            erro = resultado.get("erro")
+            texto = f"- {passo.ferramenta} [{passo.status}]"
+            if detalhes:
+                texto += " " + ", ".join(detalhes)
+            elif erro:
+                texto += f" erro: {str(erro)[:80]}"
+            if texto == anterior:
+                repeticoes += 1
+                linhas[-1] = f"{texto} (x{repeticoes + 1})"
+                continue
+            anterior, repeticoes = texto, 0
+            if vistos >= PASSOS_POR_ETAPA:
+                linhas.append("- (mais passos omitidos)")
+                break
+            linhas.append(texto)
+            vistos += 1
+    resumo = "\n".join(linhas)
+    if len(resumo) > PASSOS_MAXIMO_NO_PROMPT:
+        resumo = resumo[:PASSOS_MAXIMO_NO_PROMPT] + "\n… [cortado]"
+    return resumo or "nenhum"
+
+
 async def _rodar_verificador(
     ctx: dict[str, Any], sessao: Any, cadeia: Cadeia, verificador: Etapa
 ) -> Veredito:
@@ -814,6 +872,24 @@ async def _rodar_verificador(
         )
     ).all()
     requisitos = (cadeia.plano or {}).get("requisitos", [])
+    etapas_de_trabalho = list(
+        (
+            await sessao.scalars(
+                select(Etapa)
+                .where(Etapa.cadeia_id == cadeia.id, Etapa.especialista != "verificador")
+                .order_by(Etapa.ordem, Etapa.tentativa)
+            )
+        ).all()
+    )
+    passos = list(
+        (
+            await sessao.scalars(
+                select(Passo)
+                .where(Passo.etapa_id.in_([e.id for e in etapas_de_trabalho]))
+                .order_by(Passo.iniciado_em)
+            )
+        ).all()
+    )
     contexto = ContextoAgente(
         usuario_id=cadeia.usuario_id,
         agente_id=verificador.agente_id,
@@ -828,6 +904,7 @@ async def _rodar_verificador(
                 f"- {e.titulo}: {e.resumo}\n  {str(e.conteudo)[:2000]}" for e in entregas
             )
             or "nenhum",
+            "passos": formatar_passos(etapas_de_trabalho, passos),
         },
         dependencias=dependencias_da_etapa(ctx, cadeia=cadeia, etapa=verificador),
     )

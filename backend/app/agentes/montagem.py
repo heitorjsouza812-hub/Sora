@@ -163,7 +163,7 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
         }
         prompt = preencher(carregar_prompt("sora_base"), **(padroes | valores))
     elif contexto.papel == "verificador":
-        prompt = preencher(carregar_prompt("verificador"), **valores)
+        prompt = preencher(carregar_prompt("verificador"), **({"passos": "nenhum"} | valores))
     else:
         trecho = carregar_prompt(f"especialista_{contexto.papel}")
         prompt = preencher(carregar_prompt("especialista_comum"), trecho_do_papel=trecho, **valores)
