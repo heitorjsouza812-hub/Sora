@@ -68,6 +68,15 @@ export async function entrarNoContexto(contexto, { pularOnboarding = true, email
       const apagada = await request.delete(`${BASE}/v1/conversas/${conversa.id}?manter_agentes=false`, { headers, failOnStatusCode: false });
       if (![204, 404].includes(apagada.status())) throw new Error(`Não consegui limpar a conversa ${conversa.id} (${apagada.status()}).`);
     }
+    // Agentes criados por aprovação sobrevivem à conversa; deixá-los faria a próxima rodada
+    // (o modelo falso só pede aprovação se "Organizadora" ainda não existe) reprovar sem defeito.
+    const agentes = await request.get(`${BASE}/v1/agentes`, { headers, failOnStatusCode: false });
+    if (agentes.status() !== 200) throw new Error(`Não consegui listar agentes da conta de QA (${agentes.status()}).`);
+    for (const agente of await agentes.json()) {
+      if (agente.tipo === 'sora') continue;
+      const apagado = await request.delete(`${BASE}/v1/agentes/${agente.id}`, { headers, failOnStatusCode: false });
+      if (![204, 404].includes(apagado.status())) throw new Error(`Não consegui limpar o agente ${agente.id} (${apagado.status()}).`);
+    }
   }
   return r.corpo;
 }
