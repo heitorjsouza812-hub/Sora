@@ -14,7 +14,9 @@ pelo revisor de ações (``app/revisor/politica.py``).
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
+from uuid import uuid4
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -80,6 +82,9 @@ def cortar(texto: str, limite: int = LIMITE_RESULTADO_CARACTERES // 2) -> str:
 class SandboxDocker:
     imagem: str = "python:3.12-slim"
     docker: str = "docker"
+    docker_host: str | None = None
+    """Host Docker separado (``DOCKER_HOST``); ``None`` usa o Docker local (só desenvolvimento)."""
+    nome: str = field(default_factory=lambda: f"sora-sbx-{uuid4().hex[:12]}")
     rotulos: dict[str, str] = field(default_factory=lambda: {"sora.sandbox": "1"})
 
     def montar_argumentos(self, args: ExecutarComando) -> list[str]:
@@ -88,6 +93,8 @@ class SandboxDocker:
             self.docker,
             "run",
             "--rm",
+            "--name",
+            self.nome,
             "-i",
             "--network",
             "bridge" if args.com_internet else "none",
@@ -119,11 +126,31 @@ class SandboxDocker:
             argv += ["--label", f"{chave}={valor}"]
         return [*argv, self.imagem, "sh", "-c", args.comando]
 
+    def _ambiente(self) -> dict[str, str]:
+        ambiente = dict(os.environ)
+        if self.docker_host:
+            ambiente["DOCKER_HOST"] = self.docker_host
+        return ambiente
+
+    async def _remover(self) -> None:
+        """Matar o cliente não mata o contêiner: remove à força pelo nome."""
+        remocao = await asyncio.create_subprocess_exec(
+            self.docker,
+            "rm",
+            "-f",
+            self.nome,
+            env=self._ambiente(),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await remocao.wait()
+
     async def executar(self, args: ExecutarComando, segredos: list[str]) -> ResultadoComando:
         if shutil.which(self.docker) is None:
             raise ErroFerramenta("O computador isolado não está disponível neste servidor.")
         processo = await asyncio.create_subprocess_exec(
             *self.montar_argumentos(args),
+            env=self._ambiente(),
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -133,6 +160,7 @@ class SandboxDocker:
         except TimeoutError:
             processo.kill()
             await processo.wait()
+            await self._remover()
             return ResultadoComando(None, "", "", estourou_prazo=True)
         return ResultadoComando(
             processo.returncode,
@@ -153,7 +181,9 @@ class SandboxFalso:
         return self.respostas.get(args.comando, ResultadoComando(0, "", ""))
 
 
-def obter_sandbox(provedor: str, imagem: str) -> ProvedorSandbox:
+def obter_sandbox(
+    provedor: str, imagem: str, docker_host: str | None = None
+) -> ProvedorSandbox:
     if provedor == "docker":
-        return SandboxDocker(imagem=imagem)
+        return SandboxDocker(imagem=imagem, docker_host=docker_host or None)
     raise ErroFerramenta("O computador isolado está desligado (SANDBOX_PROVEDOR=nenhum).")

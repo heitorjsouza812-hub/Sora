@@ -45,6 +45,14 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
 }
 """Ferramentas da fase 1: nome → esquema dos argumentos."""
 
+MODULO_DA_FERRAMENTA: dict[str, str] = {}
+"""Ferramentas cuja função mora fora de ``app.ferramentas`` (nome → módulo)."""
+
+# Relógio (etapa 4): rotinas, sandbox e conectores MCP; ``relogio_registro`` só liga o que existe.
+from app.rotinas.registro import registrar as _registrar_relogio  # noqa: E402
+
+_registrar_relogio(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
 
 def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     """Fases 2 e 3, adaptadas do Rakazo (``docs/referencias/rakazo.md``).
@@ -144,7 +152,8 @@ def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[Ba
         esquema = ESQUEMAS.get(nome)
         if esquema is None:
             raise ValueError(f"Ferramenta desconhecida: {nome}")
-        funcao = getattr(import_module(f"app.ferramentas.{nome}"), nome)
+        modulo = MODULO_DA_FERRAMENTA.get(nome, f"app.ferramentas.{nome}")
+        funcao = getattr(import_module(modulo), nome)
 
         async def executar(**argumentos):
             try:

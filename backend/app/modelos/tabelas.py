@@ -715,3 +715,22 @@ class AbaNavegador(Base):
     titulo: Mapped[str] = mapped_column(Text, default="", server_default="")
     aberta_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     usada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ---------- 0007r: histórico das execuções de rotina (Relógio, etapa 4) ----------
+
+
+class RotinaExecucao(Base):
+    """Uma execução de rotina (agendada ou "executar agora"). Mostra as últimas no app."""
+
+    __tablename__ = "rotina_execucoes"
+    __table_args__ = (Index("ix_rotina_execucoes_rotina_id_iniciada_em", "rotina_id", "iniciada_em"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    rotina_id: Mapped[UUID] = mapped_column(ForeignKey("rotinas.id", ondelete="CASCADE"))
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    iniciada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(Text, default="executando", server_default="executando")
+    resumo: Mapped[str | None] = mapped_column(Text)
+    erro: Mapped[str | None] = mapped_column(Text)
+    mensagem_id: Mapped[UUID | None] = mapped_column(ForeignKey("mensagens.id", ondelete="SET NULL"))
