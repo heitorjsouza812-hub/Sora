@@ -62,6 +62,17 @@ from workers.fila import configurar_fila
 pytestmark = pytest.mark.integracao
 
 RAIZ = Path(__file__).resolve().parents[2]
+
+
+async def _fechar_worker(worker: Any) -> None:
+    """Contorna o ARQ propagando CancelledError dos jobs durante o encerramento."""
+    try:
+        await worker.close()
+    except asyncio.CancelledError:
+        worker.tasks.clear()
+        await worker.close()
+
+
 SENHA = "uma-senha-bem-longa"
 LIMITE_S = 90
 
@@ -190,7 +201,7 @@ async def ambiente_fase_b_arq(
     try:
         yield f"http://127.0.0.1:{porta}", fabrica
     finally:
-        await worker.close()
+        await _fechar_worker(worker)
         tarefa_worker.cancel()
         servidor.should_exit = True
         await tarefa_api
@@ -623,7 +634,7 @@ async def test_modelo_http_do_seletor_criar_agente_pausa_e_retoma(
                 for ferramenta in chamadas[0]["tools"]
             )
     finally:
-        await worker.close()
+        await _fechar_worker(worker)
         tarefa_worker.cancel()
         servidor_api.should_exit = True
         await tarefa_api

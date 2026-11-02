@@ -307,7 +307,12 @@ async def test_criar_agente_pede_cartao_aprovado_cria_uma_vez(cenario: Cenario) 
     assert "criado" in final["resultado"]
     async with fabrica_sessoes()() as sessao:
         individuais = (
-            await sessao.scalars(select(Agente).where(Agente.tipo == TipoAgente.INDIVIDUAL))
+            await sessao.scalars(
+                select(Agente).where(
+                    Agente.usuario_id == cenario.usuario_id,
+                    Agente.tipo == TipoAgente.INDIVIDUAL,
+                )
+            )
         ).all()
     assert [a.nome for a in individuais] == ["Teo"]
     assert individuais[0].cor.upper() != "#E2ECFF"

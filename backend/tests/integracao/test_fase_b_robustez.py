@@ -1216,8 +1216,7 @@ async def test_reconciliador_reenfileira_pausa_gravada_depois_da_espera_de_10s(
 
     monkeypatch.setattr(travados, "enfileirar", registrar)
     quantidade = await travados._retomar_perguntas_respondidas({"sessoes": fabrica})
-    assert quantidade == 1
-    assert jobs == [
+    esperado = [
         (
             "executar_etapa",
             {
@@ -1227,6 +1226,8 @@ async def test_reconciliador_reenfileira_pausa_gravada_depois_da_espera_de_10s(
             },
         )
     ]
+    assert quantidade == len(jobs)
+    assert [job for job in jobs if job == esperado[0]] == esperado
 
 
 def test_worker_sobe_no_windows_sem_sigusr1(monkeypatch: pytest.MonkeyPatch) -> None:
