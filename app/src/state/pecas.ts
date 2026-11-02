@@ -51,3 +51,27 @@ export const LIMITE_PENDENCIAS_ABERTAS = 100;
 const MSG_LIMITE = `Este agente já tem ${LIMITE_PENDENCIAS_ABERTAS} pendências abertas. Conclua ou apague alguma antes de criar outra.`;
 /** O servidor responde 409 com um texto genérico; aqui o aviso diz o limite e o que fazer. */
 export const mensagemPendencia = (e: unknown): string => ehErroApi(e) && e.status === 409 ? MSG_LIMITE : mensagemDeErro(e);
+
+// ── Perfis do navegador (Leme): login salvo e domínios aprovados; nunca voltam cookies ────
+export type TipoPerfil = 'compartilhado' | 'agente' | 'nomeado';
+export interface PerfilNavegador { perfil_id: string; nome: string; tipo: TipoPerfil; dominios_aprovados: string[]; criado_em: string; atualizado_em: string }
+export const listarPerfisNavegador = () => api.get<PerfilNavegador[]>('/v1/navegador/perfis');
+export const apagarPerfilNavegador = (id: string) => api.delete<void>(`/v1/navegador/perfis/${id}`);
+export const revogarDominioPerfil = (id: string, dominio: string) => api.delete<void>(`/v1/navegador/perfis/${id}/dominios/${encodeURIComponent(dominio)}`);
+
+export const criarPerfilNavegador = (nome: string) => api.post<PerfilNavegador>('/v1/navegador/perfis', { nome });
+/** Abre uma aba já assumida pelo usuário no perfil, para ele entrar na conta; devolve o estado da aba. */
+export const abrirPerfilNavegador = (id: string, url: string, agenteId?: string) =>
+  api.post<Record<string, unknown>>(`/v1/navegador/perfis/${id}/abrir`, { url, ...(agenteId ? { agente_id: agenteId } : {}) });
+export type TipoNavegadorAgente = 'efemero' | 'compartilhado' | 'perfil' | 'agente';
+export interface NavegadorDoAgente { agente_id: string; tipo: TipoNavegadorAgente; perfil_id: string | null; perfil_nome: string | null }
+export const lerNavegadorDoAgente = (agenteId: string) => api.get<NavegadorDoAgente>(`/v1/agentes/${agenteId}/navegador`);
+export const definirNavegadorDoAgente = (agenteId: string, tipo: Exclude<TipoNavegadorAgente, 'agente'>, perfilId?: string) =>
+  api.put<NavegadorDoAgente>(`/v1/agentes/${agenteId}/navegador`, { tipo, ...(perfilId ? { perfil_id: perfilId } : {}) });
+
+/** Mensagens próprias de perfis: o 409 do servidor pode ser nome repetido ou limite; o 503 é o navegador fora do ar. */
+export function mensagemPerfil(e: unknown, aoCriar = false): string {
+  if (ehErroApi(e) && e.status === 409 && aoCriar) return 'Já existe um perfil com esse nome ou você chegou ao limite de perfis. Escolha outro nome ou apague um perfil.';
+  if (ehErroApi(e) && e.status === 503) return 'O navegador da Sora não respondeu agora. Tente de novo em instantes.';
+  return mensagemDeErro(e);
+}

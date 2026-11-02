@@ -56,3 +56,8 @@
 .eq-pend select { background: var(--panel-2, #14161B); color: inherit; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 8px; padding: 4px; font: inherit; font-size: 12px; }
 .eq-pend-form { display: grid; gap: 8px; }
 .eq-pendencias, .eq-fila { text-align: left; } .eq-pendencias label, .eq-pendencias textarea, .eq-pendencias input[type="text"] { text-align: left; }
+
+/* Perfil do navegador do agente */
+.eq-navegador { display: grid; gap: 6px; margin-top: 16px; text-align: left; }
+.eq-navegador label { display: grid; gap: 6px; }
+.eq-navegador select { background: var(--panel-2, #14161B); color: var(--text-1, #F2F5FB); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; }

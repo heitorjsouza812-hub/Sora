@@ -5,10 +5,12 @@ import assert from 'node:assert/strict';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
 import { BASE, QA_SENHA, entrarNoContexto } from './entrar.mjs';
 
 const qaDir = dirname(fileURLToPath(import.meta.url));
+const backendDir = join(qaDir, '..', '..', 'backend');
 const shots = join(qaDir, 'shots');
 await mkdir(shots, { recursive: true });
 await Promise.all((await readdir(shots)).filter(a => a.startsWith('etapa4-') && a.endsWith('.png')).map(a => rm(join(shots, a))));
@@ -35,6 +37,8 @@ try {
     for (const c of await api('GET', '/v1/canais-equipe')) await api('POST', `/v1/canais-equipe/${c.canal_id}/arquivar`);
     for (const m of await api('GET', '/v1/memorias')) await api('DELETE', `/v1/memorias/${m.id}`);
     for (const r of await api('GET', '/v1/rotinas')) await api('DELETE', `/v1/rotinas/${r.id}`);
+    for (const ab of await api('GET', '/v1/navegador/abas')) await api('DELETE', `/v1/navegador/abas/${ab.aba_id}`);
+    for (const pf of await api('GET', '/v1/navegador/perfis')) await api('DELETE', `/v1/navegador/perfis/${pf.perfil_id}`);
     for (const h of await api('GET', '/v1/habilidades')) await api('DELETE', `/v1/habilidades/${h.id}`);
     for (const a of await api('GET', '/v1/agentes')) if (a.tipo !== 'sora') await api('DELETE', `/v1/agentes/${a.id}`);
 
@@ -49,7 +53,7 @@ try {
 
     const page = await contexto.newPage();
     // o 422 do segredo na memória é provocado de propósito (uma vez por viewport)
-    let esperado422 = 1; let esperado409 = 1; let esperado404 = 2; // 422 segredo, 409 limite, 404 voz (ditar + ouvir)
+    let esperado422 = 1; let esperado409 = 3; let esperado404 = 2; // 422 segredo, 409 limite, 404 voz (ditar + ouvir)
     page.on('console', m => {
       if (m.type() !== 'error') return;
       if (/status of 422/.test(m.text()) && esperado422-- > 0) return;
@@ -107,6 +111,63 @@ try {
     await page.getByText('O Telegram não está ligado neste servidor.').waitFor({ timeout: 15_000 });
     await ver('telegram');
 
+
+
+    // ── Navegador: criar perfil, nome repetido (409) e abrir um site para entrar (aba assumida) ──
+    await ir('/configuracoes?secao=navegador');
+    await page.getByLabel('Novo perfil').fill('Pessoal');
+    await page.getByRole('button', { name: 'Criar perfil' }).click();
+    const pessoal = page.locator('.pc-lista > li', { hasText: 'Pessoal' });
+    await pessoal.waitFor({ timeout: 15_000 });
+    await page.getByLabel('Novo perfil').fill('Pessoal');
+    await page.getByRole('button', { name: 'Criar perfil' }).click();
+    await page.getByRole('alert').filter({ hasText: 'Já existe um perfil com esse nome' }).waitFor({ timeout: 10_000 });
+    assert.equal((await api('GET', '/v1/navegador/perfis')).filter(pf => pf.nome === 'Pessoal').length, 1, 'o servidor não duplicou o perfil');
+    await pessoal.getByLabel(/Site para entrar em/).fill('https://example.com/');
+    await pessoal.getByRole('button', { name: 'Abrir para entrar' }).click();
+    // O worker precisa lançar o Chromium. Se o ambiente não permite (ex.: worker no Windows), o servidor
+    // responde 409 com o motivo e a tela deve mostrá-lo; o passo vira AVISO, salvo com SORA_QA_EXIGIR_NAVEGADOR=1.
+    const abriu = pessoal.getByText('Aba aberta para você entrar');
+    const recusou = pessoal.getByRole('alert');
+    await abriu.or(recusou).first().waitFor({ timeout: 80_000 });
+    if (await abriu.count()) {
+      const abas = await api('GET', '/v1/navegador/abas');
+      assert.equal(abas.length, 1); assert.equal(abas[0].assumida_pelo_usuario, true, 'a aba nasce assumida pelo usuário');
+      await ver('navegador-login');
+      await pessoal.getByRole('button', { name: 'Concluir e fechar' }).click();
+      await abriu.waitFor({ state: 'detached', timeout: 10_000 });
+      assert.equal((await api('GET', '/v1/navegador/abas')).length, 0, 'concluir fecha a aba');
+    } else {
+      assert.ok(!process.env.SORA_QA_EXIGIR_NAVEGADOR, 'SORA_QA_EXIGIR_NAVEGADOR=1: o navegador precisava abrir');
+      const motivo = (await recusou.first().innerText()).trim();
+      assert.ok(motivo.length > 5, 'a tela mostra o motivo do servidor');
+      await ver('navegador-login-recusado');
+      console.log(`AVISO: o worker não abriu o Chromium neste ambiente (${motivo}); "abrir para entrar" provado só até a recusa.`);
+    }
+
+    // ── Navegador: perfis com login salvo e domínios aprovados (semeados com o código do backend) ──
+    const perfilId = execFileSync('uv', ['run', 'python', join(qaDir, 'semear_perfil.py'), EMAIL, 'Trabalho', 'banco.com', 'loja.com'],
+      { cwd: backendDir, env: { ...process.env, AMBIENTE: process.env.AMBIENTE ?? 'desenvolvimento' }, shell: process.platform === 'win32' }).toString().trim().split(String.fromCharCode(10)).pop().trim();
+    await ir('/configuracoes?secao=navegador');
+    const cartao = page.locator('.pc-lista > li', { hasText: 'Trabalho' });
+    await cartao.waitFor({ timeout: 20_000 });
+    await cartao.getByText('Perfil nomeado').waitFor();
+    await cartao.getByText('banco.com').waitFor(); await cartao.getByText('loja.com').waitFor();
+    await ver('navegador');
+    await page.getByRole('button', { name: 'Revogar loja.com em Trabalho' }).click();
+    await cartao.getByText('loja.com').waitFor({ state: 'detached', timeout: 10_000 });
+    const depois = (await api('GET', '/v1/navegador/perfis')).find(pf => pf.perfil_id === perfilId);
+    assert.deepEqual(depois.dominios_aprovados, ['banco.com'], 'o servidor revogou só loja.com e manteve o login');
+    await cartao.getByRole('button', { name: 'Apagar perfil' }).click();
+    await page.getByText('Apagar este perfil?').waitFor();
+    assert.ok((await api('GET', '/v1/navegador/perfis')).some(pf => pf.perfil_id === perfilId), 'nada some antes da confirmação');
+    await page.waitForTimeout(500); // fim da animação do modal
+    await ver('navegador-apagar');
+    await page.getByRole('dialog').getByRole('button', { name: 'Apagar perfil' }).click();
+    await cartao.waitFor({ state: 'detached', timeout: 10_000 });
+    await page.locator('.pc-lista > li', { hasText: 'Pessoal' }).waitFor(); // o outro perfil segue
+    assert.equal((await api('GET', '/v1/navegador/perfis')).some(pf => pf.perfil_id === perfilId), false);
+
     // ── Canais de equipe ────────────────────────────────────────────────────────────────
     await ir('/canais');
     await page.getByRole('button', { name: /Lançamento/ }).click();
@@ -155,6 +216,23 @@ try {
     await page.getByLabel('Contexto').first().waitFor({ state: 'attached', timeout: 15_000 });
     await ver('agente');
 
+    // ── Perfil do navegador do agente (PUT/GET /v1/agentes/{id}/navegador) ──────────────
+    const seletor = page.getByLabel('Perfil do navegador deste agente');
+    await seletor.waitFor({ timeout: 15_000 });
+    assert.equal((await api('GET', `/v1/agentes/${atlas.id}/navegador`)).tipo, 'compartilhado');
+    await ver('agente-navegador');
+    await seletor.selectOption({ label: 'Pessoal' });
+    const noServidor = async (tipo) => { for (let i = 0; i < 40; i++) { const n = await api('GET', `/v1/agentes/${atlas.id}/navegador`); if (n.tipo === tipo) return n; await page.waitForTimeout(250); } throw new Error(`o servidor não passou o agente para ${tipo}`); };
+    const comPerfil = await noServidor('perfil');
+    assert.equal(comPerfil.tipo, 'perfil'); assert.equal(comPerfil.perfil_nome, 'Pessoal');
+    await seletor.selectOption({ label: 'Sem login (aba descartável)' });
+    await noServidor('efemero');
+    await page.getByText(/sem login salvo e sem pedir aprovação/).waitFor();
+    await ir(`/chat/${atlas.id}`);
+    if (largura <= 600) await page.locator('.work-pill').click();
+    await page.getByRole('tab', { name: 'Perfil' }).click();
+    await page.waitForFunction(() => document.querySelector('[aria-label="Perfil do navegador deste agente"]')?.value === 'efemero', null, { timeout: 15_000 });
+
     // ── Pendências do agente (rotas da Âncora) ──────────────────────────────────────────
     await page.getByLabel('Nova pendência').fill('Ligar para o fornecedor');
     await page.locator('.eq-pend-novo').getByLabel('Notas (opcional)').fill('depois das 14h');
@@ -196,4 +274,4 @@ try {
 await browser.close();
 if (falha) { console.error(falha); process.exit(1); }
 assert.deepEqual(erros, [], `console deve ficar limpo:\n${erros.join('\n')}`);
-console.log('Etapa 4 aprovada: memória, rotinas (worker real), habilidades, conectores, Telegram, canais e painel do agente em 1440/390; pendências (incl. limite 409) e voz pelo caminho 404 em 1440/390; console limpo.');
+console.log('Etapa 4 aprovada: memória, rotinas (worker real), habilidades, conectores, navegador (perfis: criar, 409, abrir para entrar, revogar, apagar, perfil do agente), Telegram, canais e painel do agente em 1440/390; pendências (incl. limite 409) e voz pelo caminho 404 em 1440/390; console limpo.');

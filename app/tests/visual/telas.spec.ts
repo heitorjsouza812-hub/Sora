@@ -56,6 +56,7 @@ for (const [rota, titulo] of [
   ['/configuracoes?secao=rotinas', 'Nenhuma rotina ainda.'],
   ['/configuracoes?secao=habilidades', 'Nenhuma habilidade ainda.'],
   ['/configuracoes?secao=conectores', 'Nenhum conector ainda.'],
+  ['/configuracoes?secao=navegador', 'Nenhum perfil com login salvo ainda'],
   ['/configuracoes?secao=telegram', 'não está ligado'],
   ['/lab/ui', 'Componentes base'],
 ] as const) {

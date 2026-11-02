@@ -135,7 +135,7 @@ export default function Canais() {
           <button type="button" aria-pressed={arquivados} onClick={() => { setCarregando(true); setErro(''); setArquivados(true); }}>Apagados</button>
         </div>
         {!arquivados && <Button tamanho="M" variante="secundario" onClick={() => setCriando(v => !v)}>{criando ? 'Fechar' : 'Novo canal'}</Button>}
-        {criando && <NovoCanal onCriado={() => { setCriando(false); void carregarCanais(false); }} />}
+        {criando && <NovoCanal onCriado={() => { setCriando(false); void carregarCanais(false).catch(() => undefined); }} />}
         {carregando && <p className="eq-nota" role="status">Carregando canais…</p>}
         {erro && <p className="eq-erro" role="alert">{erro}</p>}
         {!carregando && !erro && !lista.length && <p className="eq-nota">{arquivados ? 'Nenhum canal apagado.' : 'Nenhum canal ainda. Crie um para colocar vários agentes para conversar e dividir tarefas.'}</p>}

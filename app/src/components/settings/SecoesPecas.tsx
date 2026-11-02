@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { mensagemDeErro } from '../../api/cliente';
 import * as pecas from '../../state/pecas';
 import { Button, Input, Textarea } from '../base';
+import { Modal } from '../overlay';
+import { devolverAba, fecharAba, receberEventoEquipe, useEquipe } from '../../state/equipe';
 import './pecas.css';
 
 /** Lista carregada de uma rota, com recarregar e erro. */
@@ -179,5 +181,83 @@ export function SecaoTelegram() {
         <ul className="pc-lista">{tg.vinculos.map(v => <li key={v.id}><span><strong>Chat {v.chat_id}</strong><small>Vinculado em {quando(v.criado_em)}</small></span>
           <Button tamanho="M" variante="perigo" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.removerVinculoTelegram(v.id))}>Desvincular</Button></li>)}</ul>}
     </>}
+  </Secao>;
+}
+
+const ROTULO_PERFIL: Record<pecas.TipoPerfil, string> = { compartilhado: 'Compartilhado entre os agentes', agente: 'Exclusivo de um agente', nomeado: 'Perfil nomeado' };
+
+/** Aba aberta para o usuário entrar na conta: já assumida por ele; o login é salvo sozinho a cada 15 s. */
+function AbaDeLogin({ abaId, aoEncerrar }: { abaId: string; aoEncerrar: () => void }) {
+  const aba = useEquipe().abas[abaId];
+  const [erro, setErro] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+  const agir = async (f: () => Promise<void>) => { setOcupado(true); setErro(''); try { await f(); aoEncerrar(); } catch (e) { setErro(mensagemDeErro(e)); } finally { setOcupado(false); } };
+  return <div className="pc-aba" role="status" aria-label="Aba aberta para entrar">
+    <p><strong>Aba aberta para você entrar</strong>{aba ? ` — ${aba.titulo || aba.url}` : ''}</p>
+    <small>Entre na sua conta no navegador da Sora. O login é salvo sozinho a cada 15 segundos e nenhum agente mexe nessa aba enquanto ela é sua.</small>
+    <span className="pc-acoes">
+      <Button tamanho="M" variante="primario" disabled={ocupado} onClick={() => void agir(() => fecharAba(abaId))}>Concluir e fechar</Button>
+      <Button tamanho="M" variante="secundario" disabled={ocupado} onClick={() => void agir(() => devolverAba(abaId))}>Devolver aos agentes</Button>
+    </span>
+    <Erro texto={erro} />
+  </div>;
+}
+
+const urlValida = (texto: string) => { const t = texto.trim().toLowerCase(); return t.startsWith('http://') || t.startsWith('https://'); };
+
+function AbrirParaEntrar({ perfil, aoAbrir }: { perfil: pecas.PerfilNavegador; aoAbrir: (abaId: string) => void }) {
+  const [url, setUrl] = useState('');
+  const [erro, setErro] = useState('');
+  const [abrindo, setAbrindo] = useState(false);
+  const abrir = async (ev: FormEvent) => {
+    ev.preventDefault(); setErro(''); setAbrindo(true);
+    try {
+      const aba = await pecas.abrirPerfilNavegador(perfil.perfil_id, url.trim());
+      receberEventoEquipe({ tipo: 'navegador.aba', dados: aba });
+      aoAbrir(String(aba.aba_id));
+      setUrl('');
+    } catch (e) { setErro(pecas.mensagemPerfil(e)); } finally { setAbrindo(false); }
+  };
+  return <form className="pc-form pc-abrir" onSubmit={ev => void abrir(ev)} aria-label={`Abrir ${perfil.nome} para entrar`}>
+    <Input rotulo={`Site para entrar em “${perfil.nome}”`} value={url} onChange={e => setUrl(e.target.value)} placeholder="https://banco.com/entrar" inputMode="url" />
+    <Button type="submit" tamanho="M" variante="secundario" disabled={!urlValida(url) || abrindo}>{abrindo ? 'Abrindo…' : 'Abrir para entrar'}</Button>
+    <Erro texto={erro} />
+  </form>;
+}
+
+export function SecaoNavegador() {
+  const { itens, erro, recarregar } = useLista(pecas.listarPerfisNavegador);
+  const acao = useAcao(recarregar);
+  const [apagando, setApagando] = useState<pecas.PerfilNavegador | null>(null);
+  const [nome, setNome] = useState('');
+  const [erroCriar, setErroCriar] = useState('');
+  const [abas, setAbas] = useState<Record<string, string>>({}); // perfil_id → aba aberta para login
+  const apagar = async () => { if (apagando && await acao.rodar(() => pecas.apagarPerfilNavegador(apagando.perfil_id))) setApagando(null); };
+  const criar = async (ev: FormEvent) => {
+    ev.preventDefault(); setErroCriar('');
+    try { await pecas.criarPerfilNavegador(nome.trim()); setNome(''); await recarregar(); } catch (e) { setErroCriar(pecas.mensagemPerfil(e, true)); }
+  };
+  return <Secao titulo="Navegador" texto="Perfis com login salvo para os agentes usarem sites em seu nome. Crie um perfil, abra um site para entrar na sua conta e escolha qual agente usa qual perfil. Um agente só abre um site novo num perfil com login depois da sua aprovação; aqui você vê o que já aprovou e pode revogar. Senhas e cookies nunca aparecem nesta tela.">
+    <form className="pc-form" onSubmit={ev => void criar(ev)} aria-label="Criar perfil">
+      <Input rotulo="Novo perfil" value={nome} onChange={e => setNome(e.target.value)} maxLength={60} placeholder="Ex.: Trabalho" />
+      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim()}>Criar perfil</Button>
+    </form>
+    <Erro texto={erroCriar || acao.erro || erro} />
+    {itens === null ? <p role="status">Carregando perfis…</p> : !itens.length ? <p className="pc-vazio">Nenhum perfil com login salvo ainda. Crie um perfil acima, abra um site para entrar na conta e ele passa a ser usado pelos agentes que você escolher.</p> :
+      <ul className="pc-lista">{itens.map(p => <li key={p.perfil_id}>
+        <span><strong>{p.nome}</strong><small>{ROTULO_PERFIL[p.tipo]}</small>
+          {p.dominios_aprovados.length === 0 ? <small>Nenhum domínio aprovado ainda.</small> :
+            <ul className="pc-dominios" aria-label={`Domínios aprovados em ${p.nome}`}>{p.dominios_aprovados.map(d => <li key={d}><code>{d}</code>
+              <button type="button" aria-label={`Revogar ${d} em ${p.nome}`} disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.revogarDominioPerfil(p.perfil_id, d))}>Revogar</button></li>)}</ul>}
+          {p.tipo === 'nomeado' && (abas[p.perfil_id]
+            ? <AbaDeLogin abaId={abas[p.perfil_id]} aoEncerrar={() => { setAbas(a => { const { [p.perfil_id]: _, ...resto } = a; return resto; }); void recarregar(); }} />
+            : <AbrirParaEntrar perfil={p} aoAbrir={id => setAbas(a => ({ ...a, [p.perfil_id]: id }))} />)}
+        </span>
+        <span className="pc-acoes"><Button tamanho="M" variante="perigo" disabled={acao.ocupado} onClick={() => setApagando(p)}>Apagar perfil</Button></span></li>)}</ul>}
+    <Modal open={!!apagando} onClose={() => { if (!acao.ocupado) setApagando(null); }} title="Apagar este perfil?" description="O login e os domínios aprovados serão apagados." size="sm"
+      footer={<div className="cfg-modal-actions"><Button disabled={acao.ocupado} onClick={() => setApagando(null)}>Cancelar</Button><Button variante="perigo" carregando={acao.ocupado} onClick={() => void apagar()}>Apagar perfil</Button></div>}>
+      <p className="cfg-modal-copy">{apagando?.tipo === 'nomeado' ? `Os agentes que usavam “${apagando.nome}” voltam ao perfil compartilhado. ` : ''}Para usar esse login de novo, será preciso entrar na conta outra vez.</p>
+      <Erro texto={acao.erro} />
+    </Modal>
   </Secao>;
 }

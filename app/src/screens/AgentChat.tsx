@@ -9,6 +9,7 @@ import { EntregaCard } from '../components/ui/EntregaCard';
 import { MedidorContexto } from '../components/equipe/MedidorContexto';
 import { FilaDoAgente } from '../components/equipe/FilaDoAgente';
 import { PendenciasDoAgente } from '../components/equipe/PendenciasDoAgente';
+import { PerfilNavegadorDoAgente } from '../components/equipe/PerfilNavegadorDoAgente';
 import { CartaoPendencia } from '../components/pendencias/Pendencias';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { PluginMark } from '../components/ui/PluginMark';
@@ -59,6 +60,7 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
       </div>
       <MedidorContexto agenteId={a.id} />
       <FilaDoAgente agenteId={a.id} />
+      <PerfilNavegadorDoAgente agenteId={a.id} />
       <PendenciasDoAgente agenteId={a.id} />
       {a.instrucoes && <><p className="eyebrow tools-label">Instruções</p><p className="agent-instructions">{a.instrucoes}</p></>}
       <button type="button" className="st-btn-ghost agent-edit" onClick={() => abrirEditorAgente(a.id)}>Editar agente</button>

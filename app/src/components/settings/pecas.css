@@ -16,3 +16,11 @@
 .pc-vazio { color: var(--text-2, #8B93A3); margin: 0; }
 .pc-erro { color: #ff9b9b; margin: 0; }
 .pc-codigo code { padding: 2px 6px; border-radius: 6px; background: var(--panel-2, #14161B); }
+.pc-dominios { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-dominios > li { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 999px; font-size: 13px; }
+.pc-dominios button { background: none; border: 0; border-radius: 999px; color: var(--text-2, #8B93A3); cursor: pointer; font: inherit; font-size: 12px; padding: 4px 8px; }
+.pc-dominios button:hover { color: #ff9b9b; }
+.pc-abrir { margin-top: 10px; flex-wrap: wrap; }
+.pc-abrir > :first-child { min-width: 240px; }
+.pc-aba { display: grid; gap: 6px; margin-top: 10px; padding: 10px; border: 1px solid rgba(126,242,196,.35); border-radius: 10px; }
+.pc-aba p { margin: 0; }
