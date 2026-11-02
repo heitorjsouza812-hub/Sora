@@ -18,6 +18,8 @@ async def executar_comando(args: ExecutarComando, contexto: ContextoFerramenta) 
         raise ErroFerramenta("O computador isolado não roda em rotinas sem supervisão.")
     if not config.sandbox_ativo:
         raise ErroFerramenta("O computador isolado está desligado neste servidor.")
-    sandbox = obter_sandbox(config.sandbox_provedor, config.sandbox_imagem, config.sandbox_docker_host)
+    sandbox = obter_sandbox(
+        config.sandbox_provedor, config.sandbox_imagem, config.sandbox_docker_host
+    )
     resultado = await sandbox.executar(args, [])
     return resultado.para_modelo()
