@@ -611,3 +611,39 @@ async def test_acao_do_navegador_vai_para_o_juiz_e_vira_cartao(
                 assert cartao.avaliacao["decisao"] == "BLOQUEAR"
     finally:
         await fechar_checkpointer(checkpointer)
+
+
+async def test_passo_do_cartao_nao_aparece_como_erro(
+    ambiente_fase_b_arq: tuple[str, async_sessionmaker],
+) -> None:
+    """E4F2-M1: a pausa para o cartão (GraphInterrupt) não pode gravar o passo como erro."""
+    url, fabrica = ambiente_fase_b_arq
+    async with httpx.AsyncClient(base_url=url, timeout=30) as cliente:
+        auth = await entrar(cliente, fabrica, "ancora-passo@exemplo.com")
+        resposta = await cliente.post(
+            "/v1/conversas",
+            headers=auth,
+            json={"texto": "crie uma campanha para minha cafeteria [aprovacao]", "anexos": []},
+        )
+        assert resposta.status_code == 201, resposta.text
+        await ler_sse(
+            cliente, resposta.json()["id"], auth, ate=lambda nome, _: nome == "aprovacao.pedida"
+        )
+        passos: list = []
+        for _ in range(40):  # o evento do cartão sai antes de a pausa fechar o passo
+            async with fabrica() as sessao:
+                passos = list(
+                    (
+                        await sessao.execute(
+                            select(Passo.status, Passo.resultado).where(
+                                Passo.ferramenta == "criar_agente"
+                            )
+                        )
+                    ).all()
+                )
+            if passos and all(status != "executando" for status, _ in passos):
+                break
+            await asyncio.sleep(0.25)
+        assert passos, "o passo do cartão devia existir"
+        assert all(status != "erro" for status, _ in passos), passos
+        assert any("Aguardando" in (r or {}).get("resumo", "") for _, r in passos), passos
