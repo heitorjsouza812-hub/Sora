@@ -9,6 +9,7 @@ estado da cadeia.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -372,6 +373,17 @@ def _evento_etapa(etapa: Etapa, progresso: int) -> EtapaAtualizada:
     )
 
 
+CONTEUDO_MAXIMO_NO_PROMPT = 2000
+
+
+def _conteudo_para_o_prompt(conteudo: Any) -> str:
+    """Conteúdo da entrega para o especialista seguinte, cortado com marca de corte."""
+    texto = conteudo if isinstance(conteudo, str) else json.dumps(conteudo, ensure_ascii=False)
+    if len(texto) > CONTEUDO_MAXIMO_NO_PROMPT:
+        return texto[:CONTEUDO_MAXIMO_NO_PROMPT] + " … [cortado]"
+    return texto
+
+
 async def _valores_do_prompt(sessao: Any, etapa: Etapa, cadeia: Cadeia) -> dict[str, Any]:
     """Preenchimento do prompt do especialista: plano, tarefa e entregas das etapas anteriores."""
     agente = await sessao.get(Agente, etapa.agente_id)
@@ -389,16 +401,23 @@ async def _valores_do_prompt(sessao: Any, etapa: Etapa, cadeia: Cadeia) -> dict[
             select(Entrega)
             .join(Etapa, Etapa.id == Entrega.etapa_id)
             .where(Etapa.cadeia_id == cadeia.id, Etapa.ordem.in_(etapa.depende_de or []))
-            .order_by(Etapa.ordem)
+            .order_by(Etapa.ordem, Entrega.versao.desc(), Entrega.criada_em.desc())
         )
     ).all()
+    # Refação gera outra versão da mesma etapa: vale só a mais recente (a primeira de cada etapa).
+    recentes: dict[Any, Entrega] = {}
+    for entrega in anteriores:
+        recentes.setdefault(entrega.etapa_id, entrega)
     return {
         "nome": agente.nome if agente else etapa.especialista,
         "papel": etapa.especialista,
         "objetivo": plano.get("objetivo", ""),
         "tarefa": etapa.tarefa,
         "pronto_quando": pronto,
-        "resultados_anteriores": "\n".join(f"- {e.titulo}: {e.resumo}" for e in anteriores)
+        "resultados_anteriores": "\n".join(
+            f"- {e.titulo}: {e.resumo}\n  {_conteudo_para_o_prompt(e.conteudo)}"
+            for e in recentes.values()
+        )
         or "nenhum",
     }
 

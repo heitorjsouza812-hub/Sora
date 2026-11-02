@@ -647,3 +647,166 @@ async def test_passo_do_cartao_nao_aparece_como_erro(
         assert passos, "o passo do cartão devia existir"
         assert all(status != "erro" for status, _ in passos), passos
         assert any("Aguardando" in (r or {}).get("resumo", "") for _, r in passos), passos
+
+
+async def test_conteudo_da_entrega_chega_no_prompt_da_etapa_seguinte(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    """Rodada 5: o redator recebe o TEXTO da entrega do pesquisador (só a versão mais recente,
+    cortada com marca) e o primeiro pedido dele continua abaixo de ~4000 tokens."""
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+
+    from app.agentes.ancora import navegador_preguicoso
+    from app.agentes.montagem import (
+        ContextoAgente,
+        montar_prompt_de_sistema,
+        nomes_das_ferramentas,
+    )
+    from app.ferramentas.base import ContextoFerramenta
+    from app.ferramentas.registro import criar_ferramentas
+    from app.modelos.enumeracoes import (
+        AutorMensagem,
+        Movimento,
+        StatusCadeia,
+        StatusEtapa,
+        TipoConversa,
+        TipoEntrega,
+    )
+    from app.modelos.tabelas import Entrega, Etapa, Mensagem, Usuario
+    from workers.cadeia import CONTEUDO_MAXIMO_NO_PROMPT, _valores_do_prompt
+
+    cliente, fabrica, _ = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-entrega@exemplo.com")
+    async with fabrica() as sessao:
+        usuario = await sessao.scalar(
+            select(Usuario).where(Usuario.email == "ancora-entrega@exemplo.com")
+        )
+        sora = await sessao.scalar(
+            select(Agente).where(Agente.usuario_id == usuario.id, Agente.tipo == TipoAgente.SORA)
+        )
+        conversa = Conversa(
+            usuario_id=usuario.id, agente_id=sora.id, tipo=TipoConversa.PROJETO, titulo="c"
+        )
+        sessao.add(conversa)
+        await sessao.flush()
+        pedido = Mensagem(
+            conversa_id=conversa.id,
+            autor=AutorMensagem.USUARIO,
+            conteudo="p",
+            anexos=[],
+            visivel=True,
+        )
+        sessao.add(pedido)
+        await sessao.flush()
+        cadeia = Cadeia(
+            usuario_id=usuario.id,
+            conversa_id=conversa.id,
+            pedido_id=pedido.id,
+            status=StatusCadeia.EXECUTANDO,
+            plano={"objetivo": "Resumir a IANA", "etapas": []},
+            orcamento_tokens=50_000,
+        )
+        sessao.add(cadeia)
+        await sessao.flush()
+        agentes = []
+        for nome, papel in (("Atlas", "pesquisador"), ("Nina", "redator")):
+            agente = Agente(
+                usuario_id=usuario.id,
+                tipo=TipoAgente.ESPECIALISTA,
+                nome=nome,
+                funcao=papel,
+                papel=papel,
+                cor="#46E8A8",
+                movimento=Movimento.VIBRACAO,
+                nivel_padrao="N2",
+                ferramentas=[],
+                cadeia_id=cadeia.id,
+            )
+            sessao.add(agente)
+            agentes.append(agente)
+        await sessao.flush()
+        etapas = [
+            Etapa(
+                cadeia_id=cadeia.id,
+                ordem=ordem,
+                depende_de=depende,
+                especialista=papel,
+                agente_id=agente.id,
+                titulo=titulo,
+                nivel="N2",
+                tarefa=tarefa,
+                status=StatusEtapa.PENDENTE,
+            )
+            for ordem, depende, papel, agente, titulo, tarefa in (
+                (1, [], "pesquisador", agentes[0], "Pesquisar", "Abra iana.org"),
+                (2, [1], "redator", agentes[1], "Escrever", "Escreva o resumo"),
+            )
+        ]
+        sessao.add_all(etapas)
+        await sessao.flush()
+
+        def entrega(versao: int, conteudo: object) -> Entrega:
+            return Entrega(
+                usuario_id=usuario.id,
+                conversa_id=conversa.id,
+                cadeia_id=cadeia.id,
+                etapa_id=etapas[0].id,
+                agente_id=agentes[0].id,
+                versao=versao,
+                tipo=TipoEntrega.TEXTO,
+                titulo="Domínios reservados",
+                resumo="Texto extraído",
+                conteudo=conteudo,
+            )
+
+        sessao.add(entrega(1, "VERSAO-ANTIGA https://velha.example"))
+        sessao.add(
+            entrega(
+                2,
+                "Texto extraído: example.com é reservado. "
+                "URL https://www.iana.org/domains/reserved " + "x" * 5000,
+            )
+        )
+        await sessao.commit()
+
+        valores = await _valores_do_prompt(sessao, etapas[1], cadeia)
+
+    anteriores = valores["resultados_anteriores"]
+    assert "https://www.iana.org/domains/reserved" in anteriores
+    assert "example.com é reservado" in anteriores
+    assert "VERSAO-ANTIGA" not in anteriores
+    assert "[cortado]" in anteriores
+    assert len(anteriores) < CONTEUDO_MAXIMO_NO_PROMPT + 400
+
+    contexto = ContextoAgente(
+        usuario_id=usuario.id,
+        agente_id=agentes[1].id,
+        conversa_id=conversa.id,
+        papel="redator",
+        cadeia_id=cadeia.id,
+        etapa_id=etapas[1].id,
+        valores_do_prompt=valores,
+    )
+    prompt = montar_prompt_de_sistema(contexto)
+    assert "https://www.iana.org/domains/reserved" in prompt
+    ferramentas = navegador_preguicoso(
+        criar_ferramentas(
+            nomes_das_ferramentas(contexto),
+            ContextoFerramenta(
+                usuario_id=usuario.id,
+                agente_id=agentes[1].id,
+                conversa_id=conversa.id,
+                cadeia_id=cadeia.id,
+                etapa_id=etapas[1].id,
+            ),
+        ),
+        contexto,
+    )
+    import json
+
+    tokens = (
+        len(prompt)
+        + sum(len(json.dumps(convert_to_openai_tool(f), ensure_ascii=False)) for f in ferramentas)
+    ) // 4
+    print(f"primeiro pedido do redator com entrega cortada: ~{tokens} tokens de entrada")
+    assert tokens < 4000, tokens
