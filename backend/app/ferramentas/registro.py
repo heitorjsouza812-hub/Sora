@@ -127,5 +127,40 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
 
 
 def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[BaseTool]:
-    """Monta as ferramentas pedidas como ``@tool`` do LangChain, presas ao contexto."""
-    raise NotImplementedError
+    """Monta as ferramentas pedidas como ``@tool`` do LangChain, presas ao contexto.
+
+    Cada ferramenta vira uma ``StructuredTool`` assíncrona com ``args_schema`` = a classe
+    Pydantic. ``ErroFerramenta`` volta ao modelo como texto ("Erro: …"); a interrupção do
+    LangGraph (``perguntar``, ``criar_agente``) passa direto. ``entregar`` e ``veredito``
+    usam ``return_direct``: depois delas o laço do agente termina.
+    """
+    from importlib import import_module
+
+    from langchain_core.tools import StructuredTool
+
+    from app.ferramentas.base import ErroFerramenta
+
+    def montar(nome: str) -> BaseTool:
+        esquema = ESQUEMAS.get(nome)
+        if esquema is None:
+            raise ValueError(f"Ferramenta desconhecida: {nome}")
+        funcao = getattr(import_module(f"app.ferramentas.{nome}"), nome)
+
+        async def executar(**argumentos):
+            try:
+                return await funcao(esquema(**argumentos), contexto)
+            except ErroFerramenta as erro:
+                return f"Erro: {erro}"
+
+        return StructuredTool.from_function(
+            coroutine=executar,
+            name=nome,
+            description=(esquema.__doc__ or nome).strip(),
+            args_schema=esquema,
+            return_direct=nome in FERRAMENTAS_QUE_ENCERRAM,
+        )
+
+    return [montar(nome) for nome in dict.fromkeys(nomes)]
+
+
+FERRAMENTAS_QUE_ENCERRAM: frozenset[str] = frozenset({"entregar", "veredito"})

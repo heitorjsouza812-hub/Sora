@@ -38,4 +38,9 @@ FERRAMENTAS_COM_CERCA: frozenset[str] = frozenset({"buscar_web", "ler_pagina", "
 
 def ferramentas_do_agente(papel: str, extras: list[str] | None = None) -> list[str]:
     """Nomes das ferramentas que o agente pode usar (papel + ``agentes.ferramentas``)."""
-    raise NotImplementedError
+    base = FERRAMENTAS_POR_PAPEL.get(papel, [])
+    nomes: list[str] = []
+    for nome in [*base, *(extras or [])]:
+        if nome not in nomes:
+            nomes.append(nome)
+    return nomes
