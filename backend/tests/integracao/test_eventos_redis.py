@@ -3,12 +3,14 @@
 Sobe um ``redis:7`` com testcontainers. Sem Docker, pula sozinho.
 """
 
+import asyncio
 from collections.abc import AsyncIterator, Iterator
 from uuid import uuid4
 
 import pytest
 from redis.asyncio import Redis
 
+from app.eventos import sse
 from app.eventos.streams import (
     RETENCAO_SEGUNDOS,
     canal_conversa,
@@ -77,8 +79,6 @@ async def test_evento_de_estado_vai_para_o_canal_do_usuario(redis: Redis) -> Non
 
 
 async def test_xread_bloqueante_acorda_com_evento(redis: Redis) -> None:
-    import asyncio
-
     conversa, usuario = uuid4(), uuid4()
     canal = canal_conversa(conversa)
 
@@ -89,3 +89,10 @@ async def test_xread_bloqueante_acorda_com_evento(redis: Redis) -> None:
     tarefa = asyncio.create_task(publicar_depois())
     lote = await ler_lote(redis, canal, "0-0", bloquear_ms=3_000)
     assert [e.id for e in lote] == [await tarefa]
+
+
+async def test_limite_de_streams_e_atomico_sob_concorrencia(redis: Redis) -> None:
+    usuario = uuid4()
+    vagas = await asyncio.gather(*(sse.registrar_conexao(redis, usuario) for _ in range(30)))
+    assert sum(vaga is not None for vaga in vagas) == sse.MAX_CONEXOES_POR_USUARIO
+    assert await redis.zcard(f"sse:conexoes:{usuario}") == sse.MAX_CONEXOES_POR_USUARIO
