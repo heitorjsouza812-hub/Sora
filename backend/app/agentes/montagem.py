@@ -145,9 +145,7 @@ async def _prompt_do_turno(contexto: ContextoAgente) -> str:
 
     base = montar_prompt_de_sistema(contexto)
     extras = await blocos_do_turno(contexto)
-    return f"{base}
-
-{extras}" if extras else base
+    return f"{base}\n\n{extras}" if extras else base
 
 
 async def montar_agente(
