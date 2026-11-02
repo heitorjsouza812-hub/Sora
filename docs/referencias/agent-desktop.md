@@ -14,6 +14,10 @@ Apache 2.0: permite copiar, adaptar e usar comercialmente, desde que o aviso de 
 
 **Nada foi copiado literalmente.** O original é Rust falando com as APIs de acessibilidade do sistema; o nosso é Python + JavaScript falando com o DOM pelo Playwright. A documentação e o prompt dos agentes foram escritos em PT-BR por nós. Conferido em 2026-11-01: nenhum trecho de 60 caracteres dos arquivos novos aparece nos fontes (`.rs`, `.md`, `.ts`, `.js`) do agent-desktop.
 
+## Estado na etapa 4 (passo 6)
+
+O navegador por árvore está ligado ao worker no ramo `etapa4-pecas`. `MotorPlaywright`, `GerenteAbas` e `ServicoArvore` sobem e descem com o worker; o catálogo oferece as sete ferramentas por árvore e não oferece mais `navegador_ler`/`navegador_agir`. O prompt do ciclo observar → agir → conferir entra nos agentes que recebem navegador. A etapa ainda aguarda a fase 2 e o veredito final do Aferidor.
+
 ## O que entrou na Sora (`backend/app/navegador/arvore/`)
 
 | Ideia no agent-desktop | Na Sora | Como ficou |
@@ -45,9 +49,18 @@ Apache 2.0: permite copiar, adaptar e usar comercialmente, desde que o aviso de 
 
 ### Ferramentas novas dos agentes
 
-`navegador_observar`, `navegador_procurar`, `navegador_elemento`, `navegador_esperar` (livres: só leem), `navegador_acao`, `navegador_tecla`, `navegador_lote` (passam pelo revisor). Estão em `esquemas_das_proximas_fases()` com rótulo no painel Trabalho (o texto digitado nunca aparece no rótulo). `ServicoArvore` liga as ferramentas às abas do navegador persistente (`app/navegador/abas.py`): sem `aba_id`, usa a última aba do agente; aba que o usuário **assumiu** → `POLITICA_NEGADA`.
+`navegador_observar`, `navegador_procurar`, `navegador_elemento`, `navegador_esperar` (livres: só leem), `navegador_acao`, `navegador_tecla`, `navegador_lote` (passam pelo revisor) estão no catálogo ativo. O painel Trabalho recebe rastro, URL, título, aba e captura; o texto digitado nunca aparece no rótulo. `ServicoArvore` liga as ferramentas às abas do navegador persistente (`app/navegador/abas.py`): sem `aba_id`, usa a última aba do agente; aba que o usuário **assumiu** → `POLITICA_NEGADA`.
 
-As ferramentas antigas `navegador_ler` e `navegador_agir` (do Rakazo) continuam lá; quando o worker for ligado, a ideia é oferecer as novas no lugar delas.
+As ferramentas antigas `navegador_ler` e `navegador_agir` (do Rakazo) continuam no código por compatibilidade, mas não são oferecidas pelo worker.
+
+### O que o passo 6 acrescentou
+
+- Domínio novo em perfil com login pausa a etapa e vira cartão. Aprovar grava o domínio no perfil cifrado e permite repetir; negar devolve a recusa ao agente. Cartão expirado ou domínio revogado gera nova tentativa.
+- Perfis compartilhado, efêmero e nomeado podem ser escolhidos por agente. A aba de login é aberta já assumida pelo usuário; cookies são salvos periodicamente.
+- As abas persistidas são sincronizadas pelo banco antes de cada chamada. Um segundo worker consegue reencontrar ou fechar uma aba do primeiro; aba efêmera continua local ao worker que a abriu.
+- No Windows, o Playwright roda num loop Proactor próprio, em uma thread, enquanto o worker mantém o loop Selector exigido pelo psycopg.
+- Ações, teclas e lotes passam por regra do usuário, juiz e cartão. A revisão de domínio não substitui a revisão da ação.
+- Rotinas só recebem aba efêmera, sem cookies de perfil, e `navegador_abas` nesse modo só lista abas temporárias.
 
 ## O que ficou de fora, e por quê
 
@@ -56,9 +69,12 @@ As ferramentas antigas `navegador_ler` e `navegador_agir` (do Rakazo) continuam 
 - **Iframes**: só a página principal é lida (iframes aparecem como nó `iframe`). Iframes da mesma origem podem entrar depois.
 - **Arrastar entre apps, teclas seguradas, mouse por coordenadas soltas**: sem uso para os agentes da Sora agora.
 
-## Antes de ligar em produção
+## O que segue de fora ou pendente
 
-- No worker: criar o `ServicoArvore(gerente, motor.pagina)` com o `MotorPlaywright` e trocar `navegador_ler`/`navegador_agir` pelas ferramentas novas.
-- Juntar `prompts/navegador_arvore.v1.md` ao prompt dos agentes que recebem o navegador.
-- Mandar o rastro (`Rastro`) para o painel Trabalho e o cursor colorido para a transmissão da aba.
-- Rodar `tests/unitarios/test_navegador_arvore.py` onde houver Chromium (`SORA_CHROMIUM` aponta para o executável; sem ele, os testes de navegador pulam).
+- A fase 2 do Aferidor precisa repetir o fluxo ao vivo na ponta atual: cartão de domínio no app, evento `navegador.aba`, rastro, captura, Assumir/Devolver, reinício e dois workers.
+- Em produção, o Chromium continua num contêiner isolado, com saída pelo `proxy-egresso`, e o worker conecta por CDP. A etapa 4 ainda precisa repetir o Teste de pronto nesse desenho.
+- A aba aberta para login ainda não é espelhada no app. A rota cria e assume a aba, mas falta a transmissão para o usuário digitar senha ou resolver captcha.
+- Iframes continuam só como um nó da árvore. O conteúdo interno não recebe refs.
+- O cursor colorido existe, mas continua desligado; a transmissão visual da aba não entrou.
+- Se dois workers mantiverem o mesmo perfil aberto, o último salvamento dos cookies vence. As abas são sincronizadas, mas o contexto Chromium em si não migra entre processos.
+- Controle do sistema operacional, área de transferência, notificações, mouse por coordenada solta e arrastar entre apps continuam fora do escopo.

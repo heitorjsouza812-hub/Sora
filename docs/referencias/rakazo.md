@@ -10,6 +10,10 @@ O Rakazo é Apache 2.0, que permite copiar, adaptar e usar comercialmente. As co
 - todo arquivo derivado diz no topo `Adaptado do Rakazo (github.com/elie222/rakazo, Apache-2.0): <arquivo de origem>`;
 - esta página lista o que foi portado e o que mudou.
 
+## Estado na etapa 4 (passo 6)
+
+As peças principais foram ligadas ao turno real do agente e às rotas do app no ramo `etapa4-pecas`: memória, pendências, contexto e compactação, revisor, habilidades, saltos, catálogo preguiçoso, rotinas, conectores MCP, Telegram, sandbox e voz. A validação final do Aferidor ainda está pendente; os resultados abaixo são os testes dos donos na implementação atual.
+
 ## O que foi portado
 
 ### Fase 1: coordenação, aprovação e contexto
@@ -59,7 +63,7 @@ Colunas `conversas.resumo_compactado`, `conversas.compactado_ate`, `mensagens.sa
 
 ### Configuração nova
 
-`TELEGRAM_TOKEN_BOT`, `TELEGRAM_SEGREDO_WEBHOOK`, `SANDBOX_PROVEDOR` (`nenhum` | `docker`), `SANDBOX_IMAGEM`, `SORA_MAX_SALTOS` e `BUSCA_PROVEDOR=duckduckgo` (só desenvolvimento). Jobs novos em `workers/fila.py`: `executar_rotina`, `compactar_historico`, `responder_canal`, `reconciliar_travados`.
+`TELEGRAM_TOKEN_BOT`, `TELEGRAM_SEGREDO_WEBHOOK`, `SANDBOX_PROVEDOR` (`nenhum` | `docker`), `SANDBOX_IMAGEM`, `SANDBOX_DOCKER_HOST`, `SORA_MAX_SALTOS` e `BUSCA_PROVEDOR=duckduckgo` (só desenvolvimento). Os jobs agora ficam nos módulos do worker: `workers/rotinas.py`, `workers/ancora.py`, `workers/canal.py` e `workers/travados.py`, registrados em `workers/configuracao.py`.
 
 ## O que já existia na Sora (não foi duplicado)
 
@@ -74,8 +78,25 @@ Colunas `conversas.resumo_compactado`, `conversas.compactado_ate`, `mensagens.sa
 - **Stripe/cobrança**: a Sora mostra "Uso do mês" com as chaves do próprio usuário.
 - **Lark, iMessage, push e SMTP**: o Telegram ficou como modelo; outros canais seguem o mesmo formato de `app/canais`.
 
-## Antes de ligar em produção
+## O que foi ligado no worker
 
-- `executar_comando` com Docker: o worker que fala com o Docker tem poder de root na máquina. Rode as sandboxes num host separado ou com Docker rootless, e nunca monte o socket do Docker do servidor principal no contêiner do worker.
-- Embeddings da memória: o `Vetorizador` (768 dimensões) ainda precisa ser escolhido e a escrita do vetor no pgvector precisa ser testada com o banco real.
-- Os testes de banco desta leva compilam o SQL no dialeto do PostgreSQL; rodar `tests/integracao` com Docker antes de ligar memória, pendências e canais.
+- **Coordenação e revisor:** limite de saltos, catálogo real de tarefas, catálogo preguiçoso de conectores e política `livre`/`cartao_fixo`/`revisor`. O juiz falha fechado. `navegador_acao`, `navegador_tecla` e `navegador_lote` passam pelo juiz e pelo cartão; a revisão de domínio é uma barreira separada.
+- **Contexto, memória e pendências:** memórias e pendências entram no bloco de cada turno; o medidor atualiza o estado e a compactação roda antes da próxima chamada ou pelo job manual. A memória grava vetor de 768 dimensões quando há provedor aceito e cai para busca por palavras se o vetorizador falhar.
+- **Habilidades:** CRUD no app, ferramentas do agente e `/Nome` para forçar uma habilidade no pedido. As instruções próprias do agente ficam no modelo e entram no prompt do turno.
+- **Rotinas:** agenda, execução imediata, histórico e evento `rotina.executada`; ocorrência idempotente, sem supervisão, thread própria, prazo e `SEM_RESPOSTA`.
+- **Conectores MCP:** cadastro e teste por API, cabeçalhos cifrados, transporte com proteção SSRF, carga por turno e catálogo preguiçoso. Em rotina, só entram ferramentas de leitura.
+- **Telegram:** vínculo, webhook e resposta direta pelo worker, com idempotência por mensagem.
+- **Sandbox:** `executar_comando` roda em contêiner descartável, sem rede por padrão, sem privilégio e com limites. Em produção só fica ativo com `SANDBOX_DOCKER_HOST` separado.
+- **Voz:** transcrição e fala usam a chave OpenAI ou compatível do usuário e o transporte seguro contra SSRF e rebinding.
+- **Navegador:** o modo por texto portado do Rakazo continua no código, mas saiu do catálogo ativo. O worker oferece o navegador por árvore descrito em [agent-desktop.md](agent-desktop.md).
+
+## O que segue de fora ou pendente
+
+- A fase 2 do Aferidor ainda precisa validar a ponta atual do ramo, inclusive reinício, dois workers e serviços externos simulados por servidores locais.
+- O `Vetorizador` foi provado no PostgreSQL com uma implementação determinística. Falta chamar OpenAI, Gemini ou Ollama de verdade com a chave do usuário.
+- `@Habilidade` dentro de rotina ainda não foi ligado; `/Nome` no pedido direto está ligado.
+- Telegram só faz resposta direta: não inicia uma cadeia de especialistas, e o resultado de uma rotina não é entregue ao Telegram nesta etapa. A API real do Telegram também não foi chamada nos testes locais.
+- Voz real ainda não foi provada. O caminho usa só OpenAI/compatível; o modelo de transcrição está fixo no backend e precisa aceitar `whisper-large-v3` para o teste solicitado com a API compatível da Groq.
+- `executar_comando` em produção exige host Docker separado ou rootless; nunca montar o socket do servidor principal no worker.
+- Gráficos continuam disponíveis como ferramenta, mas não fizeram parte do Teste de pronto da etapa 4. DuckDuckGo continua restrito a desenvolvimento.
+- Desktop gráfico por bot, OAuth de assinatura, Stripe, Lark, iMessage, push e SMTP continuam fora pelos motivos já registrados acima.
