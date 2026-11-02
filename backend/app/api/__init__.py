@@ -13,6 +13,7 @@ from app.api import (
     conversas,
     entregas,
     equipe,
+    pecas,
     eventos,
     modelos,
     perguntas,
@@ -38,6 +39,7 @@ for roteador in (
     preferencias.roteador,
     uso.roteador,
     canais.roteador,
+    pecas.roteador,  # antes da equipe: as rotas de contexto são da Âncora
     equipe.roteador,
 ):
     roteador_v1.include_router(roteador)

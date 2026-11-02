@@ -28,6 +28,7 @@ from workers.cadeia import (
     planejar_cadeia,
     verificar_cadeia,
 )
+from workers.ancora import compactar_historico
 from workers.conversa import responder_direto, retomar_conversa
 from workers.fila import configurar_fila
 from workers.rotinas import disparar_rotinas, executar_rotina
@@ -82,6 +83,7 @@ class WorkerSettings:
         expirar_aprovacao,
         reconciliar_travados,
         executar_rotina,
+        compactar_historico,
     ]
     cron_jobs: ClassVar[list[Any]] = [
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),

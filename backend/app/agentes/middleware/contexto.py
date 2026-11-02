@@ -44,6 +44,24 @@ class MiddlewareContexto(AgentMiddleware):
         self.porta = porta
         self._modelo: str | None = None
 
+    async def abefore_agent(self, state: Any, runtime: Any) -> dict[str, Any] | None:
+        from app.contexto.estado import marcar_turno
+
+        try:
+            await marcar_turno(self.porta.redis, self.porta.agente_id, True)
+        except Exception:
+            registro.warning("não consegui marcar o turno em andamento", exc_info=True)
+        return None
+
+    async def aafter_agent(self, state: Any, runtime: Any) -> dict[str, Any] | None:
+        from app.contexto.estado import marcar_turno
+
+        try:
+            await marcar_turno(self.porta.redis, self.porta.agente_id, False)
+        except Exception:
+            registro.warning("não consegui limpar o turno em andamento", exc_info=True)
+        return None
+
     async def aafter_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
         mensagens = state["messages"]
         ultima = mensagens[-1] if mensagens else None
