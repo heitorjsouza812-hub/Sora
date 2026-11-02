@@ -7,6 +7,7 @@ aprovou. Registrado antes de ``equipe`` para valer sobre as rotas de perfil de l
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -34,6 +35,7 @@ from app.navegador.perfis import (
 )
 from workers.fila import obter_fila
 
+registro = logging.getLogger(__name__)
 roteador = APIRouter(prefix="/navegador", tags=["navegador"])
 Usuario = Annotated[UUID, Depends(usuario_atual)]
 Sessao = Annotated[AsyncSession, Depends(obter_sessao, scope="function")]
@@ -267,9 +269,13 @@ async def abrir_aba_no_perfil(
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "O navegador não respondeu a tempo."
         ) from erro
+    except ErroFerramenta as erro:  # mensagem do worker, já escrita para o usuário
+        raise HTTPException(status.HTTP_409_CONFLICT, str(erro)) from erro
     except Exception as erro:
+        registro.warning("falha ao abrir aba no perfil %s", perfil.id, exc_info=True)
         raise HTTPException(
-            status.HTTP_409_CONFLICT, str(erro) or "Não consegui abrir a aba."
+            status.HTTP_409_CONFLICT,
+            "Não consegui abrir a aba agora. Tente de novo em instantes.",
         ) from erro
     return AbaNavegadorEvento(**estado)
 

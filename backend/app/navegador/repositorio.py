@@ -24,6 +24,20 @@ from app.navegador.perfis import (
 )
 
 
+def _aba_do_registro(item: AbaNavegador) -> Aba:
+    return Aba(
+        id=item.id,
+        usuario_id=item.usuario_id,
+        agente_id=item.agente_id,
+        particao=item.particao,
+        url=item.url,
+        titulo=item.titulo,
+        aberta_em=item.aberta_em,
+        usada_em=item.usada_em,
+        carregada=False,
+    )
+
+
 class RepositorioNavegador:
     def __init__(self, fabrica_sessoes: Any) -> None:
         self._sessoes = fabrica_sessoes
@@ -67,23 +81,35 @@ class RepositorioNavegador:
         por_usuario: dict[UUID, set[UUID]] = {}
         for perfil in perfis:
             por_usuario.setdefault(perfil.usuario_id, set()).add(perfil.id)
-        return (
-            [
-                Aba(
-                    id=item.id,
-                    usuario_id=item.usuario_id,
-                    agente_id=item.agente_id,
-                    particao=item.particao,
-                    url=item.url,
-                    titulo=item.titulo,
-                    aberta_em=item.aberta_em,
-                    usada_em=item.usada_em,
-                    carregada=False,
+        return [_aba_do_registro(item) for item in registros], por_usuario
+
+    async def carregar_abas_do_agente(
+        self, agente_id: UUID
+    ) -> tuple[list[Aba], dict[UUID, set[UUID]]]:
+        async with self._sessoes() as sessao:
+            registros = list(
+                (
+                    await sessao.scalars(
+                        select(AbaNavegador).where(AbaNavegador.agente_id == agente_id)
+                    )
+                ).all()
+            )
+            donos = {r.usuario_id for r in registros}
+            perfis = (
+                list(
+                    (
+                        await sessao.scalars(
+                            select(PerfilNavegador).where(PerfilNavegador.usuario_id.in_(donos))
+                        )
+                    ).all()
                 )
-                for item in registros
-            ],
-            por_usuario,
-        )
+                if donos
+                else []
+            )
+        por_usuario: dict[UUID, set[UUID]] = {}
+        for perfil in perfis:
+            por_usuario.setdefault(perfil.usuario_id, set()).add(perfil.id)
+        return [_aba_do_registro(r) for r in registros], por_usuario
 
     async def salvar_aba(self, aba: Aba) -> None:
         if aba.perfil_efemero:

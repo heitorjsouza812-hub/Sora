@@ -94,7 +94,7 @@ def site(monkeypatch: pytest.MonkeyPatch, servidor_local: str):
     yield servidor_local
 
 
-async def _perfil_logado(mundo: Mundo, email: str) -> UUID:
+async def _perfil_logado(mundo: Mundo, email: str, aprovados: tuple[str, ...] = ()) -> UUID:
     async with mundo.fabrica() as sessao:
         usuario_id = await sessao.scalar(select(Usuario.id).where(Usuario.email == email))
         assert usuario_id is not None
@@ -105,6 +105,8 @@ async def _perfil_logado(mundo: Mundo, email: str) -> UUID:
             ],
             "origins": [],
         }
+        for dominio in aprovados:
+            estado = pf.com_dominio_aprovado(estado, dominio)
         sessao.add(
             EstadoNavegador(
                 particao=particao,
@@ -178,7 +180,7 @@ async def test_dominio_novo_em_perfil_logado_pausa_aprova_e_navega(mundo: Mundo,
     pedida = next(d for n, d in eventos if n == "aprovacao.pedida")
     assert pedida["tipo"] == "aprovar_dominio" and pedida["dominio"] == "localhost"
     assert [o["valor"] for o in pedida["opcoes"]] == ["sempre_permitir", "negar"]
-    assert pedida["agente_id"] and "particao" in pedida["perfil"]
+    assert pedida["agente_id"] and pedida["perfil"] == {"tipo": "compartilhado"}
     assert "segredo" not in str(eventos)
 
     passos = [
@@ -275,7 +277,10 @@ async def _cartao_novo(mundo: Mundo, usuario_id: UUID, dominio: str) -> Aprovaca
                 for p in await sessao.scalars(select(Passo))
                 if p.ferramenta
             ]
-        raise AssertionError(f"sem cartão de {dominio}; etapas={etapas}; passos={passos}") from None
+        cartoes = [dict(c.acao) for c in await _todos_os_cartoes(mundo, usuario_id)]
+        raise AssertionError(
+            f"sem cartão de {dominio}; etapas={etapas}; passos={passos}; cartoes={cartoes}"
+        ) from None
 
 
 async def test_clique_em_dominio_barrado_vira_cartao_e_aba_sobrevive_ao_reinicio(
@@ -293,15 +298,9 @@ async def test_clique_em_dominio_barrado_vira_cartao_e_aba_sobrevive_ao_reinicio
         )
         conversa_id = r.json()["id"]
         leitura = asyncio.create_task(ler_sse(cliente, conversa_id, auth, ate=_concluiu))
-        for dominio in ("localhost", "127.0.0.1"):
-            cartao = await _cartao_novo(mundo, usuario_id, dominio)
-            ok = await cliente.post(
-                f"/v1/aprovacoes/{cartao.id}/decidir",
-                headers=auth,
-                json={"decisao": "sempre_permitir"},
-            )
-            assert ok.status_code == 204, ok.text
+        aprovador = asyncio.create_task(_aprovar_tudo(cliente, mundo, auth, usuario_id, leitura))
         eventos = await asyncio.wait_for(leitura, 120)
+        await aprovador
 
         pedidas = [d for n, d in eventos if n == "aprovacao.pedida" and d.get("tipo")]
         assert [p["dominio"] for p in pedidas] == ["localhost", "127.0.0.1"]
@@ -497,3 +496,262 @@ async def test_agente_efemero_abre_aba_descartavel_sem_login(
             assert await sessao.get(AbaNavegador, aba.id) is None  # nem fica salva
             pedidos = select(Aprovacao).where(Aprovacao.usuario_id == usuario_id)
             assert not (await sessao.scalars(pedidos)).all()  # sem cartão
+
+
+async def _todos_os_cartoes(mundo: Mundo, usuario_id: UUID) -> list[Aprovacao]:
+    async with mundo.fabrica() as sessao:
+        return list(
+            (
+                await sessao.scalars(select(Aprovacao).where(Aprovacao.usuario_id == usuario_id))
+            ).all()
+        )
+
+
+async def _aprovar_tudo(cliente, mundo: Mundo, auth: dict, usuario_id: UUID, leitura) -> None:
+    """O usuário aprova o que aparecer: o revisor do clique (uma vez) e o domínio (sempre)."""
+    decididas: set[UUID] = set()
+    while not leitura.done():
+        for cartao in await _todos_os_cartoes(mundo, usuario_id):
+            if cartao.id in decididas or cartao.status.value != "pendente":
+                continue
+            domino = cartao.acao.get("tipo") == "aprovar_dominio"
+            resposta = await cliente.post(
+                f"/v1/aprovacoes/{cartao.id}/decidir",
+                headers=auth,
+                json={"decisao": "sempre_permitir" if domino else "permitir_uma_vez"},
+            )
+            assert resposta.status_code == 204, resposta.text
+            decididas.add(cartao.id)
+        await asyncio.sleep(0.3)
+
+
+async def _segundo_worker(mundo: Mundo) -> Any:
+    from arq.connections import RedisSettings
+    from arq.worker import create_worker
+
+    from workers.configuracao import WorkerSettings
+
+    worker = create_worker(
+        WorkerSettings,
+        redis_settings=RedisSettings.from_dsn(mundo.url_redis),
+        handle_signals=False,
+        poll_delay=0.1,
+    )
+    tarefa = asyncio.create_task(worker.async_run())
+
+    async def pronto() -> Any:
+        return (worker.ctx or {}).get("navegador")
+
+    await esperar(pronto, 60)
+    return worker, tarefa
+
+
+async def test_dois_workers_enxergam_as_mesmas_abas(mundo: Mundo, site: str) -> None:
+    """E4-M3: a aba aberta no worker A é usada, fechada e vista como fechada no worker B."""
+    from uuid import uuid4
+
+    from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
+    from app.navegador import NavegadorAbrir
+    from app.navegador.abas import NavegadorFecharAba
+    from app.navegador.arvore.ferramentas import NavegadorObservar
+    from tests.integracao.test_fase_b_pronto import _fechar_worker
+
+    email = "leme-g@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=60) as cliente:
+        await entrar(cliente, mundo.fabrica, email)
+    usuario_id = await _usuario_id(mundo, email)
+    await _perfil_logado(mundo, email, aprovados=("localhost",))
+    await mundo.iniciar_worker()
+    segundo, tarefa_b = await _segundo_worker(mundo)
+    try:
+
+        async def pronto() -> Any:
+            return (mundo._worker.ctx or {}).get("navegador")
+
+        a = await esperar(pronto, 60)
+        b = segundo.ctx["navegador"]
+        assert a is not b
+        agente = uuid4()
+        async with mundo.fabrica() as sessao:  # o agente precisa existir (chave estrangeira)
+            from app.modelos.enumeracoes import TipoAgente
+            from app.modelos.tabelas import Agente
+
+            sessao.add(
+                Agente(
+                    id=agente,
+                    usuario_id=usuario_id,
+                    nome="Atlas",
+                    papel="Pesquisa",
+                    cor="#56A8FF",
+                    tipo=TipoAgente.INDIVIDUAL,
+                )
+            )
+            await sessao.commit()
+        ctx = ContextoFerramenta(usuario_id=usuario_id, agente_id=agente, conversa_id=uuid4())
+
+        aberta = await a.executar("navegador_abrir", NavegadorAbrir(url=site), ctx)
+        aba_id = UUID(aberta["aba_id"])
+        assert aba_id not in b.gerente._abas  # só o A conhece a aba (memória)
+
+        # o B recria a aba pelo estado salvo e consegue observar a página
+        visto = await b.executar("navegador_observar", NavegadorObservar(aba_id=aba_id), ctx)
+        assert "Painel de teste" in visto["resumo"]
+        listadas = await b.executar("navegador_abas", type("A", (), {})(), ctx)
+        assert [x["aba_id"] for x in listadas["abas"]] == [str(aba_id)]
+
+        # o B fecha; o A, na próxima chamada, percebe e responde com erro claro (sem usar aba velha)
+        await b.executar("navegador_fechar_aba", NavegadorFecharAba(aba_id=aba_id), ctx)
+        with pytest.raises(ErroFerramenta, match="não existe mais"):
+            await a.executar("navegador_observar", NavegadorObservar(aba_id=aba_id), ctx)
+        assert aba_id not in a.gerente._abas
+
+        # aba temporária (rotina) vive só no worker que a abriu: o outro responde com erro claro
+        sem = ContextoFerramenta(
+            usuario_id=usuario_id, agente_id=agente, conversa_id=uuid4(), sem_supervisao=True
+        )
+        efemera = await a.executar("navegador_abrir", NavegadorAbrir(url=site), sem)
+        with pytest.raises(ErroFerramenta, match="outro servidor"):
+            await b.executar(
+                "navegador_observar", NavegadorObservar(aba_id=UUID(efemera["aba_id"])), sem
+            )
+        await a.executar(
+            "navegador_fechar_aba", NavegadorFecharAba(aba_id=UUID(efemera["aba_id"])), sem
+        )
+    finally:
+        await _fechar_worker(segundo)
+        tarefa_b.cancel()
+
+
+async def test_cartao_de_dominio_novo_quando_expira_ou_o_dominio_e_revogado(
+    mundo: Mundo, site: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """E4-B2 e E4-B1: cartão repetido nunca pausa sem cartão; o perfil vai ao app sem partição."""
+    from uuid import uuid4
+
+    from app.ferramentas.base import ContextoFerramenta
+    from app.modelos.enumeracoes import StatusAprovacao
+    from app.navegador.abas import RevisaoNavegacaoNecessaria
+    from app.navegador.repositorio import aprovar_dominio_no_perfil
+
+    email = "leme-h@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=60) as cliente:
+        await entrar(cliente, mundo.fabrica, email)
+    usuario_id = await _usuario_id(mundo, email)
+    await _perfil_logado(mundo, email)
+    await mundo.iniciar_worker()
+
+    async def pronto() -> Any:
+        return (mundo._worker.ctx or {}).get("navegador")
+
+    amb = await esperar(pronto, 60)
+    particao = pf.particao(usuario_id, usuario_id, COMPARTILHADO)
+    publicados: list[Any] = []
+
+    async def captura(redis, evento, conversa_id, usuario):
+        publicados.append(evento)
+
+    monkeypatch.setattr("app.ferramentas.navegador_worker.publicar_evento", captura)
+    monkeypatch.setattr("langgraph.types.interrupt", lambda _valor: "sempre_permitir")
+    agente = await _novo_agente(mundo, usuario_id)
+    ctx = ContextoFerramenta(
+        usuario_id=usuario_id, agente_id=agente, conversa_id=uuid4(), etapa_id=None
+    )
+    revisao = RevisaoNavegacaoNecessaria("localhost", aba_id=uuid4(), url=site, particao=particao)
+
+    async def cartoes() -> list[Aprovacao]:
+        todos = await _todos_os_cartoes(mundo, usuario_id)
+        return sorted(todos, key=lambda c: str(c.id))
+
+    async def marcar(cartao: Aprovacao, status: StatusAprovacao) -> None:
+        async with mundo.fabrica() as sessao:
+            linha = await sessao.get(Aprovacao, cartao.id)
+            linha.status = status
+            await sessao.commit()
+
+    async def aprovar_no_perfil() -> None:
+        async with mundo.fabrica() as sessao:
+            await aprovar_dominio_no_perfil(
+                sessao, particao=particao, usuario_id=usuario_id, dominio="localhost"
+            )
+            await sessao.commit()
+
+    # 1) primeiro pedido: um cartão pendente, com o perfil no formato do app
+    await amb._pedir_revisao(ctx, "navegador_abrir", revisao)
+    (primeiro,) = await cartoes()
+    assert len(publicados) == 1
+    assert publicados[0].perfil == {"tipo": "compartilhado"}
+    assert "particao" not in str(publicados[0].perfil)
+
+    # 2) o usuário aprova e a ferramenta roda de novo (retomada): o mesmo cartão, nenhum novo
+    await marcar(primeiro, StatusAprovacao.PERMITIDA)
+    await aprovar_no_perfil()
+    resposta = await amb._pedir_revisao(ctx, "navegador_abrir", revisao)
+    assert resposta.startswith("Domínio aprovado")
+    assert len(await cartoes()) == 1 and len(publicados) == 1
+
+    # 3) o usuário revoga o domínio e a mesma etapa navega de novo: nasce um cartão novo
+    async with mundo.fabrica() as sessao:
+        estado = await sessao.get(EstadoNavegador, particao)
+        dados = pf.decifrar_estado(estado.estado_cifrado, usuario_id=usuario_id, particao_=particao)
+        estado.estado_cifrado = pf.cifrar_estado(
+            pf.sem_dominio_aprovado(dados, "localhost"), usuario_id=usuario_id, particao_=particao
+        )
+        await sessao.commit()
+    await amb._pedir_revisao(ctx, "navegador_abrir", revisao)
+    assert len(await cartoes()) == 2 and len(publicados) == 2
+
+    # 4) cartão que expirou sem resposta também é substituído
+    pendentes = [c for c in await cartoes() if c.status == StatusAprovacao.PENDENTE]
+    assert len(pendentes) == 1
+    await marcar(pendentes[0], StatusAprovacao.EXPIRADA)
+    await amb._pedir_revisao(ctx, "navegador_abrir", revisao)
+    assert len(await cartoes()) == 3 and len(publicados) == 3
+    assert [c.status for c in await cartoes()].count(StatusAprovacao.PENDENTE) == 1
+
+
+async def test_abrir_aba_no_perfil_devolve_erro_em_portugues(
+    mundo: Mundo, servidor_local: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    email = "leme-i@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=90) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, email)
+        await mundo.iniciar_worker()
+        perfil = (
+            await cliente.post("/v1/navegador/perfis", headers=auth, json={"nome": "Erro"})
+        ).json()
+        monkeypatch.setattr(
+            "app.navegador.abas.GerenteAbas.abrir",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("falha interna: senha=segredo")),
+        )
+        quebrada = await cliente.post(
+            f"/v1/navegador/perfis/{perfil['perfil_id']}/abrir",
+            headers=auth,
+            json={"url": servidor_local},
+        )
+        assert quebrada.status_code == 409
+        assert quebrada.json()["detail"] == (
+            "Não consegui abrir a aba agora. Tente de novo em instantes."
+        )
+        assert "segredo" not in quebrada.text and "RuntimeError" not in quebrada.text
+
+
+async def _novo_agente(mundo: Mundo, usuario_id: UUID) -> UUID:
+    from uuid import uuid4
+
+    from app.modelos.enumeracoes import TipoAgente
+    from app.modelos.tabelas import Agente
+
+    agente = uuid4()
+    async with mundo.fabrica() as sessao:
+        sessao.add(
+            Agente(
+                id=agente,
+                usuario_id=usuario_id,
+                nome="Atlas",
+                papel="Pesquisa",
+                cor="#56A8FF",
+                tipo=TipoAgente.INDIVIDUAL,
+            )
+        )
+        await sessao.commit()
+    return agente

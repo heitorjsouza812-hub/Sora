@@ -17,16 +17,23 @@ from app.eventos.streams import publicar_evento
 from app.eventos.tipos import AprovacaoPedida
 from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
 from app.modelos.enumeracoes import StatusAprovacao
-from app.modelos.tabelas import Anexo, Aprovacao, Conversa
+from app.modelos.tabelas import Anexo, Aprovacao, Conversa, PerfilNavegador
 from app.navegador.abas import (
     Aba,
     GerenteAbas,
     RevisaoNavegacaoNecessaria,
 )
 from app.navegador.arvore import ServicoArvore, para_modelo
-from app.navegador.perfis import EscolhaPerfil
+from app.navegador.perfis import (
+    EscolhaPerfil,
+    TipoPerfil,
+    dominios_aprovados,
+    ler_particao,
+)
 from app.navegador.persistente import MotorPlaywright
 from app.navegador.repositorio import RepositorioNavegador
+
+MAX_CARTOES_POR_DOMINIO = 5
 
 
 @dataclass(slots=True)
@@ -95,7 +102,10 @@ class AmbienteNavegador:
             for aba in abas:
                 if aba.id == aba_id:
                     return aba
-            raise ErroFerramenta("Essa aba não existe ou não é sua.")
+            raise ErroFerramenta(
+                "Essa aba não existe mais (foi fechada, ou era temporária e vive em outro "
+                "servidor). Veja suas abas com navegador_abas ou abra uma nova."
+            )
         if not abas:
             raise ErroFerramenta("Você não tem abas abertas. Use navegador_abrir.")
         return max(abas, key=lambda item: item.usada_em)
@@ -109,42 +119,58 @@ class AmbienteNavegador:
         if revisao.aba_id is None:
             raise ErroFerramenta(str(revisao))
         escopo = contexto.etapa_id or contexto.conversa_id
-        aprovacao_id = uuid5(
-            NAMESPACE_URL, f"sora:dominio:{escopo}:{revisao.particao}:{revisao.dominio}"
-        )
+        base = f"sora:dominio:{escopo}:{revisao.particao}:{revisao.dominio}"
         agora = datetime.now(UTC)
         expira_em = agora + timedelta(minutes=10)
         criada = False
+        aprovados_hoje = dominios_aprovados(
+            await self.repositorio.ler_estado(revisao.particao) if revisao.particao else None
+        )
         async with self.sessoes() as sessao:
-            aprovacao = await sessao.get(Aprovacao, aprovacao_id, with_for_update=True)
-            if aprovacao is not None and aprovacao.status == StatusAprovacao.NEGADA:
-                return f"Erro: o usuário negou acesso ao domínio {revisao.dominio}."
-            if aprovacao is None:
-                aprovacao = Aprovacao(
-                    id=aprovacao_id,
-                    usuario_id=contexto.usuario_id,
-                    etapa_id=contexto.etapa_id,
-                    agente_id=contexto.agente_id,
-                    acao={
-                        "tipo": "aprovar_dominio",
-                        "ferramenta": ferramenta,
-                        "aba_id": str(revisao.aba_id),
-                        "dominio": revisao.dominio,
-                        "url": revisao.url,
-                        "particao": revisao.particao,
-                        "conversa_id": str(contexto.conversa_id),
-                    },
-                    avaliacao={
-                        "resumo": f"Permitir acesso a {revisao.dominio}",
-                        "dano": "O perfil desta aba tem login salvo.",
-                    },
-                    expira_em=expira_em,
-                )
-                sessao.add(aprovacao)
-                criada = True
-                await sessao.commit()
+            # Mesma etapa, mesmo domínio: o cartão é um só enquanto vale. Cartão já usado e
+            # domínio de novo barrado (revogado depois) ou cartão expirado pedem um cartão novo.
+            for tentativa in range(MAX_CARTOES_POR_DOMINIO):
+                chave = base if tentativa == 0 else f"{base}:{tentativa}"
+                aprovacao_id = uuid5(NAMESPACE_URL, chave)
+                aprovacao = await sessao.get(Aprovacao, aprovacao_id, with_for_update=True)
+                if aprovacao is None:
+                    aprovacao = Aprovacao(
+                        id=aprovacao_id,
+                        usuario_id=contexto.usuario_id,
+                        etapa_id=contexto.etapa_id,
+                        agente_id=contexto.agente_id,
+                        acao={
+                            "tipo": "aprovar_dominio",
+                            "ferramenta": ferramenta,
+                            "aba_id": str(revisao.aba_id),
+                            "dominio": revisao.dominio,
+                            "url": revisao.url,
+                            "particao": revisao.particao,
+                            "conversa_id": str(contexto.conversa_id),
+                        },
+                        avaliacao={
+                            "resumo": f"Permitir acesso a {revisao.dominio}",
+                            "dano": "O perfil desta aba tem login salvo.",
+                        },
+                        expira_em=expira_em,
+                    )
+                    sessao.add(aprovacao)
+                    criada = True
+                    await sessao.commit()
+                    break
+                if aprovacao.status == StatusAprovacao.NEGADA:
+                    return f"Erro: o usuário negou acesso ao domínio {revisao.dominio}."
+                if aprovacao.status == StatusAprovacao.PENDENTE:
+                    expira_em = aprovacao.expira_em
+                    break
+                if (
+                    aprovacao.status == StatusAprovacao.PERMITIDA
+                    and revisao.dominio.lower() in aprovados_hoje
+                ):
+                    break  # a ferramenta rodou de novo depois da decisão: o interrupt devolve
+                # EXPIRADA, ou PERMITIDA mas revogada depois: tenta o próximo número
             else:
-                expira_em = aprovacao.expira_em
+                return "Erro: pedidos de acesso demais para este domínio. Tente mais tarde."
         if criada:
             await publicar_evento(
                 self.redis,
@@ -159,7 +185,7 @@ class AmbienteNavegador:
                     tipo="aprovar_dominio",
                     dominio=revisao.dominio,
                     url=revisao.url,
-                    perfil={"particao": revisao.particao},
+                    perfil=await self._perfil_do_cartao(revisao.particao),
                     agente_id=contexto.agente_id,
                     opcoes=[
                         {"rotulo": "Aprovar domínio", "valor": "sempre_permitir"},
@@ -177,12 +203,39 @@ class AmbienteNavegador:
         decisao = interrupt(
             {"tipo": "aprovacao", "aprovacao_id": str(aprovacao_id), "dominio": revisao.dominio}
         )
-        if str(decisao) == "negar":
+        if str(decisao) in ("negar", "negada"):
             return f"Erro: o usuário negou acesso ao domínio {revisao.dominio}."
+        if str(decisao) == "expirada":
+            return f"Erro: o pedido de acesso a {revisao.dominio} expirou sem resposta."
         return "Domínio aprovado. Repita a navegação."
+
+    async def _perfil_do_cartao(self, nome_particao: str | None) -> dict[str, Any]:
+        """``{tipo, perfil_id?, nome?}`` para o cartão; a partição (interna) nunca vai ao app."""
+        lida = ler_particao(nome_particao or "")
+        if lida is None:
+            return {"tipo": "compartilhado"}
+        if lida.tipo is TipoPerfil.NOMEADO and lida.perfil_id is not None:
+            async with self.sessoes() as sessao:
+                nome = await sessao.scalar(
+                    select(PerfilNavegador.nome).where(PerfilNavegador.id == lida.perfil_id)
+                )
+            return {"tipo": "perfil", "perfil_id": str(lida.perfil_id), "nome": nome or "Perfil"}
+        return {"tipo": lida.tipo.value}
+
+    async def _sincronizar_abas(self, contexto: ContextoFerramenta) -> None:
+        """Mais de um worker: a aba pode ter nascido em outro. O banco manda: aba salva que este
+        worker não conhece volta (descarregada, recarrega ao usar) e aba que sumiu do banco
+        (fechada em outro worker ou pelo usuário) sai da memória. Aba efêmera não é salva."""
+        if contexto.sem_supervisao:
+            return
+        salvas, perfis = await self.repositorio.carregar_abas_do_agente(contexto.agente_id)
+        await self.gerente.sincronizar_com_banco(
+            contexto.agente_id, salvas, perfis_por_usuario=perfis
+        )
 
     async def executar(self, nome: str, args: Any, contexto: ContextoFerramenta) -> Any:
         try:
+            await self._sincronizar_abas(contexto)
             if nome == "navegador_abrir":
                 escolha = await self.repositorio.escolha_do_agente(
                     contexto.agente_id, contexto.usuario_id
@@ -206,8 +259,15 @@ class AmbienteNavegador:
 
             if nome == "navegador_abas":
                 return {
-                    "resumo": self.gerente.descrever(contexto.agente_id),
-                    "abas": [self._estado(a) for a in self.gerente.do_agente(contexto.agente_id)],
+                    "resumo": self.gerente.descrever(
+                        contexto.agente_id, so_efemeras=contexto.sem_supervisao
+                    ),
+                    "abas": [
+                        self._estado(a)
+                        for a in self.gerente.do_agente(
+                            contexto.agente_id, so_efemeras=contexto.sem_supervisao
+                        )
+                    ],
                 }
 
             aba = self._aba(contexto, getattr(args, "aba_id", None))

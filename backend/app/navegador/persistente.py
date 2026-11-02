@@ -24,6 +24,7 @@ from app.navegador.perfis import (
     estado_playwright,
     perfil_tem_login,
 )
+from app.navegador.ponte_loop import LoopDoPlaywright, embrulhar, precisa_de_loop_proprio
 from app.revisor.politica import dominio_registravel, navegacao_exige_revisao
 
 PRAZO_NAVEGACAO_MS = 20_000
@@ -47,6 +48,7 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         self._bloqueios: dict[str, str] = {}
         self._urls_bloqueadas: dict[str, str] = {}
         self._apagadas: set[str] = set()
+        self._loop_proprio: LoopDoPlaywright | None = None
         """Partições cujo perfil o usuário apagou: o login em memória não volta para o banco."""
         """Último domínio barrado por revisão em cada partição (para o erro certo no goto)."""
         self._paginas: dict[UUID, Any] = {}
@@ -60,7 +62,13 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             raise ErroFerramenta(
                 "O navegador não está instalado neste servidor (uv sync --group navegador)."
             ) from erro
-        self._playwright = await async_playwright().start()
+        if precisa_de_loop_proprio():
+            # worker no Windows (loop sem subprocesso): o Playwright ganha o loop dele
+            self._loop_proprio = LoopDoPlaywright()
+            bruto = await self._loop_proprio.executar(async_playwright().start())
+            self._playwright = embrulhar(bruto, self._loop_proprio)
+        else:
+            self._playwright = await async_playwright().start()
         from app.core.config import obter_configuracao
 
         config = obter_configuracao()
@@ -304,3 +312,6 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         if self._playwright is not None:
             await self._playwright.stop()
         self._navegador = self._playwright = None
+        if self._loop_proprio is not None:
+            self._loop_proprio.parar()
+            self._loop_proprio = None

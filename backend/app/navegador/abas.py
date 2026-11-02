@@ -207,8 +207,8 @@ class GerenteAbas:
             key=lambda a: a.aberta_em,
         )
 
-    def descrever(self, agente_id: UUID) -> str:
-        abas = self.do_agente(agente_id)
+    def descrever(self, agente_id: UUID, *, so_efemeras: bool = False) -> str:
+        abas = self.do_agente(agente_id, so_efemeras=so_efemeras)
         if not abas:
             return "Você não tem abas abertas. Use navegador_abrir."
         linhas = []
@@ -327,6 +327,22 @@ class GerenteAbas:
             self._console[restaurada.id] = deque(maxlen=MAX_LINHAS_CONSOLE)
             voltaram.append(restaurada)
         return voltaram
+
+    async def sincronizar_com_banco(
+        self,
+        agente_id: UUID,
+        salvas: Sequence[Aba],
+        *,
+        perfis_por_usuario: dict[UUID, set[UUID]],
+    ) -> None:
+        """Várias cópias do worker: deixa as abas do agente iguais ao que está salvo no banco."""
+        ids_salvos = {aba.id for aba in salvas}
+        for aba in list(self._abas.values()):
+            if aba.agente_id == agente_id and not aba.perfil_efemero and aba.id not in ids_salvos:
+                await self._remover(aba)
+        faltando = [aba for aba in salvas if aba.id not in self._abas]
+        if faltando:
+            await self.restaurar(faltando, perfis_por_usuario=perfis_por_usuario)
 
     # ---------- interno ----------
 
