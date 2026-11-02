@@ -31,9 +31,13 @@ async def verificar(cadeia_id: UUID) -> Veredito:
 
 def decidir(veredito: Veredito, *, rodada: int, max_rodadas: int) -> DecisaoVerificacao:
     """Aplica a regra de reprovação ao veredito."""
-    raise NotImplementedError
+    if veredito.aprovado and all(item.status == "atendido" for item in veredito.requisitos):
+        return DecisaoVerificacao(concluir=True)
+    if rodada >= max_rodadas:
+        return DecisaoVerificacao(concluir=False, falhar=True, motivo=veredito.motivo)
+    return DecisaoVerificacao(concluir=False, motivo=veredito.motivo)
 
 
 def subir_nivel(nivel: str) -> str:
     """N1 → N2 → N3 (N3 fica em N3), para a nova tentativa de uma etapa reprovada."""
-    raise NotImplementedError
+    return {"N1": "N2", "N2": "N3", "N3": "N3"}.get(nivel, "N3")

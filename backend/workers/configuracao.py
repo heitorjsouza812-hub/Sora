@@ -12,8 +12,11 @@ from typing import Any, ClassVar
 
 from arq.connections import RedisSettings
 
+from app.agentes.checkpointer import abrir_checkpointer, fechar_checkpointer
 from app.busca.provedor import verificar_busca_permitida
+from app.core.banco import fabrica_sessoes
 from app.core.config import obter_configuracao
+from app.core.redis import criar_cliente_redis
 from app.llm.falso import verificar_modelo_falso_permitido
 from workers.aprovacoes import expirar_aprovacao
 from workers.cadeia import (
@@ -25,6 +28,7 @@ from workers.cadeia import (
     verificar_cadeia,
 )
 from workers.conversa import responder_direto
+from workers.fila import configurar_fila
 
 
 def verificar_trava_de_producao() -> None:
@@ -40,12 +44,22 @@ async def ao_iniciar(ctx: dict[str, Any]) -> None:
 
     Antes de tudo, a trava de produção (é o worker quem chama os modelos)."""
     verificar_trava_de_producao()
-    raise NotImplementedError
+    config = obter_configuracao()
+    ctx["sessoes"] = fabrica_sessoes()
+    ctx["redis_eventos"] = criar_cliente_redis(config.redis_url)
+    ctx["checkpointer"] = await abrir_checkpointer(config.database_url)
+    configurar_fila(ctx.get("redis"))
 
 
 async def ao_desligar(ctx: dict[str, Any]) -> None:
     """Fecha o que ``ao_iniciar`` abriu."""
-    raise NotImplementedError
+    configurar_fila(None)
+    checkpointer = ctx.pop("checkpointer", None)
+    if checkpointer is not None:
+        await fechar_checkpointer(checkpointer)
+    redis_eventos = ctx.pop("redis_eventos", None)
+    if redis_eventos is not None:
+        await redis_eventos.aclose()
 
 
 class WorkerSettings:
