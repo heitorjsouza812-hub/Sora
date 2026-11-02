@@ -97,13 +97,29 @@ function receber(evento: EventoSse) {
   }
 }
 
+const mapaDeEntregas = (lista: EntregasApi['entregas']): Record<string, EntregaGerada> => Object.fromEntries(lista.map(x => [x.agente_id || x.id, { ...x, agenteId: x.agente_id ?? undefined, conteudo: x.conteudo, ...(typeof x.conteudo === 'object' && x.conteudo ? x.conteudo as object : {}) } as EntregaGerada]));
+
 async function carregarEntregas(conversaId: string): Promise<void> {
   const dados = await api.get<EntregasApi>(`/v1/conversas/${conversaId}/entregas`);
+  // Versão anterior (ajuste): serve para a comparação. A nova versão só traz quem foi ajustado, então
+  // quem não mudou continua com a entrega da versão anterior.
+  const anterior = dados.versoes.length > 1 ? await api.get<EntregasApi>(`/v1/conversas/${conversaId}/entregas?versao=${dados.versoes.at(-2)}`).catch(() => null) : null;
   alterar(e => ({ ...e, projetos: e.projetos.map(p => {
     if (p.id !== conversaId) return p;
-    const entregas = Object.fromEntries(dados.entregas.map(x => [x.agente_id || x.id, { ...x, agenteId: x.agente_id ?? undefined, conteudo: x.conteudo, ...(typeof x.conteudo === 'object' && x.conteudo ? x.conteudo as object : {}) }]));
-    return { ...p, entregas, versao: dados.versoes.at(-1) ?? p.versao };
+    const anteriores = anterior ? mapaDeEntregas(anterior.entregas) : undefined;
+    const entregas = { ...(anteriores ?? {}), ...mapaDeEntregas(dados.entregas) };
+    return { ...p, entregas, entregasAnteriores: anteriores, versao: dados.versoes.at(-1) ?? p.versao };
   }) }));
+}
+
+/** Comparação "versão anterior × nova": o agente cuja entrega mudou no último ajuste. */
+export function comparacaoDeVersao(e: EstadoProjetos, p: ProjetoSora): { agente: AgenteSora; antes: EntregaGerada; depois: EntregaGerada } | null {
+  if (p.versao < 2 || !p.entregasAnteriores) return null;
+  for (const id of p.agenteIds) {
+    const antes = p.entregasAnteriores[id], depois = p.entregas[id], agente = e.agentes[id];
+    if (agente && antes && depois && antes.id !== depois.id) return { agente, antes, depois };
+  }
+  return null;
 }
 
 export function acompanharConversa(conversaId: string): void {

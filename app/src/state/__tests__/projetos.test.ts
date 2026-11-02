@@ -62,6 +62,22 @@ describe('aplicarEvento', () => {
     expect(horarioDoEvento('0-0')).toBe(AGORA);
   });
 
+  it('nova tentativa reemite a cadeia com outro etapa_id na mesma ordem e vale a mais recente', () => {
+    const nova = '00000000-0000-0000-0000-000000000009';
+    let e = aplicarEvento(estado(), evento('cadeia.criada', { cadeia_id: 'cadeia-1', versao: 1, etapas: [
+      { etapa_id: etapaId, ordem: 1, agente_id: agenteId, titulo: 'Pesquisar', depende_de: [] },
+      { etapa_id: 'v1', ordem: 2, agente_id: agenteId, titulo: 'Verificar', depende_de: [1] }] }));
+    e = aplicarEvento(e, evento('cadeia.criada', { cadeia_id: 'cadeia-1', versao: 1, etapas: [{ etapa_id: nova, ordem: 1, agente_id: agenteId, titulo: 'Pesquisar', depende_de: [] }] }, 5));
+    expect(e.projetos[0]?.tarefas.map(t => [t.ordem, t.id])).toEqual([[1, nova], [2, 'v1']]);
+    const outra = aplicarEvento(e, evento('cadeia.criada', { cadeia_id: 'cadeia-2', versao: 2, etapas: [{ etapa_id: 'a2', ordem: 1, agente_id: agenteId, titulo: 'Ajuste', depende_de: [] }] }, 9));
+    expect(outra.projetos[0]?.tarefas.map(t => t.id)).toEqual(['a2']);
+  });
+
+  it('ignora aprovacao.resolvida sem mexer no estado', () => {
+    const base = estado();
+    expect(aplicarEvento(base, evento('aprovacao.resolvida', { aprovacao_id: 'x', status: 'expirada' }))).toBe(base);
+  });
+
   it('não duplica o texto quando o SSE repete a mensagem já carregada do histórico', () => {
     const base = estado();
     let e: EstadoProjetos = { ...base, mensagens: [{ id: 'msg-1', conversaId, autor: 'sora', texto: 'Tudo pronto.', criadoEm: AGORA, gerando: false }] };

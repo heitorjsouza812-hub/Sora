@@ -21,7 +21,7 @@ import { PainelTrabalho } from '../components/work';
 import { ZonaSoltar } from '../components/anexos';
 import { CardErroModelo, definirErroSimulado, useErroSimulado } from '../components/erros';
 import {
-  abrirProjeto, agentesDoProjeto, anexarEnvio, conversarComSora, estadoAgente, estadoProjeto, gerandoNa, mensagensDa, pararGeracao, projetoAtivo,
+  abrirProjeto, agentesDoProjeto, comparacaoDeVersao, anexarEnvio, conversarComSora, estadoAgente, estadoProjeto, gerandoNa, mensagensDa, pararGeracao, projetoAtivo,
   podeRefazer, refazerResposta, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos, type ProjetoSora,
 } from '../state/projetos';
@@ -208,11 +208,10 @@ export default function SoraChat() {
       ) });
     }
     // comparação de versões após um ajuste concluído
-    const novaVersao = [...msgs].reverse().find(m => m.texto === 'Pronto. Veja a nova versão.');
-    const alvo = p.ajusteAgenteId ? e.agentes[p.ajusteAgenteId] : undefined;
-    if (novaVersao && alvo && p.entregasAnteriores?.[alvo.id] && p.entregas[alvo.id]) {
-      const antes = p.entregasAnteriores[alvo.id], depois = p.entregas[alvo.id];
-      itens.push({ t: novaVersao.criadoEm + 1, key: `v-${p.versao}`, node: (
+    const comparacao = ep.fase === 'pronto' || ep.fase === 'aprovado' ? comparacaoDeVersao(e, p) : null;
+    if (comparacao) {
+      const { agente: alvo, antes, depois } = comparacao;
+      itens.push({ t: Math.max(p.criadoEm, p.marcos.fim, ...msgs.map(m => m.criadoEm)) + 2, key: `v-${p.versao}`, node: (
         <div className="version-compare card" style={{ '--agent': alvo.cor } as CSSProperties}>
           <div><span>Versão anterior</span><p>{antes.resumo}</p><ul>{antes.itens?.slice(0, 4).map(i => <li key={i}>{i}</li>)}</ul></div>
           <div><span>Nova versão · {alvo.nome}</span><p>{depois.resumo}</p><ul>{depois.itens?.slice(0, 5).map(i => <li key={i}>{i}</li>)}</ul></div>

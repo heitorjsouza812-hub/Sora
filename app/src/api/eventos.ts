@@ -1,4 +1,4 @@
-import { buscarAutenticado } from './cliente';
+import { buscarAutenticado, ErroApi } from './cliente';
 
 export interface EventoSse<T = Record<string, unknown>> {
   id: string;
@@ -79,6 +79,9 @@ export async function acompanharEventos(caminho: string, opcoes: OpcoesEventos):
       }
     } catch (erro) {
       if (opcoes.signal.aborted) return;
+      // 400 = Last-Event-ID fora do formato `ms-seq`: recomeça do histórico retido, uma vez; o redutor é
+      // idempotente. Se ainda assim der 400, vira erro comum e segue o recuo (sem laço apertado).
+      if (erro instanceof ErroApi && erro.status === 400 && ultimoId !== '0-0') { ultimoId = '0-0'; continue; }
       opcoes.aoErro?.(erro);
     }
     tentativa += 1;

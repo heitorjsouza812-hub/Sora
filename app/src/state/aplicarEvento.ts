@@ -80,7 +80,10 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
       roteiro: [],
     }));
     const comCadeia = atualizarProjeto(estado, conversaId, p => ({
-      ...p, mensagensPendentes: false, cadeiaId: texto(d.cadeia_id), cadeiaStatus: 'planejando', versao: numero(d.versao, p.versao), tarefas,
+      // Mesma cadeia reemitida (nova tentativa após reprovação): a etapa nova tem outro id e a MESMA `ordem`;
+      // vale a de maior tentativa, ou seja, a mais recente por ordem. Cadeia nova (ajuste) substitui tudo.
+      ...p, mensagensPendentes: false, cadeiaId: texto(d.cadeia_id), cadeiaStatus: 'planejando', versao: numero(d.versao, p.versao),
+      tarefas: p.cadeiaId === texto(d.cadeia_id) ? [...p.tarefas.filter(t => !tarefas.some(n => n.ordem === t.ordem)), ...tarefas].sort((a, b) => a.ordem - b.ordem) : tarefas,
       agenteIds: tarefas.reduce<string[]>((ids, t) => t.agenteId && !ids.includes(t.agenteId) ? [...ids, t.agenteId] : ids, p.agenteIds),
     }));
     return { ...comCadeia, execucoes: [...comCadeia.execucoes, ...novas] };

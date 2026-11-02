@@ -4,17 +4,22 @@ import { entrarNoContexto } from '../../qa/entrar.mjs';
 
 const pedido = 'Crie uma campanha para lançar minha cafeteria';
 
+async function aguardarSessao(page: import('@playwright/test').Page) {
+  await page.waitForLoadState('load');
+  await page.waitForFunction(() => Boolean(window.__sora) && !window.__sora.lerEstado().carregando, null, { timeout: 20_000 });
+}
+
 async function limparEstado(page: import('@playwright/test').Page) {
   await page.goto('/');
   // Espera a renovação silenciosa terminar: navegar no meio dela gira o token sem o cookie novo chegar.
-  await page.waitForLoadState('networkidle');
+  // Não dá para usar 'networkidle': o app mantém o SSE agregado (/v1/eventos) sempre aberto.
+  await aguardarSessao(page);
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.setItem('sora.chegou', '1');
   });
   await page.reload();
-  await page.waitForLoadState('networkidle');
-  await page.waitForFunction(() => Boolean(window.__sora));
+  await aguardarSessao(page);
   await page.addStyleTag({ content: '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}' });
 }
 
@@ -49,12 +54,11 @@ for (const [rota, titulo] of [
 }
 
 test('projeto pronto', async ({ page }) => {
-  const projeto = await page.evaluate((texto) => {
-    const p = window.__sora.criarProjeto(texto, Date.now() - 300_000);
-    return { id: p.id };
-  }, pedido);
-
-  await page.goto(`/projeto/${projeto.id}`);
-  await expect(page.getByRole('button', { name: 'Revisar', exact: true })).toBeVisible();
+  // Backend real (modelo falso): cria o projeto pela própria interface e espera a equipe terminar.
+  test.setTimeout(120_000);
+  await page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i }).fill(pedido);
+  await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
+  await page.waitForURL(/\/projeto\//);
+  await expect(page.getByRole('button', { name: 'Revisar', exact: true })).toBeVisible({ timeout: 90_000 });
   await captura(page, 'projeto-pronto.png');
 });

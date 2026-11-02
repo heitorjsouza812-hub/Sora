@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
 import { entrarNoContexto } from './entrar.mjs';
 
@@ -46,12 +47,11 @@ try {
   await abaTrabalho.waitFor({ state: 'visible', timeout: 30_000 });
   await abaTrabalho.click();
   await page.locator('.wk-panel').waitFor({ state: 'visible', timeout: 20_000 });
-  // O modelo falso (SORA_MODELO_FALSO=1) só entrega; eventos `passo` vêm do caminho do modelo real
-  // (middleware de passos). Por isso o painel precisa mostrar o agente e o progresso reais; os passos
-  // (.wk-prompt/.wk-tool/.wk-step) entram só se o backend os emitir.
+  // Desde a rodada 4 o backend emite `passo` também com o modelo falso: o painel precisa mostrar
+  // o agente, o progresso e pelo menos uma chamada de ferramenta real.
   await page.locator('.wk-head').first().waitFor({ state: 'visible', timeout: 60_000 });
-  const passosNoPainel = await page.locator('.wk-prompt, .wk-tool, .wk-step').count();
-  console.log(`Trabalho: ${passosNoPainel} passo(s) emitidos pelo backend neste fluxo.`);
+  // O painel segue o agente que está trabalhando; espera por contagem, não por um elemento específico.
+  await page.waitForFunction(() => document.querySelectorAll('.wk-prompt, .wk-tool, .wk-step').length >= 1, null, { timeout: 60_000 });
   await screenshot(page, '03-trabalho-sse-1440x900');
 
   await page.getByRole('button', { name: 'Revisar', exact: true }).waitFor({ state: 'visible', timeout: 120_000 });
@@ -73,6 +73,41 @@ try {
   await page.getByRole('button', { name: 'Revisar', exact: true }).click();
   await page.getByRole('button', { name: /Aprovar e publicar/i }).waitFor({ state: 'visible', timeout: 20_000 });
   await screenshot(page, '06-revisao-1440x900');
+
+  // ── Pedido de ajuste: nova versão e comparação ────────────────────────────────────────────
+  await page.getByRole('button', { name: 'Pedir ajuste', exact: true }).click();
+  await page.getByRole('textbox', { name: /Instrução/i }).fill('deixe os textos mais descontraídos');
+  await page.getByRole('button', { name: 'Enviar ajuste', exact: true }).click();
+  await page.waitForURL(/\/projeto\//, { timeout: 20_000 });
+  await page.locator('.version-compare').waitFor({ state: 'visible', timeout: 120_000 });
+  await visivel(page, 'Versão anterior', 5_000);
+  await visivel(page, 'Nova versão', 5_000);
+  await screenshot(page, '07-ajuste-comparacao-1440x900');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const largura2 = await page.evaluate(() => ({ pagina: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
+  assert.ok(largura2.pagina <= largura2.viewport, `comparação de versões não pode rolar na horizontal (${largura2.pagina}/${largura2.viewport})`);
+  await screenshot(page, '08-ajuste-comparacao-390x844');
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // ── Resposta direta: "oi" não monta plano nem equipe ──────────────────────────────────────
+  await page.getByRole('link', { name: 'Novo chat', exact: true }).click();
+  const campo = page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i });
+  await campo.waitFor({ state: 'visible', timeout: 15_000 });
+  await campo.fill('oi');
+  await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
+  await page.waitForURL(/\/projeto\//, { timeout: 30_000 });
+  await page.waitForFunction(() => document.querySelectorAll('.chat-item').length >= 2, null, { timeout: 60_000 });
+  await page.waitForTimeout(3_000);
+  assert.equal(await page.getByText(/^Plano ·/).count(), 0, 'resposta direta não monta plano');
+  assert.equal(await page.getByRole('button', { name: 'Revisar', exact: true }).count(), 0, 'resposta direta não pede revisão');
+  await screenshot(page, '09-resposta-direta-1440x900');
+
+  // ── Aviso de erro do provedor (precisa de API sem modelo falso: SORA_QA_BASE_ERRO) ────────
+  if (process.env.SORA_QA_BASE_ERRO) {
+    const r = spawnSync(process.execPath, [join(qaDir, 'e2e-erro-provedor.mjs')], { stdio: 'inherit', env: { ...process.env, SORA_QA_BASE: process.env.SORA_QA_BASE_ERRO } });
+    assert.equal(r.status, 0, 'cenário de erro do provedor falhou');
+  } else console.log('AVISO: SORA_QA_BASE_ERRO não definido; cenário de erro do provedor não executado.');
 
   assert.deepEqual(consoleEvents, [], `console limpo:\n${JSON.stringify(consoleEvents, null, 2)}`);
 } catch (erro) {
