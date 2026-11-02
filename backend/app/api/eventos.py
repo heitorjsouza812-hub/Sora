@@ -105,11 +105,17 @@ async def _transmitir(
         finally:
             await encerrar_conexao(redis, usuario_id, conexao)
 
+    async def cliente_fechou(_mensagem: dict[str, Any]) -> None:
+        # O EventSourceResponse consome a mensagem ASGI de desconexão. Liberar a vaga aqui
+        # evita esperar o cancelamento do gerador, que pode atrasar em recargas sucessivas.
+        await encerrar_conexao(redis, usuario_id, conexao)
+
     return EventSourceResponse(
         fluxo(),
         headers=CABECALHOS_SSE,
         ping=INTERVALO_PING_SEGUNDOS,
         ping_message_factory=mensagem_ping,
+        client_close_handler_callable=cliente_fechou,
     )
 
 

@@ -11,6 +11,20 @@ const fluxo = (texto: string) => new Response(new ReadableStream({ start(c) { c.
 afterEach(() => { buscarAutenticado.mockReset(); });
 
 describe('acompanharEventos', () => {
+  it('cancela o leitor ao abortar para fechar a conexão no servidor', async () => {
+    const cancelou = vi.fn();
+    buscarAutenticado.mockResolvedValueOnce(new Response(new ReadableStream({
+      cancel: cancelou,
+    })));
+    const controlador = new AbortController();
+    await acompanharEventos('/v1/eventos', {
+      signal: controlador.signal,
+      aoEvento: () => {},
+      aoConectar: () => controlador.abort(),
+    });
+    expect(cancelou).toHaveBeenCalledOnce();
+  });
+
   it('se o Last-Event-ID for rejeitado com 400, recomeça de 0-0 uma vez e continua', async () => {
     buscarAutenticado
       .mockRejectedValueOnce(new ErroApi(400, 'Last-Event-ID inválido.'))

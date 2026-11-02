@@ -66,18 +66,23 @@ export async function acompanharEventos(caminho: string, opcoes: OpcoesEventos):
       const leitor = resposta.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      while (!opcoes.signal.aborted) {
-        const { value, done } = await leitor.read();
-        buffer += decoder.decode(value, { stream: !done });
-        const { blocos, resto } = separarEventos(buffer);
-        buffer = resto;
-        for (const bloco of blocos) {
-          const evento = decodificar(bloco);
-          if (!evento) continue;
-          if (evento.id) ultimoId = evento.id;
-          if (evento.tipo !== 'ping') opcoes.aoEvento({ ...evento, recebidoEm: horarioDoEvento(evento.id) });
+      try {
+        while (!opcoes.signal.aborted) {
+          const { value, done } = await leitor.read();
+          buffer += decoder.decode(value, { stream: !done });
+          const { blocos, resto } = separarEventos(buffer);
+          buffer = resto;
+          for (const bloco of blocos) {
+            const evento = decodificar(bloco);
+            if (!evento) continue;
+            if (evento.id) ultimoId = evento.id;
+            if (evento.tipo !== 'ping') opcoes.aoEvento({ ...evento, recebidoEm: horarioDoEvento(evento.id) });
+          }
+          if (done) break;
         }
-        if (done) break;
+      } finally {
+        await leitor.cancel().catch(() => undefined);
+        leitor.releaseLock();
       }
     } catch (erro) {
       if (opcoes.signal.aborted) return;

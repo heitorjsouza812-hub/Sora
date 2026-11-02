@@ -180,6 +180,21 @@ async def test_api01_stream_encerrado_libera_a_vaga(redis) -> None:
     assert await redis.zcard(f"sse:conexoes:{USUARIO}") == 0
 
 
+async def test_api01_desconexao_asgi_libera_a_vaga_sem_esperar_o_gerador(redis) -> None:
+    from app.api import eventos as rotas
+
+    async def receber() -> dict[str, str]:
+        return {"type": "http.request"}
+
+    requisicao = Request({"type": "http", "method": "GET", "path": "/", "headers": []}, receber)
+    resposta = await rotas.eventos_do_usuario(requisicao, USUARIO, redis)
+    assert await redis.zcard(f"sse:conexoes:{USUARIO}") == 1
+
+    await resposta.client_close_handler_callable({"type": "http.disconnect"})
+
+    assert await redis.zcard(f"sse:conexoes:{USUARIO}") == 0
+
+
 # ------------------------------------------- API-08 / VAL-10: SSE fecha quando o token vence
 
 
