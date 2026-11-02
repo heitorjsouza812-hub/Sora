@@ -61,12 +61,14 @@ async def criar_agente(args: CriarAgente, contexto: ContextoFerramenta) -> str:
                 "Peça ao usuário para apagar um antes."
             )
         cartao = await sessao.scalar(
-            select(Aprovacao).where(
+            select(Aprovacao)
+            .where(
                 Aprovacao.usuario_id == contexto.usuario_id,
                 Aprovacao.agente_id == contexto.agente_id,
-                Aprovacao.status == StatusAprovacao.PENDENTE,
+                Aprovacao.etapa_id == contexto.etapa_id,
                 Aprovacao.acao == acao,
             )
+            .limit(1)
         )
         if cartao is None:
             cartao = Aprovacao(
@@ -88,10 +90,16 @@ async def criar_agente(args: CriarAgente, contexto: ContextoFerramenta) -> str:
                 expira_em=cartao.expira_em,
             )
         aprovacao_id = cartao.id
+        status_do_cartao = cartao.status
     if novo_cartao is not None:
         await emitir(contexto, novo_cartao)
 
-    decisao = interrupt({"tipo": "aprovacao", "aprovacao_id": str(aprovacao_id)})
+    if status_do_cartao == StatusAprovacao.PENDENTE:
+        decisao = interrupt({"tipo": "aprovacao", "aprovacao_id": str(aprovacao_id)})
+    elif status_do_cartao == StatusAprovacao.PERMITIDA:
+        decisao = DecisaoAprovacao.PERMITIR_UMA_VEZ
+    else:
+        decisao = DecisaoAprovacao.NEGAR
     if str(decisao) in (DecisaoAprovacao.NEGAR.value, StatusAprovacao.NEGADA.value, "expirada"):
         return "O usuário não aprovou a criação do agente."
 

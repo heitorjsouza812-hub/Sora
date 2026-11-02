@@ -31,7 +31,7 @@ from app.eventos.tipos import (
     EtapaPlano as EtapaPlanoEvento,
 )
 from app.ferramentas.veredito import Veredito
-from app.llm.falso import criar_modelo_falso, modelo_falso_ativo, respostas_prontas
+from app.llm.falso import modelo_falso_ativo, respostas_prontas
 from app.modelos.enumeracoes import (
     AutorMensagem,
     Nivel,
@@ -71,19 +71,70 @@ def _chamada_da_ferramenta(papel: str, nome: str) -> dict[str, Any]:
     raise RuntimeError(f"o modelo falso de {papel} nao chamou {nome}")
 
 
+def _json_do_texto(texto: str) -> str:
+    """O trecho entre a primeira ``{`` e a ultima ``}`` (modelos costumam cercar o JSON)."""
+    inicio, fim = texto.find("{"), texto.rfind("}")
+    return texto[inicio : fim + 1] if inicio >= 0 and fim > inicio else texto
+
+
+async def _obter_plano(ctx: dict[str, Any], sessao: Any, cadeia: Cadeia) -> Plano:
+    """Chama o planejador (N3) pelo seletor; tenta os modelos em ordem ate um plano valido."""
+    from app.agentes.montagem import FERRAMENTAS_POR_PAPEL
+    from app.agentes.prompts import carregar_prompt, preencher
+    from app.orquestrador.modelos import modelos_do_papel
+
+    pedido = await sessao.scalar(select(Mensagem.conteudo).where(Mensagem.id == cadeia.pedido_id))
+    especialistas = "; ".join(
+        f"{papel}: {', '.join(ferramentas)}"
+        for papel, ferramentas in FERRAMENTAS_POR_PAPEL.items()
+        if papel not in {"sora", "individual"}
+    )
+    prompt = preencher(
+        carregar_prompt("planejador"),
+        pedido=pedido or "",
+        resumo_da_conversa="nenhum",
+        memorias_relevantes="nenhuma",
+        especialistas_e_ferramentas=especialistas,
+    )
+    modelos = await modelos_do_papel(
+        sessao, cadeia.usuario_id, "planejador", dificuldade=3, precisa=()
+    )
+    ultimo: Exception | None = None
+    for modelo in modelos:
+        try:
+            resposta = await modelo.ainvoke([HumanMessage(prompt)])
+            plano = Plano.model_validate_json(_json_do_texto(_conteudo_texto(resposta)))
+            validar_plano(plano, tem_modelo_de_imagem=False)
+            return plano
+        except Exception as erro:
+            ultimo = erro
+    raise RuntimeError(f"o planejador nao devolveu um plano valido: {ultimo}")
+
+
 async def planejar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
     """Chama o planejador (N3), grava o plano, cria as etapas e um especialista
     por papel; emite ``agente.criado`` e ``cadeia.criada``. Quem põe na fila: a API."""
-    if not modelo_falso_ativo():
-        raise RuntimeError("o caminho de modelo real depende da montagem do agente da Fase B")
     fabrica = ctx["sessoes"]
     async with fabrica() as sessao:
         cadeia = await sessao.get(Cadeia, _uuid(cadeia_id), with_for_update=True)
         if cadeia is None or cadeia.status != StatusCadeia.PLANEJANDO:
             return
-        resposta = await criar_modelo_falso("planejador").ainvoke([HumanMessage("planeje")])
-        plano = Plano.model_validate_json(_conteudo_texto(resposta))
-        validar_plano(plano, tem_modelo_de_imagem=False)
+        try:
+            plano = await _obter_plano(ctx, sessao, cadeia)
+        except Exception:
+            cadeia.status = StatusCadeia.FALHOU
+            await sessao.commit()
+            await _publicar(
+                ctx,
+                cadeia,
+                CadeiaAtualizada(
+                    cadeia_id=cadeia.id,
+                    status=cadeia.status,
+                    tokens_usados=cadeia.tokens_usados,
+                    custo_usd=_custo(cadeia),
+                ),
+            )
+            return
         nomes = set((await sessao.scalars(select(Agente.nome))).all())
         cores = set((await sessao.scalars(select(Agente.cor))).all())
         eventos_agentes: list[AgenteCriado] = []
@@ -216,14 +267,17 @@ async def avancar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
             await enfileirar("executar_etapa", etapa_id=id_etapa)
 
 
-def _modelos_da_etapa(ctx: dict[str, Any], papel: str) -> list[Any]:
+async def _modelos_da_etapa(
+    ctx: dict[str, Any], sessao: Any, usuario_id: UUID, papel: str, nivel: str = "N2"
+) -> list[Any]:
     """Modelos na ordem do seletor. ``ctx["modelos_da_etapa"]`` (teste) tem prioridade."""
+    from app.orquestrador.modelos import modelos_do_papel
+
     fabrica_de_modelos = ctx.get("modelos_da_etapa")
     if fabrica_de_modelos is not None:
         return list(fabrica_de_modelos(papel))
-    if modelo_falso_ativo():
-        return [criar_modelo_falso(papel)]
-    raise RuntimeError("a escolha de modelos reais da etapa ainda nao foi ligada ao seletor")
+    dificuldade = int(nivel[1]) if len(nivel) == 2 and nivel[1].isdigit() else 2
+    return await modelos_do_papel(sessao, usuario_id, papel, dificuldade=dificuldade)
 
 
 def valor_da_retomada(resposta: Any) -> Any:
@@ -337,13 +391,15 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
             cadeia_id=cadeia.id,
             etapa_id=etapa.id,
             valores_do_prompt=await _valores_do_prompt(sessao, etapa, cadeia),
-            ferramentas_extras=["perguntar"],
+            ferramentas_extras=list(ctx.get("ferramentas_extras", ["perguntar", "criar_agente"])),
             dependencias=dependencias_da_etapa(),
         )
         try:
             resultado = await montar_e_rodar_agente(
                 contexto=contexto,
-                modelos=_modelos_da_etapa(ctx, etapa.especialista),
+                modelos=await _modelos_da_etapa(
+                    ctx, sessao, cadeia.usuario_id, etapa.especialista, etapa.nivel
+                ),
                 checkpointer=ctx["checkpointer"],
                 entrada=None if retomada else {"messages": [HumanMessage(etapa.tarefa)]},
                 resposta=resposta,
@@ -464,11 +520,56 @@ async def executar_etapa(ctx: dict[str, Any], etapa_id: str, resposta: Any | Non
     await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
 
 
+async def _rodar_verificador(
+    ctx: dict[str, Any], sessao: Any, cadeia: Cadeia, verificador: Etapa
+) -> Veredito:
+    """Roda o Verificador como agente; a ferramenta ``veredito`` grava ``etapas.saida``."""
+    from app.agentes import ContextoAgente, montar_e_rodar_agente
+
+    pedido = await sessao.scalar(select(Mensagem.conteudo).where(Mensagem.id == cadeia.pedido_id))
+    entregas = (
+        await sessao.scalars(
+            select(Entrega).where(Entrega.cadeia_id == cadeia.id).order_by(Entrega.criada_em)
+        )
+    ).all()
+    requisitos = (cadeia.plano or {}).get("requisitos", [])
+    contexto = ContextoAgente(
+        usuario_id=cadeia.usuario_id,
+        agente_id=verificador.agente_id,
+        conversa_id=cadeia.conversa_id,
+        papel="verificador",
+        cadeia_id=cadeia.id,
+        etapa_id=verificador.id,
+        valores_do_prompt={
+            "pedido": pedido or "",
+            "requisitos": "\n".join(f"- {r}" for r in requisitos) or "nenhum",
+            "resultados": "\n".join(
+                f"- {e.titulo}: {e.resumo}\n  {str(e.conteudo)[:2000]}" for e in entregas
+            )
+            or "nenhum",
+        },
+        dependencias=dependencias_da_etapa(),
+    )
+    await montar_e_rodar_agente(
+        contexto=contexto,
+        modelos=await _modelos_da_etapa(
+            ctx, sessao, cadeia.usuario_id, "verificador", verificador.nivel
+        ),
+        checkpointer=ctx["checkpointer"],
+        entrada={"messages": [HumanMessage(verificador.tarefa)]},
+    )
+    await sessao.refresh(verificador)
+    bruto = (verificador.saida or {}).get("veredito")
+    if bruto is None:
+        raise RuntimeError("o Verificador terminou sem chamar veredito")
+    return Veredito.model_validate(bruto)
+
+
 async def verificar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
     """Roda o Verificador sobre o resultado e aplica a regra de reprovação.
     Quem põe na fila: ``avancar_cadeia``, quando todas as etapas terminam."""
-    if not modelo_falso_ativo():
-        raise RuntimeError("o caminho real depende da montagem do Verificador")
+    if ctx.get("checkpointer") is None and not modelo_falso_ativo():
+        raise RuntimeError("o caminho real exige o checkpointer no ctx do worker")
     fabrica = ctx["sessoes"]
     async with fabrica() as sessao:
         cadeia = await sessao.get(Cadeia, _uuid(cadeia_id), with_for_update=True)
@@ -496,10 +597,13 @@ async def verificar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
                 custo_usd=_custo(cadeia),
             ),
         )
-        args = _chamada_da_ferramenta("verificador", "veredito")
-        veredito = Veredito.model_validate(args)
+        if ctx.get("checkpointer") is not None:
+            veredito = await _rodar_verificador(ctx, sessao, cadeia, verificador)
+        else:
+            args = _chamada_da_ferramenta("verificador", "veredito")
+            veredito = Veredito.model_validate(args)
+            verificador.saida = veredito.model_dump(mode="json")
         cadeia.rodada += 1
-        verificador.saida = veredito.model_dump(mode="json")
         verificador.status = StatusEtapa.CONCLUIDA if veredito.aprovado else StatusEtapa.FALHOU
         await sessao.commit()
         await _publicar(
@@ -567,5 +671,110 @@ async def ajustar(
     ctx: dict[str, Any], conversa_id: str, texto: str, agente_id: str | None = None
 ) -> None:
     """Cria a cadeia ``versao + 1`` só com o especialista certo e o Verificador.
-    Quem põe na fila: a API, em ``POST /ajuste``."""
-    raise NotImplementedError
+    Quem põe na fila: a API, em ``POST /ajuste``. Sem ``agente_id``, o especialista é o da
+    última etapa de trabalho da versão anterior (a que produz o resultado final)."""
+    async with ctx["sessoes"]() as sessao:
+        anterior = await sessao.scalar(
+            select(Cadeia)
+            .where(Cadeia.conversa_id == _uuid(conversa_id))
+            .order_by(Cadeia.versao.desc())
+            .limit(1)
+        )
+        if anterior is None:
+            return
+        etapas = list(
+            (
+                await sessao.scalars(
+                    select(Etapa).where(Etapa.cadeia_id == anterior.id).order_by(Etapa.ordem)
+                )
+            ).all()
+        )
+        trabalho = [e for e in etapas if e.especialista != "verificador"]
+        verificacao = next((e for e in etapas if e.especialista == "verificador"), None)
+        if not trabalho or verificacao is None:
+            return
+        escolhida = next(
+            (e for e in trabalho if agente_id and str(e.agente_id) == agente_id), trabalho[-1]
+        )
+        entrega = await sessao.scalar(select(Entrega).where(Entrega.etapa_id == escolhida.id))
+        pedido = Mensagem(
+            conversa_id=anterior.conversa_id,
+            autor=AutorMensagem.USUARIO,
+            conteudo=texto,
+            anexos=[],
+            visivel=True,
+        )
+        sessao.add(pedido)
+        await sessao.flush()
+        nova = Cadeia(
+            usuario_id=anterior.usuario_id,
+            conversa_id=anterior.conversa_id,
+            pedido_id=pedido.id,
+            status=StatusCadeia.EXECUTANDO,
+            versao=anterior.versao + 1,
+            orcamento_tokens=anterior.orcamento_tokens,
+        )
+        sessao.add(nova)
+        await sessao.flush()
+        anteriores = f"{entrega.titulo}: {entrega.resumo}" if entrega else "(sem entrega)"
+        trabalhar = Etapa(
+            cadeia_id=nova.id,
+            ordem=1,
+            depende_de=[],
+            especialista=escolhida.especialista,
+            agente_id=escolhida.agente_id,
+            titulo=f"Ajustar: {texto[:50]}",
+            nivel=escolhida.nivel,
+            tarefa=(
+                f"O usuário pediu um ajuste: {texto}\n\nTarefa original: {escolhida.tarefa}\n"
+                f"Entrega anterior: {anteriores}"
+            ),
+            status=StatusEtapa.PENDENTE,
+        )
+        conferir = Etapa(
+            cadeia_id=nova.id,
+            ordem=2,
+            depende_de=[1],
+            especialista="verificador",
+            agente_id=verificacao.agente_id,
+            titulo=verificacao.titulo,
+            nivel=verificacao.nivel,
+            tarefa=verificacao.tarefa,
+            status=StatusEtapa.PENDENTE,
+        )
+        sessao.add_all([trabalhar, conferir])
+        await sessao.flush()
+        plano_anterior = anterior.plano or {}
+        nova.plano = {
+            "objetivo": plano_anterior.get("objetivo", texto),
+            "requisitos": [*plano_anterior.get("requisitos", []), f"Ajuste: {texto}"],
+            "etapas": [],
+        }
+        await sessao.commit()
+        eventos = [
+            EtapaPlanoEvento(
+                etapa_id=e.id,
+                ordem=e.ordem,
+                especialista=e.especialista,
+                agente_id=e.agente_id,
+                titulo=e.titulo,
+                nivel=Nivel(e.nivel),
+                depende_de=list(e.depende_de),
+            )
+            for e in (trabalhar, conferir)
+        ]
+        await _publicar(
+            ctx, nova, CadeiaCriada(cadeia_id=nova.id, versao=nova.versao, etapas=eventos)
+        )
+        await _publicar(
+            ctx,
+            nova,
+            CadeiaAtualizada(
+                cadeia_id=nova.id,
+                status=nova.status,
+                tokens_usados=nova.tokens_usados,
+                custo_usd=_custo(nova),
+            ),
+        )
+        nova_id = str(nova.id)
+    await enfileirar("avancar_cadeia", cadeia_id=nova_id)
