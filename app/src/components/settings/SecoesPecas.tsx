@@ -7,11 +7,16 @@ import { Button, Input, Textarea } from '../base';
 import './pecas.css';
 
 /** Lista carregada de uma rota, com recarregar e erro. */
-function useLista<T>(carregar: () => Promise<T[]>) {
+function useLista<T>(carregar: () => Promise<T[]>, atualizarACada = 0) {
   const [itens, setItens] = useState<T[] | null>(null);
   const [erro, setErro] = useState('');
   const recarregar = useCallback(() => carregar().then(l => { setItens(l); setErro(''); }).catch(e => { setErro(mensagemDeErro(e)); setItens(l => l ?? []); }), [carregar]);
-  useEffect(() => { void recarregar(); }, [recarregar]);
+  useEffect(() => {
+    void recarregar();
+    if (!atualizarACada) return;
+    const t = window.setInterval(() => { void recarregar(); }, atualizarACada);
+    return () => window.clearInterval(t);
+  }, [recarregar, atualizarACada]);
   return { itens, erro, recarregar };
 }
 
@@ -49,11 +54,19 @@ export function SecaoMemoria() {
   </Secao>;
 }
 
+/** Intervalo guardado em segundos ("86400") → "1 dia". */
+function intervaloLegivel(expressao: string | null): string {
+  const n = Number(expressao);
+  if (!expressao || !Number.isFinite(n) || n <= 0) return expressao ?? '';
+  const [v, un] = n % 86400 === 0 ? [n / 86400, 'dia'] : n % 3600 === 0 ? [n / 3600, 'hora'] : n % 60 === 0 ? [n / 60, 'minuto'] : [n, 'segundo'];
+  return `${v} ${un}${v === 1 ? '' : 's'}`;
+}
+
 const ROTULO_EXEC: Record<string, string> = { executando: 'Rodando', enviada: 'Enviada', silenciosa: 'Sem resposta', falhou: 'Falhou' };
 
 function Execucoes({ rotinaId }: { rotinaId: string }) {
   const carregar = useCallback(() => pecas.execucoesDaRotina(rotinaId), [rotinaId]);
-  const { itens, erro } = useLista(carregar);
+  const { itens, erro } = useLista(carregar, 5000);
   if (erro) return <Erro texto={erro} />;
   if (itens === null) return <p role="status">Carregando…</p>;
   if (!itens.length) return <p className="pc-vazio">Ainda não rodou.</p>;
@@ -61,7 +74,7 @@ function Execucoes({ rotinaId }: { rotinaId: string }) {
 }
 
 export function SecaoRotinas() {
-  const { itens, erro, recarregar } = useLista(pecas.listarRotinas);
+  const { itens, erro, recarregar } = useLista(pecas.listarRotinas, 5000);
   const acao = useAcao(recarregar);
   const [titulo, setTitulo] = useState(''); const [pedido, setPedido] = useState('');
   const [modo, setModo] = useState<'cron' | 'intervalo'>('intervalo'); const [cron, setCron] = useState('0 9 * * *'); const [aCada, setACada] = useState(1);
@@ -87,7 +100,7 @@ export function SecaoRotinas() {
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando rotinas…</p> : !itens.length ? <p className="pc-vazio">Nenhuma rotina ainda.</p> :
       <ul className="pc-lista">{itens.map(r => <li key={r.id} data-ativa={r.ativa}>
-        <span><strong>{r.titulo}</strong><p>{r.pedido}</p><small>{r.tipo === 'cron' ? `cron ${r.expressao}` : r.tipo === 'intervalo' ? `a cada ${r.expressao}` : 'uma vez'} · próxima: {quando(r.proxima_execucao)} · última: {quando(r.ultima_execucao)}{r.ultimo_status ? ` (${ROTULO_EXEC[r.ultimo_status] ?? r.ultimo_status})` : ''}{!r.ativa ? ' · pausada' : ''}</small>
+        <span><strong>{r.titulo}</strong><p>{r.pedido}</p><small>{r.tipo === 'cron' ? `cron ${r.expressao}` : r.tipo === 'intervalo' ? `a cada ${intervaloLegivel(r.expressao)}` : 'uma vez'} · próxima: {quando(r.proxima_execucao)} · última: {quando(r.ultima_execucao)}{r.ultimo_status ? ` (${ROTULO_EXEC[r.ultimo_status] ?? r.ultimo_status})` : ''}{!r.ativa ? ' · pausada' : ''}</small>
           {aberta === r.id && <Execucoes rotinaId={r.id} />}</span>
         <span className="pc-acoes">
           <Button tamanho="M" variante="secundario" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.alterarRotina(r.id, { ativa: !r.ativa }))}>{r.ativa ? 'Pausar' : 'Retomar'}</Button>
@@ -147,7 +160,7 @@ export function SecaoHabilidades() {
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando habilidades…</p> : !itens.length ? <p className="pc-vazio">Nenhuma habilidade ainda.</p> :
-      <ul className="pc-lista">{itens.map(h => <li key={h.id}><span><strong>/{h.nome}</strong><p>{h.descricao}</p><small>{h.origem} · atualizada {quando(h.atualizada_em)}</small></span>
+      <ul className="pc-lista">{itens.map(h => <li key={h.id}><span><strong>/{h.nome}</strong><p>{h.descricao}</p><small>{h.origem === 'usuario' ? 'Você' : h.origem} · atualizada {quando(h.atualizada_em)}</small></span>
         <Button tamanho="M" variante="perigo" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.apagarHabilidade(h.id))}>Apagar</Button></li>)}</ul>}
   </Secao>;
 }

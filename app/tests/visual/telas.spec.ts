@@ -51,12 +51,18 @@ for (const [rota, titulo] of [
   ['/agentes', 'Seus agentes'],
   ['/agentes/novo', 'Criar agente'],
   ['/configuracoes', 'Configurações'],
+  ['/canais', 'Canais de equipe'],
+  ['/configuracoes?secao=memoria', 'Nada guardado ainda.'],
+  ['/configuracoes?secao=rotinas', 'Nenhuma rotina ainda.'],
+  ['/configuracoes?secao=habilidades', 'Nenhuma habilidade ainda.'],
+  ['/configuracoes?secao=conectores', 'Nenhum conector ainda.'],
+  ['/configuracoes?secao=telegram', 'não está ligado'],
   ['/lab/ui', 'Componentes base'],
 ] as const) {
   test(`tela ${rota}`, async ({ page }) => {
     await page.goto(rota);
     await expect(page.getByText(titulo, { exact: false }).first()).toBeVisible();
-    await captura(page, `${rota.slice(1).replaceAll('/', '-')}.png`);
+    await captura(page, `${rota.slice(1).replace(/[^a-z0-9]+/gi, '-')}.png`);
   });
 }
 

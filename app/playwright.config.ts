@@ -9,7 +9,7 @@ export default defineConfig({
     },
   },
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: process.env.SORA_QA_BASE ?? 'http://localhost:5173',
     colorScheme: 'dark',
     reducedMotion: 'reduce',
   },

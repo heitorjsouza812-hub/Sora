@@ -1,0 +1,134 @@
+// Etapa 4 (passo 6): telas novas contra API + worker reais (modelo falso): Configurações (memória,
+// rotinas, habilidades, conectores, Telegram), Canais de equipe e o painel do agente (contexto/fila).
+// Uso: SORA_QA_BASE=http://localhost:5273 node qa/etapa4.mjs
+import assert from 'node:assert/strict';
+import { mkdir, readdir, rm } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from '@playwright/test';
+import { BASE, QA_SENHA, entrarNoContexto } from './entrar.mjs';
+
+const qaDir = dirname(fileURLToPath(import.meta.url));
+const shots = join(qaDir, 'shots');
+await mkdir(shots, { recursive: true });
+await Promise.all((await readdir(shots)).filter(a => a.startsWith('etapa4-') && a.endsWith('.png')).map(a => rm(join(shots, a))));
+
+const EMAIL = process.env.SORA_QA_ETAPA4_EMAIL ?? 'qa-etapa4@sora.local';
+const erros = [];
+const browser = await chromium.launch({ headless: true });
+let falha;
+try {
+  for (const [largura, altura] of [[1440, 900], [390, 844]]) {
+    const vp = `${largura}x${altura}`;
+    const contexto = await browser.newContext({ viewport: { width: largura, height: altura }, colorScheme: 'dark' });
+    await entrarNoContexto(contexto, { email: EMAIL });
+    const { request } = contexto;
+    const entrar = await (await request.post(`${BASE}/v1/auth/entrar`, { data: { email: EMAIL, senha: QA_SENHA } })).json();
+    const H = { Authorization: `Bearer ${entrar.token_acesso}` };
+    const api = async (metodo, caminho, data) => {
+      const r = await request.fetch(`${BASE}${caminho}`, { method: metodo, headers: H, data, failOnStatusCode: false });
+      if (r.status() >= 400) throw new Error(`${metodo} ${caminho} -> ${r.status()} ${await r.text()}`);
+      return r.status() === 204 ? null : r.json();
+    };
+    // limpa o que sobrou de rodadas anteriores
+    for (const c of await api('GET', '/v1/canais-equipe')) await api('POST', `/v1/canais-equipe/${c.canal_id}/arquivar`);
+    for (const m of await api('GET', '/v1/memorias')) await api('DELETE', `/v1/memorias/${m.id}`);
+    for (const r of await api('GET', '/v1/rotinas')) await api('DELETE', `/v1/rotinas/${r.id}`);
+    for (const h of await api('GET', '/v1/habilidades')) await api('DELETE', `/v1/habilidades/${h.id}`);
+    for (const a of await api('GET', '/v1/agentes')) if (a.tipo !== 'sora') await api('DELETE', `/v1/agentes/${a.id}`);
+
+    const mk = nome => api('POST', '/v1/agentes', { nome, funcao: 'Pesquisa', papel: `Você é ${nome}, especialista em pesquisa.`, cor: nome === 'Atlas' ? '#56A8FF' : '#46E8A8', movimento: 'vibracao', ferramentas: [] });
+    const atlas = await mk('Atlas'); const nina = await mk('Nina');
+    const canal = await api('POST', '/v1/canais-equipe', { nome: 'Lançamento', membros: [atlas.id, nina.id], lider_id: atlas.id });
+    const canalId = canal.canal_id;
+    await api('POST', `/v1/canais-equipe/${canalId}/mensagens`, { texto: 'Vamos montar o lançamento.' });
+    await api('POST', '/v1/memorias', { conteudo: 'A cafeteria fecha às segundas.' });
+    await api('POST', '/v1/rotinas', { titulo: 'Resumo da manhã', pedido: 'Resuma as novidades', daqui_segundos: 5 });
+    await api('POST', '/v1/rotinas', { titulo: 'Revisão semanal', pedido: 'Revise as pendências', a_cada: 1, unidade: 'dias' });
+
+    const page = await contexto.newPage();
+    // o 422 do segredo na memória é provocado de propósito (uma vez por viewport)
+    let esperado422 = 1;
+    page.on('console', m => {
+      if (m.type() !== 'error') return;
+      if (/status of 422/.test(m.text()) && esperado422-- > 0) return;
+      erros.push(`${vp} console: ${m.text()}`);
+    });
+    page.on('pageerror', e => erros.push(`${vp} pageerror: ${e.message}`));
+    const ver = async (nome) => page.screenshot({ path: join(shots, `etapa4-${nome}-${vp}.png`) });
+    const ir = async (rota) => { await page.goto(`${BASE}${rota}`, { waitUntil: 'domcontentloaded' }); };
+
+    // ── Memória ─────────────────────────────────────────────────────────────────────────
+    await ir('/configuracoes?secao=memoria');
+    await page.getByText('A cafeteria fecha às segundas.').waitFor({ timeout: 20_000 });
+    await page.getByLabel('Nova lembrança').fill('Moro em Curitiba.');
+    await page.getByRole('button', { name: 'Guardar' }).click();
+    await page.getByText('Moro em Curitiba.').waitFor({ timeout: 10_000 });
+    await ver('memoria');
+    await page.getByRole('button', { name: 'Esquecer' }).first().click();
+    await page.waitForFunction(() => document.querySelectorAll('.pc-lista > li').length === 1, null, { timeout: 10_000 });
+    // o servidor recusa segredo e a tela mostra o motivo
+    await page.getByLabel('Nova lembrança').fill('minha senha é hunter2 e a api_key=sk-abcdefghijklmnop');
+    await page.getByRole('button', { name: 'Guardar' }).click();
+    await page.getByRole('alert').first().waitFor({ timeout: 10_000 });
+
+    // ── Rotinas (a rotina de 5 s roda no worker) ────────────────────────────────────────
+    await ir('/configuracoes?secao=rotinas');
+    await page.locator('.pc-lista').getByText('Resumo da manhã').waitFor({ timeout: 20_000 });
+    const unica = page.locator('.pc-lista > li', { hasText: 'Resumo da manhã' });
+    await unica.getByRole('button', { name: 'Histórico' }).click();
+    await unica.locator('.pc-execs').getByText(/Enviada|Sem resposta/).waitFor({ timeout: 60_000 });
+    await ver('rotinas');
+    // a rotina de execução única se desativa depois de rodar; a recorrente pausa e retoma
+    await unica.getByText(/pausada/).waitFor({ timeout: 15_000 });
+    const semanal = page.locator('.pc-lista > li', { hasText: 'Revisão semanal' });
+    await semanal.getByRole('button', { name: 'Pausar' }).click();
+    await semanal.getByRole('button', { name: 'Retomar' }).waitFor({ timeout: 10_000 });
+    await semanal.getByRole('button', { name: 'Retomar' }).click();
+    await semanal.getByRole('button', { name: 'Pausar' }).waitFor({ timeout: 10_000 });
+
+    // ── Habilidades ─────────────────────────────────────────────────────────────────────
+    await ir('/configuracoes?secao=habilidades');
+    await page.getByLabel('Nome', { exact: true }).fill('resumo-curto');
+    await page.getByLabel('Para que serve').fill('Resume textos em três linhas.');
+    await page.getByLabel('Instruções').fill('1. Leia o texto.\n2. Resuma em três linhas.');
+    await page.getByRole('button', { name: 'Criar habilidade' }).click();
+    await page.getByText('/resumo-curto').waitFor({ timeout: 10_000 });
+    await ver('habilidades');
+
+    // ── Conectores e Telegram ───────────────────────────────────────────────────────────
+    await ir('/configuracoes?secao=conectores');
+    await page.getByText('Nenhum conector ainda.').waitFor({ timeout: 15_000 });
+    await ver('conectores');
+    await ir('/configuracoes?secao=telegram');
+    await page.getByText('O Telegram não está ligado neste servidor.').waitFor({ timeout: 15_000 });
+    await ver('telegram');
+
+    // ── Canais de equipe ────────────────────────────────────────────────────────────────
+    await ir('/canais');
+    await page.getByRole('button', { name: /Lançamento/ }).click();
+    await page.getByText('Vamos montar o lançamento.').waitFor({ timeout: 15_000 });
+    await page.getByLabel('Mensagem para o canal').fill('Atlas, pesquise concorrentes.');
+    await page.getByRole('button', { name: 'Enviar', exact: true }).click();
+    await page.getByText('Atlas, pesquise concorrentes.').waitFor({ timeout: 15_000 });
+    await ver('canais');
+    await page.getByRole('button', { name: 'Reagir com 👍' }).first().click();
+    await page.getByRole('button', { name: 'Reagir com 👍' }).first().filter({ hasText: '1' }).waitFor({ timeout: 10_000 });
+    await page.getByRole('button', { name: 'Apagar' }).first().click();
+    await page.getByRole('button', { name: 'Apagados' }).click();
+    await page.getByRole('button', { name: /Lançamento/ }).first().waitFor({ timeout: 10_000 });
+
+    // ── Painel do agente: contexto e fila ───────────────────────────────────────────────
+    await ir(`/chat/${atlas.id}`);
+    if (largura <= 600) await page.locator('.work-pill').click(); // no celular o painel abre numa folha
+    await page.getByRole('tab', { name: 'Perfil' }).click();
+    await page.getByLabel('Contexto').first().waitFor({ state: 'attached', timeout: 15_000 });
+    await ver('agente');
+
+    await contexto.close();
+  }
+} catch (e) { falha = e; }
+await browser.close();
+if (falha) { console.error(falha); process.exit(1); }
+assert.deepEqual(erros, [], `console deve ficar limpo:\n${erros.join('\n')}`);
+console.log('Etapa 4 aprovada: memória, rotinas (worker real), habilidades, conectores, Telegram, canais e painel do agente em 1440/390; console limpo.');

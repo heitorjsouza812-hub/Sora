@@ -40,3 +40,4 @@
 .eq-envio > :first-child { flex: 1; }
 .eq-vazio { display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--text-2, #8B93A3); }
 @media (max-width: 720px) { .eq-pagina { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .eq-pagina { padding-top: 40px; } }
