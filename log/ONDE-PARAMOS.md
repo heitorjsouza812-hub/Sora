@@ -1,5 +1,11 @@
 # Onde paramos
 
+## Etapa 3 — motor de ponta a ponta (concluída em 2026-11-02)
+
+- Conversa → plano → especialistas → etapas → entrega no worker, com pausa/retomada, perguntas, aprovações, orçamento, cancelamento e batimento; app ligado por REST + SSE, sem simulação; decisões de segurança do navegador aplicadas. Plano: `log/etapa3-motor.md`. Diário: `log/2026-11-02.md`.
+- Verde: backend 1130 passed / 2 skipped com integração, ruff, build, oxlint, npm test 130, e2e e ilha.
+- **Próximo:** etapa 4 / passo 6 (`log/etapa4-pecas.md`), em andamento no ramo `etapa4-pecas` (worktree `C:\dev\sora-e4`). Depois: teste com chave real, CSP do Tauri, instalador assinado.
+
 _Atualizado em 2026-11-01 — **navegador por árvore adaptado do agent-desktop** (refs conferidas, ações com verificação, esperas, lote) e, no mesmo dia, **peças inspiradas no OpenBot escritas do zero no backend** (contexto, filas, correio, canais de equipe, navegador persistente; migração 0005). Antes, 2026-10-17: **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; **etapa 2 (app ligado ao backend, login real, chaves fora do navegador) concluída**. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
 
 ## Navegador por árvore — agent-desktop (2026-11-01)

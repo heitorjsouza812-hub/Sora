@@ -27,10 +27,10 @@ export const alterarConector = (id: string, ativo: boolean) => api.patch<Conecto
 export const apagarConector = (id: string) => api.delete<void>(`/v1/conectores/${id}`);
 export const testarConector = (id: string) => api.post<{ ok: boolean; ferramentas: string[]; erro: string | null }>(`/v1/conectores/${id}/testar`);
 
-export interface Habilidade { id: string; nome: string; descricao: string; conteudo: string; origem: string; criada_em: string; atualizada_em: string }
+export interface Habilidade { id: string; nome: string; descricao: string; corpo: string; origem: string; criada_em: string; atualizada_em: string }
 export const listarHabilidades = () => api.get<Habilidade[]>('/v1/habilidades');
-export const criarHabilidade = (h: { nome: string; descricao: string; conteudo: string }) => api.post<Habilidade>('/v1/habilidades', h);
-export const alterarHabilidade = (id: string, h: { descricao?: string; conteudo?: string }) => api.patch<Habilidade>(`/v1/habilidades/${id}`, h);
+export const criarHabilidade = (h: { nome: string; descricao: string; corpo: string }) => api.post<Habilidade>('/v1/habilidades', h);
+export const alterarHabilidade = (id: string, h: { descricao?: string; corpo?: string }) => api.patch<Habilidade>(`/v1/habilidades/${id}`, h);
 export const apagarHabilidade = (id: string) => api.delete<void>(`/v1/habilidades/${id}`);
 
 export interface CanalExterno { canal: 'telegram'; disponivel: boolean; vinculos: { id: string; chat_id: string; criado_em: string }[] }

@@ -137,7 +137,7 @@ export function SecaoHabilidades() {
   const { itens, erro, recarregar } = useLista(pecas.listarHabilidades);
   const acao = useAcao(recarregar);
   const [nome, setNome] = useState(''); const [descricao, setDescricao] = useState(''); const [conteudo, setConteudo] = useState('');
-  const criar = async (ev: FormEvent) => { ev.preventDefault(); if (await acao.rodar(() => pecas.criarHabilidade({ nome: nome.trim(), descricao: descricao.trim(), conteudo }))) { setNome(''); setDescricao(''); setConteudo(''); } };
+  const criar = async (ev: FormEvent) => { ev.preventDefault(); if (await acao.rodar(() => pecas.criarHabilidade({ nome: nome.trim(), descricao: descricao.trim(), corpo: conteudo }))) { setNome(''); setDescricao(''); setConteudo(''); } };
   return <Secao titulo="Habilidades" texto="Instruções reutilizáveis. Digite /Nome numa conversa para usar uma habilidade, ou @Nome para chamá-la dentro de um pedido.">
     <form className="pc-form pc-form-coluna" onSubmit={ev => void criar(ev)}>
       <Input rotulo="Nome" value={nome} onChange={e => setNome(e.target.value)} maxLength={40} />

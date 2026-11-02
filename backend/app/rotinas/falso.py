@@ -5,23 +5,27 @@ Só para desenvolvimento e testes. O que o pedido da rotina contém decide o rot
 - ``[sem-novidades]``: responde ``SEM_RESPOSTA`` (a rotina fica em silêncio);
 - ``[usar:listar]``: chama ``listar_agendamentos`` (ferramenta segura) e relata o resultado;
 - ``[tentar:agendar]``: tenta ``agendar`` (proibida sem supervisão) e relata o que voltou;
+- ``[chamar:NOME|{json}]``: chama a ferramenta NOME com esses argumentos e relata o retorno;
 - ``[lembrar:texto]``: chama ``buscar_memoria`` com o texto;
 - qualquer outro: um resumo curto.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 _LEMBRAR = re.compile(r"\[lembrar:([^\]]+)\]")
+_CHAMAR = re.compile(r"\[chamar:([\w.-]+)\|(\{.*?\})\]")
 
 
 def _chamada(nome: str, argumentos: dict) -> AIMessage:
     return AIMessage(
-        content="", tool_calls=[{"name": nome, "args": argumentos, "id": f"call_{uuid4().hex[:12]}"}]
+        content="",
+        tool_calls=[{"name": nome, "args": argumentos, "id": f"call_{uuid4().hex[:12]}"}],
     )
 
 
@@ -36,10 +40,13 @@ def resposta_da_rotina(mensagens: list[BaseMessage]) -> AIMessage:
         return AIMessage(content=f"Agendamentos vistos: {resultados[-1].content}")
     if "[tentar:agendar]" in pedido:
         if not resultados:
-            return _chamada(
-                "agendar", {"titulo": "intruso", "pedido": "x", "daqui_minutos": 5}
-            )
+            return _chamada("agendar", {"titulo": "intruso", "pedido": "x", "daqui_minutos": 5})
         return AIMessage(content=f"Retorno do agendar: {resultados[-1].content}")
+    chamar = _CHAMAR.search(pedido)
+    if chamar:
+        if not resultados:
+            return _chamada(chamar.group(1), json.loads(chamar.group(2)))
+        return AIMessage(content=f"Retorno de {chamar.group(1)}: {resultados[-1].content}")
     achado = _LEMBRAR.search(pedido)
     if achado:
         if not resultados:
