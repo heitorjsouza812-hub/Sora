@@ -31,7 +31,6 @@ from app.correio.sql import ArmazemReacoesSQL
 from app.eventos.equipe import (
     AbaNavegadorEvento,
     CanalAtualizado,
-    ContextoAtualizado,
     FilaAtualizada,
     ItemFilaResumo,
     MensagemCanalEvento,
@@ -613,16 +612,6 @@ async def reagir(
 
 def _fora_do_escopo() -> None:
     raise HTTPException(501, "Esta peca sera ligada pelo dono do escopo nesta etapa.")
-
-
-@roteador.get("/agentes/{agente_id}/contexto")
-async def contexto_do_agente(agente_id: UUID) -> list[ContextoAtualizado]:
-    _fora_do_escopo()
-
-
-@roteador.post("/agentes/{agente_id}/contexto/compactar", status_code=202)
-async def compactar_agora(agente_id: UUID, fio: str = "principal") -> ContextoAtualizado:
-    _fora_do_escopo()
 
 
 @roteador.get("/navegador/abas")

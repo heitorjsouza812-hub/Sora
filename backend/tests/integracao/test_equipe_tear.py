@@ -117,3 +117,23 @@ async def test_tarefa_sobrevive_a_worker_parado(mundo: Mundo) -> None:  # noqa: 
             return bool(t) and all(x["status"] == "concluida" for x in t)
 
         await esperar(todas)
+
+
+async def test_compactar_recusa_com_item_na_fila(mundo: Mundo) -> None:  # noqa: F811
+    from app.filas import FilaAgente, OrigemItem
+    from app.filas.sql import ArmazemFilaSQL
+    from app.modelos.enumeracoes import TipoConversa
+    from app.modelos.tabelas import Conversa
+
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as c:
+        auth = await entrar(c, mundo.fabrica, "tear-d@exemplo.com")
+        (a,) = await _agentes(mundo, "tear-d@exemplo.com", 1)
+        async with mundo.fabrica() as sessao:
+            sessao.add(Conversa(usuario_id=a.usuario_id, agente_id=a.id, tipo=TipoConversa.CHAT))
+            await FilaAgente(ArmazemFilaSQL(sessao)).enfileirar(
+                usuario_id=a.usuario_id, agente_id=a.id, texto="x", origem=OrigemItem.USUARIO
+            )
+            await sessao.commit()
+        r = await c.post(f"/v1/agentes/{a.id}/contexto/compactar", headers=auth)
+        assert r.status_code == 409, r.text
+        assert "fila" in r.json()["detail"].lower()

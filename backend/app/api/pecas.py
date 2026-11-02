@@ -274,8 +274,12 @@ async def compactar_agora(
     estado = await ler(redis, agente_id, fio) or medir(
         agente_id, fio, janela=None, tokens_informados=0
     )
+    from app.filas import FilaAgente
+    from app.filas.sql import ArmazemFilaSQL
+
+    na_fila = await FilaAgente(ArmazemFilaSQL(sessao)).na_fila(agente_id)
     decisao = pedir_compactacao_manual(
-        estado, turno_rodando=await turno_rodando(redis, agente_id), itens_na_fila=0
+        estado, turno_rodando=await turno_rodando(redis, agente_id), itens_na_fila=na_fila
     )
     if decisao.decisao == "recusar":
         raise HTTPException(status.HTTP_409_CONFLICT, decisao.motivo)
