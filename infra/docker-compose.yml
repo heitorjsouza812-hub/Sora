@@ -121,6 +121,12 @@ services:
     mem_limit: 128m
     cpus: 0.5
     networks: [navegador_isolada, navegador_saida]
+    extra_hosts:  # nomes só da prova: resolvem para IP interno (DNS rebinding)
+      - "rebind-privado.teste:10.0.0.5"
+      - "rebind-nuvem.teste:169.254.169.254"
+      - "rebind-cgnat.teste:100.100.100.200"
+      - "rebind-misto.teste:93.184.216.34"
+      - "rebind-misto.teste:10.0.0.5"
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 3128), 2).close()"]
       interval: 5s

@@ -12,15 +12,14 @@ PRAZO = 20
 
 
 def _publico(texto: str) -> bool:
-    ip = ipaddress.ip_address(texto)
-    return not (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    )
+    """Só IP globalmente roteável passa (recusa 100.64.0.0/10, metadados da Alibaba etc.)."""
+    ip = ipaddress.ip_address(texto.split("%", 1)[0])
+    if ip.version == 6:
+        if ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        elif ip.sixtofour is not None or ip.teredo is not None:
+            return False
+    return ip.is_global and not (ip.is_multicast or ip.is_loopback or ip.is_link_local)
 
 
 async def _resolver(host: str, porta: int) -> list[tuple[int, str]]:

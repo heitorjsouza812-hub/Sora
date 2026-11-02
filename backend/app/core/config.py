@@ -164,6 +164,7 @@ class Configuracao(BaseSettings):
             raise ValueError("JWT_SEGREDO parece um valor de exemplo; gere um aleatório.")
         if any(_HOST_LOCAL.match(origem) for origem in self._origens_informadas()):
             raise ValueError("CORS_ORIGENS não pode ter localhost em produção.")
+        _ = self.endpoint_navegador  # produção sem NAVEGADOR_CDP_URL falha já na inicialização
         return self
 
     def chaveiro(self) -> dict[int, bytes]:

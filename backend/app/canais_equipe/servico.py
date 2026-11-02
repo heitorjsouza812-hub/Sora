@@ -9,7 +9,7 @@ from __future__ import annotations
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -107,8 +107,21 @@ class Mudancas:
     rota: Rota | None = None
 
 
+_ultimo_instante: datetime | None = None
+
+
 def _agora() -> datetime:
-    return datetime.now(UTC)
+    """Relógio estritamente crescente no processo.
+
+    ``fim_do_turno`` compara ``atualizada_em`` para saber o que aconteceu durante o turno; o
+    relógio do Windows repete o mesmo instante em chamadas seguidas e quebrava essa ordem.
+    """
+    global _ultimo_instante
+    agora = datetime.now(UTC)
+    if _ultimo_instante is not None and agora <= _ultimo_instante:
+        agora = _ultimo_instante + timedelta(microseconds=1)
+    _ultimo_instante = agora
+    return agora
 
 
 class ServicoCanais:

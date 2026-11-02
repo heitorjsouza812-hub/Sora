@@ -890,3 +890,27 @@ def test_val01_docker_parado_pula_a_integracao(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(docker, "from_env", sem_daemon)
     disponivel, motivo = docker_disponivel()
     assert not disponivel and "não está respondendo" in motivo
+
+
+def test_api09_producao_sem_cdp_falha_ja_na_inicializacao(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AMBIENTE", "producao")
+    monkeypatch.delenv("NAVEGADOR_CDP_URL", raising=False)
+    monkeypatch.setenv("JWT_SEGREDO", "x" * 64)
+    with pytest.raises(ValueError, match="NAVEGADOR_CDP_URL"):
+        Configuracao(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_api09_boot_real_do_worker_em_producao_sem_cdp_nao_sobe() -> None:
+    import os
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if k != "NAVEGADOR_CDP_URL"}
+    env["AMBIENTE"] = "producao"
+    env["JWT_SEGREDO"] = "s" * 64
+    codigo = "from app.core.config import obter_configuracao; obter_configuracao()"
+    saida = subprocess.run(
+        [sys.executable, "-c", codigo], env=env, capture_output=True, text=True, timeout=60
+    )
+    assert saida.returncode != 0
+    assert "NAVEGADOR_CDP_URL" in saida.stderr

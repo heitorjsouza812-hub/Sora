@@ -54,3 +54,45 @@ for caminho in ("/json/version", "/json/version/"):
     if "ws://navegador:9223/devtools/" not in ws:
         raise SystemExit(f"FALHA: a ponte do CDP não reescreveu o WebSocket em {caminho}")
 print("OK ponte CDP reescreve o WebSocket (com e sem barra final)")
+
+
+def recusa_por_politica(alvo: str) -> None:
+    """403 'Destino recusado' = o proxy resolveu, viu IP não público e recusou (não é falha de rede)."""
+    for esquema in ("http", "ws"):
+        with socket.create_connection(
+            (urllib.parse.urlsplit(PROXY).hostname, urllib.parse.urlsplit(PROXY).port), timeout=8
+        ) as conexao:
+            extra = (
+                "Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: c29yYS1wcm92YQ==\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                if esquema == "ws"
+                else ""
+            )
+            conexao.sendall(
+                f"GET {esquema}://{alvo}/ HTTP/1.1\r\nHost: {alvo}\r\n{extra}\r\n".encode()
+            )
+            status = conexao.recv(256).split(b"\r\n", 1)[0]
+        if b" 403 " not in status:
+            raise SystemExit(f"FALHA: {esquema}://{alvo} não foi recusado por política: {status!r}")
+    print(f"OK recusa por política (IP resolvido): {alvo}")
+
+
+# IP literal: CGNAT/Alibaba, RFC1918, loopback, link-local, IPv6 e IPv4 mapeado em IPv6.
+for ip in (
+    "100.100.100.200",
+    "100.64.0.1",
+    "10.0.0.5",
+    "192.168.1.1",
+    "172.16.0.1",
+    "127.0.0.1",
+    "169.254.169.254",
+    "[::1]",
+    "[fd00::1]",
+    "[::ffff:10.0.0.5]",
+    "[::ffff:100.100.100.200]",
+):
+    recusa_por_politica(ip)
+
+# DNS rebinding: nomes que o proxy resolve para IP interno (extra_hosts do proxy-egresso).
+for nome in ("rebind-privado.teste", "rebind-nuvem.teste", "rebind-cgnat.teste", "rebind-misto.teste"):
+    recusa_por_politica(nome)
