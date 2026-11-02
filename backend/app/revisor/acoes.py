@@ -46,8 +46,35 @@ def exige_revisao(ferramenta: str) -> bool:
 async def regra_permite(
     sessao: AsyncSession, usuario_id: UUID, agente_id: UUID, acao: AcaoProposta
 ) -> bool:
-    """True se uma ``regras_permissao`` "sempre permitir" casa com a ação."""
-    raise NotImplementedError
+    """True se uma regra "sempre permitir" do usuário casa com a ação.
+
+    Vale para o agente da regra (ou todos, se ``agente_id`` é nulo) e a mesma ferramenta. Uma
+    ``condicao`` não vazia exige cada par chave/valor igual nos argumentos (condição ilegível =
+    não casa). Ferramenta de cartão fixo nunca é liberada por regra.
+    """
+    from sqlalchemy import or_, select
+
+    from app.modelos.tabelas import RegraPermissao
+    from app.revisor.politica import Politica, politica_da_ferramenta
+
+    if politica_da_ferramenta(acao.ferramenta) is Politica.CARTAO_FIXO:
+        return False
+    regras = (
+        await sessao.scalars(
+            select(RegraPermissao).where(
+                RegraPermissao.usuario_id == usuario_id,
+                RegraPermissao.ferramenta == acao.ferramenta,
+                or_(RegraPermissao.agente_id.is_(None), RegraPermissao.agente_id == agente_id),
+            )
+        )
+    ).all()
+    for regra in regras:
+        condicao = regra.condicao
+        if isinstance(condicao, dict) and all(
+            acao.argumentos.get(chave) == valor for chave, valor in condicao.items()
+        ):
+            return True
+    return False
 
 
 async def revisar_acao(
@@ -58,8 +85,22 @@ async def revisar_acao(
     pedidos_do_usuario: list[str],
 ) -> AvaliacaoRevisor:
     """Chama o modelo revisor (papel ``revisor``) e valida a saída. Qualquer erro ou JSON
-    inválido é tratado como BLOQUEAR (falha fechada)."""
-    raise NotImplementedError
+    inválido é tratado como BLOQUEAR (falha fechada).
+
+    Quem roda o juiz no worker é ``app/revisor/execucao.py`` (``conferir_acao``); esta função é
+    a decisão sem modelo: regra do usuário libera, o resto bloqueia.
+    """
+    from app.revisor.esquemas import Dano, DecisaoRevisor, Destino
+    from app.revisor.juiz import bloqueio
+
+    if await regra_permite(sessao, usuario_id, agente_id, acao):
+        return AvaliacaoRevisor(
+            dano=Dano.NENHUM,
+            destino=Destino.CONFIAVEL,
+            decisao=DecisaoRevisor.PERMITIR,
+            motivo="Uma regra sua permite esta ação.",
+        )
+    return bloqueio("Sem modelo revisor neste contexto; a decisão fica com você.")
 
 
 async def registrar_acao(
@@ -72,4 +113,17 @@ async def registrar_acao(
     aprovacao_id: UUID | None,
 ) -> None:
     """Grava em ``registro_acoes`` todo efeito externo (data, agente e motivo)."""
-    raise NotImplementedError
+    from app.core.redacao import limpar_texto_sensivel
+    from app.modelos.tabelas import RegistroAcao
+
+    sessao.add(
+        RegistroAcao(
+            usuario_id=usuario_id,
+            agente_id=agente_id,
+            etapa_id=etapa_id,
+            ferramenta=acao.ferramenta,
+            resumo=limpar_texto_sensivel(resumo)[:500],
+            aprovacao_id=aprovacao_id,
+        )
+    )
+    await sessao.flush()

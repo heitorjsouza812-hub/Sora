@@ -95,8 +95,16 @@ class ContextoAgente:
 
 def nomes_das_ferramentas(contexto: ContextoAgente) -> list[str]:
     """Ferramentas do papel seguidas das extras, sem repetição."""
+    from app.agentes.ancora import ferramentas_do_papel
+
     return list(
-        dict.fromkeys((*FERRAMENTAS_POR_PAPEL[contexto.papel], *contexto.ferramentas_extras))
+        dict.fromkeys(
+            (
+                *FERRAMENTAS_POR_PAPEL[contexto.papel],
+                *ferramentas_do_papel(contexto.papel),
+                *contexto.ferramentas_extras,
+            )
+        )
     )
 
 
@@ -129,6 +137,17 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
         trecho = carregar_prompt(f"especialista_{contexto.papel}")
         prompt = preencher(carregar_prompt("especialista_comum"), trecho_do_papel=trecho, **valores)
     return f"{prompt}\n\n{montar_instrucoes(nomes_das_ferramentas(contexto))}"
+
+
+async def _prompt_do_turno(contexto: ContextoAgente) -> str:
+    """Prompt do papel + instruções próprias, memórias, pendências, habilidades e colegas."""
+    from app.agentes.ancora import blocos_do_turno
+
+    base = montar_prompt_de_sistema(contexto)
+    extras = await blocos_do_turno(contexto)
+    return f"{base}
+
+{extras}" if extras else base
 
 
 async def montar_agente(
@@ -174,7 +193,7 @@ async def montar_agente(
     return create_agent(
         model=modelos[0],
         tools=ferramentas,
-        system_prompt=montar_prompt_de_sistema(contexto),
+        system_prompt=await _prompt_do_turno(contexto),
         middleware=montar_middleware(contexto, modelos),
         checkpointer=checkpointer,
         name=f"sora_{contexto.papel}",

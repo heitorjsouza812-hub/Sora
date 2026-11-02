@@ -77,6 +77,36 @@ def montar_middleware(
                 finalizar=deps.finalizar_passo,
             )
         )
+    # Âncora (etapa 4): aprovação por ferramenta e medidor/compactação do contexto.
+    from app.agentes.middleware.contexto import MiddlewareContexto
+    from app.agentes.middleware.revisor import MiddlewareRevisor
+    from app.contexto.porta import PortaContexto
+    from app.ferramentas import ambiente
+    from app.ferramentas.base import ContextoFerramenta
+
+    itens.append(
+        MiddlewareRevisor(
+            ContextoFerramenta(
+                usuario_id=contexto.usuario_id,
+                agente_id=contexto.agente_id,
+                conversa_id=contexto.conversa_id,
+                cadeia_id=contexto.cadeia_id,
+                etapa_id=contexto.etapa_id,
+                sem_supervisao=contexto.sem_supervisao,
+            )
+        )
+    )
+    if contexto.etapa_id is None and contexto.thread_proprio is None:
+        itens.append(
+            MiddlewareContexto(
+                PortaContexto(
+                    redis=ambiente.redis_dos_eventos(),
+                    usuario_id=contexto.usuario_id,
+                    conversa_id=contexto.conversa_id,
+                    agente_id=contexto.agente_id,
+                )
+            )
+        )
     if contexto.etapa_id is not None and deps.ler_mensagens_pendentes is not None:
         from app.agentes.middleware.mensagens import MiddlewareMensagensPendentes
 
