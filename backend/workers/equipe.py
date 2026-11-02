@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage
 from sqlalchemy import select
 
 from app.canais_equipe.contexto import montar_pacote
+from app.canais_equipe.modelos import ErroCanal
 from app.canais_equipe.roteamento import DecisaoLider, Membro, conferir_decisao
 from app.canais_equipe.servico import Mudancas, ServicoCanais
 from app.canais_equipe.sql import ArmazemCanaisSQL
@@ -184,8 +185,14 @@ async def _executar_tarefa(ctx: dict[str, Any], tarefa_id: UUID) -> None:
     async with ctx["sessoes"]() as sessao:
         armazem = ArmazemCanaisSQL(sessao)
         servico = ServicoCanais(armazem)
-        async with armazem.transacao_tarefa(tarefa_id):
-            tarefa = await servico.iniciar(tarefa_id)
+        try:
+            async with armazem.transacao_tarefa(tarefa_id):
+                tarefa = await servico.iniciar(tarefa_id)
+        except ErroCanal as erro:
+            # Arquivada, cancelada ou parada depois de entrar na fila do ARQ: não há o que
+            # fazer, e levantar faria o ARQ tentar de novo.
+            registro.info("tarefa de canal %s ignorada: %s", tarefa_id, erro)
+            return
         canal = await servico.canal(tarefa.canal_id)
         membros = await _membros(sessao, canal.usuario_id, canal.membros)
         mensagens = await armazem.mensagens(canal.id)

@@ -137,3 +137,61 @@ async def test_compactar_recusa_com_item_na_fila(mundo: Mundo) -> None:  # noqa:
         r = await c.post(f"/v1/agentes/{a.id}/contexto/compactar", headers=auth)
         assert r.status_code == 409, r.text
         assert "fila" in r.json()["detail"].lower()
+
+
+@pytest.mark.parametrize("como", ["arquivar", "cancelar"])
+async def test_job_de_tarefa_que_nao_espera_mais_sai_limpo(mundo: Mundo, como: str) -> None:  # noqa: F811
+    """Canal arquivado/tarefa cancelada com o job já na fila do ARQ: o job termina com
+    sucesso (sem exceção, logo sem retry) e a tarefa continua como o usuário deixou."""
+    from arq.jobs import Job
+
+    from workers.fila import enfileirar, obter_fila
+
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as c:
+        auth = await entrar(c, mundo.fabrica, f"tear-e-{como}@exemplo.com")
+        a, b = await _agentes(mundo, f"tear-e-{como}@exemplo.com")
+        canal = (
+            await c.post(
+                "/v1/canais-equipe",
+                headers=auth,
+                json={"nome": "Cancelavel", "membros": [str(a.id), str(b.id)]},
+            )
+        ).json()
+        cid = canal["canal_id"]
+        r = await c.post(
+            f"/v1/canais-equipe/{cid}/mensagens",
+            headers=auth,
+            json={"texto": "Vai ser cancelada.", "destinatario": str(a.id)},
+        )
+        assert r.status_code == 202
+        tarefa = (await c.get(f"/v1/canais-equipe/{cid}/tarefas", headers=auth)).json()[0]
+        if como == "arquivar":
+            r = await c.post(f"/v1/canais-equipe/{cid}/arquivar", headers=auth)
+        else:
+            tid = tarefa["tarefa_id"]
+            await c.post(f"/v1/tarefas-canal/{tid}/parar", headers=auth)
+            r = await c.post(f"/v1/tarefas-canal/{tid}/cancelar", headers=auth)
+        assert r.status_code in (200, 204), r.text
+        antes = next(
+            t
+            for t in (await c.get(f"/v1/canais-equipe/{cid}/tarefas", headers=auth)).json()
+            if t["tarefa_id"] == tarefa["tarefa_id"]
+        )["status"]
+        assert antes != "na_fila"
+
+        job_id = f"tear-ignorada-{como}"
+        await enfileirar("executar_tarefa_canal", id_job=job_id, tarefa_id=tarefa["tarefa_id"])
+        await mundo.iniciar_worker()
+        job = Job(job_id, await obter_fila())
+
+        async def terminou():
+            return await job.result_info()
+
+        info = await esperar(terminou)
+        assert info.success is True, info.result
+        depois = next(
+            t
+            for t in (await c.get(f"/v1/canais-equipe/{cid}/tarefas", headers=auth)).json()
+            if t["tarefa_id"] == tarefa["tarefa_id"]
+        )["status"]
+        assert depois == antes
