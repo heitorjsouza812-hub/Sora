@@ -12,6 +12,7 @@ export interface OpcoesEventos {
   ultimoId?: string;
   aoEvento: (evento: EventoSse) => void;
   aoErro?: (erro: unknown) => void;
+  aoConectar?: () => void;
 }
 
 function separarEventos(buffer: string): { blocos: string[]; resto: string } {
@@ -60,6 +61,7 @@ export async function acompanharEventos(caminho: string, opcoes: OpcoesEventos):
         signal: opcoes.signal,
       });
       if (!resposta.body) throw new Error('O servidor não abriu o canal de eventos.');
+      opcoes.aoConectar?.();
       tentativa = 0;
       const leitor = resposta.body.getReader();
       const decoder = new TextDecoder();

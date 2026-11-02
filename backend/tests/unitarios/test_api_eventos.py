@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sse_starlette.sse import EventSourceResponse
+from starlette.requests import Request
 
 from app.api import eventos as rotas
 from app.core.banco import obter_sessao
@@ -20,6 +21,13 @@ from app.main import criar_aplicacao
 
 USUARIO = UUID("12121212-1212-4121-8121-121212121212")
 CONVERSA = UUID("11111111-1111-4111-8111-111111111111")
+
+
+def requisicao() -> Request:
+    async def receber() -> dict[str, str]:
+        return {"type": "http.request"}
+
+    return Request({"type": "http", "method": "GET", "path": "/", "headers": []}, receber)
 
 
 class SessaoFalsa:
@@ -54,7 +62,9 @@ async def test_conversa_do_usuario_filtra_por_usuario() -> None:
 
 async def test_conversa_de_outro_usuario_da_404(redis: fakeredis.FakeAsyncRedis) -> None:
     with pytest.raises(HTTPException) as erro:
-        await rotas.eventos_da_conversa(CONVERSA, USUARIO, SessaoFalsa(dona=False), redis)  # type: ignore[arg-type]
+        await rotas.eventos_da_conversa(
+            requisicao(), CONVERSA, USUARIO, SessaoFalsa(dona=False), redis
+        )  # type: ignore[arg-type]
     assert erro.value.status_code == 404
 
 
@@ -82,6 +92,7 @@ async def test_rota_da_conversa_retoma_do_last_event_id(
         for i in range(3)
     ]
     resposta = await rotas.eventos_da_conversa(
+        requisicao(),
         CONVERSA,
         USUARIO,
         SessaoFalsa(dona=True),  # type: ignore[arg-type]
@@ -106,7 +117,7 @@ async def test_rota_do_usuario_le_o_canal_do_usuario(redis: fakeredis.FakeAsyncR
     await publicar_evento(redis, SugestoesEvento(itens=["fora"]), CONVERSA, USUARIO)
     await publicar_evento(redis, etapa, CONVERSA, USUARIO)
 
-    resposta = await rotas.eventos_do_usuario(USUARIO, redis, ultimo_evento_id="0-0")
+    resposta = await rotas.eventos_do_usuario(requisicao(), USUARIO, redis, ultimo_evento_id="0-0")
     corpo = resposta.body_iterator
     primeira = await anext(corpo)  # type: ignore[call-overload]
     await corpo.aclose()  # type: ignore[union-attr]

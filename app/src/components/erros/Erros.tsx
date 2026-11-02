@@ -1,5 +1,6 @@
 // Estados de erro projetados (item 47): sem conexão, modelo falhou, plugin desconectado, créditos.
 import { Link } from 'react-router-dom';
+import { useProjetos } from '../../state/projetos';
 import { Button } from '../base';
 import { SoraOrb } from '../mascot';
 import { useConexao } from './estado';
@@ -19,6 +20,18 @@ export function FaixaSemConexao() {
       <span className="err-faixa__ponto" aria-hidden="true" />
       <p><strong>Sem conexão.</strong> Seus agentes pausaram; nada se perde. Assim que a internet voltar, a Sora continua.</p>
       <Button tamanho="P" variante="secundario" onClick={tentarDeNovo}>Tentar de novo</Button>
+    </div>
+  );
+}
+
+/** Aviso visível quando o canal ao vivo foi recusado ou interrompido; some ao reconectar. */
+export function FaixaErroEventos() {
+  const erro = useProjetos().erroEventos;
+  if (!erro) return null;
+  return (
+    <div className="err-faixa" role="alert">
+      <span className="err-faixa__ponto" aria-hidden="true" />
+      <p><strong>Atualizações ao vivo pausadas.</strong> {erro}</p>
     </div>
   );
 }

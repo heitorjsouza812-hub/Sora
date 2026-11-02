@@ -8,7 +8,7 @@ import { BottomSheet } from '../overlay';
 import { GestaoHost } from '../gestao';
 import { Comandos } from '../comandos';
 import { Ilha } from '../ilha';
-import { FaixaSemConexao } from '../erros';
+import { FaixaErroEventos, FaixaSemConexao } from '../erros';
 import { EditorAgenteHost, MenuAgente } from '../builder';
 import { ContaRodape, Navegacao, Sidebar } from './Sidebar';
 import { statusDaSora } from './useSoraStatus';
@@ -77,6 +77,7 @@ export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppSh
           {(acoes || share) && <div className="topbar-actions">{acoes}{share && <Compartilhar />}</div>}
         </header>
         <FaixaSemConexao />
+        <FaixaErroEventos />
         {children}
       </section>
       <BottomSheet open={menu} onClose={() => setMenu(false)} title="Menu" className="mobile-nav-sheet">

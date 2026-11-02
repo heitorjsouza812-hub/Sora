@@ -32,7 +32,7 @@ vi.mock('../../creditos', () => ({ IndicadorCreditos: () => null }));
 vi.mock('../../gestao', () => ({ GestaoHost: () => null, pedirApagar: vi.fn(), pedirRenomear: vi.fn() }));
 vi.mock('../../comandos', () => ({ Comandos: () => null }));
 vi.mock('../../ilha', () => ({ Ilha: () => null }));
-vi.mock('../../erros', () => ({ FaixaSemConexao: () => null }));
+vi.mock('../../erros', () => ({ FaixaErroEventos: () => null, FaixaSemConexao: () => null }));
 vi.mock('../../builder', () => ({ EditorAgenteHost: () => null, MenuAgente: () => null }));
 vi.mock('../useSoraStatus', () => ({ statusDaSora: () => ({ orb: 'idle', pulso: 0, rotulo: 'Disponível' }), statusCurto: vi.fn() }));
 

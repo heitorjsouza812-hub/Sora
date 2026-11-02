@@ -20,8 +20,8 @@ from app.eventos.streams import EventoLido, ler_eventos
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
-INTERVALO_PING_SEGUNDOS = 15
-BLOQUEIO_XREAD_MS = 5_000
+INTERVALO_PING_SEGUNDOS = 5
+BLOQUEIO_XREAD_MS = 1_000
 """Quanto cada ``XREAD`` espera antes de tentar de novo (não muda nada para o app)."""
 
 
@@ -47,6 +47,7 @@ async def gerar_sse(
     bloquear_ms: int = BLOQUEIO_XREAD_MS,
     expira_em: float | None = None,
     a_cada_volta: Callable[[], Awaitable[None]] | None = None,
+    desconectou: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Gera as mensagens SSE do canal, retomando do ``Last-Event-ID``.
 
@@ -56,6 +57,8 @@ async def gerar_sse(
     conexão (limite por usuário).
     """
     async for evento in ler_eventos(redis, canal, ultimo_evento_id, bloquear_ms=bloquear_ms):
+        if desconectou is not None and await desconectou():
+            return
         if expira_em is not None and time.time() >= expira_em:
             return
         if a_cada_volta is not None:

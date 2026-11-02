@@ -64,6 +64,7 @@ def validade_do_token(requisicao: Request) -> float | None:
 
 
 async def _transmitir(
+    requisicao: Request,
     redis: Redis,
     canal: str,
     ultimo_evento_id: str | None,
@@ -93,7 +94,12 @@ async def _transmitir(
     async def fluxo() -> AsyncIterator[dict[str, Any]]:
         try:
             async for mensagem in gerar_sse(
-                redis, canal, ultimo_evento_id, expira_em=expira_em, a_cada_volta=renovar
+                redis,
+                canal,
+                ultimo_evento_id,
+                expira_em=expira_em,
+                a_cada_volta=renovar,
+                desconectou=requisicao.is_disconnected,
             ):
                 yield mensagem
         finally:
@@ -113,6 +119,7 @@ async def _transmitir(
     responses=RESPOSTA_SSE,
 )
 async def eventos_da_conversa(
+    requisicao: Request,
     conversa_id: UUID,
     usuario_id: Annotated[UUID, Depends(usuario_atual)],
     # scope="function": a sessão (e a conexão do pool) fecha antes do stream começar; com o
@@ -126,12 +133,13 @@ async def eventos_da_conversa(
     if not await conversa_do_usuario(sessao, conversa_id, usuario_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversa não encontrada.")
     return await _transmitir(
-        redis, canal_conversa(conversa_id), ultimo_evento_id, usuario_id, expira_em
+        requisicao, redis, canal_conversa(conversa_id), ultimo_evento_id, usuario_id, expira_em
     )
 
 
 @roteador.get("/eventos", response_class=EventSourceResponse, responses=RESPOSTA_SSE)
 async def eventos_do_usuario(
+    requisicao: Request,
     usuario_id: Annotated[UUID, Depends(usuario_atual)],
     redis: Annotated[Redis, Depends(obter_redis)],
     ultimo_evento_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
@@ -139,5 +147,5 @@ async def eventos_do_usuario(
 ) -> EventSourceResponse:
     """Transmite eventos de estado para a Ilha e a barra lateral."""
     return await _transmitir(
-        redis, canal_usuario(usuario_id), ultimo_evento_id, usuario_id, expira_em
+        requisicao, redis, canal_usuario(usuario_id), ultimo_evento_id, usuario_id, expira_em
     )

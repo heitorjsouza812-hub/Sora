@@ -30,4 +30,25 @@ describe('acompanharEventos', () => {
     expect(recebidos).toEqual(['mensagem.fim']);
     expect(erros).toEqual([]);
   });
+
+  it('avisa o 429 e limpa o aviso quando o canal reconecta', async () => {
+    vi.useFakeTimers();
+    buscarAutenticado
+      .mockRejectedValueOnce(new ErroApi(429, 'Conexões de eventos demais abertas.'))
+      .mockResolvedValueOnce(fluxo('event: ping\ndata: {}\n\n'));
+    const controlador = new AbortController();
+    const erros: string[] = [];
+    let conectou = 0;
+    const tarefa = acompanharEventos('/v1/eventos', {
+      signal: controlador.signal,
+      aoEvento: () => {},
+      aoErro: e => erros.push((e as Error).message),
+      aoConectar: () => { conectou += 1; controlador.abort(); },
+    });
+    await vi.runAllTimersAsync();
+    await tarefa;
+    expect(erros).toEqual(['Conexões de eventos demais abertas.']);
+    expect(conectou).toBe(1);
+    vi.useRealTimers();
+  });
 });

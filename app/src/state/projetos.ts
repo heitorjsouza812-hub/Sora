@@ -44,6 +44,7 @@ export interface SoraPerfil { nome: string; cor: string }
 export interface EstadoProjetos {
   versao: 2; sora: SoraPerfil; agentes: Record<string, AgenteSora>; projetos: ProjetoSora[]; projetoAtivoId: string | null;
   execucoes: Execucao[]; mensagens: MensagemChat[]; pluginsConectados: string[]; carregando: boolean; erro?: string;
+  erroEventos?: string;
   pendencias?: Pendencia[];
 }
 /** Algo que a equipe espera do usuário: pergunta (inclui o orçamento estourado: Continuar/Parar) ou aprovação. */
@@ -97,7 +98,7 @@ const controladoresConversa = new Map<string, AbortController>();
 let iniciando: Promise<void> | null = null;
 
 function receber(evento: EventoSse) {
-  alterar(e => aplicarEvento(e, evento));
+  alterar(e => ({ ...aplicarEvento(e, evento), erroEventos: undefined }));
   if (evento.tipo === 'entrega' || (evento.tipo === 'cadeia.atualizada' && evento.dados.status === 'concluida')) {
     const conversaId = String(evento.dados.conversa_id ?? '');
     if (conversaId) void carregarEntregas(conversaId);
@@ -138,7 +139,8 @@ export function acompanharConversa(conversaId: string): void {
   void acompanharEventos(`/v1/conversas/${conversaId}/eventos`, {
     signal: controlador.signal,
     aoEvento: evento => receber({ ...evento, dados: { conversa_id: conversaId, ...evento.dados } }),
-    aoErro: erro => alterar(e => ({ ...e, erro: erro instanceof Error ? erro.message : 'Canal de eventos interrompido.' })),
+    aoConectar: () => alterar(e => ({ ...e, erroEventos: undefined })),
+    aoErro: erro => alterar(e => ({ ...e, erroEventos: erro instanceof Error ? erro.message : 'Canal de eventos interrompido.' })),
   }).finally(() => controladoresConversa.delete(conversaId));
 }
 
@@ -152,7 +154,12 @@ export function iniciarProjetos(): Promise<void> {
     definir({ ...inicial(), carregando: false, agentes: mapa, projetos: conversas.filter(c => c.tipo !== 'agente').map(projetoDaApi), mensagens: mensagens.map(mensagemDaApi) });
     for (const c of conversas.filter(c => c.tipo !== 'agente')) void carregarEntregas(c.id).catch(() => undefined);
     controladorGeral?.abort(); controladorGeral = new AbortController();
-    void acompanharEventos('/v1/eventos', { signal: controladorGeral.signal, aoEvento: receber, aoErro: erro => alterar(e => ({ ...e, erro: erro instanceof Error ? erro.message : 'Canal de eventos interrompido.' })) });
+    void acompanharEventos('/v1/eventos', {
+      signal: controladorGeral.signal,
+      aoEvento: receber,
+      aoConectar: () => alterar(e => ({ ...e, erroEventos: undefined })),
+      aoErro: erro => alterar(e => ({ ...e, erroEventos: erro instanceof Error ? erro.message : 'Canal de eventos interrompido.' })),
+    });
   })().catch(erro => { alterar(e => ({ ...e, carregando: false, erro: erro instanceof Error ? erro.message : 'Não foi possível carregar as conversas.' })); throw erro; }).finally(() => { iniciando = null; });
   return iniciando;
 }

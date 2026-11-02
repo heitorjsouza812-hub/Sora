@@ -301,6 +301,30 @@ async def test_gerar_sse_retoma_e_formata(redis: fakeredis.FakeAsyncRedis) -> No
     assert json.loads(mensagens[0]["data"]) == {"itens": ["s1"]}
 
 
+async def test_gerar_sse_detecta_cliente_desconectado_sem_esperar_sessenta_segundos(
+    redis: fakeredis.FakeAsyncRedis,
+) -> None:
+    chamadas = 0
+
+    async def desconectou() -> bool:
+        nonlocal chamadas
+        chamadas += 1
+        return True
+
+    mensagens = [
+        mensagem
+        async for mensagem in gerar_sse(
+            redis,
+            canal_conversa(CONVERSA),
+            "0-0",
+            bloquear_ms=1,
+            desconectou=desconectou,
+        )
+    ]
+    assert mensagens == []
+    assert chamadas == 1
+
+
 def test_mensagem_sse_usa_json_compacto() -> None:
     m = mensagem_sse(EventoLido(id="1-0", evento="erro", dados={"codigo": "x", "mensagem": "ã"}))
     assert m == {"id": "1-0", "event": "erro", "data": '{"codigo":"x","mensagem":"ã"}'}

@@ -17,6 +17,7 @@ import fakeredis
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
+from starlette.requests import Request
 
 from app.busca import ler_pagina as lp
 from app.core import contas, seguranca
@@ -144,8 +145,16 @@ async def test_api01_rota_responde_429_com_o_limite_cheio(redis) -> None:
 
     for _ in range(sse.MAX_CONEXOES_POR_USUARIO):
         await sse.registrar_conexao(redis, USUARIO)
+
+    async def receber() -> dict[str, str]:
+        return {"type": "http.request"}
+
     with pytest.raises(HTTPException) as erro:
-        await rotas.eventos_do_usuario(USUARIO, redis)
+        await rotas.eventos_do_usuario(
+            Request({"type": "http", "method": "GET", "path": "/", "headers": []}, receber),
+            USUARIO,
+            redis,
+        )
     assert erro.value.status_code == 429
     assert "Retry-After" in (erro.value.headers or {})
 
@@ -154,7 +163,16 @@ async def test_api01_stream_encerrado_libera_a_vaga(redis) -> None:
     from app.api import eventos as rotas
 
     await redis.xadd(canal_usuario(USUARIO), {"event": "x", "data": "{}"})
-    resposta = await rotas.eventos_do_usuario(USUARIO, redis, ultimo_evento_id="0-0")
+
+    async def receber() -> dict[str, str]:
+        return {"type": "http.request"}
+
+    resposta = await rotas.eventos_do_usuario(
+        Request({"type": "http", "method": "GET", "path": "/", "headers": []}, receber),
+        USUARIO,
+        redis,
+        ultimo_evento_id="0-0",
+    )
     corpo = resposta.body_iterator
     await anext(corpo)  # type: ignore[call-overload]
     assert await redis.zcard(f"sse:conexoes:{USUARIO}") == 1
