@@ -135,6 +135,8 @@ class Configuracao(BaseSettings):
     sandbox_provedor: Literal["nenhum", "docker"] = "nenhum"
     """Onde roda ``executar_comando`` (``app/computador``). ``nenhum`` desliga a ferramenta."""
     sandbox_imagem: str = "python:3.12-slim"
+    navegador_cdp_url: str | None = None
+    """CDP remoto do Chromium isolado. Em produção não há fallback para navegador local."""
 
     @field_validator("sora_modelo_falso", mode="before")
     @classmethod
@@ -162,6 +164,7 @@ class Configuracao(BaseSettings):
             raise ValueError("JWT_SEGREDO parece um valor de exemplo; gere um aleatório.")
         if any(_HOST_LOCAL.match(origem) for origem in self._origens_informadas()):
             raise ValueError("CORS_ORIGENS não pode ter localhost em produção.")
+        _ = self.endpoint_navegador  # produção sem NAVEGADOR_CDP_URL falha já na inicialização
         return self
 
     def chaveiro(self) -> dict[int, bytes]:
@@ -195,6 +198,16 @@ class Configuracao(BaseSettings):
         if self.permitir_provedor_rede_local is None:
             return not self.producao
         return self.permitir_provedor_rede_local
+
+    @property
+    def endpoint_navegador(self) -> str | None:
+        """Endpoint CDP; produção falha fechada em vez de iniciar Chromium no worker."""
+        valor = (self.navegador_cdp_url or "").strip()
+        if valor and not valor.startswith(("http://", "https://")):
+            raise ValueError("NAVEGADOR_CDP_URL precisa ser um endpoint HTTP(S) de CDP.")
+        if self.producao and not valor:
+            raise ValueError("NAVEGADOR_CDP_URL é obrigatório em produção.")
+        return valor or None
 
     @property
     def database_url_sqlalchemy(self) -> str:

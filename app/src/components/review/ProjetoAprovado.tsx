@@ -1,14 +1,10 @@
-// Tela "Projeto aprovado!" (item 39): o que foi publicado e onde (simulado), a Sora em 'done' com pulso
-// e os próximos passos. Nada aqui chama servidor — os destinos vêm de destinos.ts.
+// Tela "Projeto aprovado!": confirma a versão aprovada sem inventar publicação externa.
 import { useId, useState, type CSSProperties } from 'react';
 import type { AgenteSora, EntregaGerada, ProjetoSora } from '../../state/projetos';
-import { PLUGIN_ICONS } from '../../data/pluginIcons';
 import { Badge, Button } from '../base';
 import { SoraOrb } from '../mascot';
 import { PecaCampanha } from '../ui/CampaignPiece';
-import { PluginMark } from '../ui/PluginMark';
 import { DeliveryContent } from './Entregas';
-import { destinoDaEntrega } from './destinos';
 
 export interface ProjetoAprovadoProps {
   projeto: ProjetoSora;
@@ -34,18 +30,12 @@ function Miniatura({ entrega, cor }: { entrega: EntregaGerada; cor: string }) {
   return <span className="rv-ok-mini rv-ok-mini--texto" aria-hidden="true"><i /><i /><i /><i /></span>;
 }
 
-function Marca({ nome }: { nome: string }) {
-  const icone = PLUGIN_ICONS.find((p) => p.name === nome);
-  return <PluginMark nome={nome} cor={icone?.hex ?? '#8B93A3'} path={icone?.path ?? null} size={18} />;
-}
-
 export function ProjetoAprovado({
   projeto, agentes, entregas, corSora = '#E2ECFF', pulseKey, onAgendarProxima, onVoltarProjeto, onNovoProjeto,
 }: ProjetoAprovadoProps) {
   const [verEntregas, setVerEntregas] = useState(false);
   const detalhesId = useId();
-  const itens = agentes.flatMap((a) => (entregas[a.id] ? [{ agente: a, entrega: entregas[a.id], destino: destinoDaEntrega(entregas[a.id], a, projeto) }] : []));
-  const agendados = itens.filter((x) => x.destino.status === 'Agendado').length;
+  const itens = agentes.flatMap((a) => (entregas[a.id] ? [{ agente: a, entrega: entregas[a.id] }] : []));
   const quando = projeto.aprovadoEm ? fmtQuando.format(projeto.aprovadoEm) : '';
 
   return (
@@ -56,28 +46,26 @@ export function ProjetoAprovado({
         <h1 id="rv-ok-titulo">Projeto aprovado!</h1>
         <p>
           {itens.length
-            ? `A Sora entregou ${itens.length} ${itens.length === 1 ? 'entrega' : 'entregas'} de “${projeto.titulo}”${agendados ? `, ${agendados} ${agendados === 1 ? 'agendada' : 'agendadas'}` : ''}. Confira onde ficou cada uma.`
-            : `“${projeto.titulo}” foi aprovado. A equipe pode seguir com a publicação.`}
+            ? `Você aprovou ${itens.length} ${itens.length === 1 ? 'entrega' : 'entregas'} de “${projeto.titulo}”. Elas estão prontas para o próximo passo.`
+            : `“${projeto.titulo}” foi aprovado.`}
         </p>
       </header>
 
       {itens.length > 0 && (
         <section className="rv-ok-lista" aria-labelledby="rv-ok-publicado">
-          <h2 id="rv-ok-publicado">O que foi publicado e onde</h2>
+          <h2 id="rv-ok-publicado">Entregas aprovadas</h2>
           <ul>
-            {itens.map(({ agente, entrega, destino }) => (
+            {itens.map(({ agente, entrega }) => (
               <li key={agente.id} className="rv-ok-item" style={{ '--agent-color': agente.cor } as CSSProperties}>
                 <Miniatura entrega={entrega} cor={agente.cor} />
                 <div className="rv-ok-item__texto">
                   <strong>{entrega.titulo} <span>· {entrega.resumo}</span></strong>
-                  <span className="rv-ok-destino"><Marca nome={destino.plugin} />{destino.texto}</span>
                   <small>Feito por <b>{agente.nome}</b> · {agente.funcao}</small>
                 </div>
-                <Badge tom={destino.status === 'Salvo' ? 'sucesso' : 'agente'} cor={destino.status === 'Agendado' ? agente.cor : undefined} ponto>{destino.status}</Badge>
+                <Badge tom="sucesso" ponto>Aprovada</Badge>
               </li>
             ))}
           </ul>
-          <p className="rv-ok-nota">Simulação: as publicações reais acontecem quando os plugins estiverem conectados de verdade.</p>
         </section>
       )}
 

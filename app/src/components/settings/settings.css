@@ -64,6 +64,7 @@
 .cfg-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }.cfg-modal-copy { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.55; }
 @media (max-width: 767px) { .cfg-shell { grid-template-columns: 1fr; }
   /* celular: o título já está no cabeçalho; as abas viram uma faixa presa ao topo */
+  :root[data-ilha-pilula] .cfg-nav { padding-top: 52px; }
   .cfg-nav { height: auto; padding: var(--sp-2) var(--sp-4); background: var(--surface-1); border-right: 0; border-bottom: 1px solid var(--line); }
   .cfg-nav h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .cfg-nav [role="tablist"] { display: flex; gap: var(--sp-1); overflow-x: auto; scrollbar-width: none; }
@@ -77,3 +78,10 @@
 @media (prefers-reduced-motion: reduce) { .cfg-chevron { transition: none; } }
 
 
+
+.cfg-capacidades { display: grid; gap: var(--sp-2); margin: 0 0 var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px dashed var(--line-strong); border-radius: var(--r-12, 12px); }
+.cfg-capacidades legend { padding: 0 var(--sp-2); color: var(--text-1); font-size: var(--fs-13, 13px); font-weight: 600; }
+.cfg-capacidades small { color: var(--text-2); line-height: 1.5; }
+.cfg-capacidades > div { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.cfg-capacidade { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 32px; color: var(--text-1); font-size: var(--fs-14); cursor: pointer; }
+.cfg-capacidade input { accent-color: var(--sora, #e2ecff); width: 16px; height: 16px; }

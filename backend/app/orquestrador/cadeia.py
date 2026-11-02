@@ -10,11 +10,19 @@ banco e ficam para a parte da cadeia de ponta a ponta.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from app.modelos.enumeracoes import StatusCadeia, StatusEtapa
-from app.orquestrador.estados import EM_ANDAMENTO_ETAPA
+from app.modelos.tabelas import Cadeia, Conversa, Etapa
+from app.orquestrador.estados import (
+    EM_ANDAMENTO_ETAPA,
+    FINAIS_CADEIA,
+    FINAIS_ETAPA,
+    mudar_cadeia,
+    mudar_etapa,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -204,12 +212,34 @@ async def criar_cadeia(
     versao: int = 1,
 ) -> UUID:
     """Cria a cadeia em ``planejando`` e marca a conversa como ``projeto``."""
-    raise NotImplementedError
+    cadeia = Cadeia(
+        usuario_id=usuario_id,
+        conversa_id=conversa_id,
+        pedido_id=pedido_id,
+        orcamento_tokens=orcamento_tokens,
+        versao=versao,
+        status=StatusCadeia.PLANEJANDO,
+    )
+    sessao.add(cadeia)
+    conversa = await sessao.get(Conversa, conversa_id)
+    if conversa is None or conversa.usuario_id != usuario_id:
+        raise LookupError("conversa nao encontrada")
+    from app.modelos.enumeracoes import TipoConversa
+
+    conversa.tipo = TipoConversa.PROJETO
+    await sessao.flush()
+    return cadeia.id
 
 
 async def mudar_status_cadeia(sessao: AsyncSession, cadeia_id: UUID, para: StatusCadeia) -> None:
     """Troca o estado da cadeia (checando a transição) e emite ``cadeia.atualizada``."""
-    raise NotImplementedError
+    cadeia = await sessao.get(Cadeia, cadeia_id, with_for_update=True)
+    if cadeia is None:
+        raise LookupError("cadeia nao encontrada")
+    cadeia.status = mudar_cadeia(cadeia.status, para)
+    if para in FINAIS_CADEIA:
+        cadeia.concluida_em = datetime.now(UTC)
+    await sessao.flush()
 
 
 async def pegar_etapa(sessao: AsyncSession, etapa_id: UUID) -> bool:
@@ -217,7 +247,15 @@ async def pegar_etapa(sessao: AsyncSession, etapa_id: UUID) -> bool:
 
     Devolve ``False`` se outro worker já pegou a etapa.
     """
-    raise NotImplementedError
+    from sqlalchemy import update
+
+    resultado = await sessao.execute(
+        update(Etapa)
+        .where(Etapa.id == etapa_id, Etapa.status == StatusEtapa.PENDENTE)
+        .values(status=StatusEtapa.EXECUTANDO, iniciada_em=datetime.now(UTC))
+        .returning(Etapa.id)
+    )
+    return resultado.scalar_one_or_none() is not None
 
 
 async def mudar_status_etapa(
@@ -228,9 +266,41 @@ async def mudar_status_etapa(
     erro: str | None = None,
 ) -> None:
     """Troca o estado da etapa e emite ``etapa.atualizada``."""
-    raise NotImplementedError
+    etapa = await sessao.get(Etapa, etapa_id, with_for_update=True)
+    if etapa is None:
+        raise LookupError("etapa nao encontrada")
+    etapa.status = mudar_etapa(etapa.status, para)
+    etapa.erro = erro
+    if para in FINAIS_ETAPA:
+        etapa.concluida_em = datetime.now(UTC)
+    await sessao.flush()
 
 
 async def cancelar_cadeia(sessao: AsyncSession, cadeia_id: UUID) -> None:
     """Marca ``cancelada`` e grava ``cancelar:{cadeia_id}`` no Redis."""
-    raise NotImplementedError
+    cadeia = await sessao.get(Cadeia, cadeia_id, with_for_update=True)
+    if cadeia is None:
+        raise LookupError("cadeia nao encontrada")
+    if cadeia.status not in FINAIS_CADEIA:
+        cadeia.status = StatusCadeia.CANCELADA
+        cadeia.concluida_em = datetime.now(UTC)
+    await sessao.flush()
+
+
+async def retomar_etapa(sessao: AsyncSession, etapa_id: UUID) -> bool:
+    """``UPDATE ... WHERE status IN (aguardando_*) RETURNING id``: so uma retomada vence.
+
+    Devolve ``False`` se a etapa nao estava esperando (resposta repetida ou etapa cancelada).
+    """
+    from sqlalchemy import update
+
+    resultado = await sessao.execute(
+        update(Etapa)
+        .where(
+            Etapa.id == etapa_id,
+            Etapa.status.in_([StatusEtapa.AGUARDANDO_USUARIO, StatusEtapa.AGUARDANDO_APROVACAO]),
+        )
+        .values(status=StatusEtapa.EXECUTANDO)
+        .returning(Etapa.id)
+    )
+    return resultado.scalar_one_or_none() is not None

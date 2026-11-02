@@ -1,278 +1,252 @@
+// Fase C: fluxo real app -> API -> Redis/ARQ worker -> SSE -> revisão.
 import assert from 'node:assert/strict';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
-import { logarTodoContexto } from './entrar.mjs';
+import { entrarNoContexto } from './entrar.mjs';
 
-const BASE = 'http://localhost:5173';
+const BASE = process.env.SORA_QA_BASE ?? 'http://localhost:5173';
 const qaDir = dirname(fileURLToPath(import.meta.url));
 const shots = join(qaDir, 'shots');
 const consoleEvents = [];
-// Erros 4xx da API que o cenário provoca de propósito (ex.: chave falsa → 422) não contam como erro de console.
-let api4xxEsperado = false;
-const failures = [];
-let shotNo = 0;
+const streams429 = [];
 
-const sleep = (page, ms) => page.waitForTimeout(ms);
-const name = (text) => new RegExp(text, 'i');
-
-function observe(page, viewport) {
-  page.on('console', (message) => {
-    if (message.type() !== 'error') return;
-    if (api4xxEsperado && /Failed to load resource: the server responded with a status of 4\d\d/.test(message.text())) return;
-    consoleEvents.push({ viewport, type: 'console', text: message.text(), url: page.url() });
+function observar(page, viewport) {
+  // Um 429 em /v1/*/eventos é regressão: o servidor deve liberar a vaga ao notar a desconexão.
+  page.on('response', r => { if (r.status() === 429 && r.url().includes('/eventos')) streams429.push(r.url()); });
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    consoleEvents.push({ viewport, tipo: 'console', texto: m.text(), url: page.url() });
   });
-  page.on('pageerror', (error) => consoleEvents.push({ viewport, type: 'pageerror', text: error.message, url: page.url() }));
+  page.on('pageerror', e => consoleEvents.push({ viewport, tipo: 'pageerror', texto: e.message, url: page.url() }));
 }
 
-async function snap(page, label) {
-  shotNo += 1;
-  await page.screenshot({ path: join(shots, `e2e-${String(shotNo).padStart(2, '0')}-${label}.png`), fullPage: false });
-}
-
-async function goto(page, route) {
-  const response = await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  assert.ok(response?.ok(), `GET ${route} deveria responder 2xx`);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(200);
-}
-
-async function reset(page) {
-  await goto(page, '/');
-  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(250);
-}
-
-async function send(page, text) {
-  const box = page.getByRole('textbox').last();
-  await box.fill(text);
-  await box.press('Enter');
-}
-
-async function expectVisible(page, text, timeout = 10_000) {
-  const target = page.getByText(text, { exact: false }).first();
-  await target.waitFor({ state: 'visible', timeout });
-  return target;
-}
-
-async function menuAction(page, owner, action) {
-  const row = page.locator(owner).first();
-  await row.getByRole('button', { name: /opções/i }).click();
-  await page.getByRole('menuitem', { name: action, exact: true }).click();
-}
-
-async function scenario(label, fn) {
-  try {
-    await fn();
-  } catch (error) {
-    failures.push({ label, error: error instanceof Error ? error.message : String(error) });
-  }
-}
-
-async function rootInitial(page) {
-  await reset(page);
-  assert.equal(await page.getByText('Chats', { exact: true }).count(), 0, 'novo chat não deve listar CHATS');
-  const heroOrbs = page.locator('.home-screen .hero-orb canvas');
-  assert.equal(await heroOrbs.count(), 1, 'a home deve montar exatamente uma Sora no bloco principal');
-  const heroBox = await heroOrbs.first().boundingBox();
-  assert.ok(heroBox && heroBox.width >= 150 && heroBox.height >= 150, 'a Sora inicial deve ser grande (mínimo 150 px)');
-  // Outros canvases de efeitos só são aceitáveis se não forem uma segunda Sora na hero.
-  assert.equal(await page.locator('.home-screen .hero-orb canvas:visible').count(), 1, 'não deve haver duas Soras visíveis na hero');
-  await snap(page, 'a-inicio');
-}
-
-async function flowAndReview(page) {
-  await reset(page);
-
-  await send(page, 'Crie uma campanha para lançar minha cafeteria');
-  await expectVisible(page, 'Analisando o pedido');
-  await expectVisible(page, 'Chats');
-  await snap(page, 'a-pensando');
-
-  await expectVisible(page, 'Plano', 8_000);
-  await expectVisible(page, 'Definindo agente', 8_000);
-  await expectVisible(page, 'Equipe', 8_000);
-  await expectVisible(page, 'Trabalho', 12_000);
-  await snap(page, 'a-plano-agentes');
-
-  const reloadUrl = page.url();
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
-  assert.equal(page.url(), reloadUrl, 'recarregar no fluxo deve manter a rota do projeto');
-  await expectVisible(page, 'Plano', 8_000);
-  await snap(page, 'g-reload');
-
-  await page.getByRole('tab', { name: /Trabalho/ }).first().click();
-  await expectVisible(page, 'Sora pediu', 12_000);
-  const tool = page.locator('.wk-tool').first();
-  await tool.waitFor({ state: 'visible', timeout: 12_000 });
-  const paramsBefore = await tool.locator('.wk-params-full').count();
-  await tool.getByRole('button').click();
-  await assert.doesNotReject(() => tool.locator('.wk-params-full').waitFor({ state: 'visible', timeout: 3_000 }), 'parâmetros da ferramenta devem expandir');
-  assert.equal(paramsBefore, 0, 'parâmetros devem começar recolhidos');
-  await snap(page, 'e-trabalho-parametros');
-
-  await expectVisible(page, 'Revisar', 90_000);
-  await page.getByRole('button', { name: 'Revisar', exact: true }).click();
-  await expectVisible(page, 'Aprovar e publicar', 10_000);
-  await page.getByRole('button', { name: 'Aprovar e publicar', exact: true }).click();
-  await expectVisible(page, 'Aprovado', 5_000);
-  await snap(page, 'a-aprovado');
-}
-
-async function ordinaryChat(page) {
-  await reset(page);
-  await send(page, 'oi, tudo bem?');
-  await expectVisible(page, 'Oi', 6_000);
-  assert.equal(await page.getByText('Equipe', { exact: true }).count(), 0, 'conversa comum não deve criar equipe');
-  await snap(page, 'b-conversa-comum');
-}
-
-async function projects(page) {
-  await reset(page);
-  await goto(page, '/projetos');
-  await send(page, 'Crie um projeto de campanha para uma padaria');
-  await expectVisible(page, 'Plano', 10_000);
-  await sleep(page, 6_000); // permite o nascimento dos agentes antes de testar a opção de mantê-los
-  await goto(page, '/projetos');
-  await expectVisible(page, 'Seus projetos');
-  const card = page.locator('.pj-card').first();
-  await card.waitFor({ state: 'visible', timeout: 5_000 });
-  await menuAction(page, '.pj-card', 'Renomear');
-  await page.getByLabel('Título').fill('Projeto Renomeado E2E');
-  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
-  await expectVisible(page, 'Projeto Renomeado E2E');
-  await snap(page, 'c-projeto-renomeado');
-
-  await menuAction(page, '.pj-card', 'Apagar');
-  await page.getByRole('checkbox', { name: 'Manter os agentes como avulsos' }).check();
-  await page.getByRole('button', { name: 'Apagar', exact: true }).click();
-  assert.equal(await page.getByText('Projeto Renomeado E2E', { exact: true }).count(), 0, 'projeto preservado deve sumir da lista');
-  await goto(page, '/agentes');
-  assert.ok(await page.locator('.agent-card, .ag-card, [class*=agent]').count() > 0, 'agentes preservados devem continuar em Agentes');
-
-  await goto(page, '/projetos');
-  await send(page, 'Crie um projeto de lançamento de uma loja');
-  await expectVisible(page, 'Plano', 10_000);
-  await goto(page, '/projetos');
-  await menuAction(page, '.pj-card', 'Apagar');
-  await page.getByRole('button', { name: 'Apagar', exact: true }).click();
-  assert.equal(await page.locator('.pj-card').count(), 0, 'projeto apagado sem manter agentes deve sumir');
-  await snap(page, 'c-projetos-apagados');
-}
-
-async function agents(page) {
-  await reset(page);
-  await goto(page, '/agentes/novo');
-  await page.getByRole('tab', { name: 'Configurar', exact: true }).click();
-  await page.getByText('Nome', { exact: true }).locator('..').getByRole('textbox').fill('Vigia E2E');
-  await page.getByText('Função', { exact: true }).locator('..').getByRole('textbox').fill('Validação');
-  await page.getByLabel('Cor hexadecimal').fill('#FF0069');
-  await page.getByRole('button', { name: name('Ondas') }).click();
-  await page.getByRole('button', { name: 'Criar agente', exact: true }).click();
-  await expectVisible(page, 'Salvo');
-  await sleep(page, 500); // aguarda a persistência agendada pelo store
-  await goto(page, '/agentes');
-  await expectVisible(page, 'Vigia E2E');
-  await expectVisible(page, 'Chats');
-  await snap(page, 'd-agente-criado');
-
-  await page.getByRole('link', { name: 'Editar', exact: true }).first().click();
-  await page.getByRole('tab', { name: 'Configurar', exact: true }).click();
-  await page.getByLabel('Cor hexadecimal').fill('#00C4CC');
-  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
-  await expectVisible(page, 'Salvo');
-  await sleep(page, 400);
-  await goto(page, '/');
-  const customRow = page.locator('.chat-row').filter({ hasText: 'Vigia E2E' });
-  await customRow.waitFor({ state: 'visible', timeout: 5_000 });
-  const avatarColor = await customRow.evaluate((element) => getComputedStyle(element).getPropertyValue('--agent').trim());
-  assert.match(avatarColor, /#00c4cc|rgb\(0,\s*196,\s*204\)/i, 'avatar da barra lateral deve receber a nova cor');
-
-  await customRow.getByRole('button', { name: /opções/i }).click();
-  // apagar agente é imediato, com toast "Desfazer" (item 45)
-  await page.getByRole('menuitem', { name: 'Apagar', exact: true }).click();
-  await expectVisible(page, 'Agente apagado', 3_000);
-  assert.equal(await customRow.count(), 0, 'agente apagado não pode permanecer na barra lateral');
-  await page.locator('.b-toast').filter({ hasText: 'Agente apagado' }).getByRole('button', { name: 'Desfazer', exact: true }).click();
-  await customRow.waitFor({ state: 'visible', timeout: 3_000 });
-  await customRow.getByRole('button', { name: /opções/i }).click();
-  await page.getByRole('menuitem', { name: 'Apagar', exact: true }).click();
-  await expectVisible(page, 'Agente apagado', 3_000);
-  assert.equal(await customRow.count(), 0, 'agente apagado de novo não pode permanecer na barra lateral');
-  await snap(page, 'd-agente-apagado');
-}
-
-async function settings(page) {
-  await reset(page);
-  await goto(page, '/configuracoes');
-  // Etapa 2: o backend testa a chave antes de salvar; chave falsa → erro PT-BR e nada guardado no navegador.
-  const card = page.locator('.cfg-provider-card').filter({ has: page.getByRole('button', { name: /OpenAI/i }) }).first();
-  await card.getByRole('button', { name: /OpenAI/i }).click();
-  await card.getByLabel('Chave da API').fill('sk-teste123');
-  api4xxEsperado = true;
-  await card.getByRole('button', { name: 'Testar e conectar', exact: true }).click();
-  const retorno = card.locator('.cfg-card-feedback');
-  await page.waitForFunction((el) => el && el.textContent.trim() && !el.textContent.includes('Falando com o servidor'), await retorno.elementHandle(), { timeout: 30_000 });
-  const textoRetorno = (await retorno.innerText()).trim();
-  assert.ok(!/conectada e modelos/i.test(textoRetorno), `chave falsa não pode conectar (retorno: ${textoRetorno})`);
-  await expectVisible(page, 'Não conectado');
-  const armazenado = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
-  assert.ok(!armazenado.includes('sk-teste123'), 'nenhuma chave de API pode ficar no navegador');
-  api4xxEsperado = false;
-  await snap(page, 'f-configuracoes');
-}
-
-async function mobile(browser) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
-  const page = await context.newPage();
-  observe(page, '390x844');
-  try {
-    await reset(page);
-    const menu = page.getByRole('button', { name: 'Abrir menu', exact: true });
-    await menu.click();
-    await expectVisible(page, 'Menu');
-    assert.equal(await menu.getAttribute('aria-expanded'), 'true');
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(150);
-    assert.equal(await menu.getAttribute('aria-expanded'), 'false');
-    for (const route of ['/', '/projetos', '/agentes', '/configuracoes', '/plugins']) {
-      await goto(page, route);
-      const metrics = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
-      assert.ok(metrics.sw <= metrics.cw, `${route} não pode ter scroll horizontal (${metrics.sw}/${metrics.cw})`);
-    }
-    await snap(page, 'h-mobile');
-  } finally {
-    await context.close();
-  }
-}
+async function screenshot(page, nome) { await page.screenshot({ path: join(shots, `e2e-${nome}.png`), fullPage: false }); }
+async function visivel(page, texto, timeout = 20_000) { const alvo = page.getByText(texto, { exact: false }).first(); await alvo.waitFor({ state: 'visible', timeout }); return alvo; }
 
 await mkdir(shots, { recursive: true });
-await Promise.all((await readdir(shots)).filter((file) => file.startsWith('e2e-') && file.endsWith('.png')).map((file) => rm(join(shots, file))));
-const browser = logarTodoContexto(await chromium.launch({ headless: true }));
-const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
-const desktop = await desktopContext.newPage();
-observe(desktop, '1440x900');
+await Promise.all((await readdir(shots)).filter(a => a.startsWith('e2e-') && a.endsWith('.png')).map(a => rm(join(shots, a))));
+
+const browser = await chromium.launch({ headless: true });
+const contexto = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
+await entrarNoContexto(contexto, {
+  email: process.env.SORA_QA_E2E_EMAIL ?? 'qa-e2e@sora.local',
+  limparConversas: true,
+});
+const page = await contexto.newPage();
+observar(page, '1440x900');
+
+let falha;
 try {
-  await scenario('a início sem chats e sem mascote', () => rootInitial(desktop));
-  await scenario('a/e/g fluxo, trabalho, recarga e revisão', () => flowAndReview(desktop));
-  await scenario('b conversa comum', () => ordinaryChat(desktop));
-  await scenario('c projetos', () => projects(desktop));
-  await scenario('d agentes', () => agents(desktop));
-  await scenario('f configurações', () => settings(desktop));
-  await scenario('h mobile', () => mobile(browser));
+  const resposta = await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  assert.ok(resposta?.ok(), 'a Home deve responder 2xx');
+  await page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i }).waitFor({ state: 'visible', timeout: 15_000 });
+  await screenshot(page, '01-inicio-1440x900');
+
+  await page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i }).fill('crie uma campanha para minha cafeteria');
+  await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
+  await page.waitForURL(/\/projeto\//, { timeout: 30_000 });
+  await visivel(page, 'Plano', 30_000);
+  await visivel(page, 'Equipe', 30_000);
+  await screenshot(page, '02-plano-equipe-1440x900');
+
+  const abaTrabalho = page.getByRole('tab', { name: /Trabalho/ }).first();
+  await abaTrabalho.waitFor({ state: 'visible', timeout: 30_000 });
+  await abaTrabalho.click();
+  await page.locator('.wk-panel').waitFor({ state: 'visible', timeout: 20_000 });
+  // Desde a rodada 4 o backend emite `passo` também com o modelo falso: o painel precisa mostrar
+  // o agente, o progresso e pelo menos uma chamada de ferramenta real.
+  await page.locator('.wk-head').first().waitFor({ state: 'visible', timeout: 60_000 });
+  // O painel segue o agente que está trabalhando; espera por contagem, não por um elemento específico.
+  await page.waitForFunction(() => document.querySelectorAll('.wk-prompt, .wk-tool, .wk-step').length >= 1, null, { timeout: 60_000 });
+  await screenshot(page, '03-trabalho-sse-1440x900');
+
+  await page.getByRole('button', { name: 'Revisar', exact: true }).waitFor({ state: 'visible', timeout: 120_000 });
+  await screenshot(page, '04-pronto-1440x900');
+
+  const url = page.url();
+  for (let recarga = 0; recarga < 6; recarga += 1) {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    assert.equal(page.url(), url, 'recarregar deve manter a conversa real');
+    await page.waitForTimeout(1_200);
+  }
+  await visivel(page, 'Plano', 30_000);
+  await page.getByRole('button', { name: 'Revisar', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+  assert.deepEqual(streams429, [], `recargas não podem esgotar streams SSE:\n${streams429.join('\n')}`);
+  assert.equal(await page.getByText(/Atualizações ao vivo pausadas/i).count(), 0, 'o aviso de limite SSE não deve aparecer');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const largura = await page.evaluate(() => ({ pagina: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
+  assert.ok(largura.pagina <= largura.viewport, `chat real não pode rolar na horizontal (${largura.pagina}/${largura.viewport})`);
+  await screenshot(page, '05-pronto-390x844');
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: 'Revisar', exact: true }).click();
+  await page.getByRole('button', { name: /Aprovar e publicar/i }).waitFor({ state: 'visible', timeout: 20_000 });
+  await screenshot(page, '06-revisao-1440x900');
+
+  // ── Pedido de ajuste: nova versão e comparação ────────────────────────────────────────────
+  await page.getByRole('button', { name: 'Pedir ajuste', exact: true }).click();
+  await page.getByRole('textbox', { name: /Instrução/i }).fill('deixe os textos mais descontraídos');
+  await page.getByRole('button', { name: 'Enviar ajuste', exact: true }).click();
+  await page.waitForURL(/\/projeto\//, { timeout: 20_000 });
+  await page.locator('.version-compare').waitFor({ state: 'visible', timeout: 120_000 });
+  await visivel(page, 'Versão anterior', 5_000);
+  await visivel(page, 'Nova versão', 5_000);
+  await screenshot(page, '07-ajuste-comparacao-1440x900');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const largura2 = await page.evaluate(() => ({ pagina: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
+  assert.ok(largura2.pagina <= largura2.viewport, `comparação de versões não pode rolar na horizontal (${largura2.pagina}/${largura2.viewport})`);
+  await screenshot(page, '08-ajuste-comparacao-390x844');
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // ── Resposta direta: "oi" não monta plano nem equipe ──────────────────────────────────────
+  await page.getByRole('link', { name: 'Novo chat', exact: true }).click();
+  const campo = page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i });
+  await campo.waitFor({ state: 'visible', timeout: 15_000 });
+  await campo.fill('oi');
+  await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
+  await page.waitForURL(/\/projeto\//, { timeout: 30_000 });
+  await page.waitForFunction(() => document.querySelectorAll('.chat-item').length >= 2, null, { timeout: 60_000 });
+  await page.waitForTimeout(3_000);
+  assert.equal(await page.getByText(/^Plano ·/).count(), 0, 'resposta direta não monta plano');
+  assert.equal(await page.getByRole('button', { name: 'Revisar', exact: true }).count(), 0, 'resposta direta não pede revisão');
+  await screenshot(page, '09-resposta-direta-1440x900');
+
+  // ── Gatilhos do modelo falso: pergunta, aprovação, orçamento (Continuar e Parar) ─────────────
+  // Fluxo completo pelo app: envia o pedido com a tag, responde no cartão (chat ou ilha) e confere o fim
+  // da cadeia. Tags: [pergunta], [aprovacao], [orcamento] (.maestri/contrato-etapa3.md, rodada 4).
+  const fecharIlha = async () => { await page.keyboard.press('Escape'); await page.waitForTimeout(400); };
+  const enviarPedido = async (texto) => {
+    await page.getByRole('link', { name: 'Novo chat', exact: true }).click();
+    const campo = page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i });
+    await campo.waitFor({ state: 'visible', timeout: 15_000 });
+    await campo.fill(texto);
+    await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
+    await page.waitForURL(/\/projeto\//, { timeout: 30_000 });
+  };
+  const concluiu = async () => {
+    await page.getByRole('button', { name: 'Revisar', exact: true }).waitFor({ state: 'visible', timeout: 120_000 });
+    assert.equal(await page.locator('[data-pendencia]').count(), 0, 'depois de concluir não pode sobrar cartão');
+  };
+
+  // [pergunta]: responde no cartão do chat
+  await enviarPedido('crie uma campanha para minha cafeteria [pergunta]');
+  const cartaoPergunta = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoPergunta.waitFor({ state: 'visible', timeout: 90_000 });
+  await visivel(page, 'A equipe precisa de você', 5_000);
+  await visivel(page, 'Aguardando você', 5_000);
+  await page.waitForTimeout(1_000);
+  await screenshot(page, '11-pergunta-1440x900');
+  await fecharIlha();
+  const opcaoEscolhida = await cartaoPergunta.getByRole('button').first().innerText();
+  await cartaoPergunta.getByRole('button').first().click();
+  await cartaoPergunta.waitFor({ state: 'detached', timeout: 15_000 });
+  await concluiu();
+  console.log(`[pergunta] respondida com "${opcaoEscolhida}" e a cadeia concluiu.`);
+
+  // [aprovacao] recusada (primeiro: o fake sempre cria "Organizadora" e, existindo, não pede de novo): negar
+  // não trava a cadeia e não cria agente
+  await enviarPedido('crie uma campanha para minha cafeteria [aprovacao]');
+  const cartaoRecusa = page.locator('[data-pendencia="aprovacao"]').first();
+  await cartaoRecusa.waitFor({ state: 'visible', timeout: 90_000 });
+  await fecharIlha();
+  await cartaoRecusa.getByRole('button', { name: 'Recusar', exact: true }).click();
+  await cartaoRecusa.waitFor({ state: 'detached', timeout: 15_000 });
+  await concluiu();
+  assert.equal(await page.locator('aside.sidebar').getByText('Organizadora').count(), 0, 'recusar não cria agente');
+  console.log('[aprovacao] recusada: a cadeia concluiu e nenhum agente foi criado.');
+
+
+  // [aprovacao]: decide no cartão da ILHA (abre sozinha); o agente criado aparece em CHATS
+  await enviarPedido('crie uma campanha para minha cafeteria [aprovacao]');
+  const ilhaDialogo = page.getByRole('dialog', { name: 'Ilha da Sora', exact: true });
+  const cartaoNaIlha = ilhaDialogo.locator('[data-pendencia="aprovacao"]');
+  await cartaoNaIlha.waitFor({ state: 'visible', timeout: 90_000 });
+  await visivel(page, 'Organizadora', 5_000);
+  await page.waitForTimeout(1_000);
+  await screenshot(page, '12-aprovacao-ilha-1440x900');
+  await cartaoNaIlha.getByRole('button', { name: 'Aprovar', exact: true }).click();
+  await cartaoNaIlha.waitFor({ state: 'detached', timeout: 15_000 });
+  await fecharIlha();
+  await concluiu();
+  // o agente individual criado pela aprovação aparece solto em CHATS (se o evento não o trouxe, a recarga traz)
+  const naBarra = page.locator('aside.sidebar').getByText('Organizadora').first();
+  // a pasta do projeto atual (a 1ª, a mais recente) começa recolhida: abre e exige o agente visível
+  const pasta = page.locator('aside.sidebar .pasta-toggle').first();
+  await pasta.waitFor({ state: 'visible', timeout: 15_000 });
+  if ((await pasta.getAttribute('aria-expanded')) !== 'true') await pasta.click();
+  await naBarra.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.waitForTimeout(500);
+  await fecharIlha();
+  await screenshot(page, '13-agente-criado-chats-1440x900');
+  console.log('[aprovacao] aprovada na ilha, cadeia concluída e "Organizadora" visível em CHATS.');
+
+  // [orcamento] + Continuar
+  await enviarPedido('crie uma campanha para minha cafeteria [orcamento]');
+  const cartaoOrcamento = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoOrcamento.waitFor({ state: 'visible', timeout: 90_000 });
+  await fecharIlha();
+  await cartaoOrcamento.getByRole('button', { name: 'Parar', exact: true }).waitFor({ state: 'visible' });
+  await screenshot(page, '14-orcamento-1440x900');
+  await cartaoOrcamento.getByRole('button', { name: 'Continuar', exact: true }).click();
+  await cartaoOrcamento.waitFor({ state: 'detached', timeout: 15_000 });
+  await concluiu();
+  console.log('[orcamento] Continuar: a cadeia concluiu.');
+
+  // [orcamento] + Parar: a etapa e a cadeia falham, sem cartão sobrando e sem "Revisar"
+  await enviarPedido('crie uma campanha para minha cafeteria [orcamento]');
+  const cartaoParar = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoParar.waitFor({ state: 'visible', timeout: 90_000 });
+  await fecharIlha();
+  await cartaoParar.getByRole('button', { name: 'Parar', exact: true }).click();
+  await cartaoParar.waitFor({ state: 'detached', timeout: 15_000 });
+  await visivel(page, 'A equipe parou', 90_000);
+  assert.equal(await page.getByRole('button', { name: 'Revisar', exact: true }).count(), 0, 'cadeia parada não pede revisão');
+  assert.equal(await page.locator('[data-pendencia]').count(), 0);
+  await screenshot(page, '15-orcamento-parar-1440x900');
+  console.log('[orcamento] Parar: a cadeia falhou e o app mostra que a equipe parou.');
+
+  // celular: cartão de pergunta sem rolagem horizontal
+  await enviarPedido('crie uma campanha para minha cafeteria [pergunta]');
+  const cartaoMovel = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoMovel.waitFor({ state: 'visible', timeout: 90_000 });
+  await fecharIlha();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const largura3 = await page.evaluate(() => ({ pagina: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
+  assert.ok(largura3.pagina <= largura3.viewport, `cartão de pergunta não pode rolar na horizontal (${largura3.pagina}/${largura3.viewport})`);
+  await cartaoMovel.scrollIntoViewIfNeeded();
+  await screenshot(page, '16-pergunta-390x844');
+  await cartaoMovel.getByRole('button').first().click();
+  await cartaoMovel.waitFor({ state: 'detached', timeout: 15_000 });
+  await concluiu();
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // ── Aviso de erro do provedor (precisa de API sem modelo falso: SORA_QA_BASE_ERRO) ────────
+  if (process.env.SORA_QA_BASE_ERRO) {
+    const r = spawnSync(process.execPath, [join(qaDir, 'e2e-erro-provedor.mjs')], { stdio: 'inherit', env: { ...process.env, SORA_QA_BASE: process.env.SORA_QA_BASE_ERRO } });
+    assert.equal(r.status, 0, 'cenário de erro do provedor falhou');
+  } else console.log('AVISO: SORA_QA_BASE_ERRO não definido; cenário de erro do provedor não executado.');
+
+  assert.deepEqual(consoleEvents, [], `console limpo:\n${JSON.stringify(consoleEvents, null, 2)}`);
+} catch (erro) {
+  falha = erro;
+  try { await screenshot(page, 'FALHA'); } catch { /* página encerrada */ }
 } finally {
-  await desktopContext.close();
+  await writeFile(join(shots, 'e2e-console.json'), `${JSON.stringify(consoleEvents, null, 2)}\n`, 'utf8');
+  await contexto.close();
   await browser.close();
 }
-await writeFile(join(shots, 'e2e-console.json'), `${JSON.stringify({ consoleEvents, failures }, null, 2)}\n`, 'utf8');
-if (failures.length || consoleEvents.length) {
-  for (const failure of failures) console.error(`FALHA [${failure.label}]: ${failure.error}`);
-  for (const entry of consoleEvents) console.error(`CONSOLE [${entry.viewport}]: ${entry.text}`);
+
+if (falha || consoleEvents.length) {
+  if (falha) console.error(`FALHA E2E real: ${falha.stack ?? falha.message}`);
+  for (const erro of consoleEvents) console.error(`CONSOLE [${erro.viewport}] ${erro.texto}`);
   process.exitCode = 1;
 } else {
-  console.log(`E2E aprovado: ${shotNo} screenshots, sem erros de console.`);
+  console.log('E2E real aprovado: campanha via backend/SSE, seis recargas sem 429, Trabalho, revisão e telas 1440/390; console limpo.');
 }

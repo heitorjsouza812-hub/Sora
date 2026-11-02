@@ -6,6 +6,7 @@ import { useLocation } from 'react-router-dom';
 import { TelaCarregando } from './TelaCarregando';
 import { iniciarSessao, useSessao } from '../../state/sessao';
 import { useOnboardingPulado } from './onboardingPulado';
+import { encerrarProjetos, iniciarProjetos } from '../../state/projetos';
 
 const Entrar = lazy(() => import('../../screens/Entrar'));
 const Onboarding = lazy(() => import('./Onboarding').then(m => ({ default: m.Onboarding })));
@@ -17,6 +18,11 @@ export function GateSessao({ children }: { children: ReactNode }) {
   const livre = import.meta.env.DEV && pathname.startsWith('/lab/');
 
   useEffect(() => { if (!livre) void iniciarSessao(); }, [livre]);
+  useEffect(() => {
+    if (sessao.estado !== 'logado' || livre) return;
+    void iniciarProjetos();
+    return encerrarProjetos;
+  }, [sessao.estado, livre]);
 
   if (livre) return <>{children}</>;
   if (sessao.estado === 'carregando') return <TelaCarregando />;

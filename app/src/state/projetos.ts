@@ -1,718 +1,364 @@
-// Store de projetos, equipes, agentes e trabalho (Rodada 3).
-// • Estado global único (useSyncExternalStore) persistido em localStorage (com try/catch).
-// • O tempo é a fonte da verdade: cada Execucao guarda `inicio` e um roteiro com tempos relativos;
-//   status, %, passos visíveis e fases do projeto são DERIVADOS de `agora`. Recarregar a página
-//   no meio do trabalho continua exatamente do ponto certo.
+// Estado real de conversas, equipes e trabalho. A API hidrata o estado e os eventos SSE são
+// a única fonte das transições ao vivo. O relógio serve apenas para mostrar duração na interface.
 import { useEffect, useSyncExternalStore } from 'react';
-import type { PassoTrabalho, Status } from '../types';
-import {
-  COR_SORA, agenteDeDescricao, duracaoRoteiro, novoId, pedeTrabalho, planejar, respostaConversa, roteiroAvulso, tituloDoChat, verboPara as verboDe,
-  type AgenteSora, type EntregaGerada, type PassoRoteiro, type RascunhoAgente, type TarefaGerada,
-} from '../data/planejador';
+import { api, ErroApi } from '../api/cliente';
+import { acompanharEventos, type EventoSse } from '../api/eventos';
+import { enviarAnexo } from '../api/anexos';
+import type { Anexo } from '../components/anexos';
+import type { Movimento, PassoTrabalho, Status } from '../types';
+import { aplicarEvento } from './aplicarEvento';
 
-export type { AgenteSora, EntregaGerada, PassoRoteiro, RascunhoAgente, TarefaGerada };
+export const COR_SORA = '#E2ECFF';
+export const PLUGINS_PADRAO: string[] = [];
 
-// ---------- tipos ----------
+export interface RascunhoAgente { nome: string; funcao: string; cor: string; tipoMovimento: Movimento; ferramentas: string[]; instrucoes: string }
+export interface TarefaGerada { id: string; titulo: string; ordem: number; dependeDe: string[]; agenteId: string; status?: Status; progresso?: number }
+export interface EntregaGerada {
+  id?: string; agenteId?: string; versao?: number; tipo: 'links' | 'imagem' | 'texto' | 'calendario' | 'arquivo';
+  titulo: string; resumo: string; links?: { titulo: string; dominio: string }[]; imagens?: string[]; itens?: string[]; conteudo?: unknown;
+}
+export type PassoRoteiro = PassoTrabalho;
 
+export interface AgenteSora {
+  id: string; projetoId: string; conversaId?: string; nome: string; funcao: string; cor: string; tipoMovimento: Movimento;
+  ferramentas: string[]; status: Status; verbo: string; espera: string; instrucoes: string; avulso: boolean; criadoEm: number;
+}
 export interface Execucao {
-  id: string;
-  agenteId: string;
-  projetoId?: string;
-  tarefaId?: string;
-  inicio: number;              // ms (epoch)
-  roteiro: PassoRoteiro[];
+  id: string; agenteId: string; projetoId?: string; tarefaId?: string; inicio: number; roteiro: PassoTrabalho[];
+  status: 'pendente' | 'executando' | 'concluida' | 'falhou' | 'cancelada'; progresso: number;
 }
-
 export interface ProjetoSora {
-  id: string;
-  /** 'chat': conversa iniciada no Novo chat (só vira equipe se o pedido pedir trabalho); 'projeto': sempre monta equipe */
-  tipo: 'chat' | 'projeto';
-  titulo: string;
-  pedido: string;
-  modelo: string;
-  assunto: string;
-  resposta: string;            // primeira fala da Sora
-  criadoEm: number;
-  tarefas: TarefaGerada[];
-  agenteIds: string[];
-  entregas: Record<string, EntregaGerada>;
+  id: string; tipo: 'chat' | 'projeto'; titulo: string; pedido: string; modelo: string; assunto: string; resposta: string;
+  criadoEm: number; tarefas: TarefaGerada[]; agenteIds: string[]; entregas: Record<string, EntregaGerada>;
   marcos: { plano: number; nascimentos: number[]; trabalho: number; fim: number };
-  aprovadoEm?: number;
-  versao: number;
-  entregasAnteriores?: Record<string, EntregaGerada>;   // versão anterior (após um ajuste)
-  ajusteAgenteId?: string;                              // agente que fez o último ajuste
+  aprovadoEm?: number; aprovadaVersao?: number | null; versao: number; entregasAnteriores?: Record<string, EntregaGerada>;
+  ajusteAgenteId?: string; cadeiaId?: string; cadeiaStatus?: 'planejando' | 'executando' | 'verificando' | 'aguardando_usuario' | 'concluida' | 'falhou' | 'cancelada';
+  roteamento?: 'direto' | 'cadeia' | 'pergunta'; erro?: string; mensagensPendentes?: boolean;
 }
-
 export interface MensagemChat {
-  id: string;
-  conversaId: string;          // 'sora:<projetoId>' ou agenteId
-  autor: 'usuario' | 'sora' | string;
-  texto: string;
-  criadoEm: number;            // mensagens futuras (respostas) só aparecem quando agora >= criadoEm
-  execucaoId?: string;
-  /** respostas: "Parar" congela o texto parcial neste instante */
-  interrompidaEm?: number;
-  /** 👍 / 👎 do usuário */
-  avaliacao?: 'positiva' | 'negativa';
-  /** resposta de conversa comum (pode ser refeita com outra redação) */
-  origem?: 'conversa';
-  /** qual redação da resposta está aparecendo (Refazer incrementa) */
-  variante?: number;
-  /** anexos da pergunta (só metadados; a prévia blob: não sobrevive a recarregar) */
-  anexos?: AnexoMsg[];
+  id: string; conversaId: string; autor: 'usuario' | 'sora' | string; agenteId?: string; texto: string; criadoEm: number;
+  gerando?: boolean; interrompidaEm?: number; avaliacao?: 'positiva' | 'negativa'; origem?: 'conversa'; variante?: number; anexos?: AnexoMsg[];
 }
-
 export interface AnexoMsg { id: string; nome: string; tipo: string; tamanho: number }
-
 export interface SoraPerfil { nome: string; cor: string }
-
 export interface EstadoProjetos {
-  versao: 1;
-  sora: SoraPerfil;
-  agentes: Record<string, AgenteSora>;
-  projetos: ProjetoSora[];     // mais recente primeiro
-  projetoAtivoId: string | null;
-  execucoes: Execucao[];
-  mensagens: MensagemChat[];
-  pluginsConectados: string[];
+  versao: 2; sora: SoraPerfil; agentes: Record<string, AgenteSora>; projetos: ProjetoSora[]; projetoAtivoId: string | null;
+  execucoes: Execucao[]; mensagens: MensagemChat[]; pluginsConectados: string[]; carregando: boolean; erro?: string;
+  erroEventos?: string;
+  pendencias?: Pendencia[];
 }
+/** Algo que a equipe espera do usuário: pergunta (inclui o orçamento estourado: Continuar/Parar) ou aprovação. */
+export type Pendencia = (
+  | { tipo: 'pergunta'; texto: string; opcoes: { rotulo: string; valor: string }[]; respostaLivre: boolean }
+  | { tipo: 'aprovacao'; resumo: string; dano: string; quemRecebe: string | null; expiraEm: number }
+) & { id: string; conversaId: string; desde: number; enviando?: boolean; erro?: string };
+export type FaseProjeto = 'pensando' | 'conversa' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado' | 'erro';
 
-export type FaseProjeto = 'pensando' | 'conversa' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado';
+interface ConversaApi { id: string; agente_id: string; tipo: 'chat' | 'projeto' | 'agente'; titulo: string | null; aprovada_versao: number | null; criada_em: string; atualizada_em: string }
+interface AgenteApi { id: string; tipo: 'sora' | 'individual' | 'especialista'; nome: string; funcao: string; cor: string; movimento: Movimento; status: Status | null }
+interface MensagemApi { id: string; conversa_id: string; autor: 'usuario' | 'sora' | 'agente' | 'sistema'; agente_id?: string | null; conteudo: string; anexos: AnexoMsg[]; criada_em: string }
+interface EntregasApi { entregas: { id: string; agente_id: string | null; versao: number; tipo: EntregaGerada['tipo']; titulo: string; resumo: string; conteudo: unknown }[]; versoes: number[] }
 
-// ---------- linha do tempo de um projeto novo (ms após o envio) ----------
-export const TEMPOS = {
-  pensar: 2600,      // thinking orb da Sora
-  nascer0: 3800,     // primeiro agente "nasce"
-  nascerPasso: 1500, // intervalo entre agentes
-  folga: 900,        // depois do último nascimento, começa o trabalho
-  handoff: 600,      // pausa entre um agente e o próximo
-};
-
-// ---------- persistência ----------
-const CHAVE = 'sora.projetos.v1';
-const inicial = (): EstadoProjetos => ({
-  versao: 1, sora: { nome: 'Sora', cor: COR_SORA }, agentes: {}, projetos: [], projetoAtivoId: null, execucoes: [], mensagens: [],
-  pluginsConectados: [...PLUGINS_PADRAO],
-});
-
-/** Plugins conectados de início (os destaques da tela Plugins). */
-export const PLUGINS_PADRAO = ['Figma', 'ChatGPT', 'Gemini', 'Canva', 'Notion'];
-
-function carregar(): EstadoProjetos {
-  try {
-    const bruto = localStorage.getItem(CHAVE);
-    if (!bruto) return inicial();
-    const e = JSON.parse(bruto) as EstadoProjetos;
-    if (e?.versao !== 1 || typeof e.agentes !== 'object' || !Array.isArray(e.projetos)) return inicial();
-    return { ...inicial(), ...e, projetos: e.projetos.map(p => ({ ...p, tipo: p.tipo ?? 'projeto' })) };
-  } catch { return inicial(); }
-}
-
-let estado: EstadoProjetos = typeof window === 'undefined' ? inicial() : carregar();
+const inicial = (): EstadoProjetos => ({ versao: 2, sora: { nome: 'Sora', cor: COR_SORA }, agentes: {}, projetos: [], projetoAtivoId: null, execucoes: [], mensagens: [], pluginsConectados: [], carregando: true });
+let estado = inicial();
 const ouvintes = new Set<() => void>();
-/** Grava NA HORA: com atraso, uma navegação/recarga logo após a mudança perdia a gravação. */
-function gravar() {
-  try { localStorage.setItem(CHAVE, JSON.stringify(estado)); } catch { /* armazenamento indisponível: segue só em memória */ }
-}
-
-function definir(proximo: EstadoProjetos) {
-  estado = proximo;
-  gravar();
-  ouvintes.forEach(f => f());
-  relogioReavaliar();
-}
-const alterar = (f: (e: EstadoProjetos) => EstadoProjetos) => definir(f(estado));
-
-export function lerEstado() { return estado; }
-function assinar(f: () => void) { ouvintes.add(f); return () => { ouvintes.delete(f); }; }
-
-// sincroniza entre abas
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', ev => { if (ev.key === CHAVE) { estado = carregar(); ouvintes.forEach(f => f()); relogioReavaliar(); } });
-}
-
-// ---------- relógio compartilhado (só corre enquanto há trabalho em andamento) ----------
-let agoraAtual = Date.now();
-let relogio = 0;
-const ouvintesRelogio = new Set<() => void>();
-
-/** Momento (ms) em que todo o trabalho já agendado termina. */
-function fimDeTudo(e: EstadoProjetos) {
-  let fim = 0;
-  for (const x of e.execucoes) fim = Math.max(fim, x.inicio + duracaoRoteiro(x.roteiro));
-  for (const p of e.projetos) fim = Math.max(fim, p.marcos.fim);
-  for (const m of e.mensagens) fim = Math.max(fim, m.criadoEm + (m.autor === 'usuario' ? 0 : duracaoStream(m.texto)));
-  return fim;
-}
-function relogioReavaliar() {
-  if (typeof window === 'undefined') return;
-  const ativo = ouvintesRelogio.size > 0 && fimDeTudo(estado) + 500 > Date.now();
-  if (ativo && !relogio) {
-    relogio = window.setInterval(() => {
-      agoraAtual = Date.now();
-      ouvintesRelogio.forEach(f => f());
-      if (fimDeTudo(estado) + 500 <= agoraAtual) { window.clearInterval(relogio); relogio = 0; }
-    }, 200);
-  }
-  if (!ativo && relogio) { window.clearInterval(relogio); relogio = 0; }
-  agoraAtual = Date.now();
-}
-function assinarRelogio(f: () => void) {
-  ouvintesRelogio.add(f); relogioReavaliar();
-  return () => { ouvintesRelogio.delete(f); relogioReavaliar(); };
-}
-
-// ---------- hooks ----------
-
-/** Estado completo do store (re-renderiza a cada mudança). */
+const notificar = () => ouvintes.forEach(f => f());
+function definir(proximo: EstadoProjetos) { estado = proximo; notificar(); }
+const alterar = (fn: (e: EstadoProjetos) => EstadoProjetos) => definir(fn(estado));
+export const lerEstado = () => estado;
+const assinar = (fn: () => void) => { ouvintes.add(fn); return () => { ouvintes.delete(fn); }; };
 export function useProjetos() { return useSyncExternalStore(assinar, lerEstado, lerEstado); }
 
-/** "Agora" em ms; avança a cada 200 ms enquanto houver trabalho em andamento. */
-export function useAgora() {
-  const agora = useSyncExternalStore(assinarRelogio, () => agoraAtual, () => agoraAtual);
-  useEffect(() => { relogioReavaliar(); }, []);
-  return agora;
+let agoraAtual = Date.now();
+const ouvintesAgora = new Set<() => void>();
+let timerAgora = 0;
+function assinarAgora(fn: () => void) {
+  ouvintesAgora.add(fn);
+  if (!timerAgora && typeof window !== 'undefined') timerAgora = window.setInterval(() => { agoraAtual = Date.now(); ouvintesAgora.forEach(f => f()); }, 1000);
+  return () => { ouvintesAgora.delete(fn); if (!ouvintesAgora.size && timerAgora) { window.clearInterval(timerAgora); timerAgora = 0; } };
+}
+export function useAgora() { const agora = useSyncExternalStore(assinarAgora, () => agoraAtual, () => agoraAtual); useEffect(() => { agoraAtual = Date.now(); }, []); return agora; }
+
+const verboPara = (funcao: string) => /pesquis|refer/i.test(funcao) ? 'Pesquisando' : /texto|red|copy/i.test(funcao) ? 'Escrevendo' : /design|visual|imag/i.test(funcao) ? 'Criando' : 'Trabalhando';
+function agenteDaApi(a: AgenteApi): AgenteSora {
+  return { id: a.id, projetoId: '', nome: a.nome, funcao: a.funcao, cor: a.cor, tipoMovimento: a.movimento, ferramentas: [], status: a.status ?? 'aguardando', verbo: verboPara(a.funcao), espera: 'Aguardando', instrucoes: '', avulso: a.tipo === 'individual', criadoEm: Date.now() };
+}
+function projetoDaApi(c: ConversaApi): ProjetoSora {
+  const criadoEm = Date.parse(c.criada_em);
+  return { id: c.id, tipo: c.tipo === 'projeto' ? 'projeto' : 'chat', titulo: c.titulo || 'Nova conversa', pedido: '', modelo: '', assunto: c.titulo || '', resposta: '', criadoEm, tarefas: [], agenteIds: [], entregas: {}, // fim = 0: só um evento ao vivo (cadeia.atualizada concluída) marca o fim; projeto carregado do servidor não é "acabou de terminar".
+    marcos: { plano: criadoEm, nascimentos: [], trabalho: criadoEm, fim: 0 }, aprovadoEm: c.aprovada_versao ? Date.parse(c.atualizada_em) : undefined, aprovadaVersao: c.aprovada_versao, versao: 1 };
+}
+function mensagemDaApi(m: MensagemApi): MensagemChat {
+  const autor = m.autor === 'agente' && m.agente_id ? m.agente_id : m.autor === 'usuario' ? 'usuario' : 'sora';
+  return { id: m.id, conversaId: m.conversa_id, autor, agenteId: m.agente_id ?? undefined, texto: m.conteudo, criadoEm: Date.parse(m.criada_em), anexos: m.anexos, gerando: false };
 }
 
-// ---------- derivados (puros) ----------
+let controladorGeral: AbortController | null = null;
+const controladoresConversa = new Map<string, AbortController>();
+const errosEventosPorCanal = new Map<string, string>();
+const enviosAgenteEmVoo = new Map<string, Promise<void>>();
+let iniciando: Promise<void> | null = null;
 
-export function progressoExecucao(x: Execucao, agora: number) {
-  const d = duracaoRoteiro(x.roteiro);
-  return d <= 0 ? 100 : Math.max(0, Math.min(100, Math.round(((agora - x.inicio) / d) * 100)));
-}
-
-/** Passos já iniciados de uma execução, com status derivado do relógio. */
-export function passosDaExecucao(x: Execucao, agora: number): PassoTrabalho[] {
-  const out: PassoTrabalho[] = [];
-  x.roteiro.forEach((p, i) => {
-    const inicio = x.inicio + p.em;
-    if (inicio > agora) return;
-    const fim = inicio + p.dur;
-    out.push({
-      id: `${x.id}-${i}`, agenteId: x.agenteId, tipo: p.tipo, texto: p.texto, ferramenta: p.ferramenta, acao: p.acao,
-      parametros: p.parametros, resultado: fim <= agora ? p.resultado : undefined,
-      status: fim <= agora ? 'concluido' : 'executando', inicio, fim: fim <= agora ? fim : undefined,
-      paraAgenteId: p.paraAgenteId, origem: p.origem,
-    });
-  });
-  return out;
-}
-
-export function execucoesDoAgente(e: EstadoProjetos, agenteId: string) {
-  return e.execucoes.filter(x => x.agenteId === agenteId).sort((a, b) => a.inicio - b.inicio);
-}
-
-export interface EstadoAgente {
-  status: Status;
-  progresso: number;
-  rotulo: string;              // "Pesquisando", "Aguardando referências", "Concluído", "Disponível"
-  nascido: boolean;            // já apareceu (agentes de equipe nascem em sequência)
-  execucao?: Execucao;         // atual (ou a última)
-}
-
-export function estadoAgente(e: EstadoProjetos, agenteId: string, agora: number): EstadoAgente {
-  const ag = e.agentes[agenteId];
-  if (!ag) return { status: 'aguardando', progresso: 0, rotulo: '', nascido: false };
-  const nascido = ag.criadoEm <= agora;
-  const xs = execucoesDoAgente(e, agenteId);
-  const atual = xs.find(x => x.inicio <= agora && agora < x.inicio + duracaoRoteiro(x.roteiro));
-  if (atual) return { status: 'trabalhando', progresso: progressoExecucao(atual, agora), rotulo: ag.verbo, nascido, execucao: atual };
-  const passadas = xs.filter(x => x.inicio + duracaoRoteiro(x.roteiro) <= agora);
-  const futura = xs.find(x => x.inicio > agora);
-  if (futura && !passadas.length) return { status: 'aguardando', progresso: 0, rotulo: ag.espera, nascido, execucao: futura };
-  if (passadas.length) return { status: 'concluido', progresso: 100, rotulo: 'Concluído', nascido, execucao: passadas[passadas.length - 1] };
-  return { status: 'aguardando', progresso: 0, rotulo: ag.avulso ? 'Disponível' : ag.espera, nascido };
-}
-
-export interface EstadoDoProjeto {
-  fase: FaseProjeto;
-  nascidos: number;            // quantos agentes já nasceram
-  concluidos: number;
-  pulso: number;               // conta eventos (nascimentos + conclusões) — use como pulseKey da Sora
-  progresso: number;           // 0..100 do projeto inteiro
-}
-
-export function estadoProjeto(e: EstadoProjetos, p: ProjetoSora, agora: number): EstadoDoProjeto {
-  const nascidos = p.marcos.nascimentos.filter(t => t <= agora).length;
-  const xs = e.execucoes.filter(x => x.projetoId === p.id);
-  const concluidos = p.agenteIds.filter(id => xs.some(x => x.agenteId === id && x.inicio + duracaoRoteiro(x.roteiro) <= agora)).length;
-  if (!p.agenteIds.length && !p.tarefas.length) {
-    return { fase: agora < p.marcos.plano ? 'pensando' : 'conversa', nascidos: 0, concluidos: 0, pulso: agora < p.marcos.plano ? 0 : 1, progresso: 0 };
+function receber(evento: EventoSse) {
+  const conversaId = String(evento.dados.conversa_id ?? '');
+  if (conversaId && !estado.projetos.some(p => p.id === conversaId) && !Object.values(estado.agentes).some(a => a.conversaId === conversaId)) return;
+  alterar(e => aplicarEvento(e, evento));
+  if (evento.tipo === 'entrega' || (evento.tipo === 'cadeia.atualizada' && evento.dados.status === 'concluida')) {
+    if (conversaId) void carregarEntregas(conversaId).catch(() => undefined);
   }
-  const fase: FaseProjeto = p.aprovadoEm ? 'aprovado'
-    : agora < p.marcos.plano ? 'pensando'
-      : agora < p.marcos.trabalho ? 'planejando'
-        : agora < p.marcos.fim ? 'coordenando' : 'pronto';
-  const total = p.marcos.fim - p.marcos.trabalho;
-  const progresso = Math.max(0, Math.min(100, Math.round(((agora - p.marcos.trabalho) / Math.max(1, total)) * 100)));
-  return { fase, nascidos, concluidos, pulso: nascidos + concluidos + (fase === 'pronto' ? 1 : 0), progresso };
+}
+
+function mensagemDoErroEventos(erro: unknown): string {
+  if (erro instanceof ErroApi && erro.status === 429) {
+    return 'Há muitas abas ou recargas abertas. Feche outras abas e aguarde um minuto; a Sora tentará reconectar.';
+  }
+  return erro instanceof Error ? erro.message : 'Canal de eventos interrompido.';
+}
+
+function definirErroEventos(canal: string, erro?: unknown) {
+  if (erro === undefined) errosEventosPorCanal.delete(canal);
+  else errosEventosPorCanal.set(canal, mensagemDoErroEventos(erro));
+  const mensagem = errosEventosPorCanal.values().next().value as string | undefined;
+  alterar(e => e.erroEventos === mensagem ? e : { ...e, erroEventos: mensagem });
+}
+
+const mapaDeEntregas = (lista: EntregasApi['entregas']): Record<string, EntregaGerada> => Object.fromEntries(lista.map(x => [x.agente_id || x.id, { ...x, agenteId: x.agente_id ?? undefined, conteudo: x.conteudo, ...(typeof x.conteudo === 'object' && x.conteudo ? x.conteudo as object : {}) } as EntregaGerada]));
+
+async function carregarEntregas(conversaId: string): Promise<void> {
+  const dados = await api.get<EntregasApi>(`/v1/conversas/${conversaId}/entregas`);
+  // Versão anterior (ajuste): serve para a comparação. A nova versão só traz quem foi ajustado, então
+  // quem não mudou continua com a entrega da versão anterior.
+  const anterior = dados.versoes.length > 1 ? await api.get<EntregasApi>(`/v1/conversas/${conversaId}/entregas?versao=${dados.versoes.at(-2)}`).catch(() => null) : null;
+  alterar(e => ({ ...e, projetos: e.projetos.map(p => {
+    if (p.id !== conversaId) return p;
+    const anteriores = anterior ? mapaDeEntregas(anterior.entregas) : undefined;
+    const entregas = { ...(anteriores ?? {}), ...mapaDeEntregas(dados.entregas) };
+    return { ...p, entregas, entregasAnteriores: anteriores, versao: dados.versoes.at(-1) ?? p.versao };
+  }) }));
+}
+
+/** Comparação "versão anterior × nova": o agente cuja entrega mudou no último ajuste. */
+export function comparacaoDeVersao(e: EstadoProjetos, p: ProjetoSora): { agente: AgenteSora; antes: EntregaGerada; depois: EntregaGerada } | null {
+  if (p.versao < 2 || !p.entregasAnteriores) return null;
+  for (const id of p.agenteIds) {
+    const antes = p.entregasAnteriores[id], depois = p.entregas[id], agente = e.agentes[id];
+    if (agente && antes && depois && antes.id !== depois.id) return { agente, antes, depois };
+  }
+  return null;
+}
+
+export function acompanharConversa(conversaId: string): void {
+  if (!conversaId || controladoresConversa.has(conversaId)) return;
+  for (const [id, ativo] of controladoresConversa) {
+    if (id !== conversaId) { ativo.abort(); controladoresConversa.delete(id); definirErroEventos(`conversa:${id}`); }
+  }
+  const controlador = new AbortController(); controladoresConversa.set(conversaId, controlador);
+  const canal = `conversa:${conversaId}`;
+  void acompanharEventos(`/v1/conversas/${conversaId}/eventos`, {
+    signal: controlador.signal,
+    aoEvento: evento => receber({ ...evento, dados: { conversa_id: conversaId, ...evento.dados } }),
+    aoConectar: () => definirErroEventos(canal),
+    aoErro: erro => definirErroEventos(canal, erro),
+  }).finally(() => {
+    if (controladoresConversa.get(conversaId) === controlador) {
+      controladoresConversa.delete(conversaId);
+      definirErroEventos(canal);
+    }
+  });
+}
+
+export function iniciarProjetos(): Promise<void> {
+  if (iniciando) return iniciando;
+  iniciando = (async () => {
+    const [conversas, agentes] = await Promise.all([api.get<ConversaApi[]>('/v1/conversas'), api.get<AgenteApi[]>('/v1/agentes')]);
+    const mensagens = (await Promise.all(conversas.map(c => api.get<MensagemApi[]>(`/v1/conversas/${c.id}/mensagens`)))).flat();
+    const mapa = Object.fromEntries(agentes.filter(a => a.tipo !== 'sora').map(a => [a.id, agenteDaApi(a)]));
+    for (const c of conversas) { const ag = mapa[c.agente_id]; if (ag && c.tipo === 'agente') ag.conversaId = c.id; }
+    definir({ ...inicial(), carregando: false, agentes: mapa, projetos: conversas.filter(c => c.tipo !== 'agente').map(projetoDaApi), mensagens: mensagens.map(mensagemDaApi) });
+    for (const c of conversas.filter(c => c.tipo !== 'agente')) void carregarEntregas(c.id).catch(() => undefined);
+    controladorGeral?.abort(); controladorGeral = new AbortController();
+    void acompanharEventos('/v1/eventos', {
+      signal: controladorGeral.signal,
+      aoEvento: receber,
+      aoConectar: () => definirErroEventos('geral'),
+      aoErro: erro => definirErroEventos('geral', erro),
+    });
+  })().catch(erro => { alterar(e => ({ ...e, carregando: false, erro: erro instanceof Error ? erro.message : 'Não foi possível carregar as conversas.' })); throw erro; }).finally(() => { iniciando = null; });
+  return iniciando;
+}
+export function encerrarProjetos() {
+  controladorGeral?.abort(); controladorGeral = null;
+  encerrarConversas(); errosEventosPorCanal.clear();
+}
+
+function encerrarConversa(conversaId: string) {
+  controladoresConversa.get(conversaId)?.abort();
+  controladoresConversa.delete(conversaId);
+  definirErroEventos(`conversa:${conversaId}`);
+}
+
+function encerrarConversas() {
+  for (const id of [...controladoresConversa.keys()]) encerrarConversa(id);
+}
+
+export function progressoExecucao(x: Execucao, _agora: number) { return x.progresso; }
+export function passosDaExecucao(x: Execucao, _agora: number): PassoTrabalho[] { return x.roteiro; }
+export const execucoesDoAgente = (e: EstadoProjetos, agenteId: string) => e.execucoes.filter(x => x.agenteId === agenteId).sort((a, b) => a.inicio - b.inicio);
+export interface EstadoAgente { status: Status; progresso: number; rotulo: string; nascido: boolean; execucao?: Execucao }
+export function estadoAgente(e: EstadoProjetos, agenteId: string, _agora: number): EstadoAgente {
+  const ag = e.agentes[agenteId]; if (!ag) return { status: 'aguardando', progresso: 0, rotulo: '', nascido: false };
+  const xs = execucoesDoAgente(e, agenteId); const atual = [...xs].reverse().find(x => x.status === 'executando') ?? xs.at(-1);
+  if (!atual) return { status: ag.status, progresso: ag.status === 'concluido' ? 100 : 0, rotulo: ag.avulso ? 'Disponível' : ag.espera, nascido: true };
+  const status: Status = atual.status === 'executando' ? 'trabalhando' : atual.status === 'concluida' ? 'concluido' : atual.status === 'falhou' ? 'erro' : 'aguardando';
+  return { status, progresso: atual.progresso, rotulo: status === 'trabalhando' ? ag.verbo : status === 'concluido' ? 'Concluído' : status === 'erro' ? 'Erro' : ag.espera, nascido: true, execucao: atual };
+}
+export interface EstadoDoProjeto { fase: FaseProjeto; nascidos: number; concluidos: number; pulso: number; progresso: number }
+export function estadoProjeto(e: EstadoProjetos, p: ProjetoSora, agora: number): EstadoDoProjeto {
+  const agentes = p.agenteIds.map(id => estadoAgente(e, id, agora)); const concluidos = agentes.filter(a => a.status === 'concluido').length;
+  const progresso = p.tarefas.length ? Math.round(p.tarefas.reduce((n, t) => n + (t.progresso ?? 0), 0) / p.tarefas.length) : 0;
+  const fase: FaseProjeto = p.aprovadoEm ? 'aprovado' : p.erro || p.cadeiaStatus === 'falhou' ? 'erro' : p.cadeiaStatus === 'concluida' ? 'pronto'
+    : p.cadeiaStatus === 'executando' || p.cadeiaStatus === 'verificando' ? 'coordenando' : p.cadeiaStatus === 'planejando' || p.roteamento === 'cadeia' ? 'planejando' : p.mensagensPendentes ? 'pensando' : 'conversa';
+  return { fase, nascidos: p.agenteIds.length, concluidos, pulso: p.agenteIds.length + concluidos + (fase === 'pronto' ? 1 : 0), progresso: fase === 'pronto' || fase === 'aprovado' ? 100 : progresso };
 }
 
 export const projetoAtivo = (e: EstadoProjetos) => e.projetos.find(p => p.id === e.projetoAtivoId) ?? null;
-
-/** Agentes do projeto ativo já nascidos (ordem do plano). */
-export function agentesDoProjeto(e: EstadoProjetos, p: ProjetoSora | null, agora: number) {
-  if (!p) return [];
-  return p.agenteIds.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a && a.criadoEm <= agora);
+export const agentesDoProjeto = (e: EstadoProjetos, p: ProjetoSora | null, _agora: number) => p ? p.agenteIds.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a) : [];
+export const agentesAvulsos = (e: EstadoProjetos) => Object.values(e.agentes).filter(a => a.avulso).sort((a, b) => b.criadoEm - a.criadoEm);
+export const todosAgentes = (e: EstadoProjetos, _agora: number) => Object.values(e.agentes).sort((a, b) => b.criadoEm - a.criadoEm);
+export function mensagensDa(e: EstadoProjetos, conversaOuAgenteId: string, _agora: number) {
+  const ag = e.agentes[conversaOuAgenteId]; const conversaId = ag?.conversaId;
+  return e.mensagens.filter(m => m.conversaId === conversaOuAgenteId || (!!conversaId && m.conversaId === conversaId) || m.agenteId === conversaOuAgenteId || m.autor === conversaOuAgenteId).sort((a, b) => a.criadoEm - b.criadoEm);
 }
+export const passosDoAgente = (e: EstadoProjetos, agenteId: string, agora: number) => execucoesDoAgente(e, agenteId).flatMap(x => passosDaExecucao(x, agora));
 
-/** Agentes avulsos (criados no estúdio), mais recentes primeiro. */
-export const agentesAvulsos = (e: EstadoProjetos) =>
-  Object.values(e.agentes).filter(a => a.avulso).sort((a, b) => b.criadoEm - a.criadoEm);
-
-/** Todos os agentes (equipes + avulsos), para o estúdio. */
-export const todosAgentes = (e: EstadoProjetos, agora: number) =>
-  Object.values(e.agentes).filter(a => a.criadoEm <= agora).sort((a, b) => b.criadoEm - a.criadoEm);
-
-/** Mensagens visíveis de uma conversa. */
-export const mensagensDa = (e: EstadoProjetos, conversaId: string, agora: number) =>
-  e.mensagens.filter(m => m.conversaId === conversaId && m.criadoEm <= agora).sort((a, b) => a.criadoEm - b.criadoEm);
-
-/** Passos de trabalho de um agente (todas as execuções já iniciadas). */
-export function passosDoAgente(e: EstadoProjetos, agenteId: string, agora: number) {
-  return execucoesDoAgente(e, agenteId).flatMap(x => passosDaExecucao(x, agora));
-}
-
-// ---------- ações ----------
-
-const usados = (e: EstadoProjetos) => ({
-  nomesEmUso: Object.values(e.agentes).map(a => a.nome),
-  coresEmUso: Object.values(e.agentes).map(a => a.cor),
-});
-
-const PENSAR_CONVERSA = 1600;
-
-/**
- * Novo chat/projeto a partir da primeira mensagem.
- * • tipo 'projeto' (padrão): a Sora pensa, planeja e cria a equipe inteira.
- * • tipo 'chat': se a mensagem pede trabalho, idem; se é só conversa, a Sora apenas responde.
- */
-export function criarProjeto(pedido: string, agora = Date.now(), opcoes: { tipo?: 'chat' | 'projeto' } = {}): ProjetoSora {
-  const tipo = opcoes.tipo ?? 'projeto';
-  if (tipo === 'chat' && !pedeTrabalho(pedido)) {
-    const projeto: ProjetoSora = {
-      id: novoId('chat'), tipo, titulo: tituloDoChat(pedido), pedido, modelo: 'conversa', assunto: '', resposta: '',
-      criadoEm: agora, tarefas: [], agenteIds: [], entregas: {},
-      marcos: { plano: agora + PENSAR_CONVERSA, nascimentos: [], trabalho: agora + PENSAR_CONVERSA, fim: agora + PENSAR_CONVERSA }, versao: 1,
-    };
-    const conversa = `sora:${projeto.id}`;
-    alterar(e => ({
-      ...e, projetos: [projeto, ...e.projetos], projetoAtivoId: projeto.id,
-      mensagens: [...e.mensagens,
-        { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto: pedido, criadoEm: agora },
-        { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: respostaConversa(pedido), criadoEm: agora + PENSAR_CONVERSA, origem: 'conversa' },
-      ],
-    }));
-    return projeto;
-  }
-  return montarEquipe(null, pedido, agora, tipo);
-}
-
-/**
- * Novo chat no modo "Agente independente": em vez de uma equipe, a Sora cria UM agente avulso a partir
- * do pedido (aparece solto em CHATS) e ele já começa a trabalhar nesse pedido.
- */
-export function criarAgenteIndependente(pedido: string, agora = Date.now()): AgenteSora {
-  const ag = salvarAgente(agenteDeDescricao(pedido, usados(estado)));
-  enviarParaAgente(ag.id, pedido, agora);
-  return ag;
-}
-
-/** Planeja e cria a equipe — num projeto novo ou dentro de um chat que já existe. */
-function montarEquipe(base: ProjetoSora | null, pedido: string, agora: number, tipo: 'chat' | 'projeto'): ProjetoSora {
-  const nascimentos: number[] = [];
-  const plano = planejar(pedido, {
-    ...usados(estado),
-    criadoEm: i => { const t = agora + TEMPOS.nascer0 + i * TEMPOS.nascerPasso; nascimentos[i] = t; return t; },
-  });
-  const projetoId = base?.id ?? plano.agentes[0]?.projetoId ?? novoId('proj');
-  const agentesNovos = plano.agentes.map(a => ({ ...a, projetoId }));
-  const trabalho = (nascimentos[nascimentos.length - 1] ?? agora + TEMPOS.nascer0) + TEMPOS.folga;
-  const execucoes: Execucao[] = [];
-  let t = trabalho;
-  for (const tarefa of plano.tarefas) {
-    const roteiro = plano.roteiros[tarefa.agenteId];
-    execucoes.push({ id: novoId('exec'), agenteId: tarefa.agenteId, projetoId, tarefaId: tarefa.id, inicio: t, roteiro });
-    t += duracaoRoteiro(roteiro) + TEMPOS.handoff;
-  }
-  const fim = t - TEMPOS.handoff;
-  const projeto: ProjetoSora = {
-    id: projetoId, tipo: base?.tipo ?? tipo, titulo: plano.titulo, pedido,
-    modelo: plano.modelo, assunto: plano.assunto, resposta: plano.resposta,
-    criadoEm: base?.criadoEm ?? agora, tarefas: plano.tarefas, agenteIds: agentesNovos.map(a => a.id), entregas: plano.entregas,
-    marcos: { plano: agora + TEMPOS.pensar, nascimentos, trabalho, fim }, versao: 1,
-  };
-  const conversa = `sora:${projetoId}`;
-  alterar(e => ({
-    ...e,
-    agentes: { ...e.agentes, ...Object.fromEntries(agentesNovos.map(a => [a.id, a])) },
-    projetos: base ? e.projetos.map(p => p.id === base.id ? projeto : p) : [projeto, ...e.projetos],
-    projetoAtivoId: projetoId,
-    execucoes: [...e.execucoes, ...execucoes],
-    mensagens: [...e.mensagens,
-      { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto: pedido, criadoEm: agora },
-      { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: plano.resposta, criadoEm: agora + TEMPOS.pensar },
-      { id: novoId('msg'), conversaId: conversa, autor: 'sora', criadoEm: trabalho,
-        texto: `${listaNomes(agentesNovos.map(a => a.nome))} já estão trabalhando. Acompanhe pela barra lateral.` },
-      { id: novoId('msg'), conversaId: conversa, autor: 'sora', criadoEm: fim, texto: 'Pronto! Revise as entregas antes de publicar.' },
-    ],
-  }));
-  return projeto;
-}
-
-const listaNomes = (n: string[]) => n.length < 2 ? (n[0] ?? '') : `${n.slice(0, -1).join(', ')} e ${n[n.length - 1]}`;
-
-/** "Novo chat": volta ao estado só-Sora (projetos anteriores continuam na lista). */
 export function novoChat() { alterar(e => ({ ...e, projetoAtivoId: null })); }
-export function abrirProjeto(id: string) { alterar(e => ({ ...e, projetoAtivoId: id })); }
-export function aprovarProjeto(id: string, agora = Date.now()) {
-  alterar(e => ({
-    ...e,
-    projetos: e.projetos.map(p => p.id === id ? { ...p, aprovadoEm: agora } : p),
-    mensagens: [...e.mensagens, { id: novoId('msg'), conversaId: `sora:${id}`, autor: 'sora', criadoEm: agora + 400,
-      texto: 'Aprovado! Registrei sua aprovação — a equipe pode seguir com a publicação.' }],
-  }));
+export function abrirProjeto(id: string) { alterar(e => ({ ...e, projetoAtivoId: id })); acompanharConversa(id); }
+
+async function idsDosAnexos(anexos: Anexo[] = []): Promise<string[]> {
+  const remotos = await Promise.all(anexos.map(a => { if (!a.arquivo) throw new Error(`O arquivo ${a.nome} precisa ser selecionado novamente.`); return enviarAnexo(a.arquivo); }));
+  return remotos.map(a => a.anexo_id);
 }
-/**
- * Apaga um projeto (chat da Sora + plano + execuções). Por padrão apaga também os agentes da equipe;
- * com `manterAgentes` eles continuam existindo como agentes avulsos.
- */
-export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } = {}): Desfazer {
-  const antes = estado;
-  alterar(e => {
-    const p = e.projetos.find(x => x.id === id);
-    const ids = new Set(p?.agenteIds ?? []);
-    const agentes = opcoes.manterAgentes
-      ? Object.fromEntries(Object.entries(e.agentes).map(([k, a]) => [k, ids.has(k) ? { ...a, avulso: true, projetoId: '', espera: 'Disponível' } : a]))
-      : Object.fromEntries(Object.entries(e.agentes).filter(([k]) => !ids.has(k)));
-    return {
-      ...e,
-      projetos: e.projetos.filter(x => x.id !== id),
-      projetoAtivoId: e.projetoAtivoId === id ? null : e.projetoAtivoId,
-      agentes,
-      execucoes: e.execucoes.filter(x => x.projetoId !== id),
-      mensagens: e.mensagens.filter(m => m.conversaId !== `sora:${id}` && (opcoes.manterAgentes || !ids.has(m.conversaId))),
-    };
+
+export async function criarProjeto(pedido: string, _agora?: number, opcoes: { tipo?: 'chat' | 'projeto'; anexos?: Anexo[] } = {}): Promise<ProjetoSora> {
+  const conversa = await api.post<ConversaApi>('/v1/conversas', { agente_id: null, texto: pedido, anexos: await idsDosAnexos(opcoes.anexos) });
+  const projeto = projetoDaApi(conversa); projeto.pedido = pedido; projeto.mensagensPendentes = true;
+  const mensagens = await api.get<MensagemApi[]>(`/v1/conversas/${conversa.id}/mensagens`);
+  alterar(e => ({ ...e, projetos: [projeto, ...e.projetos.filter(p => p.id !== projeto.id)], projetoAtivoId: projeto.id, mensagens: [...e.mensagens.filter(m => m.conversaId !== conversa.id), ...mensagens.map(mensagemDaApi)] }));
+  acompanharConversa(projeto.id); return projeto;
+}
+export async function criarAgenteIndependente(pedido: string, _agora?: number, anexos: Anexo[] = []): Promise<AgenteSora> {
+  const agenteApi = await api.post<AgenteApi>('/v1/agentes', { descricao: pedido });
+  const conversa = await api.post<ConversaApi>('/v1/conversas', { agente_id: agenteApi.id, texto: pedido, anexos: await idsDosAnexos(anexos) });
+  const mensagens = await api.get<MensagemApi[]>(`/v1/conversas/${conversa.id}/mensagens`);
+  const agente = { ...agenteDaApi(agenteApi), conversaId: conversa.id };
+  alterar(e => ({ ...e, agentes: { ...e.agentes, [agente.id]: agente }, mensagens: [...e.mensagens.filter(m => m.conversaId !== conversa.id), ...mensagens.map(mensagemDaApi)] }));
+  acompanharConversa(conversa.id); return agente;
+}
+export async function conversarComSora(texto: string, _agora?: number, anexos: Anexo[] = []): Promise<ProjetoSora> {
+  const p = projetoAtivo(estado); if (!p) return criarProjeto(texto, undefined, { tipo: 'chat', anexos });
+  const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${p.id}/mensagens`, { texto, anexos: await idsDosAnexos(anexos) });
+  alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId: p.id, autor: 'usuario', texto, criadoEm: Date.now(), anexos: [], gerando: false }] })); acompanharConversa(p.id); return p;
+}
+export async function enviarParaAgente(agenteId: string, texto: string, _agora?: number, _registrar = true, anexos: Anexo[] = []) {
+  const anterior = enviosAgenteEmVoo.get(agenteId) ?? Promise.resolve();
+  const envio = anterior.catch(() => undefined).then(async () => {
+    const agente = estado.agentes[agenteId];
+    if (!agente) throw new Error('Agente não encontrado.');
+    const projeto = estado.projetos.find(p => p.agenteIds.includes(agenteId));
+    let conversaId = agente.conversaId ?? projeto?.id;
+    const idsAnexos = await idsDosAnexos(anexos);
+    if (!conversaId) {
+      const conversa = await api.post<ConversaApi>('/v1/conversas', { agente_id: agenteId, texto, anexos: idsAnexos });
+      conversaId = conversa.id;
+      const mensagens = await api.get<MensagemApi[]>(`/v1/conversas/${conversaId}/mensagens`);
+      alterar(e => ({
+        ...e,
+        agentes: { ...e.agentes, [agenteId]: { ...e.agentes[agenteId]!, conversaId } },
+        mensagens: [...e.mensagens.filter(m => m.conversaId !== conversaId), ...mensagens.map(mensagemDaApi)],
+      }));
+      acompanharConversa(conversaId);
+      return;
+    }
+    const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${conversaId}/mensagens`, { texto, anexos: idsAnexos, para_agente_id: projeto ? agenteId : null });
+    alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId, agenteId, autor: 'usuario', texto, criadoEm: Date.now(), gerando: false }] }));
+    acompanharConversa(conversaId);
   });
-  return () => desfazerRemocao(antes, { projetoId: id, agenteIds: antes.projetos.find(x => x.id === id)?.agenteIds ?? [] });
+  enviosAgenteEmVoo.set(agenteId, envio);
+  try { await envio; }
+  finally { if (enviosAgenteEmVoo.get(agenteId) === envio) enviosAgenteEmVoo.delete(agenteId); }
 }
-
-export function renomearProjeto(id: string, titulo: string) {
-  const t = titulo.trim();
-  if (!t) return;
-  alterar(e => ({ ...e, projetos: e.projetos.map(p => p.id === id ? { ...p, titulo: t } : p) }));
-}
-
-/** Mensagem direta do usuário a um agente: o agente trabalha (passos ao vivo) e responde. */
-export function enviarParaAgente(agenteId: string, texto: string, agora = Date.now(), registrarNoChat = true) {
-  const ag = estado.agentes[agenteId];
-  if (!ag) return;
-  const ocupadoAte = Math.max(agora + 500, ...execucoesDoAgente(estado, agenteId).map(x => x.inicio + duracaoRoteiro(x.roteiro) + 300));
-  const roteiro = roteiroAvulso(ag, texto);
-  const x: Execucao = { id: novoId('exec'), agenteId, projetoId: ag.avulso ? undefined : ag.projetoId, inicio: ocupadoAte, roteiro };
-  const fim = ocupadoAte + duracaoRoteiro(roteiro);
-  const entrega = roteiro.find(p => p.tipo === 'entrega');
-  alterar(e => ({
-    ...e,
-    execucoes: [...e.execucoes, x],
-    mensagens: [...e.mensagens,
-      { id: novoId('msg'), conversaId: agenteId, autor: registrarNoChat ? 'usuario' : 'sora', texto, criadoEm: agora },
-      { id: novoId('msg'), conversaId: agenteId, autor: agenteId, criadoEm: fim, execucaoId: x.id,
-        texto: `Feito. ${entrega?.resultado?.resumo ?? 'Pronto'} — veja os passos no painel Trabalho.` },
-    ],
-  }));
-  return x;
-}
-
-/** Pedido de ajuste num projeto: a Sora repassa ao agente certo e uma nova versão é gerada. */
-export function pedirAjuste(projetoId: string, texto: string, agenteId?: string, agora = Date.now()) {
-  const p = estado.projetos.find(x => x.id === projetoId);
-  if (!p) return;
-  const t = texto.toLowerCase();
-  const ags = p.agenteIds.map(id => estado.agentes[id]).filter(Boolean);
-  const porPalavra = ags.find(a => t.split(/\s+/).some(w => w.length > 4 && (a.funcao.toLowerCase().includes(w.slice(0, 5)) || a.nome.toLowerCase() === w)));
-  // pelo tipo do que precisa mudar: textos → quem entregou texto/calendário; visual → quem entregou imagens
-  const querTexto = /texto|legenda|escrev|tom|descontra|formal|se[cç][oõ]es|roteiro/.test(t);
-  const querVisual = /imag|foto|cor|visual|pe[cç]a|layout|tela|cena/.test(t);
-  const porTipo = querTexto ? (ags.find(a => /texto|roteir|resum|relat|legend/i.test(a.funcao)) ?? ags.find(a => ['texto', 'calendario'].includes(p.entregas[a.id]?.tipo ?? '')))
-    : querVisual ? (ags.find(a => /visual|design|cena|layout/i.test(a.funcao)) ?? ags.find(a => p.entregas[a.id]?.tipo === 'imagem')) : undefined;
-  const alvo = (agenteId && estado.agentes[agenteId]) || porPalavra || porTipo || ags[ags.length - 1];
-  if (!alvo) return;
-  const x = enviarParaAgente(alvo.id, texto, agora, false);
-  const anterior = p.entregas[alvo.id];
-  const nova: EntregaGerada | undefined = anterior && {
-    ...anterior,
-    resumo: `${anterior.resumo} · v${p.versao + 1}`,
-    itens: [...(anterior.itens ?? []).slice(0, 5), `Ajuste: ${texto}`],
-  };
-  const conversa = `sora:${projetoId}`;
-  alterar(e => ({
-    ...e,
-    projetos: e.projetos.map(q => q.id === projetoId ? {
-      ...q, versao: q.versao + 1, aprovadoEm: undefined, ajusteAgenteId: alvo.id,
-      entregasAnteriores: { ...q.entregas }, entregas: nova ? { ...q.entregas, [alvo.id]: nova } : q.entregas,
-      marcos: { ...q.marcos, fim: Math.max(q.marcos.fim, x ? x.inicio + duracaoRoteiro(x.roteiro) : 0) },
-    } : q),
-    mensagens: [...e.mensagens,
-      { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto, criadoEm: agora },
-      { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: `Pedi para ${alvo.nome} ajustar. Já te mostro a nova versão.`, criadoEm: agora + 900 },
-      ...(x ? [{ id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: 'Pronto. Veja a nova versão.', criadoEm: x.inicio + duracaoRoteiro(x.roteiro) }] : []),
-    ],
-  }));
-}
-
-/**
- * Mensagem para a Sora no chat dela. Sem projeto ativo → vira um pedido (cria a equipe).
- * Projeto pronto/aprovado → vira ajuste. Durante o trabalho → a Sora responde e anota.
- */
-export function conversarComSora(texto: string, agora = Date.now()) {
-  const p = projetoAtivo(estado);
-  if (!p) return criarProjeto(texto, agora, { tipo: 'chat' });
-  const fase = estadoProjeto(estado, p, agora).fase;
-  if (!p.agenteIds.length && !p.tarefas.length) {
-    if (pedeTrabalho(texto)) return montarEquipe(p, texto, agora, p.tipo);
-    alterar(e => ({
-      ...e,
-      mensagens: [...e.mensagens,
-        { id: novoId('msg'), conversaId: `sora:${p.id}`, autor: 'usuario', texto, criadoEm: agora },
-        { id: novoId('msg'), conversaId: `sora:${p.id}`, autor: 'sora', texto: respostaConversa(texto), criadoEm: agora + 1200, origem: 'conversa' },
-      ],
-      projetos: e.projetos.map(q => q.id === p.id ? { ...q, marcos: { ...q.marcos, plano: agora + 1200, fim: agora + 1200 } } : q),
-    }));
-    return p;
+export async function pedirAjuste(projetoId: string, texto: string, agenteId?: string) { await api.post<void>(`/v1/conversas/${projetoId}/ajuste`, { texto, agente_id: agenteId ?? null }); acompanharConversa(projetoId); }
+export async function aprovarProjeto(id: string) { const p = estado.projetos.find(x => x.id === id); if (p) await api.post<void>(`/v1/conversas/${id}/aprovar`, { versao: p.versao }); }
+export const pendenciasDa = (e: EstadoProjetos, conversaId: string | null | undefined): Pendencia[] => conversaId ? (e.pendencias ?? []).filter(p => p.conversaId === conversaId) : [];
+const semPendencia = (id: string) => (e: EstadoProjetos): EstadoProjetos => ({ ...e, pendencias: (e.pendencias ?? []).filter(p => p.id !== id) });
+const marcarPendencia = (id: string, patch: Partial<Pick<Pendencia, 'enviando' | 'erro'>>) => (e: EstadoProjetos): EstadoProjetos => ({ ...e, pendencias: (e.pendencias ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
+async function enviarPendencia(id: string, chamada: () => Promise<unknown>) {
+  alterar(marcarPendencia(id, { enviando: true, erro: undefined }));
+  try { await chamada(); alterar(semPendencia(id)); }
+  catch (erro) {
+    // 404/409: já respondida ou vencida em outro lugar; o cartão não tem mais o que fazer
+    if (erro instanceof ErroApi && (erro.status === 404 || erro.status === 409)) { alterar(semPendencia(id)); return; }
+    alterar(marcarPendencia(id, { enviando: false, erro: erro instanceof Error ? erro.message : 'Não foi possível enviar. Tente de novo.' }));
   }
-  if (fase === 'pronto' || fase === 'aprovado') { pedirAjuste(p.id, texto, undefined, agora); return p; }
-  const conversa = `sora:${p.id}`;
-  const resposta = fase === 'pensando' || fase === 'planejando'
-    ? `Anotado: “${resumir(texto)}”. Vou considerar isso no plano.`
-    : `Anotado: “${resumir(texto)}”. Repasso para a equipe e te aviso quando terminar.`;
-  alterar(e => ({
-    ...e,
-    mensagens: [...e.mensagens,
-      { id: novoId('msg'), conversaId: conversa, autor: 'usuario', texto, criadoEm: agora },
-      { id: novoId('msg'), conversaId: conversa, autor: 'sora', texto: resposta, criadoEm: agora + 1100 },
-    ],
-  }));
-  return p;
 }
-const resumir = (t: string) => t.length > 70 ? `${t.slice(0, 67).trimEnd()}…` : t;
+export const responderPergunta = (id: string, valor: string) => enviarPendencia(id, () => api.post<void>(`/v1/perguntas/${id}/responder`, { valor }));
+export type DecisaoDeAprovacao = 'permitir_uma_vez' | 'sempre_permitir' | 'negar';
+export const decidirAprovacao = (id: string, decisao: DecisaoDeAprovacao) => enviarPendencia(id, () => api.post<void>(`/v1/aprovacoes/${id}/decidir`, { decisao }));
+export function renomearProjeto(id: string, titulo: string) { const limpo = titulo.trim(); if (!limpo) return; alterar(e => ({ ...e, projetos: e.projetos.map(p => p.id === id ? { ...p, titulo: limpo } : p) })); void api.patch(`/v1/conversas/${id}`, { titulo: limpo }).catch(() => void iniciarProjetos()); }
 
-export function alternarPlugin(nome: string) {
-  alterar(e => ({
-    ...e,
-    pluginsConectados: e.pluginsConectados.includes(nome) ? e.pluginsConectados.filter(n => n !== nome) : [...e.pluginsConectados, nome],
-  }));
-}
-
-/** Cria (sem id) ou atualiza (com id) um agente. Novos agentes do estúdio são avulsos. */
-export function salvarAgente(dados: RascunhoAgente & { id?: string }): AgenteSora {
-  const existente = dados.id ? estado.agentes[dados.id] : undefined;
-  const ag: AgenteSora = existente
-    ? { ...existente, ...dados, id: existente.id }
-    : {
-      id: novoId('ag'), projetoId: '', nome: dados.nome.trim() || 'Agente', funcao: dados.funcao.trim() || 'Assistente',
-      cor: dados.cor, tipoMovimento: dados.tipoMovimento, ferramentas: dados.ferramentas, status: 'aguardando',
-      verbo: verboDe(dados.funcao), espera: 'Disponível', instrucoes: dados.instrucoes, avulso: true, criadoEm: Date.now(),
-    };
-  if (existente && dados.funcao !== existente.funcao) ag.verbo = verboDe(dados.funcao);
-  alterar(e => ({ ...e, agentes: { ...e.agentes, [ag.id]: ag } }));
-  return ag;
-}
-
-/** Personalização rápida de qualquer agente (nome, cor, movimento, ferramentas, instruções…). */
-export function atualizarAgente(id: string, patch: Partial<Omit<AgenteSora, 'id'>>) {
-  const ag = estado.agentes[id];
-  if (!ag) return;
-  const novo = { ...ag, ...patch };
-  if (patch.funcao && patch.funcao !== ag.funcao && !patch.verbo) novo.verbo = verboDe(patch.funcao);
-  alterar(e => ({ ...e, agentes: { ...e.agentes, [id]: novo } }));
-}
-
-/** Remove um agente avulso (agentes de equipe saem junto com o projeto). */
-/** Apaga um agente (avulso ou de equipe — na equipe, ele sai do projeto). A Sora não pode ser apagada. */
-export function removerAgente(id: string): Desfazer {
-  const antes = estado;
-  alterar(e => {
-    if (!e.agentes[id]) return e;
-    const agentes = { ...e.agentes }; delete agentes[id];
-    return {
-      ...e, agentes,
-      projetos: e.projetos.map(p => p.agenteIds.includes(id) ? { ...p, agenteIds: p.agenteIds.filter(x => x !== id) } : p),
-      execucoes: e.execucoes.filter(x => x.agenteId !== id),
-      mensagens: e.mensagens.filter(m => m.conversaId !== id),
-    };
-  });
-  return () => desfazerRemocao(antes, { agenteIds: [id] });
-}
-
-// ---------- Desfazer (toasts com "Desfazer", item 45) ----------
-
-/** Função que desfaz uma remoção. Pode ser chamada uma vez; chamadas extras não fazem nada. */
 export type Desfazer = () => void;
-
-/**
- * Restaura o que uma remoção tirou, a partir do estado de ANTES, sem apagar o que mudou depois
- * (mensagens novas, outros agentes, renomes…): agentes e campos alterados pelo "manter como avulsos",
- * o projeto na mesma posição da lista, os agenteIds dos projetos, execuções, mensagens e o projeto ativo.
- */
-function desfazerRemocao(antes: EstadoProjetos, alvo: { projetoId?: string; agenteIds: string[] }) {
-  alterar(e => {
-    const ids = new Set(alvo.agenteIds);
-    // agentes: volta quem sumiu; quem virou avulso volta a ser da equipe
-    const agentes = { ...e.agentes };
-    for (const aid of ids) {
-      const velho = antes.agentes[aid];
-      if (!velho) continue;
-      const atual = agentes[aid];
-      agentes[aid] = atual ? { ...atual, avulso: velho.avulso, projetoId: velho.projetoId, espera: velho.espera } : velho;
-    }
-    // projetos: o removido volta na mesma posição; os demais recuperam os agenteIds que perderam
-    let projetos = e.projetos.map(p => {
-      const velho = antes.projetos.find(x => x.id === p.id);
-      if (!velho || !velho.agenteIds.some(a => ids.has(a))) return p;
-      const faltam = velho.agenteIds.filter(a => ids.has(a) && !p.agenteIds.includes(a));
-      return faltam.length ? { ...p, agenteIds: velho.agenteIds.filter(a => p.agenteIds.includes(a) || faltam.includes(a)) } : p;
-    });
-    if (alvo.projetoId && !projetos.some(p => p.id === alvo.projetoId)) {
-      const velho = antes.projetos.find(x => x.id === alvo.projetoId);
-      if (velho) {
-        const pos = Math.min(antes.projetos.findIndex(x => x.id === alvo.projetoId), projetos.length);
-        projetos = [...projetos.slice(0, pos), velho, ...projetos.slice(pos)];
-      }
-    }
-    const temExec = new Set(e.execucoes.map(x => x.id));
-    const temMsg = new Set(e.mensagens.map(m => m.id));
-    const voltaExec = antes.execucoes.filter(x => !temExec.has(x.id) && (ids.has(x.agenteId) || (alvo.projetoId && x.projetoId === alvo.projetoId)));
-    const voltaMsg = antes.mensagens.filter(m => !temMsg.has(m.id) && (ids.has(m.conversaId) || (alvo.projetoId && m.conversaId === `sora:${alvo.projetoId}`)));
-    return {
-      ...e, agentes, projetos,
-      execucoes: [...e.execucoes, ...voltaExec],
-      mensagens: [...e.mensagens, ...voltaMsg],
-      projetoAtivoId: e.projetoAtivoId ?? (alvo.projetoId && antes.projetoAtivoId === alvo.projetoId ? alvo.projetoId : null),
-    };
-  });
+export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } = {}): Desfazer {
+  encerrarConversa(id);
+  const antes = estado; alterar(e => ({ ...e, projetos: e.projetos.filter(p => p.id !== id), projetoAtivoId: e.projetoAtivoId === id ? null : e.projetoAtivoId }));
+  void api.delete(`/v1/conversas/${id}?manter_agentes=${opcoes.manterAgentes ? 'true' : 'false'}`).catch(() => definir(antes)); return () => { definir(antes); void iniciarProjetos(); };
 }
+export async function salvarAgente(dados: RascunhoAgente & { id?: string }): Promise<AgenteSora> {
+  const corpo = { nome: dados.nome, funcao: dados.funcao, papel: dados.instrucoes, cor: dados.cor, movimento: dados.tipoMovimento, ferramentas: dados.ferramentas };
+  const saida = dados.id ? await api.patch<AgenteApi>(`/v1/agentes/${dados.id}`, corpo) : await api.post<AgenteApi>('/v1/agentes', corpo);
+  const agente = { ...agenteDaApi(saida), ferramentas: dados.ferramentas, instrucoes: dados.instrucoes }; alterar(e => ({ ...e, agentes: { ...e.agentes, [agente.id]: { ...e.agentes[agente.id], ...agente } } })); return agente;
+}
+export function atualizarAgente(id: string, patch: Partial<Omit<AgenteSora, 'id'>>) { const atual = estado.agentes[id]; if (!atual) return; alterar(e => ({ ...e, agentes: { ...e.agentes, [id]: { ...atual, ...patch } } })); void api.patch(`/v1/agentes/${id}`, { nome: patch.nome, funcao: patch.funcao, papel: patch.instrucoes, cor: patch.cor, movimento: patch.tipoMovimento }).catch(() => void iniciarProjetos()); }
+export function removerAgente(id: string): Desfazer { const antes = estado; alterar(e => { const agentes = { ...e.agentes }; delete agentes[id]; return { ...e, agentes }; }); void api.delete(`/v1/agentes/${id}`).catch(() => definir(antes)); return () => { definir(antes); void iniciarProjetos(); }; }
 
-/** Fotografia do estado inteiro (para fluxos que precisam voltar tudo de uma vez). */
-export function capturarSnapshot(): EstadoProjetos { return estado; }
-/** Volta o estado inteiro para uma fotografia tirada com capturarSnapshot(). */
+export function capturarSnapshot() { return estado; }
 export function restaurarSnapshot(snapshot: EstadoProjetos) { definir(snapshot); }
-
 export function atualizarSora(patch: Partial<SoraPerfil>) { alterar(e => ({ ...e, sora: { ...e.sora, ...patch } })); }
-export function restaurarSora() { alterar(e => ({ ...e, sora: { nome: 'Sora', cor: COR_SORA } })); }
-
-/** Zera tudo (QA / "começar do zero"). */
-export function limparTudo() { definir(inicial()); }
-
-// Ganchos de QA (só em desenvolvimento): qa/shoot.mjs usa para semear projetos já concluídos.
-if (import.meta.env.DEV && typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).__sora = { criarProjeto, limparTudo, lerEstado, novoChat, abrirProjeto };
+export function restaurarSora() { atualizarSora({ nome: 'Sora', cor: COR_SORA }); }
+export async function limparTudo() {
+  encerrarConversas();
+  const conversas = new Set([
+    ...estado.projetos.map(projeto => projeto.id),
+    ...Object.values(estado.agentes).map(agente => agente.conversaId).filter((id): id is string => !!id),
+  ]);
+  const individuais = Object.values(estado.agentes).filter(agente => agente.avulso).map(agente => agente.id);
+  try {
+    for (const conversaId of conversas) {
+      await api.delete(`/v1/conversas/${conversaId}?manter_agentes=false`);
+    }
+    for (const agenteId of individuais) await api.delete(`/v1/agentes/${agenteId}`);
+    definir({ ...inicial(), carregando: false });
+  } catch (erro) {
+    await iniciarProjetos().catch(() => undefined);
+    throw erro;
+  }
 }
-
-// ---------- Recursos de chat (E3): streaming simulado, Parar, Refazer, 👍/👎, editar pergunta ----------
-
-/** Quanto tempo uma resposta leva para "digitar" (ms): ~16 ms por caractere, entre 0,6 s e 4,5 s. */
-export function duracaoStream(texto: string) {
-  return Math.min(4500, Math.max(600, texto.length * 16));
-}
+export function alternarPlugin(_nome: string) { /* plugins seguem congelados */ }
 
 export interface TextoVisivel { texto: string; gerando: boolean; interrompida: boolean }
-
-/** Quanto do texto de uma resposta já apareceu (por palavra), a partir do relógio. */
-export function textoVisivel(m: MensagemChat, agora: number): TextoVisivel {
-  if (m.autor === 'usuario') return { texto: m.texto, gerando: false, interrompida: false };
-  const dur = duracaoStream(m.texto);
-  const corte = Math.min(m.interrompidaEm ?? agora, agora);
-  const frac = Math.max(0, Math.min(1, (corte - m.criadoEm) / dur));
-  const interrompida = m.interrompidaEm !== undefined && m.interrompidaEm < m.criadoEm + dur;
-  if (frac >= 1) return { texto: m.texto, gerando: false, interrompida: false };
-  // corta numa fronteira de palavra (sem quebrar markdown no meio de uma palavra)
-  const alvo = Math.floor(m.texto.length * frac);
-  const fim = m.texto.slice(alvo).search(/\s/);
-  const texto = m.texto.slice(0, fim < 0 ? m.texto.length : alvo + fim);
-  return { texto, gerando: !interrompida, interrompida };
-}
-
-/** Alguma resposta desta conversa ainda está sendo "digitada"? */
-export function gerandoNa(e: EstadoProjetos, conversaId: string, agora: number) {
-  return e.mensagens.some(m => m.conversaId === conversaId && m.criadoEm <= agora && textoVisivel(m, agora).gerando);
-}
-
-/** "Parar": congela as respostas desta conversa que estão sendo digitadas agora (o texto parcial fica). */
-export function pararGeracao(conversaId: string, agora = Date.now()) {
-  alterar(e => ({
-    ...e,
-    mensagens: e.mensagens.map(m => m.conversaId === conversaId && m.autor !== 'usuario' && m.criadoEm <= agora
-      && m.interrompidaEm === undefined && agora < m.criadoEm + duracaoStream(m.texto) ? { ...m, interrompidaEm: agora } : m),
-  }));
-}
-
-/** 👍 / 👎 (clicar de novo no mesmo tira a avaliação). */
-export function avaliarMensagem(id: string, valor: 'positiva' | 'negativa') {
-  alterar(e => ({ ...e, mensagens: e.mensagens.map(m => m.id === id ? { ...m, avaliacao: m.avaliacao === valor ? undefined : valor } : m) }));
-}
-
-/** Pode refazer? Só respostas de conversa comum da Sora (as do trabalho da equipe vêm do plano). */
-export const podeRefazer = (m: MensagemChat) => m.autor === 'sora' && m.origem === 'conversa';
-
-/** "Refazer": a Sora pensa de novo e responde com outra redação. */
-export function refazerResposta(id: string, agora = Date.now()) {
-  const m = estado.mensagens.find(x => x.id === id);
-  if (!m || !podeRefazer(m)) return;
-  const pergunta = [...estado.mensagens].filter(x => x.conversaId === m.conversaId && x.autor === 'usuario' && x.criadoEm <= m.criadoEm)
-    .sort((a, b) => b.criadoEm - a.criadoEm)[0];
-  const variante = (m.variante ?? 0) + 1;
-  const quando = agora + 900;
-  const projetoId = m.conversaId.startsWith('sora:') ? m.conversaId.slice(5) : '';
-  alterar(e => ({
-    ...e,
-    mensagens: e.mensagens.map(x => x.id === id ? {
-      ...x, texto: respostaConversa(pergunta?.texto ?? '', variante), variante, criadoEm: quando, interrompidaEm: undefined, avaliacao: undefined,
-    } : x),
-    projetos: e.projetos.map(q => q.id === projetoId && !q.agenteIds.length ? { ...q, marcos: { ...q.marcos, plano: quando, fim: quando } } : q),
-  }));
-}
-
-/** Pode editar esta pergunta? Mensagens do usuário em chats sem equipe e em chats diretos com agentes. */
-export function podeEditar(e: EstadoProjetos, m: MensagemChat) {
-  if (m.autor !== 'usuario') return false;
-  if (!m.conversaId.startsWith('sora:')) return !!e.agentes[m.conversaId];
-  const p = e.projetos.find(x => x.id === m.conversaId.slice(5));
-  return !!p && !p.agenteIds.length && !p.tarefas.length;
-}
-
-/** "Editar pergunta": troca o texto e refaz a conversa a partir dali (o que vinha depois é substituído). */
-/** Prévias (blob:) das imagens enviadas nesta sessão, por id do anexo. */
+export const duracaoStream = (_texto: string) => 0;
+export function textoVisivel(m: MensagemChat, _agora: number): TextoVisivel { return { texto: m.texto, gerando: !!m.gerando, interrompida: m.interrompidaEm !== undefined }; }
+export function gerandoNa(e: EstadoProjetos, conversaOuAgenteId: string, agora: number) { return mensagensDa(e, conversaOuAgenteId, agora).some(m => m.gerando); }
+export function pararGeracao(conversaOuAgenteId: string) { const p = estado.projetos.find(x => x.id === conversaOuAgenteId); if (p?.cadeiaId) void api.post(`/v1/cadeias/${p.cadeiaId}/cancelar`); }
+export function avaliarMensagem(id: string, valor: 'positiva' | 'negativa') { alterar(e => ({ ...e, mensagens: e.mensagens.map(m => m.id === id ? { ...m, avaliacao: m.avaliacao === valor ? undefined : valor } : m) })); }
+export const podeRefazer = (_m: MensagemChat) => false;
+export function refazerResposta(_id: string) { /* o backend não expõe refazer nesta fase */ }
+export function podeEditar(_e: EstadoProjetos, _m: MensagemChat) { return false; }
+export function editarPergunta(_id: string, _novoTexto: string) { /* edição não faz parte do contrato HTTP */ }
 const previasDaSessao = new Map<string, string>();
 export const previaDoAnexo = (id: string) => previasDaSessao.get(id);
+export async function anexarEnvio<T>(anexos: Anexo[] | undefined, enviar: (anexos: Anexo[]) => Promise<T>): Promise<T> { (anexos ?? []).forEach(a => { if (a.urlPrevia) previasDaSessao.set(a.id, a.urlPrevia); }); return enviar(anexos ?? []); }
 
-/**
- * Envia com anexos: roda o envio e marca com os anexos as perguntas do usuário criadas por ele.
- * Ex.: anexarEnvio(anexos, () => conversarComSora(texto)). Guarda só metadados no store.
- */
-export function anexarEnvio<T>(anexos: (AnexoMsg & { urlPrevia?: string })[] | undefined, enviar: () => T): T {
-  if (!anexos?.length) return enviar();
-  const antes = new Set(estado.mensagens.map(m => m.id));
-  const r = enviar();
-  anexos.forEach(a => { if (a.urlPrevia) previasDaSessao.set(a.id, a.urlPrevia); });
-  const meta = anexos.map(({ id, nome, tipo, tamanho }) => ({ id, nome, tipo, tamanho }));
-  alterar(e => ({ ...e, mensagens: e.mensagens.map(m => !antes.has(m.id) && m.autor === 'usuario' ? { ...m, anexos: meta } : m) }));
-  return r;
-}
-
-export function editarPergunta(id: string, novoTexto: string, agora = Date.now()) {
-  const m = estado.mensagens.find(x => x.id === id);
-  const texto = novoTexto.trim();
-  if (!m || (!texto && !m.anexos?.length) || !podeEditar(estado, m)) return;
-  const anexos = m.anexos;
-  const conversa = m.conversaId;
-  const ehAgente = !conversa.startsWith('sora:');
-  alterar(e => ({
-    ...e,
-    mensagens: e.mensagens.filter(x => x.conversaId !== conversa || x.criadoEm < m.criadoEm),
-    execucoes: ehAgente ? e.execucoes.filter(x => x.agenteId !== conversa || x.tarefaId || x.inicio < m.criadoEm) : e.execucoes,
-  }));
-  if (ehAgente) { anexarEnvio(anexos, () => enviarParaAgente(conversa, texto, agora)); return; }
-  abrirProjeto(conversa.slice(5));
-  anexarEnvio(anexos, () => conversarComSora(texto, agora));
-}
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__sora = { limparTudo, lerEstado, novoChat, abrirProjeto, iniciarProjetos, removerProjeto, removerAgente };
+export function _aplicarEventoParaTestes(evento: EventoSse) { receber(evento); }
+export function _reiniciarProjetosParaTestes() { encerrarProjetos(); estado = { ...inicial(), carregando: false }; notificar(); }
+export function _definirEstadoParaTestes(snapshot: EstadoProjetos) { estado = snapshot; notificar(); }

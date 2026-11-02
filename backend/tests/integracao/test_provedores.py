@@ -15,7 +15,7 @@ from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.api.provedores import obter_listador
+from app.api.provedores import obter_listador, obter_sonda
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis
 from app.core.seguranca import decifrar_segredo
@@ -101,6 +101,10 @@ class AmbienteAPI:
     respostas: list[Response]
 
 
+async def _sonda_nula(_config: object, _modelo: str) -> list[str]:
+    return []
+
+
 @pytest.fixture(scope="module")
 def servicos():
     from testcontainers.postgres import PostgresContainer
@@ -158,6 +162,7 @@ async def api(
     app.dependency_overrides[obter_sessao] = sessao_de_teste
     app.dependency_overrides[obter_redis] = lambda: redis
     app.dependency_overrides[obter_listador] = lambda: listador
+    app.dependency_overrides[obter_sonda] = lambda: _sonda_nula
     transporte = ASGITransport(app=app)
     try:
         async with AsyncClient(

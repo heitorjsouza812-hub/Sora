@@ -7,7 +7,7 @@ import type { Movimento, PassoTrabalho, Status } from '../../types';
 import type { OrbState } from '../mascot';
 import {
   agentesDoProjeto, estadoAgente, estadoProjeto, passosDoAgente, useAgora, useProjetos,
-  type EstadoProjetos, type FaseProjeto, type ProjetoSora,
+  type EstadoProjetos, type FaseProjeto, type Pendencia, type ProjetoSora,
 } from '../../state/projetos';
 import { statusDaSora } from '../layout/useSoraStatus';
 
@@ -119,6 +119,7 @@ export interface VisaoIlha {
   trabalhando: number;                // agentes trabalhando em TODOS os projetos
   rodando: number;                    // projetos rodando
   alerta: AlertaIlha | null;
+  pendencias: Pendencia[];            // o que a equipe do projeto mostrado espera do usuário
 }
 
 const RODANDO: FaseProjeto[] = ['pensando', 'planejando', 'coordenando', 'pronto'];
@@ -134,6 +135,13 @@ function resumir(e: EstadoProjetos, p: ProjetoSora, agora: number): ResumoProjet
 }
 
 const orbDoStatus = (s: Status): OrbState => s === 'trabalhando' ? 'working' : s === 'concluido' ? 'done' : 'idle';
+
+/** Pendências de todos os projetos (o usuário não pode perder um pedido de outro projeto); as do mostrado vão primeiro. */
+function pendenciasDaIlha(e: EstadoProjetos, projetoId: string | null): Pendencia[] {
+  const ids = new Set(e.projetos.map(p => p.id));
+  const todas = (e.pendencias ?? []).filter(x => ids.has(x.conversaId));
+  return [...todas.filter(x => x.conversaId === projetoId), ...todas.filter(x => x.conversaId !== projetoId)];
+}
 
 /** Função pura (testável): monta a visão da ilha. */
 export function visaoIlha(e: EstadoProjetos, agora: number, escolhido: string | null): VisaoIlha {
@@ -176,6 +184,7 @@ export function visaoIlha(e: EstadoProjetos, agora: number, escolhido: string | 
     trabalhando: Object.keys(e.agentes).filter(id => estadoAgente(e, id, agora).status === 'trabalhando').length,
     rodando: projetos.filter(r => r.rodando).length,
     alerta,
+    pendencias: pendenciasDaIlha(e, p?.id ?? null),
   };
 }
 

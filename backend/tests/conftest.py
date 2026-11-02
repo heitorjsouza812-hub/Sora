@@ -12,6 +12,7 @@ from httpx import AsyncClient
 # configuração vale ``producao`` (segura por padrão), então os testes declaram ``teste``. O
 # ``JWT_SEGREDO`` tem 32+ bytes para os testes que trocam o ambiente para produção.
 os.environ.setdefault("AMBIENTE", "teste")
+os.environ.setdefault("NAVEGADOR_CDP_URL", "http://navegador:9223")  # produção exige
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://teste:teste@localhost/teste")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault(

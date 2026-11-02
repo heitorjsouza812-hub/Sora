@@ -9,6 +9,7 @@ pergunta no lugar das etapas.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 from uuid import UUID
 
@@ -56,12 +57,43 @@ class PlanoInvalido(Exception):
 def validar_plano(plano: Plano, *, tem_modelo_de_imagem: bool) -> None:
     """Confere as regras do plano: limites, Verificador por último, dependências
     válidas e Designer só com modelo de imagem. Levanta ``PlanoInvalido``."""
-    raise NotImplementedError
+    ordens = [etapa.ordem for etapa in plano.etapas]
+    if ordens != list(range(1, len(ordens) + 1)):
+        raise PlanoInvalido("as etapas precisam ter ordens consecutivas a partir de 1")
+    verificadores = [etapa for etapa in plano.etapas if etapa.especialista == "verificador"]
+    if len(verificadores) != 1 or verificadores[0] is not plano.etapas[-1]:
+        raise PlanoInvalido("o Verificador precisa ser a ultima e unica etapa de verificacao")
+    especialistas = {
+        etapa.especialista for etapa in plano.etapas if etapa.especialista != "verificador"
+    }
+    if len(especialistas) > MAX_ESPECIALISTAS:
+        raise PlanoInvalido(f"o plano excede {MAX_ESPECIALISTAS} especialistas")
+    if not tem_modelo_de_imagem and any(e.especialista == "designer" for e in plano.etapas):
+        raise PlanoInvalido("Designer exige um modelo de imagem conectado")
+    conhecidas: set[int] = set()
+    for etapa in plano.etapas:
+        if etapa.ordem in etapa.depende_de:
+            raise PlanoInvalido(f"a etapa {etapa.ordem} depende dela mesma")
+        if len(etapa.depende_de) != len(set(etapa.depende_de)):
+            raise PlanoInvalido(f"a etapa {etapa.ordem} repete dependencias")
+        ausentes = set(etapa.depende_de) - conhecidas
+        if ausentes:
+            lista = sorted(ausentes)
+            raise PlanoInvalido(
+                f"a etapa {etapa.ordem} depende de etapas futuras ou inexistentes: {lista}"
+            )
+        conhecidas.add(etapa.ordem)
 
 
 def titulo_da_etapa(etapa: EtapaPlano) -> str:
     """Título curto mostrado no app ("Pesquisar referências"), vai para ``etapas.titulo``."""
-    raise NotImplementedError
+    texto = re.sub(r"\s+", " ", etapa.tarefa).strip().rstrip(".?!")
+    if not texto:
+        return etapa.especialista.capitalize()
+    titulo = " ".join(texto.split()[:6])
+    if len(titulo) > 60:
+        titulo = titulo[:57].rstrip() + "..."
+    return titulo[0].upper() + titulo[1:]
 
 
 async def planejar(cadeia_id: UUID) -> Plano | PerguntaPlano:

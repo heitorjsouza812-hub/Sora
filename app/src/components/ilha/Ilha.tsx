@@ -25,6 +25,7 @@ const HOVER_ABRIR = 250;
 const HOVER_FECHAR = 400;
 const MAX_BONECOS = 5;
 const CHAVE_ALERTAS = 'sora.ilha.alertas.v1';
+const JANELA_ALERTA_MS = 60_000;
 
 /** Alertas já mostrados (uma vez por projeto/versão), lembrados entre recargas. */
 function alertasVistos(): Set<string> {
@@ -196,6 +197,14 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
   const oculta = (naJanelaMain && !prefs.ilhaNoApp) || !prefs.visivel || v.projetos.length === 0 || semProjetoNaHome;
   const destacada = janela.aberta && !!janela.container;
   const aberta = ui.aberta && !oculta;
+  // A pílula pendura ~44 px abaixo da barra do topo no celular; telas com algo colado na barra (as abas de
+  // Configurações) usam este sinal para abrir espaço em vez de ficar escondidas atrás dela.
+  useEffect(() => {
+    const raiz = document.documentElement;
+    if (oculta || destacada || desktop) { delete raiz.dataset.ilhaPilula; return; }
+    raiz.dataset.ilhaPilula = '1';
+    return () => { delete raiz.dataset.ilhaPilula; };
+  }, [oculta, destacada, desktop]);
   const modo: ModoIlha = oculta ? 'oculta'
     : aberta && !destacada ? (ui.vista === 'aprovacao' && v.alerta ? 'alerta' : 'expandida')
     : prefs.esconderOciosa && v.rodando === 0 && !espiandoHover ? 'espiando'
@@ -233,14 +242,31 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
 
   // ---------- alerta: equipe pronta → abre sozinha na Aprovação (uma vez por projeto/versão) ----------
   const alertaChave = v.alerta ? `${v.alerta.projetoId}:${e.projetos.find(p => p.id === v.alerta!.projetoId)?.versao ?? 1}` : null;
+  const alertaFim = e.projetos.find(p => p.id === v.alerta?.projetoId)?.marcos.fim ?? 0;
   useEffect(() => {
     if (!alertaChave || oculta) return;
     if (alertasVistos().has(alertaChave)) return;
+    // Só abre sozinha para uma equipe que acabou de terminar. Projeto pronto de antes (navegador novo,
+    // armazenamento limpo, projeto reaberto) não é alerta: a ilha começa compacta, sem cobrir a tela.
+    if (Date.now() - alertaFim > JANELA_ALERTA_MS) return;
     marcarAlerta(alertaChave);
     porHover.current = false;
     abrirIlha('aprovacao');
     if (tocaSom) tocar('pronto');
-  }, [alertaChave, oculta, tocaSom]);
+  }, [alertaChave, alertaFim, oculta, tocaSom]);
+
+  // ---------- pendência nova (pergunta/aprovação): abre sozinha no Início, uma vez por pedido ----------
+  const pendenciasVistas = useRef(new Set<string>());
+  useEffect(() => {
+    if (oculta) return;
+    const nova = v.pendencias.find(x => !pendenciasVistas.current.has(x.id));
+    v.pendencias.forEach(x => pendenciasVistas.current.add(x.id));
+    // só pedido que acabou de chegar; pedido antigo (reabrir o app) fica no chat e na pílula
+    if (!nova || Date.now() - nova.desde > JANELA_ALERTA_MS) return;
+    porHover.current = false;
+    abrirIlha('inicio');
+    if (tocaSom) tocar('pronto');
+  }, [v.pendencias, oculta, tocaSom]);
 
   // ---------- pulso + som quando um agente conclui ----------
   const concluidos = v.agentes.filter(a => a.status === 'concluido').length;

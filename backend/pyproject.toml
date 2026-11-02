@@ -24,6 +24,7 @@ dependencies = [
     "openpyxl>=3.1,<4",
     "pillow>=11,<13",
     "psycopg[binary,pool]>=3.2,<4",
+    "publicsuffixlist==1.0.2.20260214",
     "pwdlib[argon2]>=0.3,<1",
     "pydantic>=2.11,<3",
     "pydantic-settings>=2.10,<3",

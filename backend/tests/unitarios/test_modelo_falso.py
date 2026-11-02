@@ -143,3 +143,14 @@ async def test_todo_papel_responde(papel: str) -> None:
     modelo = criar_modelo_falso(papel).bind_tools([])
     resposta = await modelo.ainvoke([HumanMessage("Pedido: oi")])
     assert resposta.content or resposta.tool_calls
+
+
+def test_gatilhos_de_teste_so_do_modelo_falso() -> None:
+    from app.llm.falso import GATILHOS, gatilhos_do_texto
+
+    assert gatilhos_do_texto("crie [pergunta] e [orcamento] [pergunta]") == [
+        "pergunta",
+        "orcamento",
+    ]
+    assert gatilhos_do_texto("sem gatilho (pergunta) [outro]") == []
+    assert set(GATILHOS) == {"pergunta", "aprovacao", "orcamento"}

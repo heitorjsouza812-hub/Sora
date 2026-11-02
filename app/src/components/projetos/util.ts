@@ -24,6 +24,7 @@ export const FASES: Record<FaseProjeto, { rotulo: string; cor: string }> = {
   coordenando: { rotulo: 'Em andamento', cor: '#9cc4ff' },
   pronto: { rotulo: 'Pronto para revisar', cor: 'var(--ok)' },
   aprovado: { rotulo: 'Aprovado', cor: 'var(--ok)' },
+  erro: { rotulo: 'Interrompido', cor: 'var(--danger)' },
 };
 
 const fmtData = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'short' });

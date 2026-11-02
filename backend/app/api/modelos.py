@@ -11,6 +11,7 @@ from app.core.banco import obter_sessao
 from app.core.dependencias import usuario_atual
 from app.modelos.esquemas import ModeloAtualizacao, ModeloSaida
 from app.modelos.tabelas import ModeloDisponivel, Provedor
+from app.seletor.tipos import Capacidade
 
 roteador = APIRouter(prefix="/modelos", tags=["modelos"], dependencies=[Depends(usuario_atual)])
 
@@ -59,6 +60,13 @@ async def atualizar_modelo(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "Informe se o modelo fica ativo (true ou false)."
         )
+    if dados.capacidades is not None:
+        validas = {c.value for c in Capacidade}
+        if not set(dados.capacidades) <= validas:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Capacidade inválida. Use: " + ", ".join(sorted(validas)) + ".",
+            )
     modelo = await sessao.scalar(
         consulta_modelos_do_usuario(usuario_id)
         .where(ModeloDisponivel.id == modelo_id)
@@ -68,6 +76,9 @@ async def atualizar_modelo(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Modelo não encontrado.")
     if dados.nivel is not None and dados.nivel != modelo.nivel:
         modelo.nivel = dados.nivel
+        modelo.origem = "usuario"
+    if dados.capacidades is not None:
+        modelo.capacidades = sorted(set(dados.capacidades))
         modelo.origem = "usuario"
     if dados.ativo is not None:
         modelo.ativo = dados.ativo

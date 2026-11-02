@@ -1,11 +1,4 @@
-"""Evento ``passo`` do painel Trabalho (especificação §4, última regra; §2,
-evento ``passo``; §1, tabela ``passos``).
-
-Em volta de cada chamada de ferramenta de um especialista: grava o passo
-``executando`` com o rótulo de ``app.ferramentas.rotulos`` (sem segredos),
-emite ``passo``, e depois atualiza o mesmo passo com o resultado resumido e
-o ``progresso`` da etapa.
-"""
+"""Porta do middleware para registrar os passos do painel Trabalho."""
 
 from __future__ import annotations
 
@@ -15,16 +8,27 @@ from uuid import UUID
 
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
 
+IniciarPasso = Callable[[UUID, UUID, dict[str, Any]], Awaitable[Any]]
+FinalizarPasso = Callable[[Any, Any | None, BaseException | None], Awaitable[None]]
+
 
 class MiddlewarePassos(AgentMiddleware):
-    """Grava e emite um passo por chamada de ferramenta."""
-
-    def __init__(self, etapa_id: UUID, agente_id: UUID) -> None:
-        raise NotImplementedError
+    def __init__(
+        self, etapa_id: UUID, agente_id: UUID, *, iniciar: IniciarPasso, finalizar: FinalizarPasso
+    ) -> None:
+        self.etapa_id = etapa_id
+        self.agente_id = agente_id
+        self._iniciar = iniciar
+        self._finalizar = finalizar
 
     async def awrap_tool_call(
-        self,
-        request: ToolCallRequest,
-        handler: Callable[[ToolCallRequest], Awaitable[Any]],
+        self, request: ToolCallRequest, handler: Callable[[ToolCallRequest], Awaitable[Any]]
     ) -> Any:
-        raise NotImplementedError
+        passo = await self._iniciar(self.etapa_id, self.agente_id, dict(request.tool_call))
+        try:
+            resultado = await handler(request)
+        except BaseException as erro:
+            await self._finalizar(passo, None, erro)
+            raise
+        await self._finalizar(passo, resultado, None)
+        return resultado

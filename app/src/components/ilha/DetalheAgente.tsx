@@ -39,7 +39,7 @@ export function DetalheAgente({ agenteId, onVoltar }: { agenteId: string; onVolt
     evento.preventDefault();
     const texto = mensagem.trim();
     if (!texto) return;
-    enviarParaAgente(agente.id, texto);
+    void enviarParaAgente(agente.id, texto);
     setMensagem('');
   };
 
@@ -62,7 +62,7 @@ export function DetalheAgente({ agenteId, onVoltar }: { agenteId: string; onVolt
         <div className="ilha-agente__progresso"><span><b>Progresso</b><small>{agente.progresso}%</small></span><progress max="100" value={agente.progresso} aria-label={`Progresso de ${agente.nome}: ${agente.progresso}%`} /></div>
         <article className="ilha-agente__passo-atual">
           <span className="ilha-eyebrow">{passoAtual?.status === 'executando' ? 'Executando agora' : 'Último passo'}</span>
-          <h3 className={!passoAtual ? 'ilha-agente__estado-vazio' : undefined}>{passoAtual ? <RotuloPasso passo={passoAtual} /> : 'Aguardando o primeiro passo'}</h3>
+          <h3 className={!passoAtual ? 'ilha-agente__estado-vazio' : undefined}>{passoAtual ? <RotuloPasso passo={passoAtual} /> : agente.status === 'trabalhando' ? 'Começando…' : agente.status === 'concluido' ? 'Trabalho concluído' : 'Aguardando a vez'}</h3>
           {passoAtual?.texto && passoAtual.texto !== passoAtual.acao && <p>{passoAtual.texto}</p>}
           {passoAtual?.parametros && <><h4>Parâmetros</h4><pre>{JSON.stringify(passoAtual.parametros, null, 2)}</pre></>}
           {passoAtual && <><h4>Resultado</h4><Resultado passo={passoAtual} /></>}

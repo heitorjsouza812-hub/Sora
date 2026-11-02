@@ -1,5 +1,5 @@
 import type { OrbState } from '../mascot';
-import { agentesDoProjeto, estadoAgente, estadoProjeto, projetoAtivo, type EstadoProjetos } from '../../state/projetos';
+import { agentesDoProjeto, estadoAgente, estadoProjeto, pendenciasDa, projetoAtivo, type EstadoProjetos } from '../../state/projetos';
 
 /** Estado da Sora (orb + rótulo + pulso) a partir do projeto ativo. */
 export function statusDaSora(e: EstadoProjetos, agora: number): { orb: OrbState; rotulo: string; pulso: number; fase: string | null } {
@@ -7,11 +7,13 @@ export function statusDaSora(e: EstadoProjetos, agora: number): { orb: OrbState;
   if (!p) return { orb: 'idle', rotulo: 'Agente principal', pulso: 0, fase: null };
   const ep = estadoProjeto(e, p, agora);
   const n = agentesDoProjeto(e, p, agora).length;
+  if (pendenciasDa(e, p.id).length) return { orb: 'listening', rotulo: 'Aguardando você', pulso: ep.pulso, fase: ep.fase };
   switch (ep.fase) {
     case 'pensando': return { orb: 'thinking', rotulo: 'Pensando…', pulso: ep.pulso, fase: ep.fase };
     case 'planejando': return { orb: 'coordinating', rotulo: n ? `Criando a equipe · ${n} de ${p.agenteIds.length}` : 'Montando o plano…', pulso: ep.pulso, fase: ep.fase };
     case 'coordenando': return { orb: 'coordinating', rotulo: `Coordenando ${n} ${n === 1 ? 'agente' : 'agentes'}`, pulso: ep.pulso, fase: ep.fase };
     case 'conversa': return { orb: 'idle', rotulo: 'Online', pulso: ep.pulso, fase: ep.fase };
+    case 'erro': return { orb: 'idle', rotulo: 'A equipe parou', pulso: ep.pulso, fase: ep.fase };
     case 'pronto': return { orb: 'done', rotulo: 'Pronto para revisar', pulso: ep.pulso, fase: ep.fase };
     default: return { orb: 'done', rotulo: 'Projeto aprovado', pulso: ep.pulso, fase: ep.fase };
   }

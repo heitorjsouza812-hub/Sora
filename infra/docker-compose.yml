@@ -48,9 +48,103 @@ services:
 
   worker:
     <<: *backend
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.worker
     command: uv run --no-sync arq workers.configuracao.WorkerSettings
     volumes:
       - anexos:/srv/sora/arquivos
+    environment:
+      NAVEGADOR_CDP_URL: http://navegador:9223
+    networks: [interna, navegador_controle]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      navegador:
+        condition: service_healthy
+
+  navegador:
+    image: mcr.microsoft.com/playwright/python:v1.64.0-noble@sha256:684df257a1fa0ef3fa288239819984008f560e8f8db5b635ee9e2a50cbcd2e23
+    user: "1000:1000"
+    command:
+      - /bin/bash
+      - -lc
+      - >-
+        "$$(find /ms-playwright -type f -path '*/chrome-linux*/chrome' -print -quit)"
+        --headless --no-sandbox --disable-dev-shm-usage --disable-quic
+        --disable-breakpad --disable-crash-reporter --crash-dumps-dir=/tmp/crash
+        --force-webrtc-ip-handling-policy=disable_non_proxied_udp
+        --webrtc-ip-handling-policy=disable_non_proxied_udp
+        --proxy-server=http://proxy-egresso:3128 --proxy-bypass-list='<-loopback>'
+        --remote-debugging-port=9222
+        --remote-allow-origins='*' --user-data-dir=/tmp/chromium about:blank &
+        exec python /opt/sora/ponte-cdp.py
+    depends_on:
+      proxy-egresso:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+      - /dev/shm:rw,nosuid,size=256m
+    mem_limit: 768m
+    cpus: 1.5
+    networks: [navegador_controle, navegador_isolada]
+    volumes:
+      - ./scripts/provar-isolamento-navegador.py:/opt/sora/provar-isolamento-navegador.py:ro
+      - ./scripts/ponte-cdp.py:/opt/sora/ponte-cdp.py:ro
+    environment:
+      HOME: /tmp
+      HTTP_PROXY: http://proxy-egresso:3128
+      HTTPS_PROXY: http://proxy-egresso:3128
+      NO_PROXY: localhost,127.0.0.1
+      SORA_TESTE_HOST_PRIVADO: alvo-privado
+      PONTE_REDE_PERMITIDA: 10.213.77.0/24
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9223/json/version', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  proxy-egresso:
+    build:
+      context: ./proxy-egresso
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    mem_limit: 128m
+    cpus: 0.5
+    networks: [navegador_isolada, navegador_saida]
+    extra_hosts:  # nomes só da prova: resolvem para IP interno (DNS rebinding)
+      - "rebind-privado.teste:10.0.0.5"
+      - "rebind-nuvem.teste:169.254.169.254"
+      - "rebind-cgnat.teste:100.100.100.200"
+      - "rebind-misto.teste:93.184.216.34"
+      - "rebind-misto.teste:10.0.0.5"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 3128), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  alvo-privado:
+    image: python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+    profiles: [teste-navegador]
+    command: ["python", "-m", "http.server", "8080"]
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=8m
+    networks: [navegador_saida]
 
   postgres:
     image: pgvector/pgvector:0.8.1-pg16@sha256:33198da2828a14c30348d2ccb4750833d5ed9a44c88d840a0e523d7417120337
@@ -86,6 +180,14 @@ networks:
     ipam:
       config:
         - subnet: 172.28.0.0/16
+  navegador_controle:
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.213.77.0/24
+  navegador_isolada:
+    internal: true
+  navegador_saida: {}
 
 volumes:
   anexos:

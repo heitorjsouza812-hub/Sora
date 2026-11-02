@@ -15,6 +15,12 @@ Como o modelo se comporta, por papel (nome do papel da política do seletor, §5
   ``falar``. ``resposta_direta``: texto simples. ``revisor``: BLOQUEAR (falha fechada).
 - Qualquer outro papel: um texto de exemplo.
 
+Gatilhos de teste (só existem aqui, e este modelo é barrado em produção): se o pedido do
+usuário trouxer ``[pergunta]``, o primeiro especialista chama ``perguntar``; ``[aprovacao]``, ele
+chama ``criar_agente`` (cartão de aprovação); ``[orcamento]``, o worker baixa o teto de tokens
+da cadeia e a primeira chamada estoura (ver ``planejar_cadeia``). Depois da resposta pelas rotas
+reais, a etapa segue o roteiro normal e a cadeia termina.
+
 As respostas se repetem em ciclo, então um laço de agente nunca fica sem resposta. Todas as
 respostas de ferramenta e de JSON são montadas com os esquemas reais (``Plano``, ``Entregar``,
 ``Veredito``, ``SaidaSistema1``…): se um esquema mudar, o modelo falso quebra alto em vez de
@@ -155,7 +161,16 @@ def _triagem_json(*, direto: bool) -> str:
     return saida.model_dump_json()
 
 
-def _plano_json() -> str:
+GATILHOS = ("pergunta", "aprovacao", "orcamento")
+_GATILHO = re.compile(r"\[(pergunta|aprovacao|orcamento)\]")
+
+
+def gatilhos_do_texto(texto: str) -> list[str]:
+    """Gatilhos de teste (``[pergunta]``, ``[aprovacao]``, ``[orcamento]``) presentes no texto."""
+    return list(dict.fromkeys(_GATILHO.findall(texto)))
+
+
+def _plano_json(gatilhos: list[str] | None = None) -> str:
     from app.modelos.enumeracoes import Nivel
     from app.orquestrador.planejador import EtapaPlano, Plano
 
@@ -167,7 +182,8 @@ def _plano_json() -> str:
                 ordem=1,
                 especialista="pesquisador",
                 nivel=Nivel.N2,
-                tarefa="Pesquisar referências sobre o pedido do usuário.",
+                tarefa="Pesquisar referências sobre o pedido do usuário."
+                + "".join(f" [{g}]" for g in (gatilhos or []) if g != "orcamento"),
                 pronto_quando="Há pelo menos duas referências com link.",
             ),
             EtapaPlano(
@@ -314,6 +330,38 @@ def _pedido_do_prompt(mensagens: list[BaseMessage]) -> str:
     return (texto[posicao + len(marcador) :] if posicao >= 0 else texto).strip()
 
 
+def _texto_das_mensagens(mensagens: list[BaseMessage]) -> str:
+    return "\n".join(str(m.content) for m in mensagens)
+
+
+def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | None:
+    """Chamada de ferramenta de um gatilho de teste ainda não atendido, ou ``None``.
+
+    O gatilho vem na tarefa da etapa. "Atendido" = já existe o resultado da ferramenta no
+    histórico (a retomada depois da resposta do usuário traz o histórico de volta)."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    if papel not in ("pesquisador", "redator", "designer"):
+        return None
+    tarefa = "\n".join(str(m.content) for m in mensagens if isinstance(m, HumanMessage))
+    feitas = {m.name for m in mensagens if isinstance(m, ToolMessage)}
+    gatilhos = gatilhos_do_texto(tarefa)
+    if "pergunta" in gatilhos and "perguntar" not in feitas:
+        from app.ferramentas.perguntar import Opcao, Perguntar
+
+        pergunta = Perguntar(
+            texto="Qual tom você prefere para o texto?",
+            opcoes=[Opcao(rotulo="Formal", valor="formal"), Opcao(rotulo="Leve", valor="leve")],
+        )
+        return _chamada("perguntar", pergunta.model_dump(mode="json"))
+    if "aprovacao" in gatilhos and "criar_agente" not in feitas:
+        from app.ferramentas.criar_agente import CriarAgente
+
+        proposta = CriarAgente(nome="Organizadora", papel="Organizar pesquisas")
+        return _chamada("criar_agente", proposta.model_dump(mode="json"))
+    return None
+
+
 def _triagem_para(mensagens: list[BaseMessage]) -> AIMessage:
     from app.sistema1.regras import aplicar_regras
 
@@ -381,9 +429,13 @@ def classe_modelo_falso() -> type[BaseChatModel]:
         ) -> ChatResult:
             if self.papel == "sistema1":
                 resposta = _triagem_para(messages)
+            elif self.papel == "planejador":
+                resposta = _texto(_plano_json(gatilhos_do_texto(_texto_das_mensagens(messages))))
             else:
-                proxima = next(self.messages)
-                resposta = _texto(proxima) if isinstance(proxima, str) else proxima
+                resposta = _gatilho_pendente(self.papel, messages)
+                if resposta is None:
+                    proxima = next(self.messages)
+                    resposta = _texto(proxima) if isinstance(proxima, str) else proxima
             resposta = _com_uso(resposta, messages)
             return ChatResult(generations=[ChatGeneration(message=resposta)])
 

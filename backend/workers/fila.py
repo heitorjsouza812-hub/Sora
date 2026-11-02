@@ -10,6 +10,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
+from arq import create_pool
+from arq.connections import ArqRedis, RedisSettings
+
+from app.core.config import obter_configuracao
+
 NomeJob = Literal[
     "planejar_cadeia",
     "avancar_cadeia",
@@ -18,6 +23,7 @@ NomeJob = Literal[
     "entregar_resultado",
     "ajustar",
     "responder_direto",
+    "retomar_conversa",
     "expirar_aprovacao",
     # adaptados do Rakazo (docs/referencias/rakazo.md)
     "executar_rotina",
@@ -25,6 +31,22 @@ NomeJob = Literal[
     "responder_canal",
     "reconciliar_travados",
 ]
+
+_fila: ArqRedis | None = None
+
+
+def configurar_fila(fila: ArqRedis | None) -> None:
+    """Injeta a conexao compartilhada; ``None`` limpa no desligamento/teste."""
+    global _fila
+    _fila = fila
+
+
+async def obter_fila() -> ArqRedis:
+    """Devolve a fila compartilhada, abrindo-a sob demanda para a API."""
+    global _fila
+    if _fila is None:
+        _fila = await create_pool(RedisSettings.from_dsn(obter_configuracao().redis_url))
+    return _fila
 
 
 async def enfileirar(
@@ -36,4 +58,5 @@ async def enfileirar(
 ) -> None:
     """Põe o job na fila. ``id_job`` evita duplicar; ``agendar_para`` adia
     (usado por ``expirar_aprovacao``)."""
-    raise NotImplementedError
+    fila = await obter_fila()
+    await fila.enqueue_job(job, _job_id=id_job, _defer_until=agendar_para, **args)

@@ -1,5 +1,6 @@
-// Estados de erro projetados (item 47): sem conexão, modelo falhou, plugin desconectado, créditos.
+// Estados de erro projetados: sem conexão, modelo falhou e plugin desconectado.
 import { Link } from 'react-router-dom';
+import { useProjetos } from '../../state/projetos';
 import { Button } from '../base';
 import { SoraOrb } from '../mascot';
 import { useConexao } from './estado';
@@ -19,6 +20,18 @@ export function FaixaSemConexao() {
       <span className="err-faixa__ponto" aria-hidden="true" />
       <p><strong>Sem conexão.</strong> Seus agentes pausaram; nada se perde. Assim que a internet voltar, a Sora continua.</p>
       <Button tamanho="P" variante="secundario" onClick={tentarDeNovo}>Tentar de novo</Button>
+    </div>
+  );
+}
+
+/** Aviso visível quando o canal ao vivo foi recusado ou interrompido; some ao reconectar. */
+export function FaixaErroEventos() {
+  const erro = useProjetos().erroEventos;
+  if (!erro) return null;
+  return (
+    <div className="err-faixa" role="alert">
+      <span className="err-faixa__ponto" aria-hidden="true" />
+      <p><strong>Atualizações ao vivo pausadas.</strong> {erro}</p>
     </div>
   );
 }
@@ -60,17 +73,6 @@ export function AvisoPluginDesconectado({ plugin }: { plugin: string }) {
   );
 }
 
-/** bloqueio suave: dá para escrever, mas não enviar */
-export function AvisoCreditos({ compacto = false }: { compacto?: boolean }) {
-  return (
-    <div className={`err-aviso err-aviso--creditos ${compacto ? 'is-compacto' : ''}`} role="status">
-      <IconeAlerta />
-      <p><strong>Seus créditos acabaram.</strong> Você ainda pode escrever; para enviar, escolha um plano ou espere o próximo ciclo.</p>
-      <Button tamanho="P" variante="primario" asChild><Link to="/configuracoes?secao=conta">Ver planos</Link></Button>
-    </div>
-  );
-}
-
 /** painel DEV para ligar/desligar os erros simulados (para o /lab/ui) */
 export function PainelErrosDev() {
   const atual = useErroSimulado();
@@ -84,7 +86,7 @@ export function PainelErrosDev() {
           <Button key={t.id} tamanho="P" variante={atual === t.id ? 'primario' : 'secundario'} aria-pressed={atual === t.id} onClick={() => definirErroSimulado(t.id)}>{t.rotulo}</Button>
         ))}
       </div>
-      <small>Também por URL: <code>?simularErro=conexao|modelo|plugin|creditos</code></small>
+      <small>Também por URL: <code>?simularErro=conexao|modelo|plugin</code></small>
     </fieldset>
   );
 }

@@ -266,6 +266,38 @@ def test_politica_da_ferramenta() -> None:
     assert not acoes.exige_revisao("falar")
 
 
+def test_politica_contextual_do_navegador_compara_dominio_registravel() -> None:
+    from app.revisor.politica import dominio_registravel, politica_contextual_navegador
+
+    assert dominio_registravel("https://login.empresa.com.br/x") == "empresa.com.br"
+    assert dominio_registravel("https://cliente.github.io/x") == "cliente.github.io"
+    for nome in ("navegador_abrir", "navegador_acao", "navegador_lote"):
+        assert (
+            politica_contextual_navegador(
+                nome,
+                url="https://app.empresa.com.br/",
+                perfil_tem_login=True,
+                dominios_aprovados=set(),
+            )
+            is Politica.REVISOR
+        )
+        assert politica_contextual_navegador(
+            nome,
+            url="https://app.empresa.com.br/",
+            perfil_tem_login=True,
+            dominios_aprovados={"empresa.com.br"},
+        ) is politica_da_ferramenta(nome)
+    assert (
+        politica_contextual_navegador(
+            "navegador_abrir",
+            url="https://novo.example/",
+            perfil_tem_login=False,
+            dominios_aprovados=set(),
+        )
+        is Politica.LIVRE
+    )
+
+
 def test_somente_leitura_e_sem_supervisao() -> None:
     assert parece_somente_leitura("listar_contatos")
     assert parece_somente_leitura("get-page")

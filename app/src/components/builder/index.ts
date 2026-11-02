@@ -5,4 +5,4 @@ export { EditarAgenteModal, type EditarAgenteModalProps } from './EditarAgenteMo
 export { EditorAgenteHost } from './EditorAgenteHost';
 export { MenuAgente, type ItemMenu, type MenuAgenteProps } from './MenuAgente';
 export { abrirEditorAgente, fecharEditorAgente, useEditorAberto } from './editorAberto';
-export type { AbaConstrutor, MensagemConstrutor, RascunhoConstrutor } from './types';
+export type { AbaConstrutor, RascunhoConstrutor } from './types';

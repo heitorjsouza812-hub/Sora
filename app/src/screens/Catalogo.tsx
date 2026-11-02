@@ -134,7 +134,7 @@ export default function Catalogo() {
           <Toasts />
         </Secao>
 
-        <Secao titulo="Erros simulados" descricao="Painel DEV do Forja: liga e desliga falhas de conexão, modelo, plugin e créditos para ver os estados de erro.">
+        <Secao titulo="Erros simulados" descricao="Painel DEV do Forja: liga e desliga falhas de conexão, modelo e plugin para ver os estados de erro.">
           <PainelErrosDev />
         </Secao>
       </main>

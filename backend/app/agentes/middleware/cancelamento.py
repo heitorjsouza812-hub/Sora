@@ -28,15 +28,24 @@ class CadeiaCancelada(Exception):
 class MiddlewareCancelamento(AgentMiddleware):
     """Interrompe o agente quando a cadeia é cancelada."""
 
-    def __init__(self, cadeia_id: UUID) -> None:
-        raise NotImplementedError
+    def __init__(
+        self, cadeia_id: UUID, *, esta_cancelada: Callable[[UUID], Awaitable[bool]]
+    ) -> None:
+        self.cadeia_id = cadeia_id
+        self._esta_cancelada = esta_cancelada
+
+    async def _conferir(self) -> None:
+        if await self._esta_cancelada(self.cadeia_id):
+            raise CadeiaCancelada(f"A cadeia {self.cadeia_id} foi cancelada.")
 
     async def abefore_model(self, state: Any, runtime: Runtime) -> dict[str, Any] | None:
-        raise NotImplementedError
+        await self._conferir()
+        return None
 
     async def awrap_tool_call(
         self,
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[Any]],
     ) -> Any:
-        raise NotImplementedError
+        await self._conferir()
+        return await handler(request)

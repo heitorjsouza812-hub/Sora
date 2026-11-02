@@ -7,6 +7,7 @@
 As duas retomam pelo cabeçalho ``Last-Event-ID``.
 """
 
+import re
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 from uuid import UUID
@@ -38,9 +39,13 @@ RESPOSTA_SSE: dict[int | str, dict[str, object]] = {
         "description": "Fluxo `text/event-stream` com eventos nomeados (`event:`) e `id` do Redis.",
         "content": {"text/event-stream": {"schema": {"type": "string"}}},
     },
+    400: {"description": "`Last-Event-ID` com formato inválido."},
     404: {"description": "Conversa inexistente ou de outro usuário."},
     429: {"description": "O usuário já tem o máximo de streams abertos."},
 }
+
+ID_DE_EVENTO = re.compile(r"^\d{1,20}(-\d{1,20})?$")
+"""Formato dos ids do Redis Stream (``ms-seq``); outro formato é 400, nunca um replay vazio."""
 
 CABECALHOS_SSE = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -59,6 +64,7 @@ def validade_do_token(requisicao: Request) -> float | None:
 
 
 async def _transmitir(
+    requisicao: Request,
     redis: Redis,
     canal: str,
     ultimo_evento_id: str | None,
@@ -67,6 +73,13 @@ async def _transmitir(
 ) -> EventSourceResponse:
     """Reserva a vaga de stream do usuário (429 se cheio) e devolve o SSE que a libera ao
     terminar; o stream acaba quando o token vence (API-01, API-08)."""
+    if ultimo_evento_id is not None:
+        ultimo_evento_id = ultimo_evento_id.strip() or None
+    if ultimo_evento_id is not None and not ID_DE_EVENTO.fullmatch(ultimo_evento_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Last-Event-ID inválido. Use o id do último evento recebido (ex.: 1730000000000-0).",
+        )
     conexao = await registrar_conexao(redis, usuario_id)
     if conexao is None:
         raise HTTPException(
@@ -81,17 +94,28 @@ async def _transmitir(
     async def fluxo() -> AsyncIterator[dict[str, Any]]:
         try:
             async for mensagem in gerar_sse(
-                redis, canal, ultimo_evento_id, expira_em=expira_em, a_cada_volta=renovar
+                redis,
+                canal,
+                ultimo_evento_id,
+                expira_em=expira_em,
+                a_cada_volta=renovar,
+                desconectou=requisicao.is_disconnected,
             ):
                 yield mensagem
         finally:
             await encerrar_conexao(redis, usuario_id, conexao)
+
+    async def cliente_fechou(_mensagem: dict[str, Any]) -> None:
+        # O EventSourceResponse consome a mensagem ASGI de desconexão. Liberar a vaga aqui
+        # evita esperar o cancelamento do gerador, que pode atrasar em recargas sucessivas.
+        await encerrar_conexao(redis, usuario_id, conexao)
 
     return EventSourceResponse(
         fluxo(),
         headers=CABECALHOS_SSE,
         ping=INTERVALO_PING_SEGUNDOS,
         ping_message_factory=mensagem_ping,
+        client_close_handler_callable=cliente_fechou,
     )
 
 
@@ -101,6 +125,7 @@ async def _transmitir(
     responses=RESPOSTA_SSE,
 )
 async def eventos_da_conversa(
+    requisicao: Request,
     conversa_id: UUID,
     usuario_id: Annotated[UUID, Depends(usuario_atual)],
     # scope="function": a sessão (e a conexão do pool) fecha antes do stream começar; com o
@@ -114,12 +139,13 @@ async def eventos_da_conversa(
     if not await conversa_do_usuario(sessao, conversa_id, usuario_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversa não encontrada.")
     return await _transmitir(
-        redis, canal_conversa(conversa_id), ultimo_evento_id, usuario_id, expira_em
+        requisicao, redis, canal_conversa(conversa_id), ultimo_evento_id, usuario_id, expira_em
     )
 
 
 @roteador.get("/eventos", response_class=EventSourceResponse, responses=RESPOSTA_SSE)
 async def eventos_do_usuario(
+    requisicao: Request,
     usuario_id: Annotated[UUID, Depends(usuario_atual)],
     redis: Annotated[Redis, Depends(obter_redis)],
     ultimo_evento_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
@@ -127,5 +153,5 @@ async def eventos_do_usuario(
 ) -> EventSourceResponse:
     """Transmite eventos de estado para a Ilha e a barra lateral."""
     return await _transmitir(
-        redis, canal_usuario(usuario_id), ultimo_evento_id, usuario_id, expira_em
+        requisicao, redis, canal_usuario(usuario_id), ultimo_evento_id, usuario_id, expira_em
     )

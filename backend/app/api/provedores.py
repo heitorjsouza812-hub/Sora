@@ -13,6 +13,7 @@ from app.core import conexoes
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
 from app.llm.provedores import ConfigProvedor, listar_modelos
+from app.llm.sonda import Sonda, sondar_capacidades
 from app.modelos.esquemas import (
     ModeloSaida,
     ProvedorAtualizacao,
@@ -39,6 +40,14 @@ def obter_listador() -> Listador:
 ListadorDep = Annotated[Listador, Depends(obter_listador)]
 
 
+def obter_sonda() -> Sonda:
+    """Teste de capacidades dos modelos fora do catálogo; testes substituem para não usar a rede."""
+    return sondar_capacidades
+
+
+SondaDep = Annotated[Sonda, Depends(obter_sonda)]
+
+
 def _saida(provedor: object, gasto_mes_usd: Decimal = Decimal("0")) -> ProvedorSaida:
     return ProvedorSaida.model_validate(provedor).model_copy(
         update={"gasto_mes_usd": gasto_mes_usd}
@@ -52,9 +61,10 @@ async def conectar_provedor(
     sessao: Sessao,
     redis: RedisDep,
     listador: ListadorDep,
+    sonda: SondaDep,
 ) -> ProvedorConexaoSaida:
     """Testa, cifra e cadastra uma API de modelos."""
-    provedor, modelos = await conexoes.conectar(sessao, redis, usuario_id, dados, listador)
+    provedor, modelos = await conexoes.conectar(sessao, redis, usuario_id, dados, listador, sonda)
     return ProvedorConexaoSaida(
         provedor=_saida(provedor),
         modelos=[ModeloSaida.model_validate(modelo) for modelo in modelos],
@@ -76,9 +86,12 @@ async def atualizar_provedor(
     sessao: Sessao,
     redis: RedisDep,
     listador: ListadorDep,
+    sonda: SondaDep,
 ) -> ProvedorSaida:
     """Troca chave ou teto mensal de um provedor."""
-    provedor = await conexoes.atualizar(sessao, redis, usuario_id, provedor_id, dados, listador)
+    provedor = await conexoes.atualizar(
+        sessao, redis, usuario_id, provedor_id, dados, listador, sonda
+    )
     return _saida(provedor)
 
 

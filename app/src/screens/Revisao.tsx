@@ -12,6 +12,7 @@ export default function Revisao() {
   const agora = useAgora();
   const navigate = useNavigate();
   const p = e.projetos.find(x => x.id === projetoId);
+  if (e.carregando) return null;
   if (!p) return <Navigate to="/" replace />;
   const fase = estadoProjeto(e, p, agora).fase;
   const voltar = () => { abrirProjeto(p.id); navigate(`/projeto/${p.id}`); };
@@ -28,8 +29,8 @@ export default function Revisao() {
           entregas={p.entregas}
           entregasAnteriores={p.entregasAnteriores}
           aprovado={Boolean(p.aprovadoEm)}
-          onAprovar={id => aprovarProjeto(id)}
-          onPedirAjuste={(texto, agenteId) => { pedirAjuste(p.id, texto, agenteId); voltar(); }}
+          onAprovar={id => { void aprovarProjeto(id); }}
+          onPedirAjuste={(texto, agenteId) => { void pedirAjuste(p.id, texto, agenteId); voltar(); }}
           corSora={e.sora.cor}
           onVoltarProjeto={voltar}
           onAgendarProxima={() => navigate(`/projetos?pedido=${encodeURIComponent(proxima)}`)}

@@ -109,6 +109,32 @@ async function buscar(caminho: string, init: RequestInit): Promise<Response> {
   }
 }
 
+/** Abre uma resposta autenticada que não deve ser convertida em JSON (SSE e upload/download).
+ * Aplica as mesmas regras do cliente comum: token só em memória, uma renovação no 401 e
+ * encerramento da sessão se o acesso continuar inválido. */
+export async function buscarAutenticado(caminho: string, init: RequestInit = {}): Promise<Response> {
+  const montar = (): RequestInit => {
+    const headers = new Headers(init.headers);
+    for (const [nome, valor] of Object.entries(cabecalhosBase())) {
+      if (!headers.has(nome)) headers.set(nome, valor);
+    }
+    if (tokenAcesso) headers.set('Authorization', `Bearer ${tokenAcesso}`);
+    return { ...init, headers, credentials: 'include' };
+  };
+
+  let resp = await buscar(caminho, montar());
+  if (resp.status === 401) {
+    let renovou: boolean;
+    try { renovou = await renovarSessao(); }
+    catch (erro) { encerrarSessaoLocal(); throw erro; }
+    if (!renovou) { encerrarSessaoLocal(); throw await erroDaResposta(resp); }
+    resp = await buscar(caminho, montar());
+    if (resp.status === 401) { encerrarSessaoLocal(); throw await erroDaResposta(resp); }
+  }
+  if (!resp.ok) throw await erroDaResposta(resp);
+  return resp;
+}
+
 // ── Renovação (uma só em voo) ────────────────────────────────────────────────────────────
 
 let renovacaoEmVoo: Promise<boolean> | null = null;

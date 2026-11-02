@@ -46,6 +46,10 @@ class TipoPerfil(StrEnum):
     NOMEADO = "nomeado"
 
 
+CHAVE_METADADOS = "_sora"
+"""Metadados cifrados junto do perfil, mas nunca entregues ao Playwright."""
+
+
 @dataclass(frozen=True, slots=True)
 class EscolhaPerfil:
     """O que está salvo no agente."""
@@ -86,6 +90,40 @@ def particao(usuario_id: UUID, agente_id: UUID, escolha: EscolhaPerfil) -> str:
         return f"{base}-agente-{chave}"
     assert escolha.perfil_id is not None
     return f"{base}-perfil-{_hex(escolha.perfil_id)}"
+
+
+def particao_efemera() -> str:
+    """Partição descartável de uma execução sem supervisão; não identifica o perfil do agente."""
+    return f"efemero-{uuid4().hex}"
+
+
+def estado_playwright(estado: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Remove metadados da Sora antes de passar o estado ao Playwright."""
+    if not estado:
+        return None
+    return {chave: estado[chave] for chave in ("cookies", "origins") if chave in estado}
+
+
+def perfil_tem_login(estado: dict[str, Any] | None) -> bool:
+    estado = estado_playwright(estado) or {}
+    return bool(estado.get("cookies") or estado.get("origins"))
+
+
+def dominios_aprovados(estado: dict[str, Any] | None) -> set[str]:
+    metadados = (estado or {}).get(CHAVE_METADADOS) or {}
+    valores = metadados.get("dominios_aprovados") or [] if isinstance(metadados, dict) else []
+    return {str(valor).lower() for valor in valores if isinstance(valor, str) and valor}
+
+
+def com_dominio_aprovado(estado: dict[str, Any] | None, dominio: str) -> dict[str, Any]:
+    """Devolve o estado com a aprovação persistida no mesmo registro cifrado do perfil."""
+    novo = dict(estado or {"cookies": [], "origins": []})
+    metadados = dict(novo.get(CHAVE_METADADOS) or {})
+    aprovados = dominios_aprovados(novo)
+    aprovados.add(dominio.lower())
+    metadados["dominios_aprovados"] = sorted(aprovados)
+    novo[CHAVE_METADADOS] = metadados
+    return novo
 
 
 @dataclass(frozen=True, slots=True)

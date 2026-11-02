@@ -14,6 +14,12 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from urllib.parse import urlsplit
+
+from publicsuffixlist import PublicSuffixList
+
+_PSL = PublicSuffixList()
+"""Lista pública de sufixos empacotada (offline, versão fixada no ``uv.lock``)."""
 
 
 class Politica(StrEnum):
@@ -149,6 +155,81 @@ def parece_somente_leitura(nome: str) -> bool:
     Qualquer verbo de escrita no nome derruba a dica de leitura.
     """
     return bool(_SOMENTE_LEITURA.search(nome)) and not _ESCRITA.search(nome)
+
+
+def _host(url: str) -> str:
+    """Host em minúsculas e punycode; aceita endereço sem esquema (``evil.com/x``)."""
+    texto = url.strip()
+    if not texto:
+        return ""
+    if "://" not in texto:
+        texto = "//" + texto.lstrip("/")
+    try:
+        host = (urlsplit(texto).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return ""
+    if not host:
+        return ""
+    try:
+        return host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return ""
+
+
+def normalizar_dominio(valor: str) -> str:
+    """Forma canônica para guardar e comparar aprovações (domínio registrável em punycode)."""
+    return dominio_registravel(valor)
+
+
+def dominio_registravel(url: str) -> str:
+    """Domínio usado para a aprovação contextual do navegador.
+
+    Usa a lista pública de sufixos (inclui hospedagens como ``github.io``, onde cada cliente é
+    um domínio). IP e nome sem ponto ficam inteiros. Devolve ``""`` se não houver host: quem
+    chama deve tratar isso como "pedir revisão".
+    """
+    host = _host(url)
+    if not host:
+        return ""
+    if ":" in host or "." not in host or host.replace(".", "").isdigit():
+        return host
+    return _PSL.privatesuffix(host) or host
+
+
+def navegacao_exige_revisao(
+    url: str, *, perfil_tem_login: bool, dominios_aprovados: set[str] | frozenset[str]
+) -> bool:
+    """Regra única do A1: perfil com login + domínio não aprovado. Falha fechada.
+
+    Domínio vazio (URL ilegível) num perfil logado também pede revisão.
+    """
+    if not perfil_tem_login:
+        return False
+    dominio = dominio_registravel(url)
+    aprovados = {normalizar_dominio(d) for d in dominios_aprovados}
+    return not dominio or dominio not in aprovados
+
+
+def politica_contextual_navegador(
+    nome: str,
+    *,
+    url: str,
+    perfil_tem_login: bool,
+    dominios_aprovados: set[str] | frozenset[str],
+) -> Politica:
+    """Eleva navegação para domínio novo quando o perfil contém uma sessão salva.
+
+    Vale para abertura direta e para navegações disparadas por ações ou lotes. Perfil sem login
+    preserva a política nominal da ferramenta.
+    """
+    base = politica_da_ferramenta(nome)
+    if nome not in {"navegador_abrir", "navegador_agir", "navegador_acao", "navegador_lote"}:
+        return base
+    if navegacao_exige_revisao(
+        url, perfil_tem_login=perfil_tem_login, dominios_aprovados=dominios_aprovados
+    ):
+        return Politica.REVISOR
+    return base
 
 
 def politica_da_ferramenta(nome: str, *, somente_leitura: bool | None = None) -> Politica:

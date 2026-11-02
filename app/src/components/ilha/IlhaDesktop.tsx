@@ -8,6 +8,8 @@ import { abrirNoApp, aoAlternarIlha, informarRetanguloIlha, type Retangulo } fro
 import { definirIlhaPrefs, lerIlhaPrefs } from './ilhaEstado';
 import { abrirIlha, alternarIlha } from './ilhaUi';
 import { Ilha } from './Ilha';
+import { iniciarSessao, lerSessao } from '../../state/sessao';
+import { encerrarProjetos, iniciarProjetos } from '../../state/projetos';
 import '../ui/sora.css';
 import './ilha-desktop.css';
 
@@ -31,6 +33,15 @@ export function IlhaDesktop() {
   useEffect(() => {
     document.documentElement.classList.add('janela-ilha');
     document.title = 'Ilha da Sora';
+  }, []);
+
+  // A janela nativa tem memória JS própria: renova pelo cofre e abre o SSE agregado dela.
+  useEffect(() => {
+    let ativa = true;
+    void iniciarSessao().then(() => {
+      if (ativa && lerSessao().estado === 'logado') return iniciarProjetos();
+    });
+    return () => { ativa = false; encerrarProjetos(); };
   }, []);
 
   // atalho global Ctrl+Shift+S / bandeja: liga a ilha se estiver desligada, senão abre/fecha

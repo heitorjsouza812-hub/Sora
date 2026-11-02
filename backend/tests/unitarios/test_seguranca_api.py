@@ -17,6 +17,7 @@ import fakeredis
 import pytest
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
+from starlette.requests import Request
 
 from app.busca import ler_pagina as lp
 from app.core import contas, seguranca
@@ -144,8 +145,16 @@ async def test_api01_rota_responde_429_com_o_limite_cheio(redis) -> None:
 
     for _ in range(sse.MAX_CONEXOES_POR_USUARIO):
         await sse.registrar_conexao(redis, USUARIO)
+
+    async def receber() -> dict[str, str]:
+        return {"type": "http.request"}
+
     with pytest.raises(HTTPException) as erro:
-        await rotas.eventos_do_usuario(USUARIO, redis)
+        await rotas.eventos_do_usuario(
+            Request({"type": "http", "method": "GET", "path": "/", "headers": []}, receber),
+            USUARIO,
+            redis,
+        )
     assert erro.value.status_code == 429
     assert "Retry-After" in (erro.value.headers or {})
 
@@ -154,11 +163,35 @@ async def test_api01_stream_encerrado_libera_a_vaga(redis) -> None:
     from app.api import eventos as rotas
 
     await redis.xadd(canal_usuario(USUARIO), {"event": "x", "data": "{}"})
-    resposta = await rotas.eventos_do_usuario(USUARIO, redis, ultimo_evento_id="0-0")
+
+    async def receber() -> dict[str, str]:
+        return {"type": "http.request"}
+
+    resposta = await rotas.eventos_do_usuario(
+        Request({"type": "http", "method": "GET", "path": "/", "headers": []}, receber),
+        USUARIO,
+        redis,
+        ultimo_evento_id="0-0",
+    )
     corpo = resposta.body_iterator
     await anext(corpo)  # type: ignore[call-overload]
     assert await redis.zcard(f"sse:conexoes:{USUARIO}") == 1
     await corpo.aclose()  # type: ignore[union-attr]
+    assert await redis.zcard(f"sse:conexoes:{USUARIO}") == 0
+
+
+async def test_api01_desconexao_asgi_libera_a_vaga_sem_esperar_o_gerador(redis) -> None:
+    from app.api import eventos as rotas
+
+    async def receber() -> dict[str, str]:
+        return {"type": "http.request"}
+
+    requisicao = Request({"type": "http", "method": "GET", "path": "/", "headers": []}, receber)
+    resposta = await rotas.eventos_do_usuario(requisicao, USUARIO, redis)
+    assert await redis.zcard(f"sse:conexoes:{USUARIO}") == 1
+
+    await resposta.client_close_handler_callable({"type": "http.disconnect"})
+
     assert await redis.zcard(f"sse:conexoes:{USUARIO}") == 0
 
 
@@ -809,6 +842,21 @@ def test_api09_producao_proibe_rede_local_por_padrao(monkeypatch: pytest.MonkeyP
     assert Configuracao(_env_file=None).rede_local_permitida is True  # type: ignore[call-arg]
 
 
+def test_api09_navegador_local_so_fora_de_producao(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AMBIENTE", "producao")
+    monkeypatch.delenv("NAVEGADOR_CDP_URL", raising=False)
+    with pytest.raises(ValueError, match="NAVEGADOR_CDP_URL"):
+        _ = Configuracao(_env_file=None).endpoint_navegador  # type: ignore[call-arg]
+    monkeypatch.setenv("NAVEGADOR_CDP_URL", "http://navegador:9222")
+    assert (
+        Configuracao(_env_file=None).endpoint_navegador  # type: ignore[call-arg]
+        == "http://navegador:9222"
+    )
+    monkeypatch.setenv("AMBIENTE", "desenvolvimento")
+    monkeypatch.delenv("NAVEGADOR_CDP_URL", raising=False)
+    assert Configuracao(_env_file=None).endpoint_navegador is None  # type: ignore[call-arg]
+
+
 def test_api09_producao_recusa_jwt_de_exemplo(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AMBIENTE", "producao")
     monkeypatch.setenv("JWT_SEGREDO", "troque-este-valor-por-um-segredo-aleatorio")
@@ -875,3 +923,27 @@ def test_val01_docker_parado_pula_a_integracao(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(docker, "from_env", sem_daemon)
     disponivel, motivo = docker_disponivel()
     assert not disponivel and "não está respondendo" in motivo
+
+
+def test_api09_producao_sem_cdp_falha_ja_na_inicializacao(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AMBIENTE", "producao")
+    monkeypatch.delenv("NAVEGADOR_CDP_URL", raising=False)
+    monkeypatch.setenv("JWT_SEGREDO", "x" * 64)
+    with pytest.raises(ValueError, match="NAVEGADOR_CDP_URL"):
+        Configuracao(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_api09_boot_real_do_worker_em_producao_sem_cdp_nao_sobe() -> None:
+    import os
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if k != "NAVEGADOR_CDP_URL"}
+    env["AMBIENTE"] = "producao"
+    env["JWT_SEGREDO"] = "s" * 64
+    codigo = "from app.core.config import obter_configuracao; obter_configuracao()"
+    saida = subprocess.run(
+        [sys.executable, "-c", codigo], env=env, capture_output=True, text=True, timeout=60
+    )
+    assert saida.returncode != 0
+    assert "NAVEGADOR_CDP_URL" in saida.stderr

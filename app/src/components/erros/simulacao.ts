@@ -1,14 +1,13 @@
 // Simulação de erros para demonstrar e testar os estados do item 47 (só em desenvolvimento).
-// Liga por URL (?simularErro=conexao|modelo|plugin|creditos, ou ?simularErro= para desligar) ou pelo
+// Liga por URL (?simularErro=conexao|modelo|plugin, ou ?simularErro= para desligar) ou pelo
 // painel <PainelErrosDev/>. Fica na sessionStorage até ser desligada.
 import { useSyncExternalStore } from 'react';
 
-export type TipoErro = 'conexao' | 'modelo' | 'plugin' | 'creditos';
+export type TipoErro = 'conexao' | 'modelo' | 'plugin';
 export const TIPOS_ERRO: { id: TipoErro; rotulo: string }[] = [
   { id: 'conexao', rotulo: 'Sem conexão' },
   { id: 'modelo', rotulo: 'Modelo falhou' },
   { id: 'plugin', rotulo: 'Plugin desconectado' },
-  { id: 'creditos', rotulo: 'Créditos esgotados' },
 ];
 
 const CHAVE = 'sora.simularErro';

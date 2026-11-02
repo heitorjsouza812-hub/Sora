@@ -665,6 +665,8 @@ class TarefaCanalTabela(Base):
     status: Mapped[str] = mapped_column(Text, default="na_fila", server_default="na_fila")
     motivo: Mapped[str | None] = mapped_column(Text)
     revisao: Mapped[int] = mapped_column(default=1, server_default="1")
+    turno_seq: Mapped[int] = mapped_column(default=0, server_default="0")
+    fim_no_turno_do_pai: Mapped[int] = mapped_column(default=0, server_default="0")
     seguimentos: Mapped[list[UUID]] = mapped_column(
         ARRAY(Uuid(as_uuid=True)), default=list, server_default=text("'{}'")
     )

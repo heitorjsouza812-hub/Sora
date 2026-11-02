@@ -19,10 +19,10 @@ import { MessageComposer } from '../components/ui/MessageComposer';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { PainelTrabalho } from '../components/work';
 import { ZonaSoltar } from '../components/anexos';
+import { CartaoPendencia } from '../components/pendencias/Pendencias';
 import { CardErroModelo, definirErroSimulado, useErroSimulado } from '../components/erros';
-import { duracaoRoteiro } from '../data/planejador';
 import {
-  abrirProjeto, agentesDoProjeto, anexarEnvio, conversarComSora, estadoAgente, estadoProjeto, gerandoNa, mensagensDa, pararGeracao, projetoAtivo,
+  abrirProjeto, agentesDoProjeto, pendenciasDa, comparacaoDeVersao, anexarEnvio, conversarComSora, estadoAgente, estadoProjeto, gerandoNa, mensagensDa, pararGeracao, projetoAtivo,
   podeRefazer, refazerResposta, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos, type ProjetoSora,
 } from '../state/projetos';
@@ -156,7 +156,7 @@ export default function SoraChat() {
   const erroModelo = useErroSimulado() === 'modelo';
   const itens: Item[] = [];
   if (p && ep) {
-    const todas = mensagensDa(e, `sora:${p.id}`, agora);
+    const todas = mensagensDa(e, p.id, agora);
     // erro simulado do modelo: a resposta depois da última pergunta vira o card de erro
     const pergunta = erroModelo ? todas.filter(m => m.autor === 'usuario').pop() : undefined;
     const msgs = pergunta ? todas.filter(m => m.autor === 'usuario' || m.criadoEm <= pergunta.criadoEm) : todas;
@@ -177,13 +177,12 @@ export default function SoraChat() {
         </div>
       ) });
     }
-    if (comEquipe && agora >= p.marcos.plano) itens.push({ t: p.marcos.plano + 1, key: 'plano', node: <CartaoPlano e={e} p={p} agora={agora} /> });
+    if (comEquipe && p.tarefas.length) itens.push({ t: p.criadoEm + 1, key: 'plano', node: <CartaoPlano e={e} p={p} agora={agora} /> });
     // handoffs (um agente entregou ao próximo)
     e.execucoes.filter(x => x.projetoId === p.id && x.tarefaId).forEach(x => {
       const h = x.roteiro.find(r => r.tipo === 'handoff');
       if (!h) return;
-      const t = x.inicio + h.em;
-      if (t > agora) return;
+      const t = h.inicio;
       const de = e.agentes[x.agenteId], para = h.paraAgenteId ? e.agentes[h.paraAgenteId] : undefined;
       if (!de) return;
       itens.push({ t, key: `h-${x.id}`, node: (
@@ -194,8 +193,8 @@ export default function SoraChat() {
       ) });
     });
     // entregas (quando a primeira versão fica pronta)
-    const fimOriginal = !comEquipe ? Infinity : Math.max(...e.execucoes.filter(x => x.projetoId === p.id && x.tarefaId).map(x => x.inicio + duracaoRoteiro(x.roteiro)));
-    if (agora >= fimOriginal) {
+    const fimOriginal = !comEquipe ? Infinity : Math.max(p.criadoEm, p.marcos.fim, ...e.execucoes.filter(x => x.projetoId === p.id && x.tarefaId).flatMap(x => x.roteiro.map(r => r.fim ?? r.inicio)));
+    if (ep.fase === 'pronto') {
       const ags = p.agenteIds.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a);
       itens.push({ t: fimOriginal + 1, key: 'entregas', node: (
         <section className="deliveries" aria-label="Entregas">
@@ -210,11 +209,10 @@ export default function SoraChat() {
       ) });
     }
     // comparação de versões após um ajuste concluído
-    const novaVersao = [...msgs].reverse().find(m => m.texto === 'Pronto. Veja a nova versão.');
-    const alvo = p.ajusteAgenteId ? e.agentes[p.ajusteAgenteId] : undefined;
-    if (novaVersao && alvo && p.entregasAnteriores?.[alvo.id] && p.entregas[alvo.id]) {
-      const antes = p.entregasAnteriores[alvo.id], depois = p.entregas[alvo.id];
-      itens.push({ t: novaVersao.criadoEm + 1, key: `v-${p.versao}`, node: (
+    const comparacao = ep.fase === 'pronto' || ep.fase === 'aprovado' ? comparacaoDeVersao(e, p) : null;
+    if (comparacao) {
+      const { agente: alvo, antes, depois } = comparacao;
+      itens.push({ t: Math.max(p.criadoEm, p.marcos.fim, ...msgs.map(m => m.criadoEm)) + 2, key: `v-${p.versao}`, node: (
         <div className="version-compare card" style={{ '--agent': alvo.cor } as CSSProperties}>
           <div><span>Versão anterior</span><p>{antes.resumo}</p><ul>{antes.itens?.slice(0, 4).map(i => <li key={i}>{i}</li>)}</ul></div>
           <div><span>Nova versão · {alvo.nome}</span><p>{depois.resumo}</p><ul>{depois.itens?.slice(0, 5).map(i => <li key={i}>{i}</li>)}</ul></div>
@@ -222,14 +220,17 @@ export default function SoraChat() {
       ) });
     }
   }
+  // o que a equipe espera do usuário fica sempre no fim da conversa
+  if (p) pendenciasDa(e, p.id).forEach(x => itens.push({ t: 1e15 + x.desde, key: `pend-${x.id}`, node: <CartaoPendencia p={x} cor={e.sora.cor} /> }));
   itens.sort((a, b) => a.t - b.t);
-  const conversaId = p ? `sora:${p.id}` : '';
+  const conversaId = p ? p.id : '';
   const gerando = !!p && !erroModelo && gerandoNa(e, conversaId, agora);
   // cresce enquanto o texto aparece (streaming) — mantém o fim à vista se o usuário estiver no fim
   const assinatura = p ? mensagensDa(e, conversaId, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0;
   const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
   useEffect(() => { seguirFim(); }, [p?.id, seguirFim]);
 
+  if (e.carregando) return null;
   if (projetoId && !p) return <Navigate to="/" replace />;
   if (!projetoId && p) return <Navigate to={`/projeto/${p.id}`} replace />;
 
@@ -255,7 +256,7 @@ export default function SoraChat() {
           </div>
           <div className="chat-composer">
             <MessageComposer placeholder={`Mensagem para ${e.sora.nome}…`} compact value={texto} onValueChange={setTexto}
-              processing={processando} onSend={(t, anexos) => { anexarEnvio(anexos, () => conversarComSora(t)); seguirFim(); }}
+              processing={processando} onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => conversarComSora(t, undefined, enviados)); seguirFim(); }}
               gerando={gerando} onParar={() => pararGeracao(conversaId)} />
           </div>
           </ZonaSoltar>

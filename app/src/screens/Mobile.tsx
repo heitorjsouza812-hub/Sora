@@ -8,7 +8,7 @@ import { MicIcon } from '../components/ui/Icons';
 import { ShimmerText } from '../components/ui/ShimmerText';
 import { VOICE } from '../data/voiceLevel';
 import {
-  agentesDoProjeto, conversarComSora, estadoAgente, estadoProjeto, lerEstado, mensagensDa, projetoAtivo, useAgora, useProjetos,
+  agentesDoProjeto, comparacaoDeVersao, conversarComSora, estadoAgente, estadoProjeto, lerEstado, mensagensDa, projetoAtivo, useAgora, useProjetos,
 } from '../state/projetos';
 
 const PEDIDO_VOZ = 'Crie uma campanha para lançar minha cafeteria: pesquise referências, prepare as peças e monte um calendário de posts.';
@@ -24,9 +24,8 @@ export default function Mobile() {
   const [ouvindo, setOuvindo] = useState(false);
   const timer = useRef(0);
   const processando = !!ep && ['pensando', 'planejando', 'coordenando'].includes(ep.fase);
-  const msgs = p ? mensagensDa(e, `sora:${p.id}`, agora).slice(-4) : [];
-  const alvo = p?.ajusteAgenteId ? e.agentes[p.ajusteAgenteId] : undefined;
-  const novaPronta = msgs.some(m => m.texto === 'Pronto. Veja a nova versão.');
+  const msgs = p ? mensagensDa(e, p.id, agora).slice(-4) : [];
+  const comparacao = p && ep && (ep.fase === 'pronto' || ep.fase === 'aprovado') ? comparacaoDeVersao(e, p) : null;
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
@@ -79,9 +78,9 @@ export default function Mobile() {
           ? <div className="mobile-user-message" key={m.id}>{m.texto}</div>
           : <div className="mobile-status" key={m.id}><SoraOrb size={26} color={e.sora.cor} state="done" glow={false} decorative /><span>{m.texto}</span></div>)}
         {processando && <div className="mobile-status" role="status"><SoraThinking size={26} color={e.sora.cor} label={p.versao > 1 ? `${e.sora.nome} está ajustando…` : `${e.sora.nome} está trabalhando…`} /></div>}
-        {novaPronta && alvo && p.entregasAnteriores?.[alvo.id] && <>
-          <section className="mobile-caption old-version card"><p className="eyebrow">Versão anterior</p><p>{p.entregasAnteriores[alvo.id].resumo}</p></section>
-          <section className="mobile-caption new-version card"><span>Nova versão</span><p>{p.entregas[alvo.id]?.itens?.slice(-1)[0] ?? p.entregas[alvo.id]?.resumo}</p></section>
+        {comparacao && p && <>
+          <section className="mobile-caption old-version card"><p className="eyebrow">Versão anterior</p><p>{comparacao.antes.resumo}</p></section>
+          <section className="mobile-caption new-version card"><span>Nova versão</span><p>{comparacao.depois.itens?.slice(-1)[0] ?? comparacao.depois.resumo}</p></section>
         </>}
       </>}
     </div>

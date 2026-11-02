@@ -3,6 +3,7 @@ import { useRef, useState, type CSSProperties } from 'react';
 import { SoraOrb } from '../mascot';
 import { alternarAgenteOculto, definirIlhaPrefs, filtrarAgentes, useIlhaPrefs, type FiltroAgentes, type VisaoIlha } from './ilhaEstado';
 import { Ticker } from './Ticker';
+import { ListaPendencias } from '../pendencias/Pendencias';
 import { AnelConclusao } from './animacao';
 import { usePresenca } from './usePresenca';
 
@@ -65,6 +66,7 @@ export function VisaoGeral({ v, onAgente }: VisaoGeralProps) {
 
   return (
     <div className="ilha-visao">
+      {v.pendencias.length > 0 && <ListaPendencias pendencias={v.pendencias} cor={v.sora.cor} className="ilha-pendencias" />}
       <section className="ilha-card ilha-card-sora" aria-label="Sora">
         <button type="button" className="ilha-sora-grande" onClick={cutucar} aria-label="Sora">
           <SoraOrb size={96} color={v.sora.cor} state={v.sora.orb} pulseKey={v.sora.pulso + tonta} glow decorative seed={5} />

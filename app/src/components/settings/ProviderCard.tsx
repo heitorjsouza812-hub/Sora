@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { mensagemDeErro } from '../../api/cliente';
 import {
-  atualizarModelo, atualizarProvedor, conectarProvedor, desconectarProvedor, useModelos,
+  atualizarModelo, atualizarProvedor, CAPACIDADES_DO_MODELO, conectarProvedor, desconectarProvedor, useModelos,
   nomeAmigavelDoModelo, type DefinicaoProvedor, type NivelModelo,
 } from '../../state/modelos';
 import { Button } from '../base';
@@ -48,10 +48,14 @@ export function ProviderCard({ provedor, inicialmenteAberto = false, onConectado
     chave.trim() ? 'Chave testada e configuração atualizada.' : 'Limite mensal atualizado.',
   );
 
-  const editarModelo = (id: string, patch: { nivel?: NivelModelo; ativo?: boolean }) => executar(
-    () => atualizarModelo(id, patch), 'Modelo atualizado.',
-  );
+  const [marcando, setMarcando] = useState<Set<string>>(new Set());
+  const editarModelo = (id: string, patch: { nivel?: NivelModelo; ativo?: boolean; capacidades?: string[] }) => {
+    if (patch.capacidades) setMarcando(s => new Set(s).add(id));
+    return executar(() => atualizarModelo(id, patch), 'Modelo atualizado.');
+  };
 
+  // Modelo que chegou sem capacidades é de fora do catálogo: o bloco continua na tela enquanto o usuário marca.
+  const editavel = (id: string, capacidades: string[]) => !capacidades.length || marcando.has(id);
   const statusTexto = conexao ? 'Conectado' : 'Não conectado';
   return <article className="cfg-provider-card" data-open={aberto || undefined}>
     <button type="button" className="cfg-provider-summary" onClick={() => setAberto(x => !x)} aria-expanded={aberto}>
@@ -68,11 +72,20 @@ export function ProviderCard({ provedor, inicialmenteAberto = false, onConectado
         {conexao && <div className="cfg-provider-spend"><span>Gasto neste mês</span><strong>{moeda.format(Number(conexao.gasto_mes_usd))}</strong>{conexao.teto_mensal_usd != null && <small>de {moeda.format(Number(conexao.teto_mensal_usd))}</small>}</div>}
       </div>
       {conexao && <div className="cfg-model-list"><span className="cfg-eyebrow">Modelos disponíveis</span>
-        {configuracao.modelos.length ? configuracao.modelos.map(modelo => <div className="cfg-model-row" key={modelo.id}>
+        {configuracao.modelos.length ? configuracao.modelos.map(modelo => <Fragment key={modelo.id}><div className="cfg-model-row">
           <span className="cfg-model-name"><strong>{nomeAmigavelDoModelo(modelo)}</strong><small>{modelo.contexto.toLocaleString('pt-BR')} tokens{modelo.capacidades.length ? ` · ${modelo.capacidades.join(', ')}` : ''}</small></span>
           <label><span className="sr-only">Nível de {nomeAmigavelDoModelo(modelo)}</span><select value={modelo.nivel} disabled={ocupado} onChange={e => editarModelo(modelo.id, { nivel: e.target.value as NivelModelo })}><option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="especial">Especial</option></select></label>
           <label className="cfg-switch"><input type="checkbox" checked={modelo.ativo} disabled={ocupado} onChange={e => editarModelo(modelo.id, { ativo: e.target.checked })} /><span /><em>{modelo.ativo ? 'Ativo' : 'Inativo'}</em></label>
-        </div>) : <small className="cfg-empty">Nenhum modelo foi informado por esta API.</small>}
+        </div>
+          {editavel(modelo.id, modelo.capacidades) && <fieldset className="cfg-capacidades" disabled={ocupado}>
+            <legend>Modelo fora do catálogo: marque o que ele faz</legend>
+            <small>Sem isso a Sora não usa este modelo, porque não sabe se ele aguenta ferramentas e respostas estruturadas.</small>
+            <div>{CAPACIDADES_DO_MODELO.map(c => <label key={c.id} className="cfg-capacidade" title={c.ajuda}>
+              <input type="checkbox" checked={modelo.capacidades.includes(c.id)} onChange={e => editarModelo(modelo.id, { capacidades: e.target.checked ? [...modelo.capacidades, c.id] : modelo.capacidades.filter(x => x !== c.id) })} />
+              <span>{c.rotulo}</span>
+            </label>)}</div>
+          </fieldset>}
+        </Fragment>) : <small className="cfg-empty">Nenhum modelo foi informado por esta API.</small>}
       </div>}
       <div className="cfg-card-feedback" role="status" aria-live="polite">{ocupado ? <><SoraOrb size={28} state="thinking" seed={33} decorative />Falando com o servidor…</> : retorno}</div>
       <footer className="cfg-card-actions">

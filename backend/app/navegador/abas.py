@@ -28,7 +28,8 @@ from pydantic import BaseModel, Field
 
 from app.core.redacao import limpar_texto_sensivel, url_sem_segredos
 from app.ferramentas.base import ErroFerramenta
-from app.navegador.perfis import EscolhaPerfil, particao, particao_valida
+from app.navegador.perfis import EscolhaPerfil, particao, particao_efemera, particao_valida
+from app.revisor.politica import Politica, dominio_registravel, politica_contextual_navegador
 
 MAX_ABAS_POR_AGENTE = 8
 MAX_ABAS_POR_USUARIO = 30
@@ -61,6 +62,15 @@ class Aba:
     usada_em: datetime = field(default_factory=_agora)
     carregada: bool = True
     assumida_pelo_usuario: bool = False
+    perfil_efemero: bool = False
+
+
+class RevisaoNavegacaoNecessaria(ErroFerramenta):
+    """A navegação fica parada até o revisor aprovar o domínio para este perfil."""
+
+    def __init__(self, dominio: str) -> None:
+        self.dominio = dominio
+        super().__init__(f"O perfil tem login salvo; o domínio novo {dominio!r} exige revisão.")
 
 
 class Motor(Protocol):
@@ -72,6 +82,8 @@ class Motor(Protocol):
     async def fechar(self, aba: Aba) -> None: ...
     async def capturar(self, aba: Aba) -> bytes: ...
     async def limpar_particao(self, particao_: str) -> None: ...
+    async def contexto_politica(self, aba: Aba) -> tuple[bool, set[str]]: ...
+    async def aprovar_dominio(self, aba: Aba, dominio: str) -> None: ...
 
 
 class GerenteAbas:
@@ -83,7 +95,13 @@ class GerenteAbas:
     # ---------- abrir e usar ----------
 
     async def abrir(
-        self, *, usuario_id: UUID, agente_id: UUID, escolha: EscolhaPerfil, url: str | None = None
+        self,
+        *,
+        usuario_id: UUID,
+        agente_id: UUID,
+        escolha: EscolhaPerfil,
+        url: str | None = None,
+        sem_supervisao: bool = False,
     ) -> Aba:
         do_agente = self.do_agente(agente_id)
         if len(do_agente) >= MAX_ABAS_POR_AGENTE:
@@ -98,7 +116,10 @@ class GerenteAbas:
             id=uuid4(),
             usuario_id=usuario_id,
             agente_id=agente_id,
-            particao=particao(usuario_id, agente_id, escolha),
+            particao=particao_efemera()
+            if sem_supervisao
+            else particao(usuario_id, agente_id, escolha),
+            perfil_efemero=sem_supervisao,
         )
         await self._motor.abrir_pagina(aba)
         self._abas[aba.id] = aba
@@ -107,34 +128,71 @@ class GerenteAbas:
             aba = await self.navegar(aba.id, agente_id, url)
         return aba
 
-    def exigir(self, aba_id: UUID, agente_id: UUID) -> Aba:
-        """O ponto por onde **toda** ferramenta de agente passa antes de mexer numa aba."""
+    def exigir(self, aba_id: UUID, agente_id: UUID, *, sem_supervisao: bool = False) -> Aba:
+        """O ponto por onde **toda** ferramenta de agente passa antes de mexer numa aba.
+
+        Em execução sem supervisão (rotina) só vale aba efêmera: nunca reaproveita a aba logada
+        que o agente deixou aberta numa conversa.
+        """
         aba = self._abas.get(aba_id)
         if aba is None or aba.agente_id != agente_id:
             raise ErroFerramenta("Essa aba não existe ou não é sua. Use navegador_abas.")
+        if sem_supervisao and not aba.perfil_efemero:
+            raise ErroFerramenta(
+                "Rotinas não usam abas com perfil salvo. Abra uma aba nova (perfil temporário)."
+            )
         if aba.assumida_pelo_usuario:
             raise ErroFerramenta(
                 "O usuário está usando esta aba agora. Espere ele devolver ou use outra aba."
             )
         return aba
 
-    async def navegar(self, aba_id: UUID, agente_id: UUID, url: str) -> Aba:
-        aba = await self._garantir_carregada(self.exigir(aba_id, agente_id))
+    async def navegar(
+        self, aba_id: UUID, agente_id: UUID, url: str, *, sem_supervisao: bool = False
+    ) -> Aba:
+        aba = await self._garantir_carregada(
+            self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
+        )
+        tem_login, aprovados = await self._motor.contexto_politica(aba)
+        politica = politica_contextual_navegador(
+            "navegador_abrir",
+            url=url,
+            perfil_tem_login=tem_login,
+            dominios_aprovados=aprovados,
+        )
+        if politica is Politica.REVISOR:
+            raise RevisaoNavegacaoNecessaria(dominio_registravel(url))
         url_final, titulo = await self._motor.navegar(aba, url)
         return self._gravar(replace(aba, url=url_final, titulo=titulo[:200], usada_em=_agora()))
 
-    async def usar(self, aba_id: UUID, agente_id: UUID) -> Aba:
+    async def aprovar_dominio(self, aba_id: UUID, usuario_id: UUID, url: str) -> str:
+        """Guarda a decisão do revisor no perfil; perfil efêmero não persiste nada."""
+        aba = self._da_conta(aba_id, usuario_id)
+        dominio = dominio_registravel(url)
+        if not dominio:
+            raise ErroFerramenta("Endereço sem domínio.")
+        await self._motor.aprovar_dominio(aba, dominio)
+        return dominio
+
+    async def usar(self, aba_id: UUID, agente_id: UUID, *, sem_supervisao: bool = False) -> Aba:
         """Antes de ler ou agir: recarrega se foi descarregada e marca o uso."""
-        aba = await self._garantir_carregada(self.exigir(aba_id, agente_id))
+        aba = await self._garantir_carregada(
+            self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
+        )
         return self._gravar(replace(aba, usada_em=_agora()))
 
-    async def fechar(self, aba_id: UUID, agente_id: UUID) -> None:
-        aba = self.exigir(aba_id, agente_id)
+    async def fechar(self, aba_id: UUID, agente_id: UUID, *, sem_supervisao: bool = False) -> None:
+        aba = self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
         await self._remover(aba)
 
-    def do_agente(self, agente_id: UUID) -> list[Aba]:
+    def do_agente(self, agente_id: UUID, *, so_efemeras: bool = False) -> list[Aba]:
         return sorted(
-            (a for a in self._abas.values() if a.agente_id == agente_id), key=lambda a: a.aberta_em
+            (
+                a
+                for a in self._abas.values()
+                if a.agente_id == agente_id and (a.perfil_efemero or not so_efemeras)
+            ),
+            key=lambda a: a.aberta_em,
         )
 
     def descrever(self, agente_id: UUID) -> str:
@@ -229,7 +287,7 @@ class GerenteAbas:
         return len(abas)
 
     def para_salvar(self) -> list[Aba]:
-        return list(self._abas.values())
+        return [aba for aba in self._abas.values() if not aba.perfil_efemero]
 
     async def restaurar(
         self, abas: Sequence[Aba], *, perfis_por_usuario: dict[UUID, set[UUID]]
@@ -237,6 +295,8 @@ class GerenteAbas:
         """Depois de reiniciar: volta as abas descarregadas, na partição salva de cada uma."""
         voltaram = []
         for aba in abas:
+            if aba.perfil_efemero:
+                continue
             if not particao_valida(
                 aba.particao,
                 usuario_id=aba.usuario_id,

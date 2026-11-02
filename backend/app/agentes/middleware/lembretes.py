@@ -1,16 +1,13 @@
-"""Lembretes automáticos (03-prompts, "Lembretes automáticos"; especificação §6.1).
-
-Injeta mensagens ``visivel = false``, no máximo uma de cada por turno:
-início de turno (a primeira chamada não foi ``falar``), silêncio (6 chamadas
-de ferramenta seguidas sem ``falar``) e entrega (vai encerrar e o último
-``falar`` foi só a confirmação inicial). Só para a Sora e agentes individuais.
-"""
+"""Lembretes automáticos para Sora e agentes individuais."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+
+from app.agentes.prompts import carregar_prompt
 
 if TYPE_CHECKING:
     from langgraph.runtime import Runtime
@@ -19,10 +16,50 @@ CHAMADAS_ATE_LEMBRETE_DE_SILENCIO = 6
 
 
 class MiddlewareLembretes(AgentMiddleware):
-    """Injeta os lembretes de início de turno, silêncio e entrega."""
+    """Injeta cada lembrete no máximo uma vez por execução."""
+
+    def __init__(self) -> None:
+        self._inicio_enviado = False
+        self._silencio_enviado = False
+        self._entrega_enviada = False
+
+    @staticmethod
+    def _mensagens(state: Any) -> list[Any]:
+        return list(state.get("messages", [])) if isinstance(state, dict) else []
+
+    @staticmethod
+    def _nomes_de_ferramentas(mensagens: list[Any]) -> list[str]:
+        nomes: list[str] = []
+        for mensagem in mensagens:
+            if isinstance(mensagem, AIMessage):
+                nomes.extend(chamada.get("name", "") for chamada in mensagem.tool_calls)
+        return nomes
 
     async def abefore_model(self, state: Any, runtime: Runtime) -> dict[str, Any] | None:
-        raise NotImplementedError
-
-    async def aafter_model(self, state: Any, runtime: Runtime) -> dict[str, Any] | None:
-        raise NotImplementedError
+        nomes = self._nomes_de_ferramentas(self._mensagens(state))
+        if not self._inicio_enviado and "falar" not in nomes:
+            self._inicio_enviado = True
+            return {"messages": [SystemMessage(content=carregar_prompt("lembrete_inicio_turno"))]}
+        # O lembrete de entrega entra na chamada seguinte ao resultado de uma ferramenta que não
+        # é ``falar``. Nunca logo depois da resposta do modelo: uma mensagem solta entre o
+        # ``AIMessage`` com chamadas e o ``ToolMessage`` quebra o roteamento do grafo e perde a
+        # pausa (``interrupt``) da ferramenta na retomada.
+        mensagens = self._mensagens(state)
+        if (
+            not self._entrega_enviada
+            and mensagens
+            and isinstance(mensagens[-1], ToolMessage)
+            and nomes
+            and nomes[-1] != "falar"
+        ):
+            self._entrega_enviada = True
+            return {"messages": [SystemMessage(content=carregar_prompt("lembrete_entrega"))]}
+        chamadas_desde_falar = 0
+        for nome in reversed(nomes):
+            if nome == "falar":
+                break
+            chamadas_desde_falar += 1
+        if chamadas_desde_falar >= CHAMADAS_ATE_LEMBRETE_DE_SILENCIO and not self._silencio_enviado:
+            self._silencio_enviado = True
+            return {"messages": [SystemMessage(content=carregar_prompt("lembrete_silencio"))]}
+        return None

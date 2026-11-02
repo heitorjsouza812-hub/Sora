@@ -1,6 +1,5 @@
-// Estados de erro derivados do navegador + simulação: conexão e créditos.
+// Estado de conexão derivado do navegador e da simulação de desenvolvimento.
 import { useCallback, useSyncExternalStore } from 'react';
-import { resumoCreditos, useCreditos } from '../../state/creditos';
 import { definirErroSimulado, lerErroSimulado, useErroSimulado } from './simulacao';
 
 const assinarRede = (f: () => void) => {
@@ -20,11 +19,4 @@ export function useConexao() {
     window.dispatchEvent(new Event(navigator.onLine ? 'online' : 'offline'));
   }, []);
   return { online: online && !simulado, tentarDeNovo };
-}
-
-/** créditos esgotados (store da Brisa) ou simulado */
-export function useCreditosEsgotados() {
-  const creditos = useCreditos();
-  const simulado = useErroSimulado() === 'creditos';
-  return simulado || resumoCreditos(creditos).esgotado;
 }

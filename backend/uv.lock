@@ -1564,6 +1564,15 @@ wheels = [
 ]
 
 [[package]]
+name = "publicsuffixlist"
+version = "1.0.2.20260214"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/21/71739d28265b41ad0356bfa4b5af140883d82adf4de4b7f1aa4587804391/publicsuffixlist-1.0.2.20260214.tar.gz", hash = "sha256:dda2e775aa9915fc39b7c3598703279e53c9008d2e22d0f762eafd94b7a2d54e", size = 107951, upload-time = "2026-02-14T04:49:18.934Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0e/52/c2992acbeb461d339f7d660ba3b176d4c92ce1f7d7e9da0568672298a6d2/publicsuffixlist-1.0.2.20260214-py2.py3-none-any.whl", hash = "sha256:e243743c8d9ee7cc07d2256f935919a332697c5d27b3b22b374a3c5d754e5ae0", size = 107756, upload-time = "2026-02-14T04:49:17.723Z" },
+]
+
+[[package]]
 name = "pwdlib"
 version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2034,6 +2043,7 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pillow" },
     { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "publicsuffixlist" },
     { name = "pwdlib", extra = ["argon2"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -2084,6 +2094,7 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "pillow", specifier = ">=11,<13" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2,<4" },
+    { name = "publicsuffixlist", specifier = "==1.0.2.20260214" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3,<1" },
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "pydantic-settings", specifier = ">=2.10,<3" },

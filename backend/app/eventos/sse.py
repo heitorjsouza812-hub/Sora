@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
+from redis.exceptions import ResponseError
 from sse_starlette.event import ServerSentEvent
 
 from app.eventos.streams import EventoLido, ler_eventos
@@ -20,8 +21,8 @@ from app.eventos.streams import EventoLido, ler_eventos
 if TYPE_CHECKING:
     from redis.asyncio import Redis
 
-INTERVALO_PING_SEGUNDOS = 15
-BLOQUEIO_XREAD_MS = 5_000
+INTERVALO_PING_SEGUNDOS = 5
+BLOQUEIO_XREAD_MS = 1_000
 """Quanto cada ``XREAD`` espera antes de tentar de novo (não muda nada para o app)."""
 
 
@@ -47,6 +48,7 @@ async def gerar_sse(
     bloquear_ms: int = BLOQUEIO_XREAD_MS,
     expira_em: float | None = None,
     a_cada_volta: Callable[[], Awaitable[None]] | None = None,
+    desconectou: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Gera as mensagens SSE do canal, retomando do ``Last-Event-ID``.
 
@@ -56,6 +58,8 @@ async def gerar_sse(
     conexão (limite por usuário).
     """
     async for evento in ler_eventos(redis, canal, ultimo_evento_id, bloquear_ms=bloquear_ms):
+        if desconectou is not None and await desconectou():
+            return
         if expira_em is not None and time.time() >= expira_em:
             return
         if a_cada_volta is not None:
@@ -76,15 +80,42 @@ def _chave_conexoes(usuario_id: UUID) -> str:
     return f"sse:conexoes:{usuario_id}"
 
 
+_RESERVAR_CONEXAO_LUA = """
+redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1])
+if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[2]) then return 0 end
+redis.call('ZADD', KEYS[1], ARGV[4], ARGV[3])
+redis.call('EXPIRE', KEYS[1], ARGV[5])
+return 1
+"""
+
+
 async def registrar_conexao(redis: Redis, usuario_id: UUID) -> str | None:
     """Reserva uma vaga de stream para o usuário; ``None`` se ele já está no limite."""
     chave, agora = _chave_conexoes(usuario_id), time.time()
-    await redis.zremrangebyscore(chave, 0, agora - VALIDADE_CONEXAO_SEGUNDOS)
-    if await redis.zcard(chave) >= MAX_CONEXOES_POR_USUARIO:
-        return None
     conexao = uuid4().hex
-    await redis.zadd(chave, {conexao: agora})
-    await redis.expire(chave, VALIDADE_CONEXAO_SEGUNDOS * 2)
+    try:
+        reservou = await redis.eval(
+            _RESERVAR_CONEXAO_LUA,
+            1,
+            chave,
+            agora - VALIDADE_CONEXAO_SEGUNDOS,
+            MAX_CONEXOES_POR_USUARIO,
+            conexao,
+            agora,
+            VALIDADE_CONEXAO_SEGUNDOS * 2,
+        )
+    except ResponseError:
+        # fakeredis sem o extra Lua não implementa EVAL; produção nunca perde a atomicidade.
+        if not redis.__class__.__module__.startswith("fakeredis"):
+            raise
+        await redis.zremrangebyscore(chave, 0, agora - VALIDADE_CONEXAO_SEGUNDOS)
+        if await redis.zcard(chave) >= MAX_CONEXOES_POR_USUARIO:
+            return None
+        await redis.zadd(chave, {conexao: agora})
+        await redis.expire(chave, VALIDADE_CONEXAO_SEGUNDOS * 2)
+        reservou = 1
+    if not reservou:
+        return None
     return conexao
 
 

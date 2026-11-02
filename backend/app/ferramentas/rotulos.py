@@ -11,6 +11,7 @@ imagens"), sem segredos. O modelo não precisa narrar nada.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from typing import Any
@@ -187,4 +188,40 @@ def parametros_sem_segredos(argumentos: dict[str, Any]) -> dict[str, Any]:
 
 def resumir_resultado(acao: str, resultado: Any) -> dict[str, Any]:
     """Resultado resumido para o passo: ``{resumo, links[{titulo, dominio}], itens[]}``."""
-    raise NotImplementedError
+    texto = limpar_texto_sensivel(
+        resultado if isinstance(resultado, str) else _como_texto(resultado)
+    )
+    links: list[dict[str, str]] = []
+    itens: list[str] = []
+    bruto = resultado
+    if isinstance(bruto, dict):
+        for chave in ("resultados", "links", "itens", "paginas"):
+            if isinstance(bruto.get(chave), list):
+                bruto = bruto[chave]
+                break
+    if isinstance(bruto, list):
+        for item in bruto[:MAXIMO_ITENS]:
+            if isinstance(item, dict) and isinstance(item.get("url"), str):
+                links.append(
+                    {
+                        "titulo": _detalhe(item.get("titulo") or item.get("title") or item["url"]),
+                        "dominio": dominio(item["url"]),
+                    }
+                )
+            else:
+                itens.append(_detalhe(item))
+    resumo = _detalhe(texto) if texto else "Concluído"
+    if isinstance(resultado, dict) and isinstance(resultado.get("resumo"), str):
+        resumo = _detalhe(limpar_texto_sensivel(resultado["resumo"]))
+    return {"resumo": resumo, "links": links, "itens": itens}
+
+
+MAXIMO_ITENS = 10
+
+
+def _como_texto(valor: Any) -> str:
+    if valor is None:
+        return ""
+    if isinstance(valor, (dict, list)):
+        return json.dumps(valor, ensure_ascii=False, default=str)
+    return str(valor)
