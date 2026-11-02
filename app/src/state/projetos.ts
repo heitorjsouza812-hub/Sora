@@ -96,6 +96,7 @@ function mensagemDaApi(m: MensagemApi): MensagemChat {
 let controladorGeral: AbortController | null = null;
 const controladoresConversa = new Map<string, AbortController>();
 const errosEventosPorCanal = new Map<string, string>();
+const enviosAgenteEmVoo = new Map<string, Promise<void>>();
 let iniciando: Promise<void> | null = null;
 
 function receber(evento: EventoSse) {
@@ -249,10 +250,32 @@ export async function conversarComSora(texto: string, _agora?: number, anexos: A
   alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId: p.id, autor: 'usuario', texto, criadoEm: Date.now(), anexos: [], gerando: false }] })); acompanharConversa(p.id); return p;
 }
 export async function enviarParaAgente(agenteId: string, texto: string, _agora?: number, _registrar = true, anexos: Anexo[] = []) {
-  const agente = estado.agentes[agenteId]; if (!agente) return; const projeto = estado.projetos.find(p => p.agenteIds.includes(agenteId));
-  const conversaId = agente.conversaId ?? projeto?.id; if (!conversaId) return;
-  const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${conversaId}/mensagens`, { texto, anexos: await idsDosAnexos(anexos), para_agente_id: projeto ? agenteId : null });
-  alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId, agenteId, autor: 'usuario', texto, criadoEm: Date.now(), gerando: false }] })); acompanharConversa(conversaId);
+  const anterior = enviosAgenteEmVoo.get(agenteId) ?? Promise.resolve();
+  const envio = anterior.catch(() => undefined).then(async () => {
+    const agente = estado.agentes[agenteId];
+    if (!agente) throw new Error('Agente não encontrado.');
+    const projeto = estado.projetos.find(p => p.agenteIds.includes(agenteId));
+    let conversaId = agente.conversaId ?? projeto?.id;
+    const idsAnexos = await idsDosAnexos(anexos);
+    if (!conversaId) {
+      const conversa = await api.post<ConversaApi>('/v1/conversas', { agente_id: agenteId, texto, anexos: idsAnexos });
+      conversaId = conversa.id;
+      const mensagens = await api.get<MensagemApi[]>(`/v1/conversas/${conversaId}/mensagens`);
+      alterar(e => ({
+        ...e,
+        agentes: { ...e.agentes, [agenteId]: { ...e.agentes[agenteId]!, conversaId } },
+        mensagens: [...e.mensagens.filter(m => m.conversaId !== conversaId), ...mensagens.map(mensagemDaApi)],
+      }));
+      acompanharConversa(conversaId);
+      return;
+    }
+    const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${conversaId}/mensagens`, { texto, anexos: idsAnexos, para_agente_id: projeto ? agenteId : null });
+    alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId, agenteId, autor: 'usuario', texto, criadoEm: Date.now(), gerando: false }] }));
+    acompanharConversa(conversaId);
+  });
+  enviosAgenteEmVoo.set(agenteId, envio);
+  try { await envio; }
+  finally { if (enviosAgenteEmVoo.get(agenteId) === envio) enviosAgenteEmVoo.delete(agenteId); }
 }
 export async function pedirAjuste(projetoId: string, texto: string, agenteId?: string) { await api.post<void>(`/v1/conversas/${projetoId}/ajuste`, { texto, agente_id: agenteId ?? null }); acompanharConversa(projetoId); }
 export async function aprovarProjeto(id: string) { const p = estado.projetos.find(x => x.id === id); if (p) await api.post<void>(`/v1/conversas/${id}/aprovar`, { versao: p.versao }); }
