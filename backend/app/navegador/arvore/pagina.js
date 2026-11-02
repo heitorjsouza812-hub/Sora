@@ -9,7 +9,7 @@
 // leitura parcial quando o orçamento acaba, teste de clique em 5 pontos, campo de senha que
 // nunca devolve o valor. Código escrito pela Sora.
 (pedido) => {
-  const VERSAO = 3;
+  const VERSAO = 4;
   if (!window.__soraArvore || window.__soraArvore.versao !== VERSAO) {
     window.__soraArvore = (() => {
       const ATR_CURSOR = 'data-sora-cursor';
@@ -52,7 +52,8 @@
         const s = String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
         return max && s.length > max ? s.slice(0, max - 1) + '…' : s;
       };
-      const normal = (t) => limpar(t).normalize('NFKC').toLowerCase();
+      // sem acento e sem maiúscula: "pagina" acha "Página"
+      const normal = (t) => limpar(t).normalize('NFKD').replace(/[̀-ͯ]/g, '').normalize('NFKC').toLowerCase();
       const estiloDe = (el) => {
         try { return getComputedStyle(el); } catch (e) { return null; }
       };
@@ -876,8 +877,15 @@
         return true;
       }
 
+      // retrato barato do DOM para saber se a ação mudou a página (sem layout)
+      function assinatura() {
+        const corpo = document.body || document.documentElement;
+        const cursor = document.querySelectorAll('[data-sora-cursor]').length;  // o nosso não conta
+        return { n: document.getElementsByTagName('*').length - cursor, t: (corpo.textContent || '').length };
+      }
+
       return {
-        versao: VERSAO, observar, procurar, localizar, fixar, evidencia, estado, semantica,
+        versao: VERSAO, assinatura, observar, procurar, localizar, fixar, evidencia, estado, semantica,
         opcoes_select: opcoesDoSelect, fixar_opcao: fixarOpcao, superficies, contar_texto: contarTexto, cursor,
         refs_guardadas: () => S.refs.size, alvo_atual: () => S.alvo,
       };

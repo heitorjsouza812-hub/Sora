@@ -7,7 +7,7 @@ Você vê a página como uma árvore de elementos (papel, nome, valor, estados).
    - Para preencher um campo, prefira `definir_valor`; use `digitar` quando o site precisa das teclas (busca com sugestões, máscara).
    - Para caixas de seleção, use `marcar` ou `desmarcar` (não mudam nada se já estiver como você quer). `alternar` só quando não der para saber o estado.
    - Listas: `selecionar` com a `opcao` pelo texto que aparece.
-3. **Confira**: leia a região de novo, use `navegador_elemento`, ou peça `esperar_por: "papel:texto"` na própria ação. Depois de algo que carrega (enviar, abrir menu, trocar de página), use `navegador_esperar` em vez de esperar um tempo fixo.
+3. **Confira**: a resposta da ação já diz se a página navegou (`navegou`) ou mudou (`pagina_mudou`). Para algo específico, leia a região de novo, use `navegador_elemento`, ou peça na própria ação `esperar_por` com o texto que deve aparecer (ex.: `":Salvo com sucesso"`); se não há nada concreto a esperar, deixe `esperar_por` vazio. Depois de algo que carrega (enviar, abrir menu, trocar de página), use `navegador_esperar` em vez de esperar um tempo fixo.
 
 ### Erros e repetição
 

@@ -565,3 +565,101 @@ async def test_servico_usa_a_aba_do_agente_e_respeita_o_usuario(pagina: Any) -> 
     gerente.assumir(aba.id, usuario)
     r = await servico.executar("navegador_observar", NavegadorObservar(aba_id=aba.id), contexto)
     assert r.erro is not None and r.erro.codigo is Codigo.POLITICA_NEGADA
+
+
+# ---------- teste real com a Groq (2026-11-02): espera de exemplo e leitura antes do load
+
+
+def test_seletor_da_acao_ignora_valor_de_exemplo_e_aceita_texto_solto() -> None:
+    for exemplo in (None, "", "texto", "Texto", "papel:texto", ":texto", "'texto'", "none", "-"):
+        assert Seletor.da_acao(exemplo) is None, exemplo
+    assert Seletor.da_acao("Enviado!") == Seletor(None, "Enviado!")
+    assert Seletor.da_acao("Total: 3") == Seletor(None, "Total: 3")
+    assert Seletor.da_acao("texto:Salvo") == Seletor(None, "Salvo")
+    assert Seletor.da_acao("button:Salvar") == Seletor("button", "Salvar")
+    assert Seletor.da_acao("botão:texto") == Seletor("button", None)
+    assert Seletor.da_acao("dialog") == Seletor("dialog", None)
+    assert Seletor.da_acao(":Salvo!") == Seletor(None, "Salvo!")
+
+
+SITE = "http://sora.test"
+PAGINA_A = """<!doctype html><html><head><title>A</title></head><body>
+<h1>Página inicial</h1>
+<button onclick="document.body.insertAdjacentHTML('beforeend','<p>Pronto agora</p>')">Gerar</button>
+<a href="/b">Ir para B</a>
+<div style="height:3000px"></div><p>fim</p>
+</body></html>"""
+PAGINA_B = "<!doctype html><title>B</title><h1>Página B</h1>"
+# o <script> lento trava o parser: o link só existe no DOM depois do load
+PAGINA_LENTA = """<!doctype html><title>Lenta</title><h1>Domínios</h1>
+<script src="/lento.js"></script>
+<a href="/b">Example domains</a>"""
+
+
+@pytest.fixture
+async def site(pagina: Any) -> Any:
+    import asyncio
+
+    async def servir(route: Any) -> None:
+        caminho = route.request.url.removeprefix(SITE)
+        if caminho == "/lento.js":
+            await asyncio.sleep(1.5)
+            await route.fulfill(body="void 0", content_type="application/javascript")
+            return
+        corpo = {"/a": PAGINA_A, "/b": PAGINA_B, "/lenta": PAGINA_LENTA}.get(caminho)
+        if corpo is None:
+            await route.fulfill(status=404, body="")
+        else:
+            await route.fulfill(body=corpo, content_type="text/html; charset=utf-8")
+
+    await pagina.route(f"{SITE}/**", servir)
+    await pagina.goto(f"{SITE}/a")
+    return pagina
+
+
+async def test_acao_com_espera_de_exemplo_volta_ok_rapido(site: Any) -> None:
+    import time as _time
+
+    nav = NavegadorArvore(site)
+    refs = await _observar(nav)
+    gerar = refs[("button", "Gerar")][0]
+    inicio = _time.monotonic()
+    r = await nav.agir(gerar, "clicar", esperar_por="texto")
+    assert r.ok, r.para_json()
+    assert _time.monotonic() - inicio < 3
+    assert "espera_ignorada" in r.dados and r.dados["pagina_mudou"] is True
+    inicio = _time.monotonic()
+    r = await nav.agir(None, "rolar", direcao="baixo", quantidade=5, esperar_por="papel:texto")
+    assert r.ok and _time.monotonic() - inicio < 3, r.para_json()
+    # texto solto (sem 'papel:') é texto, não papel
+    r = await nav.agir(gerar, "clicar", esperar_por="Pronto agora")
+    assert r.ok and r.dados["espera"]["contagem"] >= 1, r.para_json()
+
+
+async def test_clique_que_navega_confirma_pela_url(site: Any) -> None:
+    nav = NavegadorArvore(site)
+    refs = await _observar(nav)
+    r = await nav.agir(refs[("link", "Ir para B")][0], "clicar")
+    assert r.ok and r.dados["navegou"]["para"] == f"{SITE}/b"
+    assert r.dados["entrega"]["entrega"] == "entregue_confirmada"
+    assert r.dados["confirmado_por"] == "navegou"
+
+
+async def test_observar_e_procurar_esperam_a_pagina_carregar(site: Any) -> None:
+    nav = NavegadorArvore(site)
+    await site.goto(f"{SITE}/lenta", wait_until="commit")
+    achou = await nav.procurar(texto="example domains")
+    assert achou.ok and achou.dados["total"] >= 1, achou.para_json()
+    await site.goto(f"{SITE}/lenta", wait_until="commit")
+    refs = await _observar(nav)
+    assert ("link", "Example domains") in refs
+
+
+async def test_procurar_ignora_acento_e_maiuscula_e_da_dica_quando_nao_acha(site: Any) -> None:
+    nav = NavegadorArvore(site)
+    r = await nav.procurar(texto="PAGINA inicial")
+    assert r.ok and r.dados["total"] >= 1, r.para_json()
+    r = await nav.procurar(texto="example")
+    assert r.dados["total"] == 0 and r.dados["url"] == f"{SITE}/a" and "dica" in r.dados
+    r = await nav.observar(esqueleto=True)
+    assert "Esqueleto: mapa raso" in para_modelo(r)
