@@ -14,3 +14,6 @@ app/qa/ref/
 !.env.exemplo
 !**/.env.example
 !**/.env.exemplo
+
+# Arquivos enviados no desenvolvimento (PASTA_ARQUIVOS do backend/.env).
+backend/arquivos*/
