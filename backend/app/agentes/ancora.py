@@ -155,7 +155,7 @@ def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
     )
 
     async def antes(ferramenta, argumentos) -> None:
-        # Sem id de chamada aqui: um hash estável dos argumentos faz a retomada achar o mesmo cartão.
+        # Sem id de chamada aqui: o hash dos argumentos faz a retomada achar o mesmo cartão.
         chamada = hashlib.sha1(
             json.dumps([ferramenta.name, argumentos], sort_keys=True, default=str).encode()
         ).hexdigest()
@@ -171,3 +171,38 @@ def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
             raise ErroFerramenta(retorno)
 
     return montar_catalogo(conectores, antes_de_executar=antes)
+
+
+async def aplicar_habilidade_forcada(usuario_id: UUID, texto: str) -> str:
+    """``/Nome pedido``: o passo a passo da habilidade vai junto, cercado como receita do usuário.
+
+    Nome desconhecido ou texto sem ``/``: devolve o texto como veio.
+    """
+    from app.ferramentas.infra import abrir_sessao
+    from app.habilidades import habilidade_forcada
+    from app.modelos.tabelas import Habilidade
+
+    achado = habilidade_forcada(texto)
+    if achado is None:
+        return texto
+    primeira_linha, resto_das_linhas = achado
+    async with abrir_sessao() as sessao:
+        habilidades = (
+            await sessao.scalars(select(Habilidade).where(Habilidade.usuario_id == usuario_id))
+        ).all()
+    # O nome pode ter espaços e o pedido vir na mesma linha: vale o maior nome que abre a linha.
+    candidatas = [
+        h
+        for h in habilidades
+        if primeira_linha.lower() == h.nome.lower()
+        or primeira_linha.lower().startswith(h.nome.lower() + " ")
+    ]
+    if not candidatas:
+        return texto
+    linha = max(candidatas, key=lambda h: len(h.nome))
+    resto = "\n".join([primeira_linha[len(linha.nome) :].strip(), resto_das_linhas]).strip()
+    return (
+        f"O usuário escolheu a habilidade {linha.nome}. Siga o passo a passo dela.\n\n"
+        f'<habilidade nome="{linha.nome.replace('"', "")}">\n{linha.conteudo}\n</habilidade>\n\n'
+        f"Pedido: {resto or 'execute a habilidade.'}"
+    )

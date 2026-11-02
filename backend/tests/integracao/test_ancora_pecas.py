@@ -481,3 +481,72 @@ async def test_job_compactar_historico_e_rota_do_botao(
         await marcar_turno(ambiente.redis_dos_eventos(), agente_id, True)
         ocupado = await cliente.post(f"/v1/agentes/{agente_id}/contexto/compactar", headers=auth)
         assert ocupado.status_code == 409 and "terminar" in ocupado.json()["detail"]
+
+
+async def test_habilidade_criada_pelo_agente_e_forcada_com_barra(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    from app.agentes.ancora import aplicar_habilidade_forcada
+    from app.ferramentas.base import ContextoFerramenta
+    from app.ferramentas.pecas import ler_habilidade
+    from app.habilidades import CriarHabilidade, LerHabilidade
+
+    cliente, fabrica, _ = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-habilidade@exemplo.com")
+    usuario_id, agente_id, conversa_id = await _agente_e_conversa(
+        fabrica, "ancora-habilidade@exemplo.com"
+    )
+    ctx = ContextoFerramenta(usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id)
+    from app.ferramentas.pecas import criar_habilidade
+
+    await criar_habilidade(
+        CriarHabilidade(nome="Resumo", descricao="Resume textos", corpo="1. Leia.\n2. Resuma."), ctx
+    )
+    assert "Resuma." in await ler_habilidade(LerHabilidade(nome="resumo"), ctx)
+    texto = await aplicar_habilidade_forcada(usuario_id, "/Resumo o texto de hoje")
+    assert "<habilidade" in texto and "Pedido: o texto de hoje" in texto
+    assert await aplicar_habilidade_forcada(usuario_id, "/Inexistente x") == "/Inexistente x"
+    assert await aplicar_habilidade_forcada(usuario_id, "oi") == "oi"
+
+
+async def test_enviar_para_agente_respeita_o_limite_de_saltos(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
+    from app.ferramentas.enviar_para_agente import EnviarParaAgente
+    from app.ferramentas.pecas import enviar_para_agente
+    from app.modelos.tabelas import Mensagem
+
+    monkeypatch.setenv("SORA_MAX_SALTOS", "2")
+    cliente, fabrica, _ = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-saltos@exemplo.com")
+    usuario_id, ana, conversa_ana = await _agente_e_conversa(fabrica, "ancora-saltos@exemplo.com")
+    async with fabrica() as sessao:
+        bia = Agente(usuario_id=usuario_id, tipo=TipoAgente.INDIVIDUAL, nome="Caio", papel="x")
+        sessao.add(bia)
+        await sessao.flush()
+        conversa_bia = Conversa(usuario_id=usuario_id, agente_id=bia.id)
+        sessao.add(conversa_bia)
+        await sessao.commit()
+        bia_id, conversa_bia_id = bia.id, conversa_bia.id
+    de_ana = ContextoFerramenta(usuario_id=usuario_id, agente_id=ana, conversa_id=conversa_ana)
+    de_bia = ContextoFerramenta(
+        usuario_id=usuario_id, agente_id=bia_id, conversa_id=conversa_bia_id
+    )
+
+    # o usuário falou por último na conversa da Ana (salto 0): a corrente começa em 1
+    await enviar_para_agente(EnviarParaAgente(agente_id=bia_id, texto="oi Caio"), de_ana)
+    await enviar_para_agente(EnviarParaAgente(agente_id=ana, texto="oi Ana"), de_bia)  # salto 2
+    async with fabrica() as sessao:
+        saltos = list(
+            await sessao.scalars(
+                select(Mensagem.salto)
+                .where(Mensagem.agente_id.in_([ana, bia_id]))
+                .order_by(Mensagem.criada_em)
+            )
+        )
+    assert saltos == [1, 2]
+    # a próxima ida e volta passaria de 2: recusada, com o texto que manda seguir sozinho
+    with pytest.raises(ErroFerramenta, match="passou de 2 trocas"):
+        await enviar_para_agente(EnviarParaAgente(agente_id=bia_id, texto="de novo"), de_ana)
