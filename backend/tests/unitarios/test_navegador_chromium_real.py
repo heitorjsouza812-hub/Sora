@@ -8,6 +8,7 @@ alvo é loopback; essa guarda tem testes próprios.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 from collections.abc import AsyncIterator
@@ -131,7 +132,32 @@ async def test_perfil_logado_clique_para_dominio_novo_e_barrado(ambiente: _Ambie
     await ambiente.gerente.navegar(aba.id, agente, ambiente.url("alpha"))  # aprovado: passa
     url = await _clicar_e_esperar(ambiente.motor, aba)
     assert "beta.test" not in url  # a navegação por clique foi abortada
-    assert ambiente.motor._bloqueios[aba.particao] == "beta.test"
+    assert ambiente.motor._bloqueios[aba.id] == "beta.test"
+
+
+async def test_duas_abas_do_mesmo_perfil_clicando_juntas_recebem_cada_uma_o_seu_bloqueio(
+    ambiente: _Ambiente,
+) -> None:
+    """E4F2-M2: o bloqueio é da aba, não do perfil. Duas abas do mesmo perfil e do mesmo worker
+    clicam ao mesmo tempo para um domínio novo; as duas viram pedido de revisão."""
+    usuario = uuid4()
+    escolha = pf.EscolhaPerfil(tipo=pf.TipoPerfil.COMPARTILHADO)
+    particao = pf.particao(usuario, uuid4(), escolha)
+    estado: dict[str, Any] = {"cookies": [COOKIE], "origins": []}
+    ambiente.estados[particao] = pf.com_dominio_aprovado(estado, "alpha.test")
+    abas = []
+    for _ in range(2):
+        agente = uuid4()
+        aba = await ambiente.gerente.abrir(usuario_id=usuario, agente_id=agente, escolha=escolha)
+        assert aba.particao == particao
+        await ambiente.gerente.navegar(aba.id, agente, ambiente.url("alpha"))
+        abas.append(aba)
+    await asyncio.gather(*(ambiente.motor.pagina(a).click("#ir") for a in abas))
+    await asyncio.sleep(0.8)
+    revisoes = [ambiente.motor.consumir_revisao(a) for a in abas]
+    assert all(r is not None for r in revisoes), revisoes
+    assert {r.aba_id for r in revisoes} == {a.id for a in abas}
+    assert all(r.dominio == "beta.test" for r in revisoes)
 
 
 async def test_perfil_logado_redirect_para_dominio_novo_pede_revisao(

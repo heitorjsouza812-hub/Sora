@@ -24,7 +24,12 @@ from app.navegador.perfis import (
     estado_playwright,
     perfil_tem_login,
 )
-from app.navegador.ponte_loop import LoopDoPlaywright, embrulhar, precisa_de_loop_proprio
+from app.navegador.ponte_loop import (
+    LoopDoPlaywright,
+    desembrulhar,
+    embrulhar,
+    precisa_de_loop_proprio,
+)
 from app.revisor.politica import dominio_registravel, navegacao_exige_revisao
 
 PRAZO_NAVEGACAO_MS = 20_000
@@ -45,8 +50,8 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         self._navegador: Any = None
         self._contextos: dict[str, Any] = {}
         self._estados: dict[str, dict[str, Any] | None] = {}
-        self._bloqueios: dict[str, str] = {}
-        self._urls_bloqueadas: dict[str, str] = {}
+        self._bloqueios: dict[Any, str] = {}
+        self._urls_bloqueadas: dict[Any, str] = {}
         self._apagadas: set[str] = set()
         self._loop_proprio: LoopDoPlaywright | None = None
         """Partições cujo perfil o usuário apagou: o login em memória não volta para o banco."""
@@ -101,6 +106,17 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             self._contextos[particao_] = contexto
         return contexto
 
+    def _chave_da_rota(self, particao_: str, rota: Any) -> Any:
+        """O bloqueio é da aba que pediu (várias abas dividem o perfil); sem aba, da partição."""
+        try:
+            pagina = rota.request.frame.page
+        except Exception:
+            return particao_
+        for aba_id, guardada in self._paginas.items():
+            if desembrulhar(guardada) is pagina:
+                return aba_id
+        return particao_
+
     async def _filtrar(self, particao_: str, rota: Any) -> None:
         url = rota.request.url
         if url.startswith(("data:", "blob:", "about:")):
@@ -117,8 +133,9 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             perfil_tem_login=perfil_tem_login(estado),
             dominios_aprovados=dominios_aprovados(estado),
         ):
-            self._bloqueios[particao_] = dominio_registravel(url)
-            self._urls_bloqueadas[particao_] = url
+            chave = self._chave_da_rota(particao_, rota)
+            self._bloqueios[chave] = dominio_registravel(url)
+            self._urls_bloqueadas[chave] = url
             await rota.abort("blockedbyclient")
             return
         await rota.continue_()
@@ -156,8 +173,8 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
                         perfil_tem_login=perfil_tem_login(estado),
                         dominios_aprovados=dominios_aprovados(estado),
                     ):
-                        self._bloqueios[particao] = dominio_registravel(alvo)
-                        self._urls_bloqueadas[particao] = alvo
+                        self._bloqueios[aba.id] = dominio_registravel(alvo)
+                        self._urls_bloqueadas[aba.id] = alvo
                         await sessao.send(
                             "Fetch.failRequest",
                             {"requestId": id_, "errorReason": "BlockedByClient"},
@@ -205,16 +222,18 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
     async def navegar(self, aba: Aba, url: str) -> tuple[str, str]:
         await self.validar_destino(url)
         pagina = self._paginas[aba.id]
-        self._bloqueios.pop(aba.particao, None)
-        self._urls_bloqueadas.pop(aba.particao, None)
+        self._bloqueios.pop(aba.id, None)
+        self._urls_bloqueadas.pop(aba.id, None)
         for tentativa in (1, 2):
             try:
                 await pagina.goto(url, wait_until="domcontentloaded", timeout=PRAZO_NAVEGACAO_MS)
                 break
             except Exception as erro:
-                if dominio := self._bloqueios.pop(aba.particao, None):
+                if dominio := (
+                    self._bloqueios.pop(aba.id, None) or self._bloqueios.pop(aba.particao, None)
+                ):
                     # redirecionamento para domínio não aprovado: pede revisão, não erro genérico
-                    alvo = self._urls_bloqueadas.pop(aba.particao, url)
+                    alvo = self._urls_bloqueadas.pop(aba.id, url)
                     raise RevisaoNavegacaoNecessaria(
                         dominio, aba_id=aba.id, url=alvo, particao=aba.particao
                     ) from erro
@@ -231,13 +250,13 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             await pagina.close()
 
     async def fechar(self, aba: Aba) -> None:
+        self._bloqueios.pop(aba.id, None)
+        self._urls_bloqueadas.pop(aba.id, None)
         await self.descarregar(aba)
         if aba.perfil_efemero:
             # a partição efêmera é só desta aba: destrói o contexto (cookies e memória)
             contexto = self._contextos.pop(aba.particao, None)
             self._estados.pop(aba.particao, None)
-            self._bloqueios.pop(aba.particao, None)
-            self._urls_bloqueadas.pop(aba.particao, None)
             if contexto is not None:
                 await contexto.close()
 
@@ -285,10 +304,11 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
 
     def consumir_revisao(self, aba: Aba) -> RevisaoNavegacaoNecessaria | None:
         """Converte clique/redirecionamento barrado em pedido de revisão do orquestrador."""
-        dominio = self._bloqueios.pop(aba.particao, None)
+        chave = aba.id if aba.id in self._bloqueios else aba.particao
+        dominio = self._bloqueios.pop(chave, None)
         if dominio is None:
             return None
-        url = self._urls_bloqueadas.pop(aba.particao, aba.url)
+        url = self._urls_bloqueadas.pop(chave, aba.url)
         return RevisaoNavegacaoNecessaria(dominio, aba_id=aba.id, url=url, particao=aba.particao)
 
     async def salvar_estados(self) -> None:
