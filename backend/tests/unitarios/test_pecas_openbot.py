@@ -942,6 +942,65 @@ async def test_filha_que_termina_durante_o_turno_da_mae_nao_se_perde() -> None:
     assert fim.tarefas[0].status is StatusTarefa.CONCLUIDA
 
 
+async def test_filha_termina_com_relogio_atrasado_e_mae_ainda_ganha_outro_turno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regressão do Aferidor: outro processo com relógio 2 s atrás não pode perder o resultado."""
+    from app.canais_equipe import servico as sv
+
+    servico, usuario, canal = await _canal()
+    [raiz] = (
+        await servico.mensagem_do_usuario(canal, usuario, texto="@Luna peças", membros=MEMBROS)
+    ).tarefas
+    await servico.iniciar(raiz.id)
+    filha = await servico.delegar(
+        raiz.id,
+        raiz.revisao,
+        por_agente=LUNA,
+        para_agente=ATLAS,
+        instrucao="refs",
+        disponiveis=TODOS,
+    )
+    await servico.iniciar(filha.id)
+    agora = datetime.now(UTC)
+    monkeypatch.setattr(sv, "_agora", lambda: agora - timedelta(seconds=2))  # relógio atrasado
+    await servico.registrar_resultado(filha.id, filha.revisao, por_agente=ATLAS, texto="4 refs")
+    monkeypatch.setattr(sv, "_agora", lambda: agora)
+    fim = await servico.fim_do_turno(raiz.id, raiz.revisao)
+    assert fim.tarefas[0].status is StatusTarefa.NA_FILA  # a mãe ainda precisa ler o resultado
+    await servico.iniciar(raiz.id)
+    fim = await servico.fim_do_turno(raiz.id, raiz.revisao)
+    assert fim.tarefas[0].status is StatusTarefa.CONCLUIDA  # no turno seguinte não reabre
+
+
+async def test_filha_de_turno_anterior_nao_reabre_a_mae_mesmo_com_relogio_igual(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.canais_equipe import servico as sv
+
+    parado = datetime.now(UTC)
+    monkeypatch.setattr(sv, "_agora", lambda: parado)  # relógio que nunca anda
+    servico, usuario, canal = await _canal()
+    [raiz] = (
+        await servico.mensagem_do_usuario(canal, usuario, texto="@Luna peças", membros=MEMBROS)
+    ).tarefas
+    await servico.iniciar(raiz.id)
+    filha = await servico.delegar(
+        raiz.id,
+        raiz.revisao,
+        por_agente=LUNA,
+        para_agente=ATLAS,
+        instrucao="refs",
+        disponiveis=TODOS,
+    )
+    await servico.fim_do_turno(raiz.id, raiz.revisao)  # mãe espera a filha
+    await servico.iniciar(filha.id)
+    await servico.registrar_resultado(filha.id, filha.revisao, por_agente=ATLAS, texto="ok")
+    await servico.iniciar(raiz.id)  # mãe acorda e lê o resultado
+    fim = await servico.fim_do_turno(raiz.id, raiz.revisao)
+    assert fim.tarefas[0].status is StatusTarefa.CONCLUIDA
+
+
 async def test_transferir_nao_devolve_para_quem_passou() -> None:
     servico, usuario, canal = await _canal()
     [tarefa] = (

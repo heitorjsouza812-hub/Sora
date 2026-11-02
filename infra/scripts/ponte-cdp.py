@@ -3,9 +3,45 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
+import os
 
 ORIGEM = ("127.0.0.1", 9222)
+CAMINHOS_COM_WS = {"/json", "/json/list", "/json/version", "/json/new", "/json/protocol"}
+"""Rotas do CDP cujo JSON traz ``webSocketDebuggerUrl``."""
+REDE_PERMITIDA = os.environ.get("PONTE_REDE_PERMITIDA", "")
+"""CIDR da rede de controle. Só quem vem dela fala com a ponte (o proxy, na rede isolada, não)."""
+
+
+def cliente_permitido(ip: str, cidr: str = REDE_PERMITIDA) -> bool:
+    if not cidr:
+        return False  # sem rede configurada, ninguém entra (falha fechada)
+    # loopback: o healthcheck do próprio contêiner
+    try:
+        endereco = ipaddress.ip_address(ip)
+        return endereco.is_loopback or endereco in ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return False
+
+
+def reescrever_ws(valor: object) -> object:
+    """Troca o host do ``webSocketDebuggerUrl`` (objeto ou lista de objetos) pelo da ponte."""
+    if isinstance(valor, list):
+        return [reescrever_ws(item) for item in valor]
+    if isinstance(valor, dict):
+        for chave in ("webSocketDebuggerUrl", "devtoolsFrontendUrl"):
+            if isinstance(valor.get(chave), str) and "/devtools/" in valor[chave]:
+                caminho = valor[chave].split("/devtools/", 1)[1]
+                if chave == "webSocketDebuggerUrl":
+                    valor[chave] = f"ws://navegador:9223/devtools/{caminho}"
+                else:
+                    del valor[chave]  # o front-end do DevTools aponta para o CDP cru
+    return valor
+
+
+def caminho_do_pedido(linha: bytes) -> str:
+    return linha.split(b" ", 2)[1].split(b"?", 1)[0].decode().rstrip("/") or "/"
 
 
 async def copiar(leitor: asyncio.StreamReader, escritor: asyncio.StreamWriter) -> None:
@@ -22,6 +58,10 @@ async def copiar(leitor: asyncio.StreamReader, escritor: asyncio.StreamWriter) -
 
 async def cliente(leitor: asyncio.StreamReader, escritor: asyncio.StreamWriter) -> None:
     origem: asyncio.StreamWriter | None = None
+    par = escritor.get_extra_info("peername")
+    if not par or not cliente_permitido(par[0]):
+        escritor.close()
+        return
     try:
         pedido = await leitor.readuntil(b"\r\n\r\n")
         linhas = pedido[:-4].split(b"\r\n")
@@ -49,11 +89,9 @@ async def cliente(leitor: asyncio.StreamReader, escritor: asyncio.StreamWriter) 
             0,
         )
         corpo = await origem_leitor.readexactly(tamanho) if tamanho else b""
-        # O Playwright pede "/json/version/" (com barra); sem isso o WS volta apontando para 127.0.0.1.
-        if linhas[0].split(b" ", 2)[1].split(b"?", 1)[0].rstrip(b"/") == b"/json/version":
-            dados = json.loads(corpo)
-            caminho = dados["webSocketDebuggerUrl"].split("/devtools/", 1)[1]
-            dados["webSocketDebuggerUrl"] = f"ws://navegador:9223/devtools/{caminho}"
+        # O Playwright pede "/json/version/" (com barra): compara sem a barra final.
+        if caminho_do_pedido(linhas[0]) in CAMINHOS_COM_WS:
+            dados = reescrever_ws(json.loads(corpo))
             corpo = json.dumps(dados).encode()
             cabecalho = b"\r\n".join(
                 linha

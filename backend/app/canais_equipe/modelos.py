@@ -123,6 +123,10 @@ class TarefaCanal:
     motivo: MotivoParada | None = None
     revisao: int = 1
     """Sobe a cada Retomar, Reatribuir ou transferência; resultado de revisão velha é recusado."""
+    turno_seq: int = 0
+    """Quantos turnos esta tarefa já começou. Sobe em ``iniciar`` e fica no banco."""
+    fim_no_turno_do_pai: int = 0
+    """Na filha: o ``turno_seq`` da mãe quando ela terminou (0 = ainda não terminou)."""
     seguimentos: list[UUID] = field(default_factory=list)
     """Mensagens do usuário que chegaram depois e continuam esta tarefa."""
     resultado: str | None = None

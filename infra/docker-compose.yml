@@ -78,7 +78,7 @@ services:
         --force-webrtc-ip-handling-policy=disable_non_proxied_udp
         --webrtc-ip-handling-policy=disable_non_proxied_udp
         --proxy-server=http://proxy-egresso:3128 --proxy-bypass-list='<-loopback>'
-        --remote-debugging-address=0.0.0.0 --remote-debugging-port=9222
+        --remote-debugging-port=9222
         --remote-allow-origins='*' --user-data-dir=/tmp/chromium about:blank &
         exec python /opt/sora/ponte-cdp.py
     depends_on:
@@ -103,6 +103,7 @@ services:
       HTTPS_PROXY: http://proxy-egresso:3128
       NO_PROXY: localhost,127.0.0.1
       SORA_TESTE_HOST_PRIVADO: alvo-privado
+      PONTE_REDE_PERMITIDA: 10.213.77.0/24
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9223/json/version', timeout=2)"]
       interval: 5s
@@ -181,6 +182,9 @@ networks:
         - subnet: 172.28.0.0/16
   navegador_controle:
     internal: true
+    ipam:
+      config:
+        - subnet: 10.213.77.0/24
   navegador_isolada:
     internal: true
   navegador_saida: {}

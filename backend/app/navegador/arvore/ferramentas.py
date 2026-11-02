@@ -286,14 +286,19 @@ class ServicoArvore:
         self, contexto: ContextoFerramenta, aba_id: UUID | None
     ) -> NavegadorArvore:
         if aba_id is None:
-            abas = sorted(self._gerente.do_agente(contexto.agente_id), key=lambda a: a.usada_em)
+            abas = sorted(
+                self._gerente.do_agente(contexto.agente_id, so_efemeras=contexto.sem_supervisao),
+                key=lambda a: a.usada_em,
+            )
             if not abas:
                 raise ErroNavegador(
                     Codigo.ABA_NAO_ENCONTRADA, "Você não tem abas abertas. Abra uma página antes."
                 )
             aba_id = abas[-1].id
         try:
-            aba = await self._gerente.usar(aba_id, contexto.agente_id)
+            aba = await self._gerente.usar(
+                aba_id, contexto.agente_id, sem_supervisao=contexto.sem_supervisao
+            )
         except ErroFerramenta as erro:
             codigo = Codigo.POLITICA_NEGADA if "usuário" in str(erro) else Codigo.ABA_NAO_ENCONTRADA
             raise ErroNavegador(codigo, str(erro)) from erro

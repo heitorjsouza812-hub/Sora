@@ -128,19 +128,31 @@ class GerenteAbas:
             aba = await self.navegar(aba.id, agente_id, url)
         return aba
 
-    def exigir(self, aba_id: UUID, agente_id: UUID) -> Aba:
-        """O ponto por onde **toda** ferramenta de agente passa antes de mexer numa aba."""
+    def exigir(self, aba_id: UUID, agente_id: UUID, *, sem_supervisao: bool = False) -> Aba:
+        """O ponto por onde **toda** ferramenta de agente passa antes de mexer numa aba.
+
+        Em execução sem supervisão (rotina) só vale aba efêmera: nunca reaproveita a aba logada
+        que o agente deixou aberta numa conversa.
+        """
         aba = self._abas.get(aba_id)
         if aba is None or aba.agente_id != agente_id:
             raise ErroFerramenta("Essa aba não existe ou não é sua. Use navegador_abas.")
+        if sem_supervisao and not aba.perfil_efemero:
+            raise ErroFerramenta(
+                "Rotinas não usam abas com perfil salvo. Abra uma aba nova (perfil temporário)."
+            )
         if aba.assumida_pelo_usuario:
             raise ErroFerramenta(
                 "O usuário está usando esta aba agora. Espere ele devolver ou use outra aba."
             )
         return aba
 
-    async def navegar(self, aba_id: UUID, agente_id: UUID, url: str) -> Aba:
-        aba = await self._garantir_carregada(self.exigir(aba_id, agente_id))
+    async def navegar(
+        self, aba_id: UUID, agente_id: UUID, url: str, *, sem_supervisao: bool = False
+    ) -> Aba:
+        aba = await self._garantir_carregada(
+            self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
+        )
         tem_login, aprovados = await self._motor.contexto_politica(aba)
         politica = politica_contextual_navegador(
             "navegador_abrir",
@@ -162,18 +174,25 @@ class GerenteAbas:
         await self._motor.aprovar_dominio(aba, dominio)
         return dominio
 
-    async def usar(self, aba_id: UUID, agente_id: UUID) -> Aba:
+    async def usar(self, aba_id: UUID, agente_id: UUID, *, sem_supervisao: bool = False) -> Aba:
         """Antes de ler ou agir: recarrega se foi descarregada e marca o uso."""
-        aba = await self._garantir_carregada(self.exigir(aba_id, agente_id))
+        aba = await self._garantir_carregada(
+            self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
+        )
         return self._gravar(replace(aba, usada_em=_agora()))
 
-    async def fechar(self, aba_id: UUID, agente_id: UUID) -> None:
-        aba = self.exigir(aba_id, agente_id)
+    async def fechar(self, aba_id: UUID, agente_id: UUID, *, sem_supervisao: bool = False) -> None:
+        aba = self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
         await self._remover(aba)
 
-    def do_agente(self, agente_id: UUID) -> list[Aba]:
+    def do_agente(self, agente_id: UUID, *, so_efemeras: bool = False) -> list[Aba]:
         return sorted(
-            (a for a in self._abas.values() if a.agente_id == agente_id), key=lambda a: a.aberta_em
+            (
+                a
+                for a in self._abas.values()
+                if a.agente_id == agente_id and (a.perfil_efemero or not so_efemeras)
+            ),
+            key=lambda a: a.aberta_em,
         )
 
     def descrever(self, agente_id: UUID) -> str:

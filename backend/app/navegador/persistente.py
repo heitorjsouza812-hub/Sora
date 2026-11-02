@@ -14,14 +14,14 @@ from uuid import UUID
 
 from app.busca.ler_pagina import EnderecoBloqueado, ErroLeitura, validar_destino
 from app.ferramentas.base import ErroFerramenta
-from app.navegador.abas import Aba
+from app.navegador.abas import Aba, RevisaoNavegacaoNecessaria
 from app.navegador.perfis import (
     com_dominio_aprovado,
     dominios_aprovados,
     estado_playwright,
     perfil_tem_login,
 )
-from app.revisor.politica import Politica, politica_contextual_navegador
+from app.revisor.politica import dominio_registravel, navegacao_exige_revisao
 
 PRAZO_NAVEGACAO_MS = 20_000
 
@@ -41,6 +41,8 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         self._navegador: Any = None
         self._contextos: dict[str, Any] = {}
         self._estados: dict[str, dict[str, Any] | None] = {}
+        self._bloqueios: dict[str, str] = {}
+        """Último domínio barrado por revisão em cada partição (para o erro certo no goto)."""
         self._paginas: dict[UUID, Any] = {}
 
     async def _iniciar(self) -> None:
@@ -96,16 +98,12 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             await rota.abort("blockedbyclient")
             return
         estado = self._estados.get(particao_)
-        if (
-            rota.request.is_navigation_request()
-            and politica_contextual_navegador(
-                "navegador_acao",
-                url=url,
-                perfil_tem_login=perfil_tem_login(estado),
-                dominios_aprovados=dominios_aprovados(estado),
-            )
-            is Politica.REVISOR
+        if rota.request.is_navigation_request() and navegacao_exige_revisao(
+            url,
+            perfil_tem_login=perfil_tem_login(estado),
+            dominios_aprovados=dominios_aprovados(estado),
         ):
+            self._bloqueios[particao_] = dominio_registravel(url)
             await rota.abort("blockedbyclient")
             return
         await rota.continue_()
@@ -132,9 +130,13 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         except (EnderecoBloqueado, ErroLeitura) as erro:
             raise ErroFerramenta(f"Endereço recusado: {erro}") from erro
         pagina = self._paginas[aba.id]
+        self._bloqueios.pop(aba.particao, None)
         try:
             await pagina.goto(url, wait_until="domcontentloaded", timeout=PRAZO_NAVEGACAO_MS)
         except Exception as erro:
+            if dominio := self._bloqueios.pop(aba.particao, None):
+                # redirecionamento para domínio não aprovado: pede revisão, não é erro genérico
+                raise RevisaoNavegacaoNecessaria(dominio) from erro
             raise ErroFerramenta("Não consegui abrir a página.") from erro
         return pagina.url, await pagina.title()
 
@@ -145,6 +147,13 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
 
     async def fechar(self, aba: Aba) -> None:
         await self.descarregar(aba)
+        if aba.perfil_efemero:
+            # a partição efêmera é só desta aba: destrói o contexto (cookies e memória)
+            contexto = self._contextos.pop(aba.particao, None)
+            self._estados.pop(aba.particao, None)
+            self._bloqueios.pop(aba.particao, None)
+            if contexto is not None:
+                await contexto.close()
 
     async def capturar(self, aba: Aba) -> bytes:
         pagina = self._paginas[aba.id]

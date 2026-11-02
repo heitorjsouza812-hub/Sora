@@ -9,7 +9,7 @@ from __future__ import annotations
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -107,21 +107,8 @@ class Mudancas:
     rota: Rota | None = None
 
 
-_ultimo_instante: datetime | None = None
-
-
 def _agora() -> datetime:
-    """Relógio estritamente crescente no processo.
-
-    ``fim_do_turno`` compara ``atualizada_em`` para saber o que aconteceu durante o turno; o
-    relógio do Windows repete o mesmo instante em chamadas seguidas e quebrava essa ordem.
-    """
-    global _ultimo_instante
-    agora = datetime.now(UTC)
-    if _ultimo_instante is not None and agora <= _ultimo_instante:
-        agora = _ultimo_instante + timedelta(microseconds=1)
-    _ultimo_instante = agora
-    return agora
+    return datetime.now(UTC)
 
 
 class ServicoCanais:
@@ -441,6 +428,7 @@ class ServicoCanais:
         if tarefa.status is not StatusTarefa.NA_FILA:
             raise ErroCanal("Esta tarefa não está esperando para começar.")
         tarefa.status = StatusTarefa.RODANDO
+        tarefa.turno_seq += 1  # a ordem dos eventos vem deste contador, nunca do relógio
         tarefa.atualizada_em = _agora()
         await self._armazem.gravar_tarefa(tarefa)
         return tarefa
@@ -478,7 +466,7 @@ class ServicoCanais:
             tarefa.status = StatusTarefa.AGUARDANDO_FILHAS
         elif any(
             t.status in (StatusTarefa.CONCLUIDA, StatusTarefa.FALHOU)
-            and t.atualizada_em >= tarefa.atualizada_em
+            and t.fim_no_turno_do_pai == tarefa.turno_seq
             for t in filhas
         ):
             # Uma filha terminou durante este turno: o dono ainda não viu o resultado dela,
@@ -486,6 +474,8 @@ class ServicoCanais:
             tarefa.status = StatusTarefa.NA_FILA
         else:
             tarefa.status = StatusTarefa.CONCLUIDA
+        if tarefa.status is StatusTarefa.CONCLUIDA:
+            await self._marcar_fim_na_mae(tarefa)
         tarefa.atualizada_em = _agora()
         await self._armazem.gravar_tarefa(tarefa)
         mudancas.tarefas.append(tarefa)
@@ -500,6 +490,7 @@ class ServicoCanais:
             return mudancas
         tarefa.status = StatusTarefa.FALHOU
         tarefa.erro = erro[:500]
+        await self._marcar_fim_na_mae(tarefa)
         tarefa.atualizada_em = _agora()
         await self._armazem.gravar_tarefa(tarefa)
         mudancas.tarefas.append(tarefa)
@@ -617,6 +608,7 @@ class ServicoCanais:
         canal = await self._canal(tarefa.canal_id)
         tarefa.resultado = texto[:MAX_TEXTO_MENSAGEM]
         tarefa.status = StatusTarefa.CONCLUIDA
+        await self._marcar_fim_na_mae(tarefa)
         tarefa.atualizada_em = _agora()
         await self._armazem.gravar_tarefa(tarefa)
         mensagem = MensagemCanal(
@@ -754,6 +746,11 @@ class ServicoCanais:
                 await self._armazem.gravar_tarefa(alvo)
                 reabertas.append(alvo)
         return reabertas
+
+    async def _marcar_fim_na_mae(self, tarefa: TarefaCanal) -> None:
+        """Anota em que turno da mãe esta filha terminou (número, não horário)."""
+        if tarefa.pai_id is not None:
+            tarefa.fim_no_turno_do_pai = (await self._tarefa(tarefa.pai_id)).turno_seq
 
     async def _acordar_pai(self, tarefa: TarefaCanal, mudancas: Mudancas) -> None:
         if tarefa.pai_id is None:

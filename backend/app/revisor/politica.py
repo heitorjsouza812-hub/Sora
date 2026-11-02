@@ -16,38 +16,10 @@ import re
 from enum import StrEnum
 from urllib.parse import urlsplit
 
-_SUFIXOS_COMPOSTOS = frozenset(
-    {
-        "com.br",
-        "net.br",
-        "org.br",
-        "gov.br",
-        "edu.br",
-        "co.uk",
-        "org.uk",
-        "gov.uk",
-        "com.au",
-        "net.au",
-        "org.au",
-        "co.jp",
-        "co.nz",
-        "com.mx",
-        "com.ar",
-        "com.co",
-    }
-)
-"""Sufixos públicos compostos usuais; a comparação desconhecida fica mais restrita."""
+from publicsuffixlist import PublicSuffixList
 
-_SUFIXOS_PRIVADOS = frozenset(
-    {
-        "appspot.com",
-        "github.io",
-        "netlify.app",
-        "pages.dev",
-        "vercel.app",
-    }
-)
-"""Hospedagens em que cada subdomínio pertence a um cliente diferente."""
+_PSL = PublicSuffixList()
+"""Lista pública de sufixos empacotada (offline, versão fixada no ``uv.lock``)."""
 
 
 class Politica(StrEnum):
@@ -185,22 +157,57 @@ def parece_somente_leitura(nome: str) -> bool:
     return bool(_SOMENTE_LEITURA.search(nome)) and not _ESCRITA.search(nome)
 
 
+def _host(url: str) -> str:
+    """Host em minúsculas e punycode; aceita endereço sem esquema (``evil.com/x``)."""
+    texto = url.strip()
+    if not texto:
+        return ""
+    if "://" not in texto:
+        texto = "//" + texto.lstrip("/")
+    try:
+        host = (urlsplit(texto).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return ""
+    if not host:
+        return ""
+    try:
+        return host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return ""
+
+
+def normalizar_dominio(valor: str) -> str:
+    """Forma canônica para guardar e comparar aprovações (domínio registrável em punycode)."""
+    return dominio_registravel(valor)
+
+
 def dominio_registravel(url: str) -> str:
     """Domínio usado para a aprovação contextual do navegador.
 
-    IPs e nomes locais ficam inteiros. Para sufixos privados conhecidos, um rótulo do cliente
-    também entra na chave, evitando que aprovar ``cliente.github.io`` aprove outro cliente.
+    Usa a lista pública de sufixos (inclui hospedagens como ``github.io``, onde cada cliente é
+    um domínio). IP e nome sem ponto ficam inteiros. Devolve ``""`` se não houver host: quem
+    chama deve tratar isso como "pedir revisão".
     """
-    host = (urlsplit(url).hostname or "").rstrip(".").lower()
-    if not host or ":" in host or host.replace(".", "").isdigit() or "." not in host:
+    host = _host(url)
+    if not host:
+        return ""
+    if ":" in host or "." not in host or host.replace(".", "").isdigit():
         return host
-    partes = host.split(".")
-    ultimas_duas = ".".join(partes[-2:])
-    if ultimas_duas in _SUFIXOS_PRIVADOS and len(partes) >= 3:
-        return ".".join(partes[-3:])
-    if ultimas_duas in _SUFIXOS_COMPOSTOS and len(partes) >= 3:
-        return ".".join(partes[-3:])
-    return ultimas_duas
+    return _PSL.privatesuffix(host) or host
+
+
+def navegacao_exige_revisao(
+    url: str, *, perfil_tem_login: bool, dominios_aprovados: set[str] | frozenset[str]
+) -> bool:
+    """Regra única do A1: perfil com login + domínio não aprovado. Falha fechada.
+
+    Domínio vazio (URL ilegível) num perfil logado também pede revisão.
+    """
+    if not perfil_tem_login:
+        return False
+    dominio = dominio_registravel(url)
+    aprovados = {normalizar_dominio(d) for d in dominios_aprovados}
+    return not dominio or dominio not in aprovados
 
 
 def politica_contextual_navegador(
@@ -212,19 +219,15 @@ def politica_contextual_navegador(
 ) -> Politica:
     """Eleva navegação para domínio novo quando o perfil contém uma sessão salva.
 
-    A checagem vale tanto para abertura direta quanto para navegações disparadas por ações ou
-    lotes. Perfil sem login preserva a política nominal existente.
+    Vale para abertura direta e para navegações disparadas por ações ou lotes. Perfil sem login
+    preserva a política nominal da ferramenta.
     """
     base = politica_da_ferramenta(nome)
-    if nome not in {
-        "navegador_abrir",
-        "navegador_agir",
-        "navegador_acao",
-        "navegador_lote",
-    }:
+    if nome not in {"navegador_abrir", "navegador_agir", "navegador_acao", "navegador_lote"}:
         return base
-    dominio = dominio_registravel(url)
-    if perfil_tem_login and dominio and dominio not in dominios_aprovados:
+    if navegacao_exige_revisao(
+        url, perfil_tem_login=perfil_tem_login, dominios_aprovados=dominios_aprovados
+    ):
         return Politica.REVISOR
     return base
 
