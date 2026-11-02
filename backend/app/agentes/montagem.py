@@ -23,7 +23,9 @@ if TYPE_CHECKING:
 
     from app.llm.troca import EventoTroca
 
-PapelAgente = Literal["sora", "pesquisador", "redator", "designer", "verificador", "individual"]
+PapelAgente = Literal[
+    "sora", "pesquisador", "redator", "designer", "verificador", "individual", "canal"
+]
 
 FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
     "sora": (
@@ -48,6 +50,7 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "ler_pagina",
         "escrever_arquivo",
     ),
+    "canal": ("canal_historico", "canal_delegar", "canal_transferir", "canal_resultado"),
 }
 
 
@@ -78,6 +81,9 @@ class ContextoAgente:
     papel: PapelAgente
     cadeia_id: UUID | None = None
     etapa_id: UUID | None = None
+    canal_id: UUID | None = None
+    tarefa_canal_id: UUID | None = None
+    revisao_canal: int | None = None
     ferramentas_extras: list[str] = field(default_factory=list)
     valores_do_prompt: dict[str, Any] = field(default_factory=dict)
     dependencias: DependenciasAgente = field(default_factory=DependenciasAgente)
@@ -101,10 +107,16 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     from app.agentes.prompts import carregar_prompt, preencher
 
     valores = contexto.valores_do_prompt
-    if contexto.papel in {"sora", "individual"}:
+    if contexto.papel in {"sora", "individual", "canal"}:
         padroes = {
             "idioma": "pt-BR",
-            "perfil_do_agente": "Sora" if contexto.papel == "sora" else "Agente individual",
+            "perfil_do_agente": (
+                "Sora"
+                if contexto.papel == "sora"
+                else "Agente trabalhando em um canal de equipe"
+                if contexto.papel == "canal"
+                else "Agente individual"
+            ),
             "data_hora": "não informada",
             "fuso": "America/Sao_Paulo",
             "memorias_relevantes": "nenhuma",
@@ -148,6 +160,9 @@ async def montar_agente(
             conversa_id=contexto.conversa_id,
             cadeia_id=contexto.cadeia_id,
             etapa_id=contexto.etapa_id,
+            canal_id=contexto.canal_id,
+            tarefa_canal_id=contexto.tarefa_canal_id,
+            revisao_canal=contexto.revisao_canal,
             sem_supervisao=contexto.sem_supervisao,
         ),
     )
