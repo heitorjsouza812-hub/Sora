@@ -136,6 +136,26 @@ NAVEGADOR_DIRETO = (
 """Só estas quatro vão no prompt; as outras nove ferramentas do navegador ficam sob demanda."""
 
 
+SINONIMOS_DO_NAVEGADOR = {
+    "navegador_abas": "listar abas, abas abertas, trocar de aba, janelas",
+    "navegador_fechar_aba": "fechar aba, encerrar aba, close tab",
+    "navegador_capturar": "capturar, captura de tela, screenshot, imagem da página, foto, print",
+    "navegador_console": "console, erros do console, logs da página, javascript",
+    "navegador_pedir_ajuda": "pedir ajuda, login, captcha, assumir a aba, usuário entrar",
+    "navegador_elemento": "elemento, detalhes de um elemento, conferir ref, estado do elemento",
+    "navegador_esperar": "esperar, aguardar, carregar, tempo, até aparecer, wait",
+    "navegador_tecla": "tecla, teclado, enter, tab, esc, atalho, pressionar",
+    "navegador_lote": "lote, várias ações, sequência de ações, batch",
+}
+
+
+def _com_sinonimos(ferramenta):
+    extra = SINONIMOS_DO_NAVEGADOR.get(ferramenta.name)
+    if extra and "Sinônimos:" not in (ferramenta.description or ""):
+        ferramenta.description = f"{ferramenta.description or ''} Sinônimos: {extra}."
+    return ferramenta
+
+
 def navegador_preguicoso(ferramentas: list, contexto: ContextoAgente) -> list:
     """Das ferramentas do navegador, abrir/observar/agir/procurar direto; o resto, no catálogo
     (``navegador_buscar_ferramentas`` / ``carregar`` / ``executar``). Cada execução continua
@@ -148,7 +168,14 @@ def navegador_preguicoso(ferramentas: list, contexto: ContextoAgente) -> list:
     return [
         *outras,
         *diretas,
-        *_catalogo_revisado(resto, contexto, "navegador", "do navegador", limite_direto=0),
+        *_catalogo_revisado(
+            [_com_sinonimos(f) for f in resto],
+            contexto,
+            "navegador",
+            "do navegador",
+            limite_direto=0,
+            grupo_padrao="navegador",
+        ),
     ]
 
 
@@ -170,6 +197,7 @@ def _catalogo_revisado(
     prefixo: str,
     rotulo: str,
     limite_direto: int = 20,
+    grupo_padrao: str = "outros",
 ) -> list:
     import hashlib
     import json
@@ -209,6 +237,7 @@ def _catalogo_revisado(
         rotulo=rotulo,
         antes_de_executar=antes,
         limite_direto=limite_direto,
+        grupo_padrao=grupo_padrao,
     )
 
 

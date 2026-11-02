@@ -102,6 +102,33 @@ def espera_com_teto(erro: BaseException) -> float | None:
     return pedida + 0.5
 
 
+async def com_espera_de_limite(chamar: Any, *, ao_esperar: Any = None, dormir: Any = None) -> Any:
+    """Roda ``chamar()``; num 429 espera o ``retry-after`` (teto 60 s, até 3 vezes) e repete.
+
+    Para chamadas avulsas (o juiz do revisor) que não passam pelo middleware do agente. Esgotadas
+    as esperas, sobe ``ErroLimiteDoProvedor``.
+    """
+    import asyncio
+
+    from app.llm.troca import MotivoTroca, classificar_erro
+
+    dormir = dormir or asyncio.sleep
+    esperas = 0
+    while True:
+        try:
+            return await chamar()
+        except Exception as erro:
+            if classificar_erro(erro) is not MotivoTroca.LIMITE_DE_TAXA:
+                raise
+            espera = espera_com_teto(erro)
+            if espera is None or esperas >= TENTATIVAS_NO_LIMITE:
+                raise ErroLimiteDoProvedor("limite por minuto") from None
+            esperas += 1
+            if ao_esperar is not None:
+                await ao_esperar(round(espera))
+            await dormir(espera)
+
+
 def enxugar(mensagens: list[Any], nivel: int) -> list[Any]:
     """Cópia da lista com resultados de ferramentas encurtados.
 
@@ -115,14 +142,14 @@ def enxugar(mensagens: list[Any], nivel: int) -> list[Any]:
     if not indices:
         return list(mensagens)
     ultimo = indices[-1]
-    ultimo_do_navegador = max(
-        (
-            i
-            for i in indices
-            if str(getattr(mensagens[i], "name", "") or "").startswith("navegador_")
-        ),
-        default=-1,
-    )
+    # A leitura mais recente de CADA ferramenta do navegador fica inteira (as refs de uma
+    # observação continuam valendo enquanto a página não muda); só as repetidas antigas encolhem.
+    ultimas_do_navegador: dict[str, int] = {}
+    for i in indices:
+        nome = str(getattr(mensagens[i], "name", "") or "")
+        if nome.startswith("navegador_"):
+            ultimas_do_navegador[nome] = i
+    manter = set(ultimas_do_navegador.values())
     saida = list(mensagens)
     for i in indices:
         m = mensagens[i]
@@ -130,7 +157,7 @@ def enxugar(mensagens: list[Any], nivel: int) -> list[Any]:
         navegador = str(getattr(m, "name", "") or "").startswith("navegador_")
         if nivel >= 2 and i != ultimo:
             limite = 200
-        elif nivel >= 1 and navegador and i != ultimo_do_navegador:
+        elif nivel >= 1 and navegador and i not in manter:
             limite = 300
         elif nivel >= 2 and i == ultimo:
             limite = 3000

@@ -359,3 +359,124 @@ def test_falar_sozinho_depois_de_ferramenta_encerra_o_turno() -> None:
     ]
     assert deve_encerrar(relato) is True
     assert deve_encerrar(relato[:-2]) is False  # acabou de voltar a ferramenta: fala ainda
+
+
+# ---------------------------------------------------------------- rodada 6
+
+
+def _navegador_escondido():
+    from app.agentes.ancora import SINONIMOS_DO_NAVEGADOR, _com_sinonimos
+    from app.ferramentas.base import ContextoFerramenta
+    from app.ferramentas.catalogo_preguicoso import CatalogoFerramentas
+    from app.ferramentas.registro import criar_ferramentas
+
+    nomes = list(SINONIMOS_DO_NAVEGADOR)
+    ferramentas = criar_ferramentas(
+        nomes,
+        ContextoFerramenta(
+            usuario_id=uuid.uuid4(), agente_id=uuid.uuid4(), conversa_id=uuid.uuid4()
+        ),
+    )
+    return CatalogoFerramentas([_com_sinonimos(f) for f in ferramentas], "navegador"), nomes
+
+
+def test_toda_ferramenta_escondida_do_navegador_e_encontravel() -> None:
+    catalogo, nomes = _navegador_escondido()
+    for nome in nomes:
+        sufixo = nome.removeprefix("navegador_")
+        for consulta, grupo in ((sufixo, "navegador"), (sufixo, ""), (nome, "navegador")):
+            achados = [f["id"] for f in catalogo.buscar(consulta, grupo)["ferramentas"]]
+            assert nome in achados, (nome, consulta, grupo, achados)
+    # sem consulta, o grupo lista todas
+    assert sorted(catalogo.buscar("", "navegador")["nomes"]) == sorted(nomes)
+
+
+def test_busca_aceita_flexao_sinonimo_e_acento() -> None:
+    catalogo, _ = _navegador_escondido()
+
+    def achou(consulta: str, nome: str) -> bool:
+        return nome in [f["id"] for f in catalogo.buscar(consulta, "navegador")["ferramentas"]]
+
+    assert achou("captura", "navegador_capturar")
+    assert achou("screenshot", "navegador_capturar")
+    assert achou("aguardar", "navegador_esperar")
+    assert achou("aguardar carregar", "navegador_esperar")
+    assert achou("teclado", "navegador_tecla")
+    assert achou("ações em lote", "navegador_lote")
+    # grupo que não existe não esconde a ferramenta
+    assert achou("capturar", "navegador_capturar") and "navegador_capturar" in [
+        f["id"] for f in catalogo.buscar("capturar", "grupo-errado")["ferramentas"]
+    ]
+
+
+async def test_juiz_espera_o_limite_do_plano_antes_de_cair_no_cartao() -> None:
+    from app.revisor.juiz import AcaoProposta, avaliar_acao
+
+    class Limite(Exception):
+        status_code = 429
+
+        def __str__(self) -> str:
+            return "Rate limit reached ... Please try again in 3s."
+
+    tentativas = 0
+    esperas: list[float] = []
+
+    async def modelo(sistema: str, prompt: str) -> str:
+        nonlocal tentativas
+        tentativas += 1
+        if tentativas < 3:
+            raise Limite
+        return (
+            '{"dano": "nenhum", "quem_recebe": null, "destino": "nao_externo", '
+            '"decisao": "PERMITIR", "motivo": "pedido pelo usuario"}'
+        )
+
+    async def dormir(segundos: float) -> None:
+        esperas.append(segundos)
+
+    veredito = await avaliar_acao(
+        modelo,
+        AcaoProposta(ferramenta="navegador_acao", argumentos={"acao": "clicar"}),
+        ["clique em Publicar"],
+        dormir=dormir,
+    )
+    assert veredito.decisao.value == "PERMITIR"
+    assert tentativas == 3 and esperas == [3.5, 3.5]
+
+
+async def test_juiz_que_nao_se_recupera_diz_que_nao_conseguiu_avaliar() -> None:
+    from app.revisor.juiz import AcaoProposta, avaliar_acao
+
+    class Limite(Exception):
+        status_code = 429
+
+        def __str__(self) -> str:
+            return "Rate limit reached ... Please try again in 3s."
+
+    async def modelo(sistema: str, prompt: str) -> str:
+        raise Limite
+
+    async def dormir(segundos: float) -> None:
+        return None
+
+    veredito = await avaliar_acao(
+        modelo,
+        AcaoProposta(ferramenta="navegador_acao", argumentos={}),
+        [],
+        dormir=dormir,
+    )
+    assert veredito.decisao.value == "BLOQUEAR"
+    assert "Não consegui avaliar o risco agora; a decisão fica com você." in veredito.motivo
+
+
+def test_enxugar_mantem_inteira_a_ultima_leitura_de_cada_ferramenta_do_navegador() -> None:
+    mensagens = [
+        HumanMessage("a"),
+        ToolMessage(content="o" * 5000, name="navegador_observar", tool_call_id="1"),
+        ToolMessage(content="p" * 5000, name="navegador_procurar", tool_call_id="2"),
+        ToolMessage(content="q" * 5000, name="navegador_observar", tool_call_id="3"),
+    ]
+    saida = enxugar(mensagens, 1)
+    assert len(saida[1].content) < 400  # observação antiga repetida encolhe
+    assert len(saida[2].content) == 5000  # a última procura segue inteira
+    assert len(saida[3].content) == 5000  # a última observação segue inteira

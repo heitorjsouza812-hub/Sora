@@ -101,20 +101,38 @@ def indice_cabe(grupos: list[tuple[str, list[str]]]) -> bool:
     return len(texto_indice(grupos).encode()) <= MAX_BYTES_INDICE
 
 
+def _sem_acento(texto: str) -> str:
+    import unicodedata
+
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto.lower()) if unicodedata.category(c) != "Mn"
+    )
+
+
+def _radical(palavra: str) -> str:
+    """ "captura"/"capturar"/"capturando" → "captur": acha a ferramenta mesmo com a flexão."""
+    return palavra[:5] if len(palavra) >= 6 else palavra
+
+
 def _pontuacao(entrada: Entrada, consulta: str) -> int:
-    nome = entrada.ferramenta.name.lower()
-    curto = nome_curto(entrada.ferramenta).lower()
-    descricao = (entrada.ferramenta.description or "").lower()
+    consulta = _sem_acento(consulta)
+    nome = _sem_acento(entrada.ferramenta.name)
+    curto = _sem_acento(nome_curto(entrada.ferramenta))
+    descricao = _sem_acento(entrada.ferramenta.description or "")
+    grupo = _sem_acento(entrada.grupo)
     if consulta in (nome, curto):
         return 0
     if nome.startswith(consulta) or curto.startswith(consulta):
         return 1
-    if consulta in nome or consulta in curto or consulta in entrada.grupo.lower():
+    if consulta in nome or consulta in curto or consulta in grupo:
         return 2
     if consulta in descricao:
         return 3
     palavras = [p for p in consulta.split() if len(p) > 2]
     if palavras and all(p in f"{nome} {descricao}" for p in palavras):
+        return 3
+    # flexão e sinônimos escritos na descrição: "captura" acha "capturar"
+    if palavras and all(_radical(p) in f"{nome} {descricao}" for p in palavras):
         return 3
     return 4
 
@@ -122,14 +140,19 @@ def _pontuacao(entrada: Entrada, consulta: str) -> int:
 class CatalogoFerramentas:
     """Índice das ferramentas escondidas atrás das três meta-ferramentas."""
 
-    def __init__(self, ferramentas: Sequence[BaseTool]) -> None:
+    def __init__(self, ferramentas: Sequence[BaseTool], grupo_padrao: str = GRUPO_PADRAO) -> None:
         vistos: set[str] = set()
         entradas: list[Entrada] = []
         for ferramenta in ferramentas:
             if not ferramenta.name or ferramenta.name in vistos:
                 continue
             vistos.add(ferramenta.name)
-            entradas.append(Entrada(ferramenta.name, ferramenta, grupo_da_ferramenta(ferramenta)))
+            grupo = grupo_da_ferramenta(ferramenta)
+            entradas.append(
+                Entrada(
+                    ferramenta.name, ferramenta, grupo_padrao if grupo == GRUPO_PADRAO else grupo
+                )
+            )
         self.entradas = entradas
 
     # ---------- índice ----------
@@ -145,7 +168,11 @@ class CatalogoFerramentas:
     ) -> dict[str, Any]:
         consulta = consulta[:MAX_CONSULTA].strip().lower()
         grupo = grupo[:MAX_GRUPO].strip()
-        escopo = [e for e in self.entradas if e.grupo == grupo] if grupo else self.entradas
+        escopo = [e for e in self.entradas if e.grupo.lower() == grupo.lower()] if grupo else []
+        if grupo and not escopo and consulta:
+            grupo = ""  # grupo que não existe não pode esconder a ferramenta: busca em tudo
+        if not grupo:
+            escopo = self.entradas
         if not consulta:
             if grupo:
                 if not escopo:
@@ -319,6 +346,7 @@ def montar_catalogo(
     rotulo: str = "dos conectores",
     antes_de_executar: AntesDeExecutar | None = None,
     limite_direto: int = LIMITE_DIRETO,
+    grupo_padrao: str = GRUPO_PADRAO,
 ) -> list[BaseTool]:
     """Devolve as ferramentas direto (até ``limite_direto``, 20) ou as três meta-ferramentas."""
     from langchain_core.tools import StructuredTool
@@ -329,7 +357,7 @@ def montar_catalogo(
     if len(ferramentas) <= limite_direto:
         return list(ferramentas)
 
-    catalogo = CatalogoFerramentas(ferramentas)
+    catalogo = CatalogoFerramentas(ferramentas, grupo_padrao)
     agrupado = catalogo.grupos()
     if indice_cabe(agrupado):
         descricao_busca = (
