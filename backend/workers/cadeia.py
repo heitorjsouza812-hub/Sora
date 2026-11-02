@@ -41,7 +41,7 @@ from app.modelos.enumeracoes import (
     TipoEntrega,
 )
 from app.modelos.tabelas import Agente, Cadeia, Entrega, Etapa, Mensagem
-from app.orquestrador.cadeia import EtapaResumo, decidir_avanco, pegar_etapa
+from app.orquestrador.cadeia import EtapaResumo, decidir_avanco, pegar_etapa, retomar_etapa
 from app.orquestrador.planejador import Plano, titulo_da_etapa, validar_plano
 from workers.fila import enfileirar
 
@@ -216,13 +216,187 @@ async def avancar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
             await enfileirar("executar_etapa", etapa_id=id_etapa)
 
 
+def _modelos_da_etapa(ctx: dict[str, Any], papel: str) -> list[Any]:
+    """Modelos na ordem do seletor. ``ctx["modelos_da_etapa"]`` (teste) tem prioridade."""
+    fabrica_de_modelos = ctx.get("modelos_da_etapa")
+    if fabrica_de_modelos is not None:
+        return list(fabrica_de_modelos(papel))
+    if modelo_falso_ativo():
+        return [criar_modelo_falso(papel)]
+    raise RuntimeError("a escolha de modelos reais da etapa ainda nao foi ligada ao seletor")
+
+
+def valor_da_retomada(resposta: Any) -> Any:
+    """A API manda ``{"pergunta_id", "valor"}`` ou ``{"aprovacao_id", "decisao"}``; as
+    ferramentas ``perguntar`` e ``criar_agente`` esperam so o valor/decisao no ``resume``."""
+    if isinstance(resposta, dict):
+        if "valor" in resposta:
+            return resposta["valor"]
+        if "decisao" in resposta:
+            return resposta["decisao"]
+    return resposta
+
+
+def _estado_da_pausa(valor: Any) -> StatusEtapa:
+    tipo = valor.get("tipo") if isinstance(valor, dict) else None
+    if tipo == "pergunta":
+        return StatusEtapa.AGUARDANDO_USUARIO
+    if tipo == "aprovacao":
+        return StatusEtapa.AGUARDANDO_APROVACAO
+    raise RuntimeError(f"interrupcao desconhecida: {valor!r}")
+
+
+def _evento_etapa(etapa: Etapa, progresso: int) -> EtapaAtualizada:
+    return EtapaAtualizada(
+        etapa_id=etapa.id,
+        status=etapa.status,
+        progresso=progresso,
+        modelo=etapa.modelo or "",
+        tokens=etapa.tokens,
+        custo_usd=float(etapa.custo_usd or 0),
+    )
+
+
+async def _valores_do_prompt(sessao: Any, etapa: Etapa, cadeia: Cadeia) -> dict[str, Any]:
+    """Preenchimento do prompt do especialista: plano, tarefa e entregas das etapas anteriores."""
+    agente = await sessao.get(Agente, etapa.agente_id)
+    plano = cadeia.plano or {}
+    pronto = next(
+        (
+            e.get("pronto_quando", "")
+            for e in plano.get("etapas", [])
+            if e.get("ordem") == etapa.ordem
+        ),
+        "",
+    )
+    anteriores = (
+        await sessao.scalars(
+            select(Entrega)
+            .join(Etapa, Etapa.id == Entrega.etapa_id)
+            .where(Etapa.cadeia_id == cadeia.id, Etapa.ordem.in_(etapa.depende_de or []))
+            .order_by(Etapa.ordem)
+        )
+    ).all()
+    return {
+        "nome": agente.nome if agente else etapa.especialista,
+        "papel": etapa.especialista,
+        "objetivo": plano.get("objetivo", ""),
+        "tarefa": etapa.tarefa,
+        "pronto_quando": pronto,
+        "resultados_anteriores": "\n".join(f"- {e.titulo}: {e.resumo}" for e in anteriores)
+        or "nenhum",
+    }
+
+
+def dependencias_da_etapa() -> Any:
+    """Portas que o worker entrega ao agente. ``ler_mensagens_pendentes`` liga o middleware
+    das correcoes da Sora (``mensagem_especialista``)."""
+    from app.agentes.montagem import DependenciasAgente
+    from app.ferramentas import ambiente
+
+    return DependenciasAgente(ler_mensagens_pendentes=ambiente.ler_mensagens_pendentes)
+
+
+async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any | None) -> None:
+    """Roda a etapa com o agente de verdade (ferramentas reais). ``entregar`` ja grava a
+    entrega e emite o evento: aqui so se conclui a etapa. ``__interrupt__`` (``perguntar`` e
+    ``criar_agente``) pausa a etapa; a retomada chega com ``resposta``."""
+    from app.agentes import ContextoAgente, montar_e_rodar_agente
+
+    if isinstance(resposta, dict) and resposta.get("tipo") == "mensagem_usuario":
+        # Mensagem direta do usuario a um especialista com etapa ativa: entra pelo correio
+        # (o middleware injeta antes da proxima chamada); etapa pausada segue pausada.
+        from app.ferramentas.ambiente import guardar_mensagem
+
+        await guardar_mensagem(_uuid(etapa_id), str(resposta.get("texto", "")))
+        return
+    resposta = valor_da_retomada(resposta)
+    retomada = resposta is not None
+    async with ctx["sessoes"]() as sessao:
+        pegou = (
+            await retomar_etapa(sessao, _uuid(etapa_id))
+            if retomada
+            else await pegar_etapa(sessao, _uuid(etapa_id))
+        )
+        if not pegou:
+            await sessao.rollback()
+            return
+        etapa = await sessao.get(Etapa, _uuid(etapa_id))
+        assert etapa is not None and etapa.agente_id is not None
+        cadeia = await sessao.get(Cadeia, etapa.cadeia_id, with_for_update=True)
+        assert cadeia is not None
+        if cadeia.status == StatusCadeia.AGUARDANDO_USUARIO:
+            cadeia.status = StatusCadeia.EXECUTANDO
+        await sessao.commit()
+        await _publicar(ctx, cadeia, _evento_etapa(etapa, 10))
+        contexto = ContextoAgente(
+            usuario_id=cadeia.usuario_id,
+            agente_id=etapa.agente_id,
+            conversa_id=cadeia.conversa_id,
+            papel=etapa.especialista,
+            cadeia_id=cadeia.id,
+            etapa_id=etapa.id,
+            valores_do_prompt=await _valores_do_prompt(sessao, etapa, cadeia),
+            ferramentas_extras=["perguntar"],
+            dependencias=dependencias_da_etapa(),
+        )
+        try:
+            resultado = await montar_e_rodar_agente(
+                contexto=contexto,
+                modelos=_modelos_da_etapa(ctx, etapa.especialista),
+                checkpointer=ctx["checkpointer"],
+                entrada=None if retomada else {"messages": [HumanMessage(etapa.tarefa)]},
+                resposta=resposta,
+            )
+        except Exception as erro:
+            etapa.status = StatusEtapa.FALHOU
+            etapa.erro = str(erro)[:500]
+            await sessao.commit()
+            await _publicar(ctx, cadeia, _evento_etapa(etapa, 100))
+            await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
+            return
+        interrupcoes = resultado.get("__interrupt__")
+        if interrupcoes:
+            valor = getattr(interrupcoes[0], "value", interrupcoes[0])
+            etapa.status = _estado_da_pausa(valor)
+            if etapa.status == StatusEtapa.AGUARDANDO_USUARIO:
+                cadeia.status = StatusCadeia.AGUARDANDO_USUARIO
+            await sessao.commit()
+            await _publicar(ctx, cadeia, _evento_etapa(etapa, 50))
+            if cadeia.status == StatusCadeia.AGUARDANDO_USUARIO:
+                await _publicar(
+                    ctx,
+                    cadeia,
+                    CadeiaAtualizada(
+                        cadeia_id=cadeia.id,
+                        status=cadeia.status,
+                        tokens_usados=cadeia.tokens_usados,
+                        custo_usd=_custo(cadeia),
+                    ),
+                )
+            return
+        entrega = await sessao.scalar(select(Entrega).where(Entrega.etapa_id == etapa.id))
+        if entrega is None:
+            etapa.status = StatusEtapa.FALHOU
+            etapa.erro = "o agente terminou sem entregar"
+        else:
+            etapa.status = StatusEtapa.CONCLUIDA
+            etapa.saida = {"entrega_id": str(entrega.id), "titulo": entrega.titulo}
+            cadeia.passos += 1
+        await sessao.commit()
+        await _publicar(ctx, cadeia, _evento_etapa(etapa, 100))
+    await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
+
+
 async def executar_etapa(ctx: dict[str, Any], etapa_id: str, resposta: Any | None = None) -> None:
     """Roda o especialista até ``entregar`` (ou retoma depois de uma pergunta ou
     aprovação, com ``resposta``). Prazo de 5 minutos. Quem põe na fila:
     ``avancar_cadeia`` e a API (retomada)."""
-    del resposta
+    if ctx.get("checkpointer") is not None:
+        await _executar_com_agente(ctx, etapa_id, resposta)
+        return
     if not modelo_falso_ativo():
-        raise RuntimeError("o caminho real depende de Molde e Elo")
+        raise RuntimeError("o caminho real exige o checkpointer no ctx do worker")
     fabrica = ctx["sessoes"]
     async with fabrica() as sessao:
         if not await pegar_etapa(sessao, _uuid(etapa_id)):

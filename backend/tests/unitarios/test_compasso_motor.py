@@ -90,3 +90,31 @@ def test_modelo_falso_tem_entregas_e_veredito_validos() -> None:
     assert _chamada_da_ferramenta("redator", "entregar")["tipo"] == "texto"
     veredito = Veredito.model_validate(_chamada_da_ferramenta("verificador", "veredito"))
     assert veredito.aprovado
+
+
+def test_jobs_registrados_com_argumentos_posicionais_do_contrato() -> None:
+    import inspect
+
+    from workers.configuracao import WorkerSettings
+
+    por_nome = {f.__name__: f for f in WorkerSettings.functions}
+    chamadas = {
+        "planejar_cadeia": ("c1",),
+        "executar_etapa": ("e1", {"pergunta_id": "p", "valor": "v"}),
+        "ajustar": ("conv", "texto", None),
+        "responder_direto": ("m1",),
+    }
+    for nome, argumentos in chamadas.items():
+        assert nome in por_nome, nome
+        inspect.signature(por_nome[nome]).bind({}, *argumentos)
+
+
+def test_retomada_desembrulha_pergunta_e_aprovacao_e_a_pausa_mapeia_o_estado() -> None:
+    from app.modelos.enumeracoes import StatusEtapa
+    from workers.cadeia import _estado_da_pausa, valor_da_retomada
+
+    assert valor_da_retomada({"pergunta_id": "p", "valor": "leve"}) == "leve"
+    assert valor_da_retomada({"aprovacao_id": "a", "decisao": "negar"}) == "negar"
+    assert valor_da_retomada("texto") == "texto"
+    assert _estado_da_pausa({"tipo": "pergunta"}) == StatusEtapa.AGUARDANDO_USUARIO
+    assert _estado_da_pausa({"tipo": "aprovacao"}) == StatusEtapa.AGUARDANDO_APROVACAO

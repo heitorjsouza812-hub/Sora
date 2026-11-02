@@ -285,3 +285,22 @@ async def cancelar_cadeia(sessao: AsyncSession, cadeia_id: UUID) -> None:
         cadeia.status = StatusCadeia.CANCELADA
         cadeia.concluida_em = datetime.now(UTC)
     await sessao.flush()
+
+
+async def retomar_etapa(sessao: AsyncSession, etapa_id: UUID) -> bool:
+    """``UPDATE ... WHERE status IN (aguardando_*) RETURNING id``: so uma retomada vence.
+
+    Devolve ``False`` se a etapa nao estava esperando (resposta repetida ou etapa cancelada).
+    """
+    from sqlalchemy import update
+
+    resultado = await sessao.execute(
+        update(Etapa)
+        .where(
+            Etapa.id == etapa_id,
+            Etapa.status.in_([StatusEtapa.AGUARDANDO_USUARIO, StatusEtapa.AGUARDANDO_APROVACAO]),
+        )
+        .values(status=StatusEtapa.EXECUTANDO)
+        .returning(Etapa.id)
+    )
+    return resultado.scalar_one_or_none() is not None
