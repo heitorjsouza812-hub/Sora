@@ -8,6 +8,7 @@ estado da cadeia.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -262,6 +263,14 @@ async def _criar_equipe(
         )
     cadeia.plano = plano.model_dump(mode="json")
     cadeia.status = StatusCadeia.EXECUTANDO
+    if modelo_falso_ativo():
+        # Gatilho de teste (só no modelo falso, barrado em produção): `[orcamento]` no pedido
+        # baixa o teto da cadeia para a primeira chamada estourar (cartão Continuar/Parar).
+        pedido = await sessao.scalar(
+            select(Mensagem.conteudo).where(Mensagem.id == cadeia.pedido_id)
+        )
+        if "[orcamento]" in (pedido or ""):
+            cadeia.orcamento_tokens = 100
     await sessao.commit()
     return eventos_agentes, eventos_etapas
 
@@ -549,6 +558,22 @@ async def _contar_passo(sessao: Any, cadeia_id: UUID) -> None:
     )
 
 
+async def _retomar_quando_pausar(sessao: Any, etapa_id: UUID) -> bool:
+    """``retomar_etapa`` com uma pequena espera: o cartão (pergunta ou aprovação) aparece para o
+    usuário um instante antes de o worker gravar a pausa da etapa. Se a resposta chegar nesse
+    intervalo a etapa ainda está `executando`; esperar a pausa evita perder a resposta."""
+    for _ in range(40):
+        if await retomar_etapa(sessao, etapa_id):
+            return True
+        await sessao.rollback()
+        status = await sessao.scalar(select(Etapa.status).where(Etapa.id == etapa_id))
+        await sessao.rollback()
+        if status != StatusEtapa.EXECUTANDO:
+            return False  # resposta repetida, etapa cancelada ou já retomada
+        await asyncio.sleep(0.25)
+    return False
+
+
 async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any | None) -> None:
     """Roda a etapa com o agente de verdade (ferramentas reais). ``entregar`` ja grava a
     entrega e emite o evento: aqui so se conclui a etapa. ``__interrupt__`` (``perguntar`` e
@@ -568,7 +593,7 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
         return
     async with ctx["sessoes"]() as sessao:
         pegou = (
-            await retomar_etapa(sessao, _uuid(etapa_id))
+            await _retomar_quando_pausar(sessao, _uuid(etapa_id))
             if retomada
             else await pegar_etapa(sessao, _uuid(etapa_id))
         )

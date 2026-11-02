@@ -1425,3 +1425,120 @@ async def test_provedor_mudo_nao_segura_o_post_da_conversa(
         conteudos = [m["conteudo"] for m in mensagens.json()]
         assert "crie uma campanha para a cafeteria" in conteudos
         assert any("Não consegui falar com o seu modelo" in c for c in conteudos)
+
+
+# ---------------------------------------- gatilhos de teste do modelo falso ([pergunta] etc.)
+
+
+async def _cadeia_com_gatilho(
+    ambiente_fase_b_arq: tuple[str, async_sessionmaker], email: str, gatilho: str
+) -> tuple[str, dict[str, int]]:
+    """Cria a cadeia com o gatilho no pedido e responde os cartões pelas rotas reais até a
+    cadeia ficar `concluida`. Devolve a conversa e quantos cartões de cada tipo foram
+    respondidos."""
+    url, fabrica = ambiente_fase_b_arq
+    respondidos = {"pergunta": 0, "aprovacao": 0}
+    async with httpx.AsyncClient(base_url=url, timeout=30) as cliente:
+        auth = await entrar(cliente, fabrica, email)
+        criada = await cliente.post(
+            "/v1/conversas",
+            headers=auth,
+            json={"texto": f"crie uma campanha para minha cafeteria {gatilho}", "anexos": []},
+        )
+        assert criada.status_code == 201, criada.text
+        conversa_id = criada.json()["id"]
+        limite = asyncio.get_running_loop().time() + 120
+        while asyncio.get_running_loop().time() < limite:
+            async with fabrica() as sessao:
+                cadeia = await sessao.scalar(
+                    select(Cadeia).where(Cadeia.conversa_id == conversa_id)
+                )
+                pendentes = (
+                    (
+                        await sessao.scalars(
+                            select(Pergunta).where(
+                                Pergunta.conversa_id == conversa_id,
+                                Pergunta.respondida_em.is_(None),
+                            )
+                        )
+                    ).all()
+                    if cadeia
+                    else []
+                )
+                aprovacoes = (
+                    (
+                        await sessao.scalars(
+                            select(Aprovacao)
+                            .join(Etapa, Etapa.id == Aprovacao.etapa_id)
+                            .where(
+                                Etapa.cadeia_id == (cadeia.id if cadeia else None),
+                                Aprovacao.status == StatusAprovacao.PENDENTE,
+                            )
+                        )
+                    ).all()
+                    if cadeia
+                    else []
+                )
+            if cadeia is not None and cadeia.status == StatusCadeia.CONCLUIDA:
+                return conversa_id, respondidos
+            assert cadeia is None or cadeia.status != StatusCadeia.FALHOU, "a cadeia falhou"
+            for pergunta in pendentes:
+                valor = pergunta.opcoes[0]["valor"]
+                resposta = await cliente.post(
+                    f"/v1/perguntas/{pergunta.id}/responder", headers=auth, json={"valor": valor}
+                )
+                assert resposta.status_code == 204, resposta.text
+                respondidos["pergunta"] += 1
+            for aprovacao in aprovacoes:
+                resposta = await cliente.post(
+                    f"/v1/aprovacoes/{aprovacao.id}/decidir",
+                    headers=auth,
+                    json={"decisao": DecisaoAprovacao.PERMITIR_UMA_VEZ.value},
+                )
+                assert resposta.status_code == 204, resposta.text
+                respondidos["aprovacao"] += 1
+            await asyncio.sleep(0.5)
+    pytest.fail(f"a cadeia com {gatilho} não concluiu")
+
+
+async def test_gatilho_pergunta_leva_a_cadeia_ate_o_fim(
+    ambiente_fase_b_arq: tuple[str, async_sessionmaker],
+) -> None:
+    conversa_id, respondidos = await _cadeia_com_gatilho(
+        ambiente_fase_b_arq, "gatilho-pergunta@exemplo.com", "[pergunta]"
+    )
+    assert respondidos == {"pergunta": 1, "aprovacao": 0}
+    async with ambiente_fase_b_arq[1]() as sessao:
+        pergunta = await sessao.scalar(select(Pergunta).where(Pergunta.conversa_id == conversa_id))
+        assert pergunta.resposta == "formal" and pergunta.respondida_em is not None
+
+
+async def test_gatilho_aprovacao_leva_a_cadeia_ate_o_fim(
+    ambiente_fase_b_arq: tuple[str, async_sessionmaker],
+) -> None:
+    _, respondidos = await _cadeia_com_gatilho(
+        ambiente_fase_b_arq, "gatilho-aprovacao@exemplo.com", "[aprovacao]"
+    )
+    assert respondidos == {"pergunta": 0, "aprovacao": 1}
+    async with ambiente_fase_b_arq[1]() as sessao:
+        usuario = await sessao.scalar(
+            select(Usuario).where(Usuario.email == "gatilho-aprovacao@exemplo.com")
+        )
+        iris = await sessao.scalar(
+            select(Agente).where(Agente.usuario_id == usuario.id, Agente.nome == "Organizadora")
+        )
+        assert iris is not None and iris.tipo == TipoAgente.INDIVIDUAL
+
+
+async def test_gatilho_orcamento_leva_a_cadeia_ate_o_fim(
+    ambiente_fase_b_arq: tuple[str, async_sessionmaker],
+) -> None:
+    conversa_id, respondidos = await _cadeia_com_gatilho(
+        ambiente_fase_b_arq, "gatilho-orcamento@exemplo.com", "[orcamento]"
+    )
+    assert respondidos["pergunta"] >= 1 and respondidos["aprovacao"] == 0
+    async with ambiente_fase_b_arq[1]() as sessao:
+        cadeia = await sessao.scalar(select(Cadeia).where(Cadeia.conversa_id == conversa_id))
+        assert cadeia.orcamento_tokens > 100  # "continuar" subiu o teto
+        pergunta = await sessao.scalar(select(Pergunta).where(Pergunta.cadeia_id == cadeia.id))
+        assert "orçamento" in pergunta.texto and pergunta.resposta == "continuar"
