@@ -19,7 +19,7 @@ from sqlalchemy import select, update
 
 from app.eventos.tipos import CadeiaAtualizada, EtapaAtualizada
 from app.modelos.enumeracoes import StatusAprovacao, StatusCadeia, StatusEtapa
-from app.modelos.tabelas import Aprovacao, Cadeia, Etapa
+from app.modelos.tabelas import Aprovacao, Cadeia, Etapa, Pergunta
 from app.orquestrador.travados import MAX_RETOMADAS, Acao, EtapaParada, acao_para
 from workers.fila import enfileirar
 
@@ -109,7 +109,37 @@ async def reconciliar_travados(ctx: dict[str, Any]) -> dict[str, int]:
         ).all()
     for aprovacao_id in vencidas:
         await expirar_aprovacao(ctx, str(aprovacao_id))
+    await _retomar_perguntas_respondidas(ctx)
     return {"retomadas": retomadas, "falhas": falhas}
+
+
+async def _retomar_perguntas_respondidas(ctx: dict[str, Any]) -> int:
+    """Reenfileira em ate 15 s uma pausa orfa cuja pergunta ja foi respondida."""
+    pendentes: list[tuple[UUID, UUID, str]] = []
+    async with ctx["sessoes"]() as sessao:
+        etapas = (
+            await sessao.scalars(
+                select(Etapa).where(Etapa.status == StatusEtapa.AGUARDANDO_USUARIO)
+            )
+        ).all()
+        for etapa in etapas:
+            bruto = (etapa.saida or {}).get("pergunta_id")
+            try:
+                pergunta_id = UUID(str(bruto))
+            except (TypeError, ValueError):
+                continue
+            pergunta = await sessao.get(Pergunta, pergunta_id)
+            if pergunta is None or pergunta.respondida_em is None or pergunta.resposta is None:
+                continue
+            pendentes.append((etapa.id, pergunta.id, pergunta.resposta))
+    for etapa_id, pergunta_id, valor in pendentes:
+        await enfileirar(
+            "executar_etapa",
+            id_job=f"pergunta-reconciliada:{pergunta_id}",
+            etapa_id=str(etapa_id),
+            resposta={"pergunta_id": str(pergunta_id), "valor": valor},
+        )
+    return len(pendentes)
 
 
 async def _publicar(ctx: dict[str, Any], cadeia: Cadeia, evento: Any) -> None:

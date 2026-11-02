@@ -262,6 +262,45 @@ async def test_pergunta_registra_e_retoma_a_etapa_uma_vez(api: Ambiente) -> None
     assert len(api.fila.jobs) == 1
 
 
+async def test_pergunta_respondida_com_etapa_executando_sempre_cria_retomada(
+    api: Ambiente,
+) -> None:
+    """B-N1: resposta no mesmo instante do cartao nao pode se perder antes da pausa."""
+    auth, uid = await _entrar(api, "corrida-pergunta@exemplo.com")
+    cena = await _cena(api, uid, StatusEtapa.EXECUTANDO)
+    async with api.fabrica() as sessao:
+        pergunta = Pergunta(
+            conversa_id=cena.conversa_id,
+            cadeia_id=cena.cadeia_id,
+            texto="Qual tom?",
+            opcoes=[
+                {"rotulo": "Leve", "valor": "leve"},
+                {"rotulo": "Formal", "valor": "formal"},
+            ],
+        )
+        sessao.add(pergunta)
+        await sessao.flush()
+        etapa = await sessao.get(Etapa, cena.etapa_id)
+        assert etapa is not None
+        etapa.saida = {"pergunta_id": str(pergunta.id)}
+        await sessao.commit()
+        pergunta_id = pergunta.id
+
+    resposta = await api.cliente.post(
+        f"/v1/perguntas/{pergunta_id}/responder",
+        json={"valor": "formal"},
+        headers=auth,
+    )
+    assert resposta.status_code == 204
+    assert api.fila.jobs == [
+        (
+            "executar_etapa",
+            (str(cena.etapa_id), {"pergunta_id": str(pergunta_id), "valor": "formal"}),
+            {"_job_id": f"pergunta:{pergunta_id}"},
+        )
+    ]
+
+
 async def _aprovacao(api: Ambiente, uid: UUID, cena: Cena, expira: timedelta) -> UUID:
     async with api.fabrica() as sessao:
         aprovacao = Aprovacao(

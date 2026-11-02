@@ -16,7 +16,7 @@ import subprocess
 import sys
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -1172,6 +1172,61 @@ async def test_resposta_acorda_a_etapa_que_perguntou_e_nao_a_primeira(
         await fila.aclose()
     retomadas = [j for j in jobs if j.function == "executar_etapa"]
     assert [j.args[0] for j in retomadas] == [str(id_segunda)]
+
+
+async def test_reconciliador_reenfileira_pausa_gravada_depois_da_espera_de_10s(
+    ambiente_fase_b: tuple[Any, async_sessionmaker, Redis],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B-N1: se o primeiro job desistiu, a pausa respondida nao espera quatro horas."""
+    cliente, fabrica, _ = ambiente_fase_b
+    auth = await entrar(cliente, fabrica, "pausa-orfa@exemplo.com")
+    del auth
+    async with fabrica() as sessao:
+        usuario = await sessao.scalar(
+            select(Usuario).where(Usuario.email == "pausa-orfa@exemplo.com")
+        )
+    conversa_id, cadeia_id, etapa_id = await _cadeia_e_etapa(
+        fabrica, usuario.id, StatusCadeia.AGUARDANDO_USUARIO
+    )
+    async with fabrica() as sessao:
+        etapa = await sessao.get(Etapa, etapa_id)
+        pergunta = Pergunta(
+            conversa_id=conversa_id,
+            cadeia_id=cadeia_id,
+            texto="Qual tom?",
+            opcoes=[],
+            resposta_livre=True,
+            resposta="formal",
+            respondida_em=datetime.now(UTC) - timedelta(seconds=11),
+        )
+        sessao.add(pergunta)
+        await sessao.flush()
+        etapa.status = StatusEtapa.AGUARDANDO_USUARIO
+        etapa.saida = {"pergunta_id": str(pergunta.id)}
+        await sessao.commit()
+        pergunta_id = pergunta.id
+
+    jobs: list[tuple[str, dict[str, Any]]] = []
+
+    async def registrar(job: str, **kwargs: Any) -> None:
+        jobs.append((job, kwargs))
+
+    from workers import travados
+
+    monkeypatch.setattr(travados, "enfileirar", registrar)
+    quantidade = await travados._retomar_perguntas_respondidas({"sessoes": fabrica})
+    assert quantidade == 1
+    assert jobs == [
+        (
+            "executar_etapa",
+            {
+                "id_job": f"pergunta-reconciliada:{pergunta_id}",
+                "etapa_id": str(etapa_id),
+                "resposta": {"pergunta_id": str(pergunta_id), "valor": "formal"},
+            },
+        )
+    ]
 
 
 def test_worker_sobe_no_windows_sem_sigusr1(monkeypatch: pytest.MonkeyPatch) -> None:

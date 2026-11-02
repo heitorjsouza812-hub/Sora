@@ -17,7 +17,7 @@ from app.core.banco import fabrica_sessoes
 from app.eventos.tipos import OpcaoPergunta, PerguntaEvento
 from app.ferramentas.ambiente import emitir
 from app.ferramentas.base import ContextoFerramenta
-from app.modelos.tabelas import Pergunta
+from app.modelos.tabelas import Etapa, Pergunta
 
 
 class Opcao(BaseModel):
@@ -63,8 +63,14 @@ async def perguntar(args: Perguntar, contexto: ContextoFerramenta) -> str:
                     resposta_livre=args.resposta_livre,
                 )
             )
-            await sessao.commit()
             criada = True
+        if contexto.etapa_id is not None:
+            etapa = await sessao.get(Etapa, contexto.etapa_id)
+            if etapa is not None and etapa.cadeia_id == contexto.cadeia_id:
+                # Grave o vinculo antes de publicar o cartao, mas preserve `executando`: o
+                # worker ainda precisa receber o interrupt e persistir a pausa.
+                etapa.saida = {**(etapa.saida or {}), "pergunta_id": str(pergunta_id)}
+        await sessao.commit()
     if criada:
         await emitir(
             contexto,

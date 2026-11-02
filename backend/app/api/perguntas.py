@@ -61,23 +61,24 @@ async def responder_pergunta(
 
     etapa_id: UUID | None = None
     if pergunta.cadeia_id is not None:
-        base = (
+        base_da_cadeia = (
             select(Etapa.id)
             .join(Cadeia, Cadeia.id == Etapa.cadeia_id)
             .where(
                 Etapa.cadeia_id == pergunta.cadeia_id,
                 Cadeia.usuario_id == usuario_id,
-                Etapa.status == StatusEtapa.AGUARDANDO_USUARIO,
             )
             .order_by(Etapa.ordem, Etapa.id)
             .limit(1)
         )
         # A etapa guarda o id da pergunta que a pausou: com várias etapas esperando, acorda a certa.
         etapa_id = await sessao.scalar(
-            base.where(Etapa.saida["pergunta_id"].astext == str(pergunta_id))
+            base_da_cadeia.where(Etapa.saida["pergunta_id"].astext == str(pergunta_id))
         )
         if etapa_id is None:
-            etapa_id = await sessao.scalar(base)
+            etapa_id = await sessao.scalar(
+                base_da_cadeia.where(Etapa.status == StatusEtapa.AGUARDANDO_USUARIO)
+            )
     pergunta.resposta = valor
     pergunta.respondida_em = datetime.now(UTC)
     await sessao.commit()
