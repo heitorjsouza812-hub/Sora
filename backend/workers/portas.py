@@ -39,6 +39,8 @@ def construir_dependencias(
     conversa_id: UUID,
     cadeia_id: UUID | None = None,
     orcamento_tokens: int | None = None,
+    etapa_id: UUID | None = None,
+    agente_id: UUID | None = None,
 ) -> Any:
     """``DependenciasAgente`` completa para uma etapa (ou conversa direta, sem cadeia)."""
     from app.agentes.montagem import DependenciasAgente
@@ -138,7 +140,40 @@ def construir_dependencias(
         )
         return caminho.name
 
+    async def ao_trocar_modelo(troca: Any) -> None:
+        """§6 "Falha de provedor": a troca aparece na linha do tempo (passo de pensamento)."""
+        destino = troca.para_modelo or "nenhum modelo disponível"
+        texto = f"Troquei de modelo: {troca.de_modelo} → {destino}"
+        passo = Passo(
+            id=uuid4(),
+            etapa_id=etapa_id,
+            agente_id=agente_id,
+            tipo=TipoPasso.PENSAMENTO,
+            texto=texto,
+            status=StatusPasso.CONCLUIDO.value,
+            resultado={"motivo": str(getattr(troca.motivo, "value", troca.motivo))},
+            iniciado_em=datetime.now(UTC),
+            concluido_em=datetime.now(UTC),
+        )
+        async with fabrica_sessoes()() as sessao:
+            sessao.add(passo)
+            await sessao.commit()
+        estado = {
+            "id": passo.id,
+            "etapa_id": etapa_id,
+            "agente_id": agente_id,
+            "tipo": TipoPasso.PENSAMENTO,
+            "texto": texto,
+            "ferramenta": None,
+            "acao": None,
+            "parametros": None,
+        }
+        await _emitir(
+            redis, estado, StatusPasso.CONCLUIDO, passo.resultado, usuario_id, conversa_id
+        )
+
     com_cadeia = cadeia_id is not None
+    com_passo = etapa_id is not None and agente_id is not None
     return DependenciasAgente(
         esta_cancelada=esta_cancelada if com_cadeia else None,
         orcamento_tokens=orcamento_tokens if com_cadeia else None,
@@ -148,6 +183,7 @@ def construir_dependencias(
         finalizar_passo=finalizar_passo,
         salvar_saida=salvar_saida,
         ler_mensagens_pendentes=ambiente.ler_mensagens_pendentes,
+        ao_trocar_modelo=ao_trocar_modelo if com_passo else None,
     )
 
 

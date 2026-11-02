@@ -55,6 +55,7 @@ from app.modelos.tabelas import (
     Aprovacao,
     Cadeia,
     Conversa,
+    Entrega,
     Etapa,
     Mensagem,
     ModeloDisponivel,
@@ -1175,3 +1176,131 @@ def test_worker_sobe_no_windows_sem_sigusr1(monkeypatch: pytest.MonkeyPatch) -> 
     entrada.preparar_windows()
     assert hasattr(signal, "SIGUSR1")
     assert isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsSelectorEventLoopPolicy)
+
+
+# ------------------------------------------------ orçamento estourado e troca de modelo (§6)
+
+
+def _entregar_do_provedor() -> dict[str, Any]:
+    return completar_ferramenta(
+        "entregar",
+        {"tipo": "texto", "titulo": "Lista", "resumo": "1 texto", "conteudo": "Cafeterias: A, B"},
+    )
+
+
+async def _pausada_por_orcamento(amb: AmbienteHttp, email: str):
+    """Etapa que estoura o orçamento (teto de 100 tokens) e para em `aguardando_usuario`."""
+    amb.provedor.responder = lambda corpo, n: _entregar_do_provedor()
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, usuario_id = await usuario_com_modelo_http(amb, cliente, email)
+    _, cadeia_id, etapa_id = await _cadeia_e_etapa(amb.fabrica, usuario_id, StatusCadeia.EXECUTANDO)
+    async with amb.fabrica() as sessao:
+        await sessao.execute(
+            text("update cadeias set orcamento_tokens = 100 where id = :c"), {"c": cadeia_id}
+        )
+        await sessao.commit()
+    await _enfileirar(amb.url_redis, "executar_etapa", str(etapa_id))
+
+    async def pergunta() -> Pergunta | None:
+        async with amb.fabrica() as sessao:
+            return await sessao.scalar(select(Pergunta).where(Pergunta.cadeia_id == cadeia_id))
+
+    achada = await esperar(pergunta, "a pergunta do orçamento não apareceu")
+    async with amb.fabrica() as sessao:
+        etapa = await sessao.get(Etapa, etapa_id)
+        cadeia = await sessao.get(Cadeia, cadeia_id)
+        assert etapa.status == StatusEtapa.AGUARDANDO_USUARIO, (etapa.status, etapa.erro)
+        assert cadeia.status == StatusCadeia.AGUARDANDO_USUARIO
+        assert "orçamento" in achada.texto
+        assert [o["valor"] for o in achada.opcoes] == ["continuar", "parar"]
+    assert amb.provedor.chamadas == []  # nenhuma chamada paga: a reserva foi recusada antes
+    return auth, cadeia_id, etapa_id, achada
+
+
+async def test_orcamento_estourado_pausa_e_continua_depois_da_resposta(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    amb = ambiente_http
+    auth, cadeia_id, etapa_id, pergunta = await _pausada_por_orcamento(
+        amb, "orcamento-continua@exemplo.com"
+    )
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        resposta = await cliente.post(
+            f"/v1/perguntas/{pergunta.id}/responder", headers=auth, json={"valor": "continuar"}
+        )
+        assert resposta.status_code == 204, resposta.text
+
+        async def concluida() -> bool:
+            async with amb.fabrica() as sessao:
+                return (await sessao.get(Etapa, etapa_id)).status == StatusEtapa.CONCLUIDA
+
+        await esperar(concluida, "a etapa não continuou depois do 'continuar'")
+        async with amb.fabrica() as sessao:
+            assert (await sessao.get(Cadeia, cadeia_id)).orcamento_tokens > 100
+            assert await sessao.scalar(select(Entrega.id).where(Entrega.etapa_id == etapa_id))
+
+
+async def test_orcamento_estourado_parar_falha_a_etapa_e_a_cadeia(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    amb = ambiente_http
+    auth, cadeia_id, etapa_id, pergunta = await _pausada_por_orcamento(
+        amb, "orcamento-para@exemplo.com"
+    )
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        resposta = await cliente.post(
+            f"/v1/perguntas/{pergunta.id}/responder", headers=auth, json={"valor": "parar"}
+        )
+        assert resposta.status_code == 204, resposta.text
+
+        async def falhou() -> bool:
+            async with amb.fabrica() as sessao:
+                return (await sessao.get(Cadeia, cadeia_id)).status == StatusCadeia.FALHOU
+
+        await esperar(falhou, "a cadeia não parou depois do 'parar'")
+        async with amb.fabrica() as sessao:
+            etapa = await sessao.get(Etapa, etapa_id)
+            assert etapa.status == StatusEtapa.FALHOU and "orçamento" in etapa.erro
+    assert amb.provedor.chamadas == []
+
+
+async def test_troca_de_modelo_aparece_na_linha_do_tempo(ambiente_http: AmbienteHttp) -> None:
+    """§6 "Falha de provedor": o worker segue para o próximo modelo e a troca vira um passo.
+    (A spec manda continuar a etapa, não pausá-la: só o orçamento vai a `aguardando_usuario`.)"""
+    amb = ambiente_http
+    # o modelo principal está fora do ar; o de reserva responde
+    amb.provedor.responder = lambda corpo, n: (
+        (500, {"error": {"message": "fora do ar"}})
+        if corpo["model"] == "modelo-local"
+        else _entregar_do_provedor()
+    )
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        _, usuario_id = await usuario_com_modelo_http(amb, cliente, "troca@exemplo.com")
+        async with amb.fabrica() as sessao:
+            provedor = await sessao.scalar(
+                select(Provedor).where(Provedor.usuario_id == usuario_id)
+            )
+            sessao.add(
+                ModeloDisponivel(
+                    provedor_id=provedor.id,
+                    modelo="openai/modelo-reserva",
+                    nivel="N2",
+                    capacidades=["ferramentas", "json"],
+                    contexto=32_000,
+                    velocidade_tps=50,
+                )
+            )
+            await sessao.commit()
+        _, _, etapa_id = await _cadeia_e_etapa(amb.fabrica, usuario_id, StatusCadeia.EXECUTANDO)
+        await _enfileirar(amb.url_redis, "executar_etapa", str(etapa_id))
+
+        async def concluida() -> bool:
+            async with amb.fabrica() as sessao:
+                return (await sessao.get(Etapa, etapa_id)).status == StatusEtapa.CONCLUIDA
+
+        await esperar(concluida, "a etapa não concluiu depois da troca de modelo")
+        async with amb.fabrica() as sessao:
+            textos = (
+                await sessao.scalars(select(Passo.texto).where(Passo.etapa_id == etapa_id))
+            ).all()
+        assert any(t.startswith("Troquei de modelo:") for t in textos), textos

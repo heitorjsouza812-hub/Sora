@@ -396,6 +396,7 @@ def dependencias_da_etapa(
     cadeia: Cadeia | None = None,
     usuario_id: UUID | None = None,
     conversa_id: UUID | None = None,
+    etapa: Etapa | None = None,
 ) -> Any:
     """Portas que o worker entrega ao agente: cancelamento, orçamento, passos do painel
     Trabalho, saída grande e as correções da Sora (``mensagem_especialista``).
@@ -413,7 +414,107 @@ def dependencias_da_etapa(
         conversa_id=cadeia.conversa_id if cadeia else conversa_id,
         cadeia_id=cadeia.id if cadeia else None,
         orcamento_tokens=cadeia.orcamento_tokens if cadeia else None,
+        etapa_id=etapa.id if etapa else None,
+        agente_id=etapa.agente_id if etapa else None,
     )
+
+
+def _estourou_orcamento(erro: BaseException | None) -> bool:
+    from app.agentes.middleware.orcamento import OrcamentoEstourado
+
+    visto: set[int] = set()
+    while erro is not None and id(erro) not in visto:
+        if isinstance(erro, OrcamentoEstourado):
+            return True
+        visto.add(id(erro))
+        erro = erro.__cause__ or erro.__context__
+    return False
+
+
+PERGUNTA_DO_ORCAMENTO = (
+    "O orçamento de tokens desta equipe acabou antes de terminar o trabalho. Posso continuar "
+    "com mais orçamento?"
+)
+
+
+async def _pausar_por_orcamento(
+    ctx: dict[str, Any], sessao: Any, cadeia: Cadeia, etapa: Etapa
+) -> None:
+    """§6 "Orçamento": passou do teto -> etapa e cadeia em ``aguardando_usuario`` e a Sora
+    pergunta se pode continuar (cartão com "Continuar" e "Parar")."""
+    from app.eventos.tipos import OpcaoPergunta, PerguntaEvento
+    from app.modelos.tabelas import Pergunta
+
+    opcoes = [{"rotulo": "Continuar", "valor": "continuar"}, {"rotulo": "Parar", "valor": "parar"}]
+    pergunta = Pergunta(
+        conversa_id=cadeia.conversa_id,
+        cadeia_id=cadeia.id,
+        texto=PERGUNTA_DO_ORCAMENTO,
+        opcoes=opcoes,
+        resposta_livre=False,
+    )
+    sessao.add(pergunta)
+    await sessao.flush()
+    etapa.status = StatusEtapa.AGUARDANDO_USUARIO
+    etapa.saida = {"pergunta_id": str(pergunta.id), "orcamento": True}
+    cadeia.status = StatusCadeia.AGUARDANDO_USUARIO
+    await sessao.commit()
+    await _publicar(
+        ctx,
+        cadeia,
+        PerguntaEvento(
+            pergunta_id=pergunta.id,
+            texto=pergunta.texto,
+            opcoes=[OpcaoPergunta(**o) for o in opcoes],
+            resposta_livre=False,
+        ),
+    )
+    await _publicar(ctx, cadeia, _evento_etapa(etapa, 50))
+    await _publicar(ctx, cadeia, _evento_cadeia(cadeia))
+
+
+async def _resposta_do_orcamento(ctx: dict[str, Any], etapa_id: str, valor: Any) -> bool:
+    """Se a etapa parou pelo orçamento, trata a resposta e devolve ``True``.
+
+    ``continuar`` soma ao teto o mesmo valor do orçamento original e põe a etapa de volta na
+    fila (o agente recomeça do checkpoint); ``parar`` falha a etapa e, por ela, a cadeia."""
+    async with ctx["sessoes"]() as sessao:
+        etapa = await sessao.get(Etapa, _uuid(etapa_id))
+        if (
+            etapa is None
+            or etapa.status != StatusEtapa.AGUARDANDO_USUARIO
+            or not (etapa.saida or {}).get("orcamento")
+        ):
+            return False
+        cadeia = await sessao.get(Cadeia, etapa.cadeia_id, with_for_update=True)
+        if cadeia is None:
+            return False
+        continuar = str(valor) == "continuar"
+        ganhou = await sessao.scalar(
+            update(Etapa)
+            .where(Etapa.id == etapa.id, Etapa.status == StatusEtapa.AGUARDANDO_USUARIO)
+            .values(
+                status=StatusEtapa.PENDENTE if continuar else StatusEtapa.FALHOU,
+                erro=None if continuar else "Parado a pedido do usuário: orçamento de tokens.",
+            )
+            .returning(Etapa.id)
+        )
+        if ganhou is None:
+            await sessao.rollback()
+            return True  # resposta repetida: outra já decidiu
+        if continuar:
+            cadeia.orcamento_tokens += max(cadeia.orcamento_tokens, 50_000)
+        if cadeia.status == StatusCadeia.AGUARDANDO_USUARIO:
+            cadeia.status = StatusCadeia.EXECUTANDO
+        await sessao.commit()
+        await sessao.refresh(etapa)
+        await _publicar(ctx, cadeia, _evento_etapa(etapa, 50 if continuar else 100))
+        await _publicar(ctx, cadeia, _evento_cadeia(cadeia))
+    if continuar:
+        await enfileirar("executar_etapa", etapa_id=etapa_id)
+    else:
+        await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
+    return True
 
 
 async def _contar_passo(sessao: Any, cadeia_id: UUID) -> None:
@@ -438,6 +539,8 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
         return
     resposta = valor_da_retomada(resposta)
     retomada = resposta is not None
+    if retomada and await _resposta_do_orcamento(ctx, etapa_id, resposta):
+        return
     async with ctx["sessoes"]() as sessao:
         pegou = (
             await retomar_etapa(sessao, _uuid(etapa_id))
@@ -473,7 +576,7 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
             etapa_id=etapa.id,
             valores_do_prompt=await _valores_do_prompt(sessao, etapa, cadeia),
             ferramentas_extras=list(ctx.get("ferramentas_extras", ["perguntar", "criar_agente"])),
-            dependencias=dependencias_da_etapa(ctx, cadeia=cadeia),
+            dependencias=dependencias_da_etapa(ctx, cadeia=cadeia, etapa=etapa),
         )
         try:
             resultado = await montar_e_rodar_agente(
@@ -486,6 +589,9 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
                 resposta=resposta,
             )
         except Exception as erro:
+            if _estourou_orcamento(erro):
+                await _pausar_por_orcamento(ctx, sessao, cadeia, etapa)
+                return
             etapa.status = StatusEtapa.FALHOU
             etapa.erro = str(erro)[:500]
             await sessao.commit()
@@ -632,7 +738,7 @@ async def _rodar_verificador(
             )
             or "nenhum",
         },
-        dependencias=dependencias_da_etapa(ctx, cadeia=cadeia),
+        dependencias=dependencias_da_etapa(ctx, cadeia=cadeia, etapa=verificador),
     )
     await montar_e_rodar_agente(
         contexto=contexto,
