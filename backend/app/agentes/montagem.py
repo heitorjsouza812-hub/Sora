@@ -185,8 +185,13 @@ async def montar_agente(
     )
     from app.conectores.carregar import ferramentas_dos_conectores
 
-    ferramentas += await ferramentas_dos_conectores(
-        contexto.usuario_id, sem_supervisao=contexto.sem_supervisao
+    from app.agentes.ancora import catalogo_dos_conectores
+
+    ferramentas += catalogo_dos_conectores(
+        await ferramentas_dos_conectores(
+            contexto.usuario_id, sem_supervisao=contexto.sem_supervisao
+        ),
+        contexto,
     )
     return create_agent(
         model=modelos[0],

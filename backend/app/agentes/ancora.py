@@ -127,3 +127,47 @@ async def blocos_do_turno(contexto: ContextoAgente) -> str:
     if diretorio:
         partes.append(diretorio)
     return "\n\n".join(partes)
+
+
+def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
+    """Ferramentas dos conectores: até 20 vão direto; acima disso, pelo catálogo preguiçoso.
+
+    No catálogo a execução passa por ``conferir_acao`` com o nome da ferramenta **de verdade**
+    (a meta-ferramenta de execução não decide nada), então leitura roda e escrita pede juiz ou
+    cartão como se fosse direta.
+    """
+    import hashlib
+    import json
+
+    from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
+    from app.ferramentas.catalogo_preguicoso import montar_catalogo
+    from app.revisor.execucao import conferir_acao
+
+    if not conectores:
+        return []
+    ferramenta_ctx = ContextoFerramenta(
+        usuario_id=contexto.usuario_id,
+        agente_id=contexto.agente_id,
+        conversa_id=contexto.conversa_id,
+        cadeia_id=contexto.cadeia_id,
+        etapa_id=contexto.etapa_id,
+        sem_supervisao=contexto.sem_supervisao,
+    )
+
+    async def antes(ferramenta, argumentos) -> None:
+        # Sem id de chamada aqui: um hash estável dos argumentos faz a retomada achar o mesmo cartão.
+        chamada = hashlib.sha1(
+            json.dumps([ferramenta.name, argumentos], sort_keys=True, default=str).encode()
+        ).hexdigest()
+        metadados = getattr(ferramenta, "metadata", None) or {}
+        retorno = await conferir_acao(
+            ferramenta.name,
+            dict(argumentos),
+            ferramenta_ctx,
+            chamada_id=chamada,
+            somente_leitura=metadados.get("somente_leitura"),
+        )
+        if retorno is not None:
+            raise ErroFerramenta(retorno)
+
+    return montar_catalogo(conectores, antes_de_executar=antes)

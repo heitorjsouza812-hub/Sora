@@ -345,10 +345,18 @@ def montar_catalogo(
         return json.dumps(catalogo.buscar(consulta, grupo, limite), ensure_ascii=False)
 
     async def _carregar(id: str) -> str:
-        return json.dumps(catalogo.carregar(id), ensure_ascii=False)
+        try:
+            return json.dumps(catalogo.carregar(id), ensure_ascii=False)
+        except ErroFerramenta as erro:
+            return f"Erro: {erro}"
 
     async def _executar(id: str, argumentos: dict[str, Any]) -> Any:
-        return await catalogo.executar(id, argumentos, antes_de_executar)
+        # Erro de ferramenta (id errado, argumento inválido, ação negada) volta ao modelo como
+        # texto; a interrupção do cartão (GraphInterrupt) não é ErroFerramenta e passa direto.
+        try:
+            return await catalogo.executar(id, argumentos, antes_de_executar)
+        except ErroFerramenta as erro:
+            return f"Erro: {erro}"
 
     return [
         StructuredTool.from_function(
