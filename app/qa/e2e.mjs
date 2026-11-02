@@ -11,9 +11,17 @@ const BASE = process.env.SORA_QA_BASE ?? 'http://localhost:5173';
 const qaDir = dirname(fileURLToPath(import.meta.url));
 const shots = join(qaDir, 'shots');
 const consoleEvents = [];
+const streams429 = [];
 
 function observar(page, viewport) {
-  page.on('console', m => { if (m.type() === 'error') consoleEvents.push({ viewport, tipo: 'console', texto: m.text(), url: page.url() }); });
+  // 429 em /v1/*/eventos = limite de streams SSE por usuário: recarregar a página deixa vagas penduradas no
+  // servidor até ele notar a desconexão, e o cliente tenta de novo sozinho. Esperado no e2e; só se conta.
+  page.on('response', r => { if (r.status() === 429 && r.url().includes('/eventos')) streams429.push(r.url()); });
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    if (/status of 429/.test(m.text()) && streams429.length) return;
+    consoleEvents.push({ viewport, tipo: 'console', texto: m.text(), url: page.url() });
+  });
   page.on('pageerror', e => consoleEvents.push({ viewport, tipo: 'pageerror', texto: e.message, url: page.url() }));
 }
 
@@ -58,7 +66,6 @@ try {
   await screenshot(page, '04-pronto-1440x900');
 
   const url = page.url();
-  const urlDoProjeto = url;
   await page.reload({ waitUntil: 'domcontentloaded' });
   assert.equal(page.url(), url, 'recarregar deve manter a conversa real');
   await visivel(page, 'Plano', 30_000);
@@ -104,61 +111,115 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Revisar', exact: true }).count(), 0, 'resposta direta não pede revisão');
   await screenshot(page, '09-resposta-direta-1440x900');
 
-  // ── Cartões de pergunta e de aprovação ───────────────────────────────────────────────────
-  // O modelo falso nunca pergunta nem pede aprovação: qa/injetar-pendencia.py grava a linha e publica o
-  // evento como o motor faria; a resposta do usuário passa pelas rotas reais. A retomada da cadeia depois
-  // da resposta NÃO é coberta aqui (precisa de modelo que chame perguntar/criar_agente).
-  await page.goto(urlDoProjeto);
-  await page.getByRole('button', { name: 'Revisar', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
-  const conversaId = page.url().split('/').pop();
-  const injetar = (...args) => {
-    const r = spawnSync('uv', ['run', 'python', join(qaDir, 'injetar-pendencia.py'), ...args], { cwd: join(qaDir, '..', '..', 'backend'), env: process.env, encoding: 'utf8', shell: process.platform === 'win32' });
-    assert.equal(r.status, 0, `injetar-pendencia ${args.join(' ')}: ${r.stderr}`);
-    return r.stdout.trim().split('\n').pop();
-  };
+  // ── Gatilhos do modelo falso: pergunta, aprovação, orçamento (Continuar e Parar) ─────────────
+  // Fluxo completo pelo app: envia o pedido com a tag, responde no cartão (chat ou ilha) e confere o fim
+  // da cadeia. Tags: [pergunta], [aprovacao], [orcamento] (.maestri/contrato-etapa3.md, rodada 4).
   const fecharIlha = async () => { await page.keyboard.press('Escape'); await page.waitForTimeout(400); };
+  const enviarPedido = async (texto) => {
+    await page.getByRole('link', { name: 'Novo chat', exact: true }).click();
+    const campo = page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i });
+    await campo.waitFor({ state: 'visible', timeout: 15_000 });
+    await campo.fill(texto);
+    await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
+    await page.waitForURL(/\/projeto\//, { timeout: 30_000 });
+  };
+  const concluiu = async () => {
+    await page.getByRole('button', { name: 'Revisar', exact: true }).waitFor({ state: 'visible', timeout: 120_000 });
+    assert.equal(await page.locator('[data-pendencia]').count(), 0, 'depois de concluir não pode sobrar cartão');
+  };
 
-  // pergunta com opções + resposta livre
-  const perguntaId = injetar('pergunta', conversaId);
+  // [pergunta]: responde no cartão do chat
+  await enviarPedido('crie uma campanha para minha cafeteria [pergunta]');
   const cartaoPergunta = page.locator('[data-pendencia="pergunta"]').first();
-  await cartaoPergunta.waitFor({ state: 'visible', timeout: 20_000 });
+  await cartaoPergunta.waitFor({ state: 'visible', timeout: 90_000 });
   await visivel(page, 'A equipe precisa de você', 5_000);
   await visivel(page, 'Aguardando você', 5_000);
+  await page.waitForTimeout(1_000);
   await screenshot(page, '11-pergunta-1440x900');
   await fecharIlha();
-  await cartaoPergunta.getByRole('button', { name: 'Clientes novos', exact: true }).click();
+  const opcaoEscolhida = await cartaoPergunta.getByRole('button').first().innerText();
+  await cartaoPergunta.getByRole('button').first().click();
   await cartaoPergunta.waitFor({ state: 'detached', timeout: 15_000 });
-  assert.match(injetar('estado', perguntaId), /resposta='novos' respondida=True/, 'a resposta precisa ter sido gravada pela rota real');
+  await concluiu();
+  console.log(`[pergunta] respondida com "${opcaoEscolhida}" e a cadeia concluiu.`);
 
-  // orçamento estourado: pergunta Continuar/Parar
-  const orcamentoId = injetar('pergunta', conversaId, '--orcamento');
-  const cartaoOrcamento = page.locator('[data-pendencia="pergunta"]').first();
-  await cartaoOrcamento.waitFor({ state: 'visible', timeout: 20_000 });
+  // [aprovacao] recusada (primeiro: o fake sempre cria "Organizadora" e, existindo, não pede de novo): negar
+  // não trava a cadeia e não cria agente
+  await enviarPedido('crie uma campanha para minha cafeteria [aprovacao]');
+  const cartaoRecusa = page.locator('[data-pendencia="aprovacao"]').first();
+  await cartaoRecusa.waitFor({ state: 'visible', timeout: 90_000 });
   await fecharIlha();
-  await cartaoOrcamento.getByRole('button', { name: 'Continuar', exact: true }).waitFor({ state: 'visible' });
+  await cartaoRecusa.getByRole('button', { name: 'Recusar', exact: true }).click();
+  await cartaoRecusa.waitFor({ state: 'detached', timeout: 15_000 });
+  await concluiu();
+  assert.equal(await page.locator('aside.sidebar').getByText('Organizadora').count(), 0, 'recusar não cria agente');
+  console.log('[aprovacao] recusada: a cadeia concluiu e nenhum agente foi criado.');
+
+
+  // [aprovacao]: decide no cartão da ILHA (abre sozinha); o agente criado aparece em CHATS
+  await enviarPedido('crie uma campanha para minha cafeteria [aprovacao]');
+  const ilhaDialogo = page.getByRole('dialog', { name: 'Ilha da Sora', exact: true });
+  const cartaoNaIlha = ilhaDialogo.locator('[data-pendencia="aprovacao"]');
+  await cartaoNaIlha.waitFor({ state: 'visible', timeout: 90_000 });
+  await visivel(page, 'Organizadora', 5_000);
+  await page.waitForTimeout(1_000);
+  await screenshot(page, '12-aprovacao-ilha-1440x900');
+  await cartaoNaIlha.getByRole('button', { name: 'Aprovar', exact: true }).click();
+  await cartaoNaIlha.waitFor({ state: 'detached', timeout: 15_000 });
+  await fecharIlha();
+  await concluiu();
+  // o agente individual criado pela aprovação aparece solto em CHATS (se o evento não o trouxe, a recarga traz)
+  const naBarra = page.locator('aside.sidebar').getByText('Organizadora').first();
+  // a pasta do projeto atual (a 1ª, a mais recente) começa recolhida: abre e exige o agente visível
+  const pasta = page.locator('aside.sidebar .pasta-toggle').first();
+  await pasta.waitFor({ state: 'visible', timeout: 15_000 });
+  if ((await pasta.getAttribute('aria-expanded')) !== 'true') await pasta.click();
+  await naBarra.waitFor({ state: 'visible', timeout: 30_000 });
+  await page.waitForTimeout(500);
+  await fecharIlha();
+  await screenshot(page, '13-agente-criado-chats-1440x900');
+  console.log('[aprovacao] aprovada na ilha, cadeia concluída e "Organizadora" visível em CHATS.');
+
+  // [orcamento] + Continuar
+  await enviarPedido('crie uma campanha para minha cafeteria [orcamento]');
+  const cartaoOrcamento = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoOrcamento.waitFor({ state: 'visible', timeout: 90_000 });
+  await fecharIlha();
   await cartaoOrcamento.getByRole('button', { name: 'Parar', exact: true }).waitFor({ state: 'visible' });
+  await screenshot(page, '14-orcamento-1440x900');
   await cartaoOrcamento.getByRole('button', { name: 'Continuar', exact: true }).click();
   await cartaoOrcamento.waitFor({ state: 'detached', timeout: 15_000 });
-  assert.match(injetar('estado', orcamentoId), /resposta='continuar'/);
+  await concluiu();
+  console.log('[orcamento] Continuar: a cadeia concluiu.');
 
-  // aprovação de criar_agente
-  const aprovacaoId = injetar('aprovacao', conversaId);
-  const cartaoAprovacao = page.locator('[data-pendencia="aprovacao"]').first();
-  await cartaoAprovacao.waitFor({ state: 'visible', timeout: 20_000 });
-  await visivel(page, 'Criar o agente Íris', 5_000);
+  // [orcamento] + Parar: a etapa e a cadeia falham, sem cartão sobrando e sem "Revisar"
+  await enviarPedido('crie uma campanha para minha cafeteria [orcamento]');
+  const cartaoParar = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoParar.waitFor({ state: 'visible', timeout: 90_000 });
   await fecharIlha();
-  await cartaoAprovacao.getByRole('button', { name: 'Recusar', exact: true }).waitFor({ state: 'visible' });
-  await screenshot(page, '12-aprovacao-1440x900');
+  await cartaoParar.getByRole('button', { name: 'Parar', exact: true }).click();
+  await cartaoParar.waitFor({ state: 'detached', timeout: 15_000 });
+  await visivel(page, 'A equipe parou', 90_000);
+  assert.equal(await page.getByRole('button', { name: 'Revisar', exact: true }).count(), 0, 'cadeia parada não pede revisão');
+  assert.equal(await page.locator('[data-pendencia]').count(), 0);
+  await screenshot(page, '15-orcamento-parar-1440x900');
+  console.log('[orcamento] Parar: a cadeia falhou e o app mostra que a equipe parou.');
+
+  // celular: cartão de pergunta sem rolagem horizontal
+  await enviarPedido('crie uma campanha para minha cafeteria [pergunta]');
+  const cartaoMovel = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoMovel.waitFor({ state: 'visible', timeout: 90_000 });
+  await fecharIlha();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
   const largura3 = await page.evaluate(() => ({ pagina: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
-  assert.ok(largura3.pagina <= largura3.viewport, `cartão de aprovação não pode rolar na horizontal (${largura3.pagina}/${largura3.viewport})`);
-  await cartaoAprovacao.scrollIntoViewIfNeeded();
-  await screenshot(page, '13-aprovacao-390x844');
+  assert.ok(largura3.pagina <= largura3.viewport, `cartão de pergunta não pode rolar na horizontal (${largura3.pagina}/${largura3.viewport})`);
+  await cartaoMovel.scrollIntoViewIfNeeded();
+  await screenshot(page, '16-pergunta-390x844');
+  await cartaoMovel.getByRole('button').first().click();
+  await cartaoMovel.waitFor({ state: 'detached', timeout: 15_000 });
+  await concluiu();
   await page.setViewportSize({ width: 1440, height: 900 });
-  await cartaoAprovacao.getByRole('button', { name: 'Aprovar', exact: true }).click();
-  await cartaoAprovacao.waitFor({ state: 'detached', timeout: 15_000 });
-  assert.match(injetar('estado', aprovacaoId), /status='?permitida/, 'a aprovação precisa ter sido gravada pela rota real');
 
   // ── Aviso de erro do provedor (precisa de API sem modelo falso: SORA_QA_BASE_ERRO) ────────
   if (process.env.SORA_QA_BASE_ERRO) {
@@ -181,5 +242,6 @@ if (falha || consoleEvents.length) {
   for (const erro of consoleEvents) console.error(`CONSOLE [${erro.viewport}] ${erro.texto}`);
   process.exitCode = 1;
 } else {
+  if (streams429.length) console.log(`AVISO: ${streams429.length} abertura(s) de SSE tomaram 429 (limite de streams por usuário) e o app se recuperou.`);
   console.log('E2E real aprovado: campanha via backend/SSE, Trabalho, recarga, revisão e telas 1440/390; console limpo.');
 }

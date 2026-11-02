@@ -1,6 +1,5 @@
 // Fase C: a Ilha deve refletir o stream agregado real, sem semear o store/localStorage.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,17 +58,22 @@ try {
   await snap('04-detalhe-real-1440x900.png');
 
 
-  // Pendência na ilha: um pedido de aprovação aparece no Início (a ilha abre sozinha) e se decide ali.
-  // O modelo falso não pede aprovação: qa/injetar-pendencia.py grava e publica como o motor faria.
-  const conversaId = page.url().split('/').pop();
-  const r = spawnSync('uv', ['run', 'python', join(dirname(fileURLToPath(import.meta.url)), 'injetar-pendencia.py'), 'aprovacao', conversaId],
-    { cwd: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'backend'), env: process.env, encoding: 'utf8', shell: process.platform === 'win32' });
-  assert.equal(r.status, 0, `injetar-pendencia: ${r.stderr}`);
+  // Pendência na ilha, fluxo completo: o pedido com [aprovacao] faz o modelo falso chamar criar_agente; a
+  // ilha abre sozinha com o cartão; aprovar ali conclui a cadeia ("A equipe terminou").
+  await page.keyboard.press('Escape');
+  await page.getByRole('link', { name: 'Novo chat', exact: true }).click();
+  const campo2 = page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i });
+  await campo2.waitFor({ state: 'visible', timeout: 15_000 });
+  await campo2.fill('crie uma campanha para minha cafeteria [aprovacao]');
+  await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
+  await page.waitForURL(/\/projeto\//, { timeout: 30_000 });
   const cartaoIlha = ilha.locator('[data-pendencia="aprovacao"]');
-  await cartaoIlha.waitFor({ state: 'visible', timeout: 20_000 });
+  await cartaoIlha.waitFor({ state: 'visible', timeout: 90_000 });
+  await page.waitForTimeout(1_000);
   await snap('07-pendencia-na-ilha-1440x900.png');
   await cartaoIlha.getByRole('button', { name: 'Aprovar', exact: true }).click();
   await cartaoIlha.waitFor({ state: 'detached', timeout: 15_000 });
+  await ilha.getByText(/A equipe terminou/i).waitFor({ state: 'visible', timeout: 120_000 });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
