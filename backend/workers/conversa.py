@@ -18,6 +18,8 @@ from sqlalchemy import func, select
 
 from app.eventos.streams import publicar_evento
 from app.eventos.tipos import SugestoesEvento
+from app.filas import FilaAgente, OrigemItem
+from app.filas.sql import ArmazemFilaSQL
 from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
 from app.modelos.enumeracoes import TipoAgente
 from app.modelos.tabelas import Agente, Conversa, Mensagem
@@ -34,6 +36,47 @@ def _texto_da_resposta(resultado: dict[str, Any]) -> str:
 
 
 async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
+    """Reserva o pedido na fila persistida antes de iniciar qualquer turno do agente."""
+    async with ctx["sessoes"]() as sessao:
+        mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
+        conversa = await sessao.get(Conversa, mensagem.conversa_id) if mensagem else None
+        if mensagem is None or conversa is None:
+            return
+        fila = FilaAgente(ArmazemFilaSQL(sessao))
+        item = await fila.enfileirar(
+            usuario_id=conversa.usuario_id,
+            agente_id=conversa.agente_id,
+            texto=mensagem.conteudo,
+            origem=OrigemItem.USUARIO,
+            anexos=(UUID(a) for a in mensagem.anexos),
+            chave=f"conversa:{mensagem.id}",
+        )
+        liberacao = await fila.proximos(conversa.agente_id)
+        if item.id not in {candidato.id for candidato in liberacao.iniciar}:
+            await sessao.commit()
+            return
+        await fila.iniciar(item.id, item.agente_id)
+        await fila.rodando(item.id, item.agente_id)
+        await sessao.commit()
+    try:
+        await _responder_direto_sem_fila(ctx, mensagem_id)
+    except BaseException as erro:
+        async with ctx["sessoes"]() as sessao:
+            await FilaAgente(ArmazemFilaSQL(sessao)).falhar(
+                item.id, item.agente_id, type(erro).__name__
+            )
+            await sessao.commit()
+        raise
+    else:
+        async with ctx["sessoes"]() as sessao:
+            await FilaAgente(ArmazemFilaSQL(sessao)).concluir(item.id, item.agente_id)
+            await sessao.commit()
+    from workers.fila import enfileirar
+
+    await enfileirar("despachar_equipe", agente_id=str(item.agente_id))
+
+
+async def _responder_direto_sem_fila(ctx: dict[str, Any], mensagem_id: str) -> None:
     """Roda a Sora (ou o agente individual) e manda o texto pelos eventos
     ``mensagem.*``, terminando com ``sugestoes``. Quem põe na fila: a API."""
     from app.agentes import ContextoAgente

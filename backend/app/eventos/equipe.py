@@ -7,6 +7,7 @@ as telas — junto com os exemplos JSON de ``tests/contrato``.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import ClassVar, Literal, get_args
 from uuid import UUID
@@ -14,6 +15,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.eventos.tipos import EventoBase
+
+RETENCAO_EQUIPE_SEGUNDOS = 24 * 60 * 60
 
 
 class ContextoAtualizado(EventoBase):
@@ -127,3 +130,19 @@ def acoes_da_tarefa(status: str) -> list[Literal["parar", "retomar", "reatribuir
     if status in ("parada", "falhou"):
         return ["retomar", "reatribuir", "cancelar"]
     return []
+
+
+async def publicar_evento_equipe(redis, evento: EventoEquipe, usuario_id: UUID) -> str:
+    """Publica uma peca da equipe no stream agregado consumido por ``GET /v1/eventos``."""
+    from app.eventos.streams import canal_usuario, id_minimo_retido
+
+    canal = canal_usuario(usuario_id)
+    dados = json.dumps(evento.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+    id_evento = await redis.xadd(
+        canal,
+        {"event": evento.evento, "data": dados},
+        minid=id_minimo_retido(),
+        approximate=False,
+    )
+    await redis.expire(canal, RETENCAO_EQUIPE_SEGUNDOS)
+    return id_evento.decode() if isinstance(id_evento, bytes) else id_evento

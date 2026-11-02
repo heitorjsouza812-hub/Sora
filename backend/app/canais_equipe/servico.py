@@ -329,6 +329,9 @@ class ServicoCanais:
                     mudancas.tarefas.append(tarefa)
         elif rota.tipo == "lider":
             mudancas.precisa_lider = mensagem.id
+            if mensagem.id not in canal.pedidos_sem_lider:
+                canal.pedidos_sem_lider.append(mensagem.id)
+                await self._armazem.salvar_canal(canal)
         else:  # sem_lider
             canal.pedidos_sem_lider.append(mensagem.id)
             await self._armazem.salvar_canal(canal)
