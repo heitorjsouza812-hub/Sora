@@ -153,3 +153,20 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
   if (evento.tipo === 'erro') return atualizarProjeto(estado, conversaId, p => ({ ...p, mensagensPendentes: false, erro: texto(d.mensagem) || 'O trabalho foi interrompido.' }));
   return estado;
 }
+
+/**
+ * Balão do usuário assim que o servidor aceita o envio. `enviadoEm` é o instante do clique (antes do POST),
+ * não o da resposta: a resposta da Sora pode chegar por SSE antes do POST voltar, e um carimbo tardio
+ * colocaria o balão do usuário DEPOIS dela. Se o eco do servidor já chegou, só garante a ordem.
+ */
+export function registrarEnvioDoUsuario(
+  estado: EstadoProjetos,
+  m: { id: string; conversaId: string; agenteId?: string; texto: string; enviadoEm: number; anexos?: EstadoProjetos['mensagens'][number]['anexos'] },
+): EstadoProjetos {
+  const existente = estado.mensagens.find(x => x.id === m.id);
+  if (existente) {
+    return existente.criadoEm <= m.enviadoEm ? estado
+      : { ...estado, mensagens: estado.mensagens.map(x => x.id === m.id ? { ...x, criadoEm: m.enviadoEm } : x) };
+  }
+  return { ...estado, mensagens: [...estado.mensagens, { id: m.id, conversaId: m.conversaId, agenteId: m.agenteId, autor: 'usuario', texto: m.texto, criadoEm: m.enviadoEm, anexos: m.anexos ?? [], gerando: false }] };
+}

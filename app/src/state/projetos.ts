@@ -7,7 +7,7 @@ import { receberEventoEquipe } from './equipe';
 import { enviarAnexo } from '../api/anexos';
 import type { Anexo } from '../components/anexos';
 import type { Movimento, PassoTrabalho, Status } from '../types';
-import { aplicarEvento } from './aplicarEvento';
+import { aplicarEvento, registrarEnvioDoUsuario } from './aplicarEvento';
 
 export const COR_SORA = '#E2ECFF';
 export const PLUGINS_PADRAO: string[] = [];
@@ -260,8 +260,10 @@ export async function criarAgenteIndependente(pedido: string, _agora?: number, a
 }
 export async function conversarComSora(texto: string, _agora?: number, anexos: Anexo[] = []): Promise<ProjetoSora> {
   const p = projetoAtivo(estado); if (!p) return criarProjeto(texto, undefined, { tipo: 'chat', anexos });
-  const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${p.id}/mensagens`, { texto, anexos: await idsDosAnexos(anexos) });
-  alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId: p.id, autor: 'usuario', texto, criadoEm: Date.now(), anexos: [], gerando: false }] })); acompanharConversa(p.id); return p;
+  const idsEnvio = await idsDosAnexos(anexos);
+  const enviadoEm = Date.now();
+  const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${p.id}/mensagens`, { texto, anexos: idsEnvio });
+  alterar(e => registrarEnvioDoUsuario(e, { id: aceita.mensagem_id, conversaId: p.id, texto, enviadoEm })); acompanharConversa(p.id); return p;
 }
 export async function enviarParaAgente(agenteId: string, texto: string, _agora?: number, _registrar = true, anexos: Anexo[] = []) {
   const anterior = enviosAgenteEmVoo.get(agenteId) ?? Promise.resolve();
@@ -283,8 +285,9 @@ export async function enviarParaAgente(agenteId: string, texto: string, _agora?:
       acompanharConversa(conversaId);
       return;
     }
+    const enviadoEm = Date.now();
     const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${conversaId}/mensagens`, { texto, anexos: idsAnexos, para_agente_id: projeto ? agenteId : null });
-    alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId, agenteId, autor: 'usuario', texto, criadoEm: Date.now(), gerando: false }] }));
+    alterar(e => registrarEnvioDoUsuario(e, { id: aceita.mensagem_id, conversaId, agenteId, texto, enviadoEm }));
     acompanharConversa(conversaId);
   });
   enviosAgenteEmVoo.set(agenteId, envio);
