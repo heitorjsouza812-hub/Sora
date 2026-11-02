@@ -14,12 +14,10 @@ const consoleEvents = [];
 const streams429 = [];
 
 function observar(page, viewport) {
-  // 429 em /v1/*/eventos = limite de streams SSE por usuário: recarregar a página deixa vagas penduradas no
-  // servidor até ele notar a desconexão, e o cliente tenta de novo sozinho. Esperado no e2e; só se conta.
+  // Um 429 em /v1/*/eventos é regressão: o servidor deve liberar a vaga ao notar a desconexão.
   page.on('response', r => { if (r.status() === 429 && r.url().includes('/eventos')) streams429.push(r.url()); });
   page.on('console', m => {
     if (m.type() !== 'error') return;
-    if (/status of 429/.test(m.text()) && streams429.length) return;
     consoleEvents.push({ viewport, tipo: 'console', texto: m.text(), url: page.url() });
   });
   page.on('pageerror', e => consoleEvents.push({ viewport, tipo: 'pageerror', texto: e.message, url: page.url() }));
@@ -69,10 +67,15 @@ try {
   await screenshot(page, '04-pronto-1440x900');
 
   const url = page.url();
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  assert.equal(page.url(), url, 'recarregar deve manter a conversa real');
+  for (let recarga = 0; recarga < 6; recarga += 1) {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    assert.equal(page.url(), url, 'recarregar deve manter a conversa real');
+    await page.waitForTimeout(1_200);
+  }
   await visivel(page, 'Plano', 30_000);
   await page.getByRole('button', { name: 'Revisar', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+  assert.deepEqual(streams429, [], `recargas não podem esgotar streams SSE:\n${streams429.join('\n')}`);
+  assert.equal(await page.getByText(/Atualizações ao vivo pausadas/i).count(), 0, 'o aviso de limite SSE não deve aparecer');
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
@@ -245,6 +248,5 @@ if (falha || consoleEvents.length) {
   for (const erro of consoleEvents) console.error(`CONSOLE [${erro.viewport}] ${erro.texto}`);
   process.exitCode = 1;
 } else {
-  if (streams429.length) console.log(`AVISO: ${streams429.length} abertura(s) de SSE tomaram 429 (limite de streams por usuário) e o app se recuperou.`);
-  console.log('E2E real aprovado: campanha via backend/SSE, Trabalho, recarga, revisão e telas 1440/390; console limpo.');
+  console.log('E2E real aprovado: campanha via backend/SSE, seis recargas sem 429, Trabalho, revisão e telas 1440/390; console limpo.');
 }
