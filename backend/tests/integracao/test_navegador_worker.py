@@ -42,7 +42,7 @@ COMPARTILHADO = pf.EscolhaPerfil(tipo=pf.TipoPerfil.COMPARTILHADO)
 @pytest.fixture(scope="module")
 def servicos_relogio(request: pytest.FixtureRequest):
     """No Windows o loop do psycopg não cria subprocesso (o Playwright precisa); por isso estes
-    testes podem rodar num contêiner Linux contra serviços já de pé (``SORA_TESTE_PG``/``_REDIS``)."""
+    testes rodam num contêiner Linux contra serviços de pé (``SORA_TESTE_PG``/``_REDIS``)."""
     import os
 
     if os.environ.get("SORA_TESTE_PG") and os.environ.get("SORA_TESTE_REDIS"):
@@ -51,19 +51,18 @@ def servicos_relogio(request: pytest.FixtureRequest):
     yield from _servicos_testcontainers.__wrapped__()
 
 
-PAGINA = (
-    "<title>Painel de teste</title><h1>Olá</h1>"
-    '<button id="ok">Confirmar</button><a href="/x">Ir</a>'
-).encode()
-
-
 class _Pagina(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
+        porta = self.server.server_address[1]
+        corpo = (
+            "<title>Painel de teste</title><h1>Olá</h1>"
+            f'<button id="ok">Confirmar</button><a href="http://127.0.0.1:{porta}/x">Ir</a>'
+        ).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(PAGINA)))
+        self.send_header("Content-Length", str(len(corpo)))
         self.end_headers()
-        self.wfile.write(PAGINA)
+        self.wfile.write(corpo)
 
     def log_message(self, *_a: Any) -> None:
         return
@@ -188,7 +187,7 @@ async def test_dominio_novo_em_perfil_logado_pausa_aprova_e_navega(mundo: Mundo,
     )["resultado"]
     assert captura.get("tipo") == "image/png", captura
     assert captura["tamanho"] > 1000
-    assert 0 or captura["tipo"] == "image/png" and captura["tamanho"] > 1000
+    assert 0 or (captura["tipo"] == "image/png" and captura["tamanho"] > 1000)
     abas = [d for n, d in eventos if n == "navegador.aba"]
     assert abas and abas[-1]["url"].startswith(site) and abas[-1]["carregada"] is True
     # ao retomar não nasce um segundo cartão
@@ -243,3 +242,131 @@ async def test_negar_domino_nao_navega_e_nao_aprova(mundo: Mundo, site: str) -> 
             particao_=pf.particao(usuario_id, usuario_id, COMPARTILHADO),
         )
         assert pf.dominios_aprovados(estado) == set()
+
+
+async def _cartao_novo(mundo: Mundo, usuario_id: UUID, dominio: str) -> Aprovacao:
+    async def achar() -> Aprovacao | None:
+        async with mundo.fabrica() as sessao:
+            return await sessao.scalar(
+                select(Aprovacao).where(
+                    Aprovacao.usuario_id == usuario_id,
+                    Aprovacao.acao["tipo"].astext == "aprovar_dominio",
+                    Aprovacao.acao["dominio"].astext == dominio,
+                )
+            )
+
+    try:
+        return await esperar(achar, 60)
+    except TimeoutError:
+        async with mundo.fabrica() as sessao:
+            etapas = [(e.status, e.erro) for e in await sessao.scalars(select(Etapa))]
+            passos = [
+                (p.ferramenta, str(p.resultado)[:300])
+                for p in await sessao.scalars(select(Passo))
+                if p.ferramenta
+            ]
+        raise AssertionError(f"sem cartão de {dominio}; etapas={etapas}; passos={passos}") from None
+
+
+async def test_clique_em_dominio_barrado_vira_cartao_e_aba_sobrevive_ao_reinicio(
+    mundo: Mundo, site: str
+) -> None:
+    email = "leme-c@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=60) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, email)
+        usuario_id = await _perfil_logado(mundo, email)
+        await mundo.iniciar_worker()
+        r = await cliente.post(
+            "/v1/conversas",
+            headers=auth,
+            json={"texto": f"pesquise [navegador:{site}] [navegador-clicar:Ir]", "anexos": []},
+        )
+        conversa_id = r.json()["id"]
+        leitura = asyncio.create_task(ler_sse(cliente, conversa_id, auth, ate=_concluiu))
+        for dominio in ("localhost", "127.0.0.1"):
+            cartao = await _cartao_novo(mundo, usuario_id, dominio)
+            ok = await cliente.post(
+                f"/v1/aprovacoes/{cartao.id}/decidir",
+                headers=auth,
+                json={"decisao": "sempre_permitir"},
+            )
+            assert ok.status_code == 204, ok.text
+        eventos = await asyncio.wait_for(leitura, 120)
+
+        pedidas = [d for n, d in eventos if n == "aprovacao.pedida" and d.get("tipo")]
+        assert [p["dominio"] for p in pedidas] == ["localhost", "127.0.0.1"]
+        assert pedidas[1]["url"].startswith("http://127.0.0.1:")
+        abas = [d for n, d in eventos if n == "navegador.aba"]
+        assert abas[-1]["url"].endswith("/x"), abas[-1]
+        acao = [
+            d
+            for n, d in eventos
+            if n == "passo" and d.get("ferramenta") == "navegador_acao" and d.get("resultado")
+        ]
+        assert acao and acao[-1]["resultado"]["rastro"]["comando"]
+
+        # ---- assumir e devolver (o agente não mexe enquanto o usuário está na aba)
+        lista = (await cliente.get("/v1/navegador/abas", headers=auth)).json()
+        assert len(lista) == 1
+        aba_id = lista[0]["aba_id"]
+        assumida = await cliente.post(f"/v1/navegador/abas/{aba_id}/assumir", headers=auth)
+        assert assumida.json()["assumida_pelo_usuario"] is True
+        devolvida = await cliente.post(f"/v1/navegador/abas/{aba_id}/devolver", headers=auth)
+        assert devolvida.json()["assumida_pelo_usuario"] is False
+
+        # ---- reinicia o worker: a aba volta descarregada, no mesmo perfil
+        await mundo.parar_worker()
+        await mundo.iniciar_worker()
+
+        async def restaurada() -> Any:
+            amb = (mundo._worker.ctx or {}).get("navegador")
+            return amb is not None and [a for a in amb.gerente.para_salvar() if str(a.id) == aba_id]
+
+        (aba,) = await esperar(restaurada, 60)
+        assert aba.carregada is False and aba.url.endswith("/x")
+        assert aba.particao == pf.particao(usuario_id, usuario_id, COMPARTILHADO)
+
+
+async def test_rotina_sem_supervisao_usa_aba_efemera_sem_login(mundo: Mundo, site: str) -> None:
+    from uuid import uuid4
+
+    from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
+    from app.navegador import NavegadorAbrir
+    from app.navegador.abas import NavegadorFecharAba
+    from app.navegador.arvore.ferramentas import NavegadorObservar
+
+    email = "leme-d@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=60) as cliente:
+        await entrar(cliente, mundo.fabrica, email)
+    usuario_id = await _perfil_logado(mundo, email)
+    await mundo.iniciar_worker()
+
+    async def pronto() -> Any:
+        return (mundo._worker.ctx or {}).get("navegador")
+
+    amb = await esperar(pronto, 60)
+    agente_id = uuid4()
+    sem = ContextoFerramenta(
+        usuario_id=usuario_id, agente_id=agente_id, conversa_id=uuid4(), sem_supervisao=True
+    )
+    efemera = await amb.executar("navegador_abrir", NavegadorAbrir(url=site), sem)
+    # perfil efêmero: sem cookies de login, sem revisão de domínio e nada gravado no banco
+    (aba,) = amb.gerente.do_agente(agente_id, so_efemeras=True)
+    assert aba.perfil_efemero and str(aba.id) == efemera["aba_id"]
+    assert await amb.motor.pagina(aba).context.cookies() == []
+    async with mundo.fabrica() as sessao:
+        assert (await sessao.get(AbaNavegador, aba.id)) is None
+    visto = await amb.executar("navegador_observar", NavegadorObservar(aba_id=aba.id), sem)
+    assert "Painel de teste" in visto["resumo"]
+    # a rotina não alcança uma aba com perfil salvo (nem abre uma logada por engano)
+    aba_logada = await amb.gerente.abrir(
+        usuario_id=usuario_id,
+        agente_id=agente_id,
+        escolha=COMPARTILHADO,
+        url=None,
+    )
+    with pytest.raises(ErroFerramenta):
+        await amb.executar("navegador_fechar_aba", NavegadorFecharAba(aba_id=aba_logada.id), sem)
+    await amb.executar("navegador_fechar_aba", NavegadorFecharAba(aba_id=aba.id), sem)
+    assert amb.gerente.do_agente(agente_id, so_efemeras=True) == []
+    await amb.gerente.fechar(aba_logada.id, agente_id)

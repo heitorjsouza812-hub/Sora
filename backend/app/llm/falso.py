@@ -29,6 +29,7 @@ mentir. As classes do LangChain só são importadas na primeira vez que o modelo
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Iterator
@@ -166,6 +167,7 @@ _GATILHO = re.compile(r"\[(pergunta|aprovacao|orcamento|memoria|pendencia|catalo
 
 
 _GATILHO_NAVEGADOR = re.compile(r"\[navegador:(\S+?)\]")
+_GATILHO_CLICAR = re.compile(r"\[navegador-clicar:([^\]]+)\]")
 
 
 def gatilhos_do_texto(texto: str) -> list[str]:
@@ -187,7 +189,8 @@ def _plano_json(gatilhos: list[str] | None = None, pedido: str = "") -> str:
                 nivel=Nivel.N2,
                 tarefa="Pesquisar referências sobre o pedido do usuário."
                 + "".join(f" [{g}]" for g in (gatilhos or []) if g != "orcamento")
-                + "".join(f" [navegador:{u}]" for u in _GATILHO_NAVEGADOR.findall(pedido)),
+                + "".join(f" [navegador:{u}]" for u in _GATILHO_NAVEGADOR.findall(pedido))
+                + "".join(f" [navegador-clicar:{u}]" for u in _GATILHO_CLICAR.findall(pedido)),
                 pronto_quando="Há pelo menos duas referências com link.",
             ),
             EtapaPlano(
@@ -386,6 +389,20 @@ def _gatilho_do_navegador(mensagens: list[BaseMessage], tarefa: str) -> AIMessag
         return _chamada("navegador_abrir", {"url": achou.group(1)})
     if "Aba aberta" not in aberturas[-1] and "aba_id" not in aberturas[-1]:
         return None  # negado ou falhou: o agente segue para a entrega
+    if (clicar := _GATILHO_CLICAR.search(tarefa)) and "navegador_observar" in feitas:
+        acoes = [str(m.content) for m in resultados if m.name == "navegador_acao"]
+        observacoes = [str(m.content) for m in resultados if m.name == "navegador_observar"]
+        if not acoes or acoes[-1].startswith("Domínio aprovado"):
+            if len(observacoes) <= len(acoes):
+                return _chamada("navegador_observar", {})  # leitura nova antes de repetir
+            arvore = observacoes[-1]
+            with contextlib.suppress(ValueError, TypeError):
+                arvore = str(json.loads(arvore)["resumo"])
+            arvore = arvore.replace("\\n", "\n")  # o resultado pode vir como JSON em texto
+            for linha in arvore.splitlines():
+                ref = re.search(r"@s\w+:e\d+", linha)
+                if ref and re.search(re.escape(clicar.group(1)), linha):
+                    return _chamada("navegador_acao", {"ref": ref.group(0), "acao": "clicar"})
     aba = re.search(r"aba_id\W+([0-9a-f-]{36})", aberturas[-1])
     for nome in ("navegador_observar", "navegador_capturar"):
         if nome not in feitas:

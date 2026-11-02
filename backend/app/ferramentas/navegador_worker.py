@@ -242,6 +242,9 @@ class AmbienteNavegador:
 
             resposta = await self.arvore.executar(nome, args, contexto)
             if revisao := self.motor.consumir_revisao(aba):
+                # o clique foi abortado e a aba ficou na página de erro: volta para onde estava
+                with contextlib.suppress(Exception):
+                    await self.motor.pagina(aba).goto(aba.url, wait_until="domcontentloaded")
                 raise revisao
             pagina = self.motor.pagina(aba)
             aba = self.gerente.sincronizar_pagina(
