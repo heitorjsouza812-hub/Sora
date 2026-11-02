@@ -20,7 +20,6 @@ import { ActivityIcon, TeamIcon } from '../components/ui/Icons';
 import { IrParaFim } from '../components/ui/IrParaFim';
 import { MensagemChat } from '../components/ui/MensagemChat';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
-import { duracaoRoteiro } from '../data/planejador';
 import {
   anexarEnvio, enviarParaAgente, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararGeracao, passosDoAgente, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos,
@@ -84,8 +83,8 @@ export default function AgentChat() {
     const anterior = e.execucoes.find(x => x.roteiro.some(r => r.tipo === 'handoff' && r.paraAgenteId === a.id));
     const h = anterior?.roteiro.find(r => r.tipo === 'handoff' && r.paraAgenteId === a.id);
     const de = anterior ? e.agentes[anterior.agenteId] : undefined;
-    if (anterior && h && de && anterior.inicio + h.em <= agora) {
-      itens.push({ t: anterior.inicio + h.em, key: 'recebeu', node: (
+    if (anterior && h && de) {
+      itens.push({ t: h.inicio, key: 'recebeu', node: (
         <div className="handoff-banner" style={{ '--agent': de.cor } as CSSProperties}><strong>{de.nome}</strong> {h.texto.replace(/^Enviou/, 'enviou').replace(` para ${a.nome}`, '')} <span aria-hidden="true">↘</span></div>
       ) });
     }
@@ -96,9 +95,9 @@ export default function AgentChat() {
           <div className="assistant-row"><SoraOrb size={34} color={e.sora.cor} state="coordinating" glow={false} decorative seed={71} /><p><strong>{e.sora.nome}</strong>&nbsp; {prompt.texto}</p></div>
         ) });
       }
-      const fim = x.inicio + duracaoRoteiro(x.roteiro);
-      if (agora < fim) {
-        const atual = [...x.roteiro].reverse().find(r => x.inicio + r.em <= agora && r.tipo !== 'prompt');
+      const fim = Math.max(x.inicio, ...x.roteiro.map(r => r.fim ?? r.inicio));
+      if (x.status === 'executando') {
+        const atual = [...x.roteiro].reverse().find(r => r.tipo !== 'prompt');
         itens.push({ t: agora, key: `w-${x.id}`, node: (
           <div className="assistant-row agent-copy">
             <SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="working" glow={false} decorative seed={3} />
@@ -136,6 +135,7 @@ export default function AgentChat() {
   const assinatura = a ? mensagensDa(e, a.id, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0;
   const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
 
+  if (e.carregando) return null;
   if (id === 'sora') return <Navigate to="/chat/sora" replace />;
   if (!a || !st) return <Navigate to="/chat/sora" replace />;
 
@@ -159,7 +159,7 @@ export default function AgentChat() {
           </div>
           <div className="chat-composer">
             <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'}
-              onSend={(t, anexos) => { anexarEnvio(anexos, () => enviarParaAgente(a.id, t)); seguirFim(); }}
+              onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => enviarParaAgente(a.id, t, undefined, true, enviados)); seguirFim(); }}
               gerando={gerando} onParar={() => pararGeracao(a.id)} />
           </div>
           </ZonaSoltar>

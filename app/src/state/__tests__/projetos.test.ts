@@ -1,103 +1,91 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-type Store = typeof import('../projetos');
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { aplicarEvento } from '../aplicarEvento';
+import { horarioDoEvento, type EventoSse } from '../../api/eventos';
+import type { EstadoProjetos } from '../projetos';
 
 const AGORA = 1_700_000_000_000;
-let store: Store;
+const conversaId = '00000000-0000-0000-0000-000000000001';
+const agenteId = '00000000-0000-0000-0000-000000000002';
+const etapaId = '00000000-0000-0000-0000-000000000003';
 
-beforeEach(async () => {
-  localStorage.clear();
-  vi.useFakeTimers();
-  vi.setSystemTime(AGORA);
-  vi.resetModules();
-  store = await import('../projetos');
+function estado(): EstadoProjetos {
+  return {
+    versao: 2, sora: { nome: 'Sora', cor: '#E2ECFF' }, agentes: {}, projetoAtivoId: conversaId,
+    projetos: [{
+      id: conversaId, tipo: 'chat', titulo: 'Campanha', pedido: 'Crie uma campanha', modelo: '', assunto: 'Campanha', resposta: '', criadoEm: AGORA,
+      tarefas: [], agenteIds: [], entregas: {}, marcos: { plano: AGORA, nascimentos: [], trabalho: AGORA, fim: AGORA }, aprovadaVersao: null, versao: 1,
+    }],
+    execucoes: [], mensagens: [], pluginsConectados: [], carregando: false,
+  };
+}
+
+function evento(tipo: string, dados: Record<string, unknown>, deslocamento = 0): EventoSse {
+  return { id: `${AGORA + deslocamento}-0`, tipo, dados: { conversa_id: conversaId, ...dados }, recebidoEm: AGORA + deslocamento };
+}
+
+beforeEach(() => vi.setSystemTime(AGORA));
+
+describe('aplicarEvento', () => {
+  it('monta plano, agente e execução somente a partir dos eventos do backend', () => {
+    let e = aplicarEvento(estado(), evento('agente.criado', { agente_id: agenteId, tipo: 'especialista', nome: 'Atlas', funcao: 'Pesquisa', cor: '#56A8FF', movimento: 'vibracao' }));
+    e = aplicarEvento(e, evento('cadeia.criada', { cadeia_id: 'cadeia-1', versao: 1, etapas: [{ etapa_id: etapaId, ordem: 1, especialista: 'pesquisador', agente_id: agenteId, titulo: 'Pesquisar referências', nivel: 'N1', depende_de: [] }] }, 1));
+
+    expect(e.agentes[agenteId]).toMatchObject({ nome: 'Atlas', projetoId: conversaId, avulso: false });
+    expect(e.projetos[0]).toMatchObject({ cadeiaId: 'cadeia-1', cadeiaStatus: 'planejando', agenteIds: [agenteId] });
+    expect(e.projetos[0]?.tarefas[0]).toMatchObject({ id: etapaId, agenteId, progresso: 0 });
+    expect(e.execucoes[0]).toMatchObject({ id: etapaId, agenteId, status: 'pendente' });
+  });
+
+  it('atualiza progresso e passos sem avançar por relógio', () => {
+    let e = aplicarEvento(estado(), evento('cadeia.criada', { cadeia_id: 'cadeia-1', versao: 1, etapas: [{ etapa_id: etapaId, ordem: 1, agente_id: agenteId, titulo: 'Pesquisar', depende_de: [] }] }));
+    e = aplicarEvento(e, evento('etapa.atualizada', { etapa_id: etapaId, status: 'executando', progresso: 45, tokens: 10, custo_usd: 0 }, 10));
+    e = aplicarEvento(e, evento('passo', { passo_id: 'passo-1', etapa_id: etapaId, agente_id: agenteId, tipo: 'ferramenta', texto: 'Buscando', ferramenta: 'buscar_web', acao: 'buscar_web', parametros: { consulta: 'café' }, resultado: null, status: 'executando', para_agente_id: null }, 20));
+
+    expect(e.execucoes[0]).toMatchObject({ status: 'executando', progresso: 45 });
+    expect(e.execucoes[0]?.roteiro[0]).toMatchObject({ id: 'passo-1', status: 'executando', ferramenta: 'buscar_web' });
+
+    const muitoDepois = aplicarEvento(e, evento('ping', {}, 999_999));
+    expect(muitoDepois.execucoes[0]).toMatchObject({ status: 'executando', progresso: 45 });
+  });
+
+  it('concatena deltas SSE e encerra a mensagem pelo evento fim', () => {
+    let e = aplicarEvento(estado(), evento('mensagem.inicio', { mensagem_id: 'msg-1', autor: 'sora', agente_id: agenteId }));
+    e = aplicarEvento(e, evento('mensagem.delta', { mensagem_id: 'msg-1', texto: 'Tudo ' }, 1));
+    e = aplicarEvento(e, evento('mensagem.delta', { mensagem_id: 'msg-1', texto: 'pronto.' }, 2));
+    e = aplicarEvento(e, evento('mensagem.fim', { mensagem_id: 'msg-1', anexos: [] }, 3));
+    expect(e.mensagens).toEqual([expect.objectContaining({ id: 'msg-1', texto: 'Tudo pronto.', gerando: false })]);
+  });
+
+  it('usa o relógio do servidor (id do Redis Stream) como horário do evento', () => {
+    expect(horarioDoEvento('1730518324070-3')).toBe(1730518324070);
+    vi.setSystemTime(AGORA);
+    expect(horarioDoEvento('0-0')).toBe(AGORA);
+  });
+
+  it('não duplica o texto quando o SSE repete a mensagem já carregada do histórico', () => {
+    const base = estado();
+    let e: EstadoProjetos = { ...base, mensagens: [{ id: 'msg-1', conversaId, autor: 'sora', texto: 'Tudo pronto.', criadoEm: AGORA, gerando: false }] };
+    e = aplicarEvento(e, evento('mensagem.inicio', { mensagem_id: 'msg-1', autor: 'sora' }));
+    e = aplicarEvento(e, evento('mensagem.delta', { mensagem_id: 'msg-1', texto: 'Tudo pronto.' }, 1));
+    e = aplicarEvento(e, evento('mensagem.fim', { mensagem_id: 'msg-1', anexos: [] }, 2));
+    expect(e.mensagens).toHaveLength(1);
+    expect(e.mensagens[0]?.texto).toBe('Tudo pronto.');
+  });
+
+  it('é idempotente para passo e entrega repetidos na retomada', () => {
+    let e = aplicarEvento(estado(), evento('cadeia.criada', { cadeia_id: 'cadeia-1', versao: 1, etapas: [{ etapa_id: etapaId, ordem: 1, agente_id: agenteId, titulo: 'Pesquisar', depende_de: [] }] }));
+    const passo = evento('passo', { passo_id: 'passo-1', etapa_id: etapaId, agente_id: agenteId, tipo: 'entrega', texto: 'Entregou', resultado: { resumo: '4 links' }, status: 'concluido' });
+    const entrega = evento('entrega', { entrega_id: 'entrega-1', agente_id: agenteId, versao: 1, tipo: 'links', titulo: 'Pesquisa', resumo: '4 links' });
+    e = aplicarEvento(aplicarEvento(e, passo), passo);
+    e = aplicarEvento(aplicarEvento(e, entrega), entrega);
+    expect(e.execucoes[0]?.roteiro).toHaveLength(1);
+    expect(Object.values(e.projetos[0]!.entregas)).toHaveLength(1);
+  });
+
+  it('marca a cadeia concluída e a conversa aprovada por eventos reais', () => {
+    let e = aplicarEvento(estado(), evento('cadeia.atualizada', { cadeia_id: 'cadeia-1', status: 'concluida', tokens_usados: 20, custo_usd: 0 }));
+    e = aplicarEvento(e, evento('conversa.atualizada', { conversa_id: conversaId, titulo: 'Campanha final', tipo: 'projeto', aprovada_versao: 1 }, 1));
+    expect(e.projetos[0]).toMatchObject({ titulo: 'Campanha final', tipo: 'projeto', cadeiaStatus: 'concluida', aprovadaVersao: 1 });
+    expect(e.projetos[0]?.aprovadoEm).toBe(AGORA + 1);
+  });
 });
-
-afterEach(() => {
-  vi.useRealTimers();
-});
-
-describe('state/projetos', () => {
-  it('cria projeto com equipe e deriva progresso e fases pelo agora informado', () => {
-    const projeto = store.criarProjeto('Crie uma campanha para minha cafeteria', AGORA);
-    const estado = store.lerEstado();
-
-    expect(estado.projetos[0]).toMatchObject({ id: projeto.id, modelo: 'campanha' });
-    expect(projeto.agenteIds).toHaveLength(3);
-    expect(estado.execucoes).toHaveLength(projeto.tarefas.length);
-    expect(store.estadoProjeto(estado, projeto, projeto.marcos.plano - 1).fase).toBe('pensando');
-    expect(store.estadoProjeto(estado, projeto, projeto.marcos.plano).fase).toBe('planejando');
-    expect(store.estadoProjeto(estado, projeto, projeto.marcos.trabalho).fase).toBe('coordenando');
-    expect(store.estadoProjeto(estado, projeto, projeto.marcos.fim)).toMatchObject({ fase: 'pronto', progresso: 100 });
-  });
-
-  it('remove projeto junto com agentes, execuções e mensagens da equipe', () => {
-    const projeto = store.criarProjeto('Crie uma campanha para minha cafeteria', AGORA);
-    const desfazer = store.removerProjeto(projeto.id);
-    const estado = store.lerEstado();
-
-    expect(estado.projetos).toHaveLength(0);
-    expect(estado.execucoes).toHaveLength(0);
-    expect(estado.mensagens).toHaveLength(0);
-    expect(projeto.agenteIds.every((id) => estado.agentes[id] === undefined)).toBe(true);
-
-    desfazer();
-    expect(store.lerEstado().projetos[0]?.id).toBe(projeto.id);
-  });
-
-  it('mantém agentes como avulsos ao remover projeto com manterAgentes', () => {
-    const projeto = store.criarProjeto('Crie uma campanha para minha cafeteria', AGORA);
-    store.removerProjeto(projeto.id, { manterAgentes: true });
-    const estado = store.lerEstado();
-
-    expect(estado.projetos).toHaveLength(0);
-    expect(estado.execucoes).toHaveLength(0);
-    for (const id of projeto.agenteIds) {
-      expect(estado.agentes[id]).toMatchObject({ avulso: true, projetoId: '', espera: 'Disponível' });
-    }
-  });
-
-  it('renomeia apenas título não vazio do projeto', () => {
-    const projeto = store.criarProjeto('Crie uma campanha para minha cafeteria', AGORA);
-    store.renomearProjeto(projeto.id, '  Lançamento da Sora  ');
-    expect(store.lerEstado().projetos[0]?.titulo).toBe('Lançamento da Sora');
-
-    store.renomearProjeto(projeto.id, '   ');
-    expect(store.lerEstado().projetos[0]?.titulo).toBe('Lançamento da Sora');
-  });
-
-  it('salva, atualiza e remove agente avulso', () => {
-    const agente = store.salvarAgente({
-      nome: 'Lia', funcao: 'Textos', cor: '#FF6FAE', tipoMovimento: 'ondas', ferramentas: ['Notion'], instrucoes: 'Escreva em PT-BR.',
-    });
-    expect(store.lerEstado().agentes[agente.id]).toMatchObject({ nome: 'Lia', avulso: true, verbo: 'Escrevendo' });
-
-    store.atualizarAgente(agente.id, { funcao: 'Código', ferramentas: ['GitHub'] });
-    expect(store.lerEstado().agentes[agente.id]).toMatchObject({ funcao: 'Código', verbo: 'Programando', ferramentas: ['GitHub'] });
-
-    store.removerAgente(agente.id);
-    expect(store.lerEstado().agentes[agente.id]).toBeUndefined();
-  });
-
-  it('persiste alterações no localStorage e as recarrega em novo módulo', async () => {
-    const projeto = store.criarProjeto('Crie uma campanha para minha cafeteria', AGORA);
-    store.renomearProjeto(projeto.id, 'Campanha persistida');
-
-    const salvo = JSON.parse(localStorage.getItem('sora.projetos.v1') ?? '{}');
-    expect(salvo.projetos[0]).toMatchObject({ id: projeto.id, titulo: 'Campanha persistida' });
-
-    vi.resetModules();
-    const recarregado = await import('../projetos');
-    expect(recarregado.lerEstado().projetos[0]).toMatchObject({ id: projeto.id, titulo: 'Campanha persistida' });
-  });
-  it('modo agente independente: cria UM agente avulso (fora de equipes) que já começa a trabalhar', () => {
-    const ag = store.criarAgenteIndependente('Pesquise tendências de café gelado no Instagram', AGORA);
-    const estado = store.lerEstado();
-
-    expect(estado.projetos).toHaveLength(0);
-    expect(estado.agentes[ag.id]).toMatchObject({ avulso: true, projetoId: '', funcao: 'Pesquisa e referências' });
-    expect(estado.execucoes.filter(x => x.agenteId === ag.id)).toHaveLength(1);
-    expect(estado.mensagens.filter(m => m.conversaId === ag.id).map(m => m.autor)).toEqual(['usuario', ag.id]);
-    const x = estado.execucoes[0];
-    expect(store.estadoAgente(estado, ag.id, x.inicio + 1).status).toBe('trabalhando');
-  });});

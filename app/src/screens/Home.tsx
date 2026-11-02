@@ -85,12 +85,10 @@ export default function Home() {
       window.setTimeout(() => {
         // a conversa (e o item em CHATS) só nasce agora, junto com a ida para o chat
         if (modo === 'agente') {
-          const ag = anexarEnvio(anexos, () => criarAgenteIndependente(pedido));
-          navigate(`/chat/${ag.id}`);
+          void anexarEnvio(anexos, enviados => criarAgenteIndependente(pedido, undefined, enviados)).then(ag => navigate(`/chat/${ag.id}`));
           return;
         }
-        const p = anexarEnvio(anexos, () => criarProjeto(pedido, undefined, { tipo: 'chat' }));
-        navigate(`/projeto/${p.id}`);
+        void anexarEnvio(anexos, enviados => criarProjeto(pedido, undefined, { tipo: 'chat', anexos: enviados })).then(p => navigate(`/projeto/${p.id}`));
       }, 1150),
     ];
   };

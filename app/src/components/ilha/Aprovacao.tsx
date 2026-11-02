@@ -28,7 +28,7 @@ export function Aprovacao({ alerta, onFeito }: AprovacaoProps) {
 
   const revisar = () => { navigate(`/revisao/${alerta.projetoId}`); onFeito(); };
   const aprovar = () => {
-    aprovarProjeto(alerta.projetoId);
+    void aprovarProjeto(alerta.projetoId);
     if (som) tocar('aprovado');
     toast({ mensagem: 'Projeto aprovado e publicado', descricao: alerta.titulo, tom: 'sucesso' });
     onFeito();

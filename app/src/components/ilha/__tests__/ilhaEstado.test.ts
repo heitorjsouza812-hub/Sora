@@ -1,141 +1,71 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-type Store = typeof import('../../../state/projetos');
-type Ilha = typeof import('../ilhaEstado');
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EstadoProjetos } from '../../../state/projetos';
 
 const AGORA = 1_700_000_000_000;
-let store: Store;
-let ilha: Ilha;
 
-beforeEach(async () => {
-  localStorage.clear();
-  vi.useFakeTimers();
-  vi.setSystemTime(AGORA);
-  vi.resetModules();
-  store = await import('../../../state/projetos');
-  ilha = await import('../ilhaEstado');
-});
+function estadoReal(): EstadoProjetos {
+  const projeto = {
+    id: 'projeto-1', tipo: 'projeto' as const, titulo: 'Campanha da cafeteria', pedido: 'Crie uma campanha', modelo: '', assunto: 'Cafeteria', resposta: '', criadoEm: AGORA,
+    tarefas: [
+      { id: 'e1', titulo: 'Pesquisa', ordem: 1, dependeDe: [], agenteId: 'a1', status: 'concluido' as const, progresso: 100 },
+      { id: 'e2', titulo: 'Criação', ordem: 2, dependeDe: ['e1'], agenteId: 'a2', status: 'trabalhando' as const, progresso: 50 },
+      { id: 'e3', titulo: 'Textos', ordem: 3, dependeDe: ['e2'], agenteId: 'a3', status: 'aguardando' as const, progresso: 0 },
+    ],
+    agenteIds: ['a1', 'a2', 'a3'], entregas: { a1: { id: 'd1', agenteId: 'a1', versao: 1, tipo: 'links' as const, titulo: 'Pesquisa', resumo: '4 referências' } },
+    marcos: { plano: AGORA, nascimentos: [], trabalho: AGORA, fim: AGORA }, aprovadaVersao: null, versao: 1, cadeiaId: 'c1', cadeiaStatus: 'executando' as const,
+  };
+  return {
+    versao: 2, sora: { nome: 'Sora', cor: '#E2ECFF' }, projetoAtivoId: projeto.id, projetos: [projeto], pluginsConectados: [], carregando: false, mensagens: [],
+    agentes: {
+      a1: { id: 'a1', projetoId: projeto.id, nome: 'Atlas', funcao: 'Pesquisa', cor: '#56A8FF', tipoMovimento: 'vibracao', ferramentas: [], status: 'aguardando', verbo: 'Pesquisando', espera: 'Aguardando', instrucoes: '', avulso: false, criadoEm: AGORA },
+      a2: { id: 'a2', projetoId: projeto.id, nome: 'Luna', funcao: 'Visual', cor: '#AC80FF', tipoMovimento: 'espiral', ferramentas: [], status: 'aguardando', verbo: 'Criando', espera: 'Aguardando', instrucoes: '', avulso: false, criadoEm: AGORA },
+      a3: { id: 'a3', projetoId: projeto.id, nome: 'Nina', funcao: 'Textos', cor: '#46E8A8', tipoMovimento: 'ondas', ferramentas: [], status: 'aguardando', verbo: 'Escrevendo', espera: 'Aguardando', instrucoes: '', avulso: false, criadoEm: AGORA },
+    },
+    execucoes: [
+      { id: 'e1', agenteId: 'a1', projetoId: projeto.id, tarefaId: 'e1', inicio: AGORA, status: 'concluida', progresso: 100, roteiro: [{ id: 'p1', agenteId: 'a1', tipo: 'entrega', texto: 'Entregou', status: 'concluido', inicio: AGORA, fim: AGORA + 1 }] },
+      { id: 'e2', agenteId: 'a2', projetoId: projeto.id, tarefaId: 'e2', inicio: AGORA + 2, status: 'executando', progresso: 50, roteiro: [{ id: 'p2', agenteId: 'a2', tipo: 'ferramenta', texto: 'Criando', ferramenta: 'gerar_imagem', status: 'executando', inicio: AGORA + 2 }] },
+      { id: 'e3', agenteId: 'a3', projetoId: projeto.id, tarefaId: 'e3', inicio: AGORA + 3, status: 'pendente', progresso: 0, roteiro: [] },
+    ],
+  };
+}
 
-afterEach(() => {
-  vi.useRealTimers();
-});
+let ilha: typeof import('../ilhaEstado');
+beforeEach(async () => { localStorage.clear(); vi.resetModules(); ilha = await import('../ilhaEstado'); });
 
-describe('visaoIlha', () => {
-  it('usa o projeto ativo no modo automático e respeita a escolha manual', () => {
-    const primeiro = store.criarProjeto('Crie uma campanha para minha cafeteria', AGORA);
-    const escolhido = store.criarProjeto('Pesquise o mercado de cafeterias', AGORA + 100);
-    store.abrirProjeto(primeiro.id);
-
-    const automatica = ilha.visaoIlha(store.lerEstado(), AGORA + 200, null);
-    const manual = ilha.visaoIlha(store.lerEstado(), AGORA + 200, escolhido.id);
-
-    expect(automatica).toMatchObject({ automatico: true, projeto: { id: primeiro.id } });
-    expect(manual).toMatchObject({ automatico: false, projeto: { id: escolhido.id } });
+describe('visaoIlha com estado do backend', () => {
+  it('expõe agentes, progresso e ticker recebidos do SSE', () => {
+    const visao = ilha.visaoIlha(estadoReal(), AGORA + 10, null);
+    expect(visao.projeto).toMatchObject({ id: 'projeto-1', fase: 'coordenando', progresso: 50 });
+    expect(visao.agentes.map(a => a.status)).toEqual(['concluido', 'trabalhando', 'aguardando']);
+    expect(visao.ticker.map(p => p.id)).toEqual(['p1', 'p2']);
+    expect(visao.trabalhando).toBe(1);
   });
 
-  it('volta ao modo automático quando o projeto escolhido foi apagado', () => {
-    const automatico = store.criarProjeto('Crie uma campanha para minha cafeteria', AGORA);
-    const apagado = store.criarProjeto('Crie um site para uma cafeteria', AGORA + 100);
-    store.abrirProjeto(automatico.id);
-    store.removerProjeto(apagado.id);
-
-    const visao = ilha.visaoIlha(store.lerEstado(), AGORA + 200, apagado.id);
-
-    expect(visao).toMatchObject({ automatico: true, projeto: { id: automatico.id } });
+  it('mostra alerta somente depois do evento de cadeia concluída', () => {
+    const e = estadoReal();
+    expect(ilha.visaoIlha(e, AGORA, null).alerta).toBeNull();
+    e.projetos[0]!.cadeiaStatus = 'concluida';
+    const visao = ilha.visaoIlha(e, AGORA, null);
+    expect(visao.alerta).toMatchObject({ tipo: 'revisar', projetoId: 'projeto-1', entregas: ['Pesquisa · 4 referências'] });
   });
 
-  it('ordena projetos rodando antes dos projetos parados', () => {
-    const rodando = store.criarProjeto('Crie uma campanha para minha cafeteria', AGORA);
-    const aprovado = store.criarProjeto('Crie um site para minha cafeteria', AGORA + 100);
-    store.aprovarProjeto(aprovado.id, AGORA + 200);
-
-    const visao = ilha.visaoIlha(store.lerEstado(), AGORA + 300, null);
-
-    expect(visao.projetos.map((projeto) => projeto.id)).toEqual([rodando.id, aprovado.id]);
-    expect(visao.projetos.map((projeto) => projeto.rodando)).toEqual([true, false]);
-  });
-
-  it('expõe agentes, ticker e alerta de revisão quando o projeto fica pronto', () => {
-    const projeto = store.criarProjeto('Crie uma campanha para lançar minha cafeteria', AGORA);
-    const visao = ilha.visaoIlha(store.lerEstado(), projeto.marcos.fim, projeto.id);
-
-    expect(visao.projeto).toMatchObject({ id: projeto.id, fase: 'pronto', progresso: 100 });
-    expect(visao.agentes).toHaveLength(projeto.agenteIds.length);
-    expect(visao.agentes.every((agente) => agente.status === 'concluido' && agente.orb === 'done' && agente.progresso === 100)).toBe(true);
-    expect(visao.ticker).toHaveLength(6);
-    expect(visao.ticker.every((passo, indice, passos) => indice === 0 || passos[indice - 1]!.inicio <= passo.inicio)).toBe(true);
-    expect(visao.ticker.at(-1)?.status).toBe('concluido');
-    expect(visao).toMatchObject({
-      trabalhando: 0,
-      alerta: {
-        tipo: 'revisar',
-        projetoId: projeto.id,
-        titulo: projeto.titulo,
-      },
-    });
-    expect(visao.alerta?.entregas).toHaveLength(projeto.agenteIds.length);
+  it('filtra agentes sem inventar transições por tempo', () => {
+    const agentes = ilha.visaoIlha(estadoReal(), AGORA + 999_999, null).agentes;
+    expect(ilha.filtrarAgentes(agentes, { filtro: 'trabalhando', ocultos: [] }).map(a => a.id)).toEqual(['a2']);
+    expect(ilha.filtrarAgentes(agentes, { filtro: 'concluidos', ocultos: [] }).map(a => a.id)).toEqual(['a1']);
   });
 });
 
 describe('preferências da Ilha', () => {
-  it('aplica o filtro, exclui ocultos e preserva a ordem dos agentes reais', () => {
-    const projeto = store.criarProjeto('Crie uma campanha para lançar minha cafeteria', AGORA);
-    const execucoes = store.lerEstado().execucoes.filter((execucao) => execucao.projetoId === projeto.id);
-    const duranteSegundoAgente = execucoes[1]!.inicio + 1;
-    const agentes = ilha.visaoIlha(store.lerEstado(), duranteSegundoAgente, projeto.id).agentes;
-    const trabalhando = agentes.find((agente) => agente.status === 'trabalhando')!;
-    const concluido = agentes.find((agente) => agente.status === 'concluido')!;
-    const aguardando = agentes.find((agente) => agente.status === 'aguardando')!;
-
-    expect(ilha.filtrarAgentes(agentes, { filtro: 'trabalhando', ocultos: [] }).map((agente) => agente.id)).toEqual([trabalhando.id]);
-    expect(ilha.filtrarAgentes(agentes, { filtro: 'concluidos', ocultos: [] }).map((agente) => agente.id)).toEqual([concluido.id]);
-    expect(ilha.filtrarAgentes(agentes, { filtro: 'todos', ocultos: [trabalhando.id] }).map((agente) => agente.id)).toEqual(
-      agentes.filter((agente) => agente.id !== trabalhando.id).map((agente) => agente.id),
-    );
-    expect(ilha.filtrarAgentes(agentes, { filtro: 'concluidos', ocultos: [concluido.id, aguardando.id] })).toEqual([]);
+  it('alterna agente oculto e persiste a preferência', () => {
+    ilha.alternarAgenteOculto('a1'); ilha.alternarAgenteOculto('a1'); ilha.alternarAgenteOculto('a2');
+    expect(ilha.lerIlhaPrefs().ocultos).toEqual(['a2']);
+    expect(JSON.parse(localStorage.getItem('sora.ilha.v1') ?? '{}')).toMatchObject({ ocultos: ['a2'] });
   });
 
-  it('alterna agente oculto sem duplicar ids e persiste a preferência', () => {
-    ilha.alternarAgenteOculto('agente-1');
-    ilha.alternarAgenteOculto('agente-1');
-    ilha.alternarAgenteOculto('agente-2');
-
-    expect(ilha.lerIlhaPrefs().ocultos).toEqual(['agente-2']);
-    expect(JSON.parse(localStorage.getItem('sora.ilha.v1') ?? '{}')).toMatchObject({ ocultos: ['agente-2'] });
-  });
-
-  it('migra preferências antigas preenchendo os campos novos com os padrões', async () => {
-    const antigas = { visivel: false, som: false, esconderOciosa: true, projetoId: 'proj-antigo' };
-    localStorage.setItem('sora.ilha.v1', JSON.stringify(antigas));
-
-    vi.resetModules();
-    const migrada = await import('../ilhaEstado');
-
-    expect(migrada.lerIlhaPrefs()).toEqual({
-      ...antigas,
-      filtro: 'todos',
-      ocultos: [],
-      ilhaNoApp: false,
-    });
-  });
-
-  it('persiste e recarrega todas as preferências, inclusive as novas', async () => {
-    const preferencias = {
-      visivel: false,
-      som: false,
-      esconderOciosa: true,
-      projetoId: 'proj-escolhido',
-      filtro: 'concluidos' as const,
-      ocultos: ['agente-1'],
-      ilhaNoApp: true,
-    };
-
-    ilha.definirIlhaPrefs(preferencias);
-
-    expect(JSON.parse(localStorage.getItem('sora.ilha.v1') ?? '{}')).toEqual(preferencias);
-
-    vi.resetModules();
-    const recarregada = await import('../ilhaEstado');
-    expect(recarregada.lerIlhaPrefs()).toEqual(preferencias);
+  it('migra preferências antigas com os padrões atuais', async () => {
+    const antigas = { visivel: false, som: false, esconderOciosa: true, projetoId: 'projeto-antigo' };
+    localStorage.setItem('sora.ilha.v1', JSON.stringify(antigas)); vi.resetModules(); const migrada = await import('../ilhaEstado');
+    expect(migrada.lerIlhaPrefs()).toEqual({ ...antigas, filtro: 'todos', ocultos: [], ilhaNoApp: false });
   });
 });

@@ -29,10 +29,11 @@ export default function Projetos() {
     if (pensando) return;
     // os anexos do primeiro envio ficam na pergunta do usuário (anexarEnvio só guarda metadados no store)
     const texto = pedido.trim() || 'Monte um projeto a partir dos arquivos anexados.';
-    const p = anexarEnvio(anexos, () => criarProjeto(texto, undefined, { tipo: 'projeto' }));
     setPensando(true);
-    // um instante de "pensando" aqui (VoiceBeam em processing) antes de abrir o chat do projeto
-    timer.current = window.setTimeout(() => navigate(`/projeto/${p.id}`), 900);
+    void anexarEnvio(anexos, enviados => criarProjeto(texto, undefined, { tipo: 'projeto', anexos: enviados })).then(p => {
+      // um instante de "pensando" aqui (VoiceBeam em processing) antes de abrir o chat do projeto
+      timer.current = window.setTimeout(() => navigate(`/projeto/${p.id}`), 900);
+    });
   };
 
   const projetos = e.projetos.filter((p) => p.tipo === 'projeto');

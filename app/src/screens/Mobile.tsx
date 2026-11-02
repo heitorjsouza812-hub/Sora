@@ -24,7 +24,7 @@ export default function Mobile() {
   const [ouvindo, setOuvindo] = useState(false);
   const timer = useRef(0);
   const processando = !!ep && ['pensando', 'planejando', 'coordenando'].includes(ep.fase);
-  const msgs = p ? mensagensDa(e, `sora:${p.id}`, agora).slice(-4) : [];
+  const msgs = p ? mensagensDa(e, p.id, agora).slice(-4) : [];
   const alvo = p?.ajusteAgenteId ? e.agentes[p.ajusteAgenteId] : undefined;
   const novaPronta = msgs.some(m => m.texto === 'Pronto. Veja a nova versão.');
 

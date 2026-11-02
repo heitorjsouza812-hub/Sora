@@ -10,6 +10,8 @@ export interface Anexo {
   tamanho: number;
   /** blob: só para imagens (não sobrevive a recarregar a página) */
   urlPrevia?: string;
+  /** Arquivo original; fica só em memória até o upload para /v1/anexos. */
+  arquivo?: File;
 }
 
 export const MAX_ANEXOS = 10;
@@ -49,6 +51,7 @@ export function prepararAnexos(arquivos: File[], jaTem: number): { novos: Anexo[
       tipo,
       tamanho: f.size,
       urlPrevia: tipo.startsWith('image/') ? URL.createObjectURL(f) : undefined,
+      arquivo: f,
     });
   }
   if (grandes) erros.push(grandes === 1 ? `Um arquivo passa de ${formatarTamanho(MAX_BYTES)} e não foi anexado.` : `${grandes} arquivos passam de ${formatarTamanho(MAX_BYTES)} e não foram anexados.`);

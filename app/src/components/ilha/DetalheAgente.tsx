@@ -39,7 +39,7 @@ export function DetalheAgente({ agenteId, onVoltar }: { agenteId: string; onVolt
     evento.preventDefault();
     const texto = mensagem.trim();
     if (!texto) return;
-    enviarParaAgente(agente.id, texto);
+    void enviarParaAgente(agente.id, texto);
     setMensagem('');
   };
 
