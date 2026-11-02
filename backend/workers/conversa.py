@@ -200,10 +200,19 @@ async def _rodar_e_falar(
                 "falha depois da resposta; sem aviso ao usuário (%s)", type(erro).__name__
             )
         else:
-            await falar(
-                Falar(texto=MENSAGEM_LIMITE if limite_do_provedor(erro) else MENSAGEM_FALHA),
-                ferramenta,
+            from app.agentes.middleware.limites import (
+                MENSAGEM_LIMITE_DE_PASSOS,
+                estourou_limite_de_passos,
             )
+
+            texto = (
+                MENSAGEM_LIMITE_DE_PASSOS
+                if estourou_limite_de_passos(erro)
+                else MENSAGEM_LIMITE
+                if limite_do_provedor(erro)
+                else MENSAGEM_FALHA
+            )
+            await falar(Falar(texto=texto), ferramenta)
         await publicar_evento(
             ctx["redis_eventos"],
             SugestoesEvento(itens=[]),

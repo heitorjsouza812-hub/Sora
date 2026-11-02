@@ -41,7 +41,14 @@ def montar_middleware(
 
     # Por dentro da nova tentativa e da troca: espera o limite do plano em vez de trocar de modelo.
     itens.append(MiddlewareLimiteDoProvedor(ao_esperar=contexto.dependencias.ao_esperar_limite))
-    itens.extend(middleware_de_limites(max_chamadas_modelo=10, max_chamadas_ferramenta=10))
+    from app.agentes.middleware.limites import limites_do_agente
+
+    chamadas_modelo, chamadas_ferramenta = limites_do_agente(contexto)
+    itens.extend(
+        middleware_de_limites(
+            max_chamadas_modelo=chamadas_modelo, max_chamadas_ferramenta=chamadas_ferramenta
+        )
+    )
     itens.extend(
         [middleware_de_conserto(), MiddlewareLoop(), MiddlewarePrazoFerramenta(), MiddlewareCerca()]
     )

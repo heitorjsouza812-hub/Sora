@@ -480,3 +480,75 @@ def test_enxugar_mantem_inteira_a_ultima_leitura_de_cada_ferramenta_do_navegador
     assert len(saida[1].content) < 400  # observação antiga repetida encolhe
     assert len(saida[2].content) == 5000  # a última procura segue inteira
     assert len(saida[3].content) == 5000  # a última observação segue inteira
+
+
+# ---------------------------------------------------------------- rodada 7
+
+
+def _contexto(papel: str):
+    from app.agentes.montagem import ContextoAgente
+
+    return ContextoAgente(
+        usuario_id=uuid.uuid4(), agente_id=uuid.uuid4(), conversa_id=uuid.uuid4(), papel=papel
+    )
+
+
+def test_limite_de_chamadas_cabe_numa_tarefa_de_navegador() -> None:
+    from app.agentes.middleware.limites import limites_do_agente
+
+    assert limites_do_agente(_contexto("redator")) == (10, 10)
+    modelo, ferramenta = limites_do_agente(_contexto("pesquisador"))
+    assert modelo >= 25 and ferramenta >= 40
+
+
+def test_limite_configuravel_por_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.agentes.middleware.limites import limites_do_agente
+
+    monkeypatch.setenv("SORA_MAX_CHAMADAS_MODELO_NAVEGADOR", "30")
+    monkeypatch.setenv("SORA_MAX_CHAMADAS_MODELO", "12")
+    assert limites_do_agente(_contexto("pesquisador"))[0] == 30
+    assert limites_do_agente(_contexto("redator"))[0] == 12
+
+
+@tool
+def passo() -> str:
+    """Faz um passo."""
+    return "feito"
+
+
+async def test_penultima_chamada_avisa_e_o_estouro_tem_mensagem_verdadeira(groq) -> None:
+    from app.agentes.middleware.limites import (
+        AVISO_ULTIMO_PASSO,
+        MENSAGEM_LIMITE_DE_PASSOS,
+        estourou_limite_de_passos,
+        middleware_de_limites,
+    )
+
+    servidor = groq([_resposta(chamada={"nome": "passo", "args": {}})])
+    with pytest.raises(Exception) as info:
+        await _rodar([_modelo(servidor.url)], middleware_de_limites(3, 10), [passo])
+
+    assert estourou_limite_de_passos(info.value)
+    assert len(servidor.corpos) == 3
+    avisos = [
+        i
+        for i, corpo in enumerate(servidor.corpos)
+        if AVISO_ULTIMO_PASSO in json.dumps(corpo["messages"], ensure_ascii=False)
+    ]
+    assert avisos == [2]  # só a última chamada leva o aviso
+    assert "máximo de passos" in MENSAGEM_LIMITE_DE_PASSOS
+    assert "não respondeu" not in MENSAGEM_LIMITE_DE_PASSOS
+
+
+async def test_agente_que_entrega_depois_do_aviso_termina_sem_erro(groq) -> None:
+    from app.agentes.middleware.limites import middleware_de_limites
+
+    servidor = groq(
+        [
+            _resposta(chamada={"nome": "passo", "args": {}}),
+            _resposta(chamada={"nome": "passo", "args": {}}),
+            _resposta("entreguei o que tinha"),
+        ]
+    )
+    resultado = await _rodar([_modelo(servidor.url)], middleware_de_limites(3, 10), [passo])
+    assert resultado["messages"][-1].content == "entreguei o que tinha"
