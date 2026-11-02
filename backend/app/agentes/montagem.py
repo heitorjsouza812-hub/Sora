@@ -64,6 +64,7 @@ class DependenciasAgente:
         None
     )
     salvar_saida: Callable[[UUID | None, str], Awaitable[str]] | None = None
+    ler_mensagens_pendentes: Callable[[UUID], Awaitable[list[str]]] | None = None
 
 
 @dataclass(slots=True)

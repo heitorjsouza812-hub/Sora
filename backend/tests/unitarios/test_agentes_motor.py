@@ -175,3 +175,29 @@ async def test_prazo_da_ferramenta_volta_como_erro_para_o_modelo() -> None:
     assert isinstance(resultado, ToolMessage)
     assert resultado.status == "error"
     assert "excedeu o prazo" in resultado.content
+
+
+async def test_mensagens_pendentes_entram_antes_do_modelo_e_o_correio_esvazia() -> None:
+    from app.agentes.middleware import montar_middleware
+    from app.agentes.middleware.mensagens import MiddlewareMensagensPendentes
+
+    fila = ["use só fontes de 2026", "foque em cafés"]
+    consultas: list[Any] = []
+
+    async def ler(etapa_id: Any) -> list[str]:
+        consultas.append(etapa_id)
+        itens, fila[:] = list(fila), []
+        return itens
+
+    ctx = contexto()
+    ctx.dependencias.ler_mensagens_pendentes = ler
+    itens = montar_middleware(ctx, [GenericFakeChatModel(messages=iter([]))])
+    mw = next(i for i in itens if isinstance(i, MiddlewareMensagensPendentes))
+    saida = await mw.abefore_model({"messages": []}, None)  # type: ignore[arg-type]
+    assert saida is not None
+    assert [m.content for m in saida["messages"]] == [
+        "<mensagem_da_sora>use só fontes de 2026</mensagem_da_sora>",
+        "<mensagem_da_sora>foque em cafés</mensagem_da_sora>",
+    ]
+    assert consultas == [ctx.etapa_id]
+    assert await mw.abefore_model({"messages": []}, None) is None  # type: ignore[arg-type]

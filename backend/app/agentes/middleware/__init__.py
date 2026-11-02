@@ -77,6 +77,12 @@ def montar_middleware(
                 finalizar=deps.finalizar_passo,
             )
         )
+    if contexto.etapa_id is not None and deps.ler_mensagens_pendentes is not None:
+        from app.agentes.middleware.mensagens import MiddlewareMensagensPendentes
+
+        itens.append(
+            MiddlewareMensagensPendentes(contexto.etapa_id, ler=deps.ler_mensagens_pendentes)
+        )
     if deps.salvar_saida is not None:
         itens.append(MiddlewareSaidaGrande(contexto.cadeia_id, salvar=deps.salvar_saida))
     return itens
