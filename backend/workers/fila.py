@@ -33,6 +33,7 @@ NomeJob = Literal[
     "compactar_historico",
     "responder_canal",
     "reconciliar_travados",
+    "abrir_aba_de_perfil",
 ]
 
 _fila: ArqRedis | None = None

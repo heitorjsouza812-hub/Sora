@@ -46,6 +46,8 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         self._estados: dict[str, dict[str, Any] | None] = {}
         self._bloqueios: dict[str, str] = {}
         self._urls_bloqueadas: dict[str, str] = {}
+        self._apagadas: set[str] = set()
+        """Partições cujo perfil o usuário apagou: o login em memória não volta para o banco."""
         """Último domínio barrado por revisão em cada partição (para o erro certo no goto)."""
         self._paginas: dict[UUID, Any] = {}
 
@@ -261,8 +263,13 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
     async def recarregar_estado_da_particao(self, particao_: str) -> None:
         if particao_.startswith("efemero-"):
             return
-        # sem linha = o usuário apagou o perfil: some também a aprovação de domínio
-        self._estados[particao_] = await self._ler_estado(particao_)
+        novo = await self._ler_estado(particao_)
+        if novo is None and self._estados.get(particao_) is not None:
+            # a linha sumiu: o usuário apagou o perfil (nada do que está em memória volta ao banco)
+            self._apagadas.add(particao_)
+        else:
+            self._apagadas.discard(particao_)
+        self._estados[particao_] = novo
 
     def consumir_revisao(self, aba: Aba) -> RevisaoNavegacaoNecessaria | None:
         """Converte clique/redirecionamento barrado em pedido de revisão do orquestrador."""
@@ -274,10 +281,12 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
 
     async def salvar_estados(self) -> None:
         for particao_, contexto in self._contextos.items():
-            if particao_.startswith("efemero-"):
+            if particao_.startswith("efemero-") or particao_ in self._apagadas:
                 continue
             estado = await contexto.storage_state()
-            anterior = self._estados.get(particao_) or {}
+            # as aprovações de domínio são da API: o banco manda, não a memória do worker
+            atual = await self._ler_estado(particao_)
+            anterior = atual if atual is not None else (self._estados.get(particao_) or {})
             if metadados := anterior.get("_sora"):
                 estado["_sora"] = metadados
             self._estados[particao_] = estado

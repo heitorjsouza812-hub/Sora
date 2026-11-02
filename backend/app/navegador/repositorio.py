@@ -105,13 +105,16 @@ class RepositorioNavegador:
             await sessao.execute(delete(AbaNavegador).where(AbaNavegador.id == aba_id))
             await sessao.commit()
 
-    async def escolha_do_agente(self, agente_id: UUID, usuario_id: UUID) -> EscolhaPerfil:
+    async def escolha_do_agente(self, agente_id: UUID, usuario_id: UUID) -> EscolhaPerfil | None:
+        """Perfil do agente; ``None`` = efêmero (aba descartável, sem login salvo)."""
         async with self._sessoes() as sessao:
             agente = await sessao.scalar(
                 select(Agente).where(Agente.id == agente_id, Agente.usuario_id == usuario_id)
             )
         if agente is None:
             raise ValueError("Agente não encontrado.")
+        if agente.perfil_navegador == "efemero":
+            return None
         tipo = TipoPerfil(agente.perfil_navegador)
         return EscolhaPerfil(tipo=tipo, perfil_id=agente.perfil_navegador_id)
 

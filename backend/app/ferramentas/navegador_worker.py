@@ -24,6 +24,7 @@ from app.navegador.abas import (
     RevisaoNavegacaoNecessaria,
 )
 from app.navegador.arvore import ServicoArvore, para_modelo
+from app.navegador.perfis import EscolhaPerfil
 from app.navegador.persistente import MotorPlaywright
 from app.navegador.repositorio import RepositorioNavegador
 
@@ -189,9 +190,10 @@ class AmbienteNavegador:
                 aba = await self.gerente.abrir(
                     usuario_id=contexto.usuario_id,
                     agente_id=contexto.agente_id,
-                    escolha=escolha,
+                    escolha=escolha or EscolhaPerfil(),
                     url=args.url,
-                    sem_supervisao=contexto.sem_supervisao,
+                    # rotina, ou agente configurado como efêmero: aba descartável sem login
+                    sem_supervisao=contexto.sem_supervisao or escolha is None,
                 )
                 await self.repositorio.salvar_aba(aba)
                 await self.publicar_aba(aba, contexto)

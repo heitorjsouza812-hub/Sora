@@ -44,6 +44,7 @@ for roteador in (
     preferencias.roteador,
     uso.roteador,
     canais.roteador,
+    navegador.roteador_agente,
     navegador.roteador,  # perfis do navegador (Leme): antes da equipe
     pecas.roteador,  # antes da equipe: as rotas de contexto são da Âncora
     equipe.roteador,

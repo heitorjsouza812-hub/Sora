@@ -111,3 +111,79 @@ async def test_listar_revogar_dominio_e_apagar_perfil(mundo: Mundo) -> None:
             assert await sessao.get(PerfilNavegador, perfil_id) is None
         sem_token = await cliente.get("/v1/navegador/perfis")
         assert sem_token.status_code in (401, 403)
+
+
+async def test_criar_perfil_e_escolher_o_perfil_do_agente(mundo: Mundo) -> None:
+    from app.modelos.enumeracoes import TipoAgente
+    from app.modelos.tabelas import Agente
+
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as cliente:
+        a = await entrar(cliente, mundo.fabrica, "perfis-c@exemplo.com")
+        b = await entrar(cliente, mundo.fabrica, "perfis-d@exemplo.com")
+        ua = await _usuario(mundo, "perfis-c@exemplo.com")
+        async with mundo.fabrica() as sessao:
+            sora = await sessao.scalar(
+                select(Agente.id).where(Agente.usuario_id == ua, Agente.tipo == TipoAgente.SORA)
+            )
+        assert sora is not None
+
+        criado = await cliente.post("/v1/navegador/perfis", headers=a, json={"nome": " Banco  X "})
+        assert criado.status_code == 201, criado.text
+        perfil = criado.json()
+        assert perfil["nome"] == "Banco X" and perfil["tipo"] == "nomeado"
+        assert perfil["dominios_aprovados"] == [] and "cookies" not in criado.text
+        duplicado = await cliente.post("/v1/navegador/perfis", headers=a, json={"nome": "banco x"})
+        assert duplicado.status_code == 409
+        vazio = await cliente.post("/v1/navegador/perfis", headers=a, json={"nome": ""})
+        assert vazio.status_code == 422
+        # o mesmo nome em outra conta é livre; e ninguém vê o perfil alheio
+        outro = await cliente.post("/v1/navegador/perfis", headers=b, json={"nome": "Banco X"})
+        assert outro.status_code == 201
+        nomes = [p["nome"] for p in (await cliente.get("/v1/navegador/perfis", headers=a)).json()]
+        assert nomes == ["Banco X"]
+
+        # escolha do agente: padrão, perfil, efêmero
+        url_agente = f"/v1/agentes/{sora}/navegador"
+        inicial = (await cliente.get(url_agente, headers=a)).json()
+        assert inicial["tipo"] == "compartilhado" and inicial["perfil_id"] is None
+        escolhido = await cliente.put(
+            url_agente, headers=a, json={"tipo": "perfil", "perfil_id": perfil["perfil_id"]}
+        )
+        assert escolhido.status_code == 200, escolhido.text
+        assert escolhido.json() == {
+            "agente_id": str(sora),
+            "tipo": "perfil",
+            "perfil_id": perfil["perfil_id"],
+            "perfil_nome": "Banco X",
+        }
+        assert (await cliente.get(url_agente, headers=a)).json()["tipo"] == "perfil"
+        sem_id = await cliente.put(url_agente, headers=a, json={"tipo": "perfil"})
+        assert sem_id.status_code == 422
+        efemero = await cliente.put(url_agente, headers=a, json={"tipo": "efemero"})
+        assert efemero.json()["tipo"] == "efemero" and efemero.json()["perfil_id"] is None
+        invalido = await cliente.put(url_agente, headers=a, json={"tipo": "qualquer"})
+        assert invalido.status_code == 422
+
+        # isolamento: agente e perfil de outra conta dão 404
+        assert (await cliente.get(url_agente, headers=b)).status_code == 404
+        troca = await cliente.put(url_agente, headers=b, json={"tipo": "compartilhado"})
+        assert troca.status_code == 404
+        perfil_b = (await cliente.get("/v1/navegador/perfis", headers=b)).json()[0]["perfil_id"]
+        roubo = await cliente.put(
+            url_agente, headers=a, json={"tipo": "perfil", "perfil_id": perfil_b}
+        )
+        assert roubo.status_code == 404
+        alheio = await cliente.post(
+            f"/v1/navegador/perfis/{perfil_b}/abrir",
+            headers=a,
+            json={"url": "http://exemplo.com/"},
+        )
+        assert alheio.status_code == 404
+
+        # apagar o perfil devolve o agente ao compartilhado
+        await cliente.put(
+            url_agente, headers=a, json={"tipo": "perfil", "perfil_id": perfil["perfil_id"]}
+        )
+        apagado = await cliente.delete(f"/v1/navegador/perfis/{perfil['perfil_id']}", headers=a)
+        assert apagado.status_code == 204
+        assert (await cliente.get(url_agente, headers=a)).json()["tipo"] == "compartilhado"

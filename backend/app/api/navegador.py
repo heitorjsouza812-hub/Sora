@@ -12,21 +12,27 @@ from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.banco import obter_sessao
 from app.core.dependencias import usuario_atual
+from app.eventos.equipe import AbaNavegadorEvento
+from app.ferramentas.base import ErroFerramenta
+from app.modelos.enumeracoes import TipoAgente
 from app.modelos.tabelas import Agente, EstadoNavegador, PerfilNavegador
 from app.navegador.perfis import (
+    PerfilNomeado,
     TipoPerfil,
     cifrar_estado,
     decifrar_estado,
     dominios_aprovados,
     ler_particao,
+    novo_perfil,
     sem_dominio_aprovado,
 )
+from workers.fila import obter_fila
 
 roteador = APIRouter(prefix="/navegador", tags=["navegador"])
 Usuario = Annotated[UUID, Depends(usuario_atual)]
@@ -184,3 +190,161 @@ async def revogar_dominio(
     )
     estado.atualizado_em = datetime.now(UTC)
     await sessao.commit()
+
+
+# ---------- criar perfil e abrir aba para o usuário logar ----------
+
+
+class PerfilEntrada(BaseModel):
+    nome: str = Field(min_length=1, max_length=60)
+
+
+class AbaDoPerfilEntrada(BaseModel):
+    url: str = Field(min_length=8, max_length=2_000, pattern=r"^https?://")
+    agente_id: UUID | None = Field(
+        default=None, description="Dono da aba; sem ele vale a Sora da conta."
+    )
+
+
+@roteador.post("/perfis", status_code=201)
+async def criar_perfil(
+    dados: PerfilEntrada, usuario_id: Usuario, sessao: Sessao
+) -> PerfilNavegadorSaida:
+    existentes = [
+        PerfilNomeado(id=p.id, usuario_id=p.usuario_id, nome=p.nome, cor=p.cor)
+        for p in await sessao.scalars(
+            select(PerfilNavegador).where(PerfilNavegador.usuario_id == usuario_id)
+        )
+    ]
+    try:
+        novo = novo_perfil(usuario_id, dados.nome, existentes)
+    except ErroFerramenta as erro:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(erro)) from erro
+    linha = PerfilNavegador(id=novo.id, usuario_id=usuario_id, nome=novo.nome, cor=novo.cor)
+    sessao.add(linha)
+    await sessao.commit()
+    await sessao.refresh(linha)
+    return PerfilNavegadorSaida(
+        perfil_id=linha.id,
+        nome=linha.nome,
+        tipo="nomeado",
+        dominios_aprovados=[],
+        criado_em=linha.criado_em,
+        atualizado_em=linha.criado_em,
+    )
+
+
+@roteador.post("/perfis/{perfil_id}/abrir", status_code=202)
+async def abrir_aba_no_perfil(
+    perfil_id: UUID, dados: AbaDoPerfilEntrada, usuario_id: Usuario, sessao: Sessao
+) -> AbaNavegadorEvento:
+    """Abre (no worker) uma aba do perfil, já assumida pelo usuário, para ele fazer o login."""
+    perfil = await sessao.scalar(
+        select(PerfilNavegador).where(
+            PerfilNavegador.id == perfil_id, PerfilNavegador.usuario_id == usuario_id
+        )
+    )
+    if perfil is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Perfil não encontrado.")
+    consulta = select(Agente.id).where(Agente.usuario_id == usuario_id, Agente.apagado_em.is_(None))
+    consulta = (
+        consulta.where(Agente.id == dados.agente_id)
+        if dados.agente_id
+        else consulta.where(Agente.tipo == TipoAgente.SORA)
+    )
+    agente_id = await sessao.scalar(consulta.limit(1))
+    if agente_id is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+    fila = await obter_fila()
+    job = await fila.enqueue_job(
+        "abrir_aba_de_perfil", str(usuario_id), str(agente_id), str(perfil.id), dados.url
+    )
+    if job is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um pedido igual em andamento.")
+    try:
+        estado = await job.result(timeout=60)
+    except TimeoutError as erro:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "O navegador não respondeu a tempo."
+        ) from erro
+    except Exception as erro:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, str(erro) or "Não consegui abrir a aba."
+        ) from erro
+    return AbaNavegadorEvento(**estado)
+
+
+# ---------- qual perfil cada agente usa ----------
+
+roteador_agente = APIRouter(tags=["navegador"])
+
+
+class EscolhaPerfilEntrada(BaseModel):
+    tipo: Literal["efemero", "compartilhado", "perfil"]
+    perfil_id: UUID | None = None
+
+
+class EscolhaPerfilSaida(BaseModel):
+    agente_id: UUID
+    tipo: Literal["efemero", "compartilhado", "agente", "perfil"]
+    perfil_id: UUID | None = None
+    perfil_nome: str | None = None
+
+
+_TIPO_NO_BANCO = {"efemero": "efemero", "compartilhado": "compartilhado", "perfil": "nomeado"}
+
+
+async def _agente_da_conta(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID) -> Agente:
+    agente = await sessao.scalar(
+        select(Agente).where(
+            Agente.id == agente_id, Agente.usuario_id == usuario_id, Agente.apagado_em.is_(None)
+        )
+    )
+    if agente is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+    return agente
+
+
+async def _escolha(sessao: AsyncSession, agente: Agente) -> EscolhaPerfilSaida:
+    nome = None
+    if agente.perfil_navegador_id is not None:
+        nome = await sessao.scalar(
+            select(PerfilNavegador.nome).where(PerfilNavegador.id == agente.perfil_navegador_id)
+        )
+    tipo = "perfil" if agente.perfil_navegador == "nomeado" else agente.perfil_navegador
+    return EscolhaPerfilSaida(
+        agente_id=agente.id,
+        tipo=tipo,  # type: ignore[arg-type]
+        perfil_id=agente.perfil_navegador_id,
+        perfil_nome=nome,
+    )
+
+
+@roteador_agente.get("/agentes/{agente_id}/navegador")
+async def perfil_do_agente(
+    agente_id: UUID, usuario_id: Usuario, sessao: Sessao
+) -> EscolhaPerfilSaida:
+    return await _escolha(sessao, await _agente_da_conta(sessao, usuario_id, agente_id))
+
+
+@roteador_agente.put("/agentes/{agente_id}/navegador")
+async def escolher_perfil_do_agente(
+    agente_id: UUID, dados: EscolhaPerfilEntrada, usuario_id: Usuario, sessao: Sessao
+) -> EscolhaPerfilSaida:
+    agente = await _agente_da_conta(sessao, usuario_id, agente_id)
+    if dados.tipo == "perfil":
+        if dados.perfil_id is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Informe o perfil_id.")
+        existe = await sessao.scalar(
+            select(PerfilNavegador.id).where(
+                PerfilNavegador.id == dados.perfil_id, PerfilNavegador.usuario_id == usuario_id
+            )
+        )
+        if existe is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Perfil não encontrado.")
+        agente.perfil_navegador_id = dados.perfil_id
+    else:
+        agente.perfil_navegador_id = None
+    agente.perfil_navegador = _TIPO_NO_BANCO[dados.tipo]
+    await sessao.commit()
+    return await _escolha(sessao, agente)

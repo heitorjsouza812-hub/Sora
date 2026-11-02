@@ -61,6 +61,7 @@ class _Pagina(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(corpo)))
+        self.send_header("Set-Cookie", "sessao=login-do-usuario; Path=/; Max-Age=3600")
         self.end_headers()
         self.wfile.write(corpo)
 
@@ -69,7 +70,7 @@ class _Pagina(BaseHTTPRequestHandler):
 
 
 @pytest.fixture
-def site(monkeypatch: pytest.MonkeyPatch):
+def servidor_local(monkeypatch: pytest.MonkeyPatch):
     servidor = ThreadingHTTPServer(("127.0.0.1", 0), _Pagina)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()
 
@@ -77,6 +78,12 @@ def site(monkeypatch: pytest.MonkeyPatch):
         return None
 
     monkeypatch.setattr("app.navegador.persistente.validar_destino", sem_guarda)
+    yield f"http://localhost:{servidor.server_address[1]}/"
+    servidor.shutdown()
+
+
+@pytest.fixture
+def site(monkeypatch: pytest.MonkeyPatch, servidor_local: str):
 
     async def compartilhado(self, agente_id, usuario_id):
         return pf.EscolhaPerfil(tipo=pf.TipoPerfil.COMPARTILHADO)
@@ -84,8 +91,7 @@ def site(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         "app.navegador.repositorio.RepositorioNavegador.escolha_do_agente", compartilhado
     )
-    yield f"http://localhost:{servidor.server_address[1]}/"
-    servidor.shutdown()
+    yield servidor_local
 
 
 async def _perfil_logado(mundo: Mundo, email: str) -> UUID:
@@ -357,7 +363,8 @@ async def test_rotina_sem_supervisao_usa_aba_efemera_sem_login(mundo: Mundo, sit
     # perfil efêmero: sem cookies de login, sem revisão de domínio e nada gravado no banco
     (aba,) = amb.gerente.do_agente(agente_id, so_efemeras=True)
     assert aba.perfil_efemero and str(aba.id) == efemera["aba_id"]
-    assert await amb.motor.pagina(aba).context.cookies() == []
+    cookies = await amb.motor.pagina(aba).context.cookies()
+    assert all(c["value"] != "segredo" for c in cookies)  # nada do login salvo
     async with mundo.fabrica() as sessao:
         assert (await sessao.get(AbaNavegador, aba.id)) is None
     visto = await amb.executar("navegador_observar", NavegadorObservar(aba_id=aba.id), sem)
@@ -374,3 +381,119 @@ async def test_rotina_sem_supervisao_usa_aba_efemera_sem_login(mundo: Mundo, sit
     await amb.executar("navegador_fechar_aba", NavegadorFecharAba(aba_id=aba.id), sem)
     assert amb.gerente.do_agente(agente_id, so_efemeras=True) == []
     await amb.gerente.fechar(aba_logada.id, agente_id)
+
+
+async def _usuario_id(mundo: Mundo, email: str) -> UUID:
+    async with mundo.fabrica() as sessao:
+        return await sessao.scalar(select(Usuario.id).where(Usuario.email == email))
+
+
+async def test_abrir_aba_no_perfil_novo_para_o_usuario_logar(
+    mundo: Mundo, servidor_local: str
+) -> None:
+    email = "leme-e@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=90) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, email)
+        usuario_id = await _usuario_id(mundo, email)
+        await mundo.iniciar_worker()
+        perfil = (
+            await cliente.post("/v1/navegador/perfis", headers=auth, json={"nome": "Meu banco"})
+        ).json()
+        aberta = await cliente.post(
+            f"/v1/navegador/perfis/{perfil['perfil_id']}/abrir",
+            headers=auth,
+            json={"url": servidor_local},
+        )
+        assert aberta.status_code == 202, aberta.text
+        estado = aberta.json()
+        assert estado["assumida_pelo_usuario"] is True and estado["carregada"] is True
+        assert estado["url"].startswith(servidor_local) and estado["titulo"] == "Painel de teste"
+        abas = (await cliente.get("/v1/navegador/abas", headers=auth)).json()
+        assert [x["aba_id"] for x in abas] == [estado["aba_id"]]
+        assert abas[0]["assumida_pelo_usuario"] is True
+
+        # o login feito na aba (cookie) chega ao banco sem nenhum agente rodando
+        particao = pf.particao(
+            usuario_id,
+            UUID(estado["agente_id"]),
+            pf.EscolhaPerfil(tipo=pf.TipoPerfil.NOMEADO, perfil_id=UUID(perfil["perfil_id"])),
+        )
+
+        async def salvo() -> bool:
+            async with mundo.fabrica() as sessao:
+                linha = await sessao.get(EstadoNavegador, particao)
+                if linha is None:
+                    return False
+                dados = pf.decifrar_estado(
+                    linha.estado_cifrado, usuario_id=usuario_id, particao_=particao
+                )
+                tem_cookie = any(c["name"] == "sessao" for c in dados["cookies"])
+                return tem_cookie and "localhost" in pf.dominios_aprovados(dados)
+
+        await esperar(salvo, 60)
+        lista = (await cliente.get("/v1/navegador/perfis", headers=auth)).json()
+        assert lista[0]["dominios_aprovados"] == ["localhost"]
+        assert "login-do-usuario" not in str(lista)
+        devolvida = await cliente.post(
+            f"/v1/navegador/abas/{estado['aba_id']}/devolver", headers=auth
+        )
+        assert devolvida.json()["assumida_pelo_usuario"] is False
+
+
+async def test_agente_efemero_abre_aba_descartavel_sem_login(
+    mundo: Mundo, servidor_local: str
+) -> None:
+    from uuid import uuid4
+
+    from app.ferramentas.base import ContextoFerramenta
+    from app.modelos.enumeracoes import TipoAgente
+    from app.modelos.tabelas import Agente
+    from app.navegador import NavegadorAbrir
+
+    email = "leme-f@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=60) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, email)
+        usuario_id = await _usuario_id(mundo, email)
+        async with mundo.fabrica() as sessao:
+            sora = await sessao.scalar(
+                select(Agente.id).where(
+                    Agente.usuario_id == usuario_id, Agente.tipo == TipoAgente.SORA
+                )
+            )
+        # o perfil compartilhado tem login salvo; o agente efêmero não o enxerga
+        particao = pf.particao(usuario_id, sora, COMPARTILHADO)
+        estado = {
+            "cookies": [{"name": "s", "value": "x", "domain": "localhost", "path": "/"}],
+            "origins": [],
+        }
+        async with mundo.fabrica() as sessao:
+            sessao.add(
+                EstadoNavegador(
+                    particao=particao,
+                    usuario_id=usuario_id,
+                    estado_cifrado=pf.cifrar_estado(
+                        estado, usuario_id=usuario_id, particao_=particao
+                    ),
+                )
+            )
+            await sessao.commit()
+        escolha = await cliente.put(
+            f"/v1/agentes/{sora}/navegador", headers=auth, json={"tipo": "efemero"}
+        )
+        assert escolha.status_code == 200
+        await mundo.iniciar_worker()
+
+        async def pronto() -> Any:
+            return (mundo._worker.ctx or {}).get("navegador")
+
+        amb = await esperar(pronto, 60)
+        ctx = ContextoFerramenta(usuario_id=usuario_id, agente_id=sora, conversa_id=uuid4())
+        aberta = await amb.executar("navegador_abrir", NavegadorAbrir(url=servidor_local), ctx)
+        (aba,) = amb.gerente.do_agente(sora)
+        assert aba.perfil_efemero and str(aba.id) == aberta["aba_id"]
+        cookies = await amb.motor.pagina(aba).context.cookies()
+        assert all(c["name"] != "s" for c in cookies)  # nada do login do compartilhado
+        async with mundo.fabrica() as sessao:
+            assert await sessao.get(AbaNavegador, aba.id) is None  # nem fica salva
+            pedidos = select(Aprovacao).where(Aprovacao.usuario_id == usuario_id)
+            assert not (await sessao.scalars(pedidos)).all()  # sem cartão

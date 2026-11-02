@@ -19,6 +19,7 @@ from app.core.banco import fabrica_sessoes
 from app.core.config import obter_configuracao
 from app.core.redis import criar_cliente_redis
 from app.llm.falso import verificar_modelo_falso_permitido
+from workers.ancora import compactar_historico
 from workers.aprovacoes import expirar_aprovacao
 from workers.cadeia import (
     ajustar,
@@ -29,7 +30,6 @@ from workers.cadeia import (
     verificar_cadeia,
 )
 from workers.canal import responder_canal
-from workers.ancora import compactar_historico
 from workers.conversa import responder_direto, retomar_conversa
 from workers.equipe import (
     despachar_equipe,
@@ -38,7 +38,7 @@ from workers.equipe import (
     recuperar_equipe_apos_queda,
 )
 from workers.fila import configurar_fila
-from workers.navegador import fechar_navegador, iniciar_navegador
+from workers.navegador import abrir_aba_de_perfil, fechar_navegador, iniciar_navegador
 from workers.rotinas import disparar_rotinas, executar_rotina
 from workers.travados import reconciliar_travados
 
@@ -96,6 +96,7 @@ class WorkerSettings:
         executar_rotina,
         compactar_historico,
         responder_canal,
+        abrir_aba_de_perfil,
         despachar_equipe,
         executar_item_fila,
         executar_tarefa_canal,
