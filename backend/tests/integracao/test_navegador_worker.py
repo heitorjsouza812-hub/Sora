@@ -154,9 +154,13 @@ async def test_dominio_novo_em_perfil_logado_pausa_aprova_e_navega(mundo: Mundo,
 
         cartao = await _cartao(mundo, usuario_id)
         assert cartao.acao["dominio"] == "localhost"
-        async with mundo.fabrica() as sessao:
-            etapa = await sessao.get(Etapa, cartao.etapa_id)
-            assert etapa.status == StatusEtapa.AGUARDANDO_APROVACAO
+
+        async def pausada() -> bool:
+            async with mundo.fabrica() as sessao:
+                etapa = await sessao.get(Etapa, cartao.etapa_id)
+                return etapa.status == StatusEtapa.AGUARDANDO_APROVACAO
+
+        assert await esperar(pausada, 30)
         assert not leitura.done()
 
         decidida = await cliente.post(

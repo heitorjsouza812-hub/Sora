@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, ClassVar, Literal, get_args
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from app.modelos.enumeracoes import (
     AutorMensagem,
@@ -161,6 +161,16 @@ class AprovacaoPedida(EventoBase):
     perfil: dict[str, Any] | None = None
     agente_id: UUID | None = None
     opcoes: list[dict[str, str]] | None = None
+
+    @model_serializer(mode="wrap")
+    def _sem_extras_vazios(self, proximo: Any) -> dict[str, Any]:
+        """Cartão comum mantém o formato de sempre; os campos do cartão de domínio só vão
+        quando existem (Leme, etapa 4)."""
+        dados = proximo(self)
+        for campo in ("tipo", "dominio", "url", "perfil", "agente_id", "opcoes"):
+            if dados.get(campo) is None:
+                dados.pop(campo, None)
+        return dados
 
 
 class AprovacaoResolvida(EventoBase):

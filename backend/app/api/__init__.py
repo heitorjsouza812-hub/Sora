@@ -14,10 +14,11 @@ from app.api import (
     conversas,
     entregas,
     equipe,
-    pecas,
     eventos,
     habilidades,
     modelos,
+    navegador,
+    pecas,
     perguntas,
     preferencias,
     provedores,
@@ -43,6 +44,7 @@ for roteador in (
     preferencias.roteador,
     uso.roteador,
     canais.roteador,
+    navegador.roteador,  # perfis do navegador (Leme): antes da equipe
     pecas.roteador,  # antes da equipe: as rotas de contexto são da Âncora
     equipe.roteador,
     rotinas.roteador,

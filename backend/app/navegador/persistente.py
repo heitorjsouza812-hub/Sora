@@ -261,9 +261,8 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
     async def recarregar_estado_da_particao(self, particao_: str) -> None:
         if particao_.startswith("efemero-"):
             return
-        estado = await self._ler_estado(particao_)
-        if estado is not None:
-            self._estados[particao_] = estado
+        # sem linha = o usuário apagou o perfil: some também a aprovação de domínio
+        self._estados[particao_] = await self._ler_estado(particao_)
 
     def consumir_revisao(self, aba: Aba) -> RevisaoNavegacaoNecessaria | None:
         """Converte clique/redirecionamento barrado em pedido de revisão do orquestrador."""
@@ -271,9 +270,7 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         if dominio is None:
             return None
         url = self._urls_bloqueadas.pop(aba.particao, aba.url)
-        return RevisaoNavegacaoNecessaria(
-            dominio, aba_id=aba.id, url=url, particao=aba.particao
-        )
+        return RevisaoNavegacaoNecessaria(dominio, aba_id=aba.id, url=url, particao=aba.particao)
 
     async def salvar_estados(self) -> None:
         for particao_, contexto in self._contextos.items():
