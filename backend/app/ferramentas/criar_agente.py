@@ -9,6 +9,7 @@ nome é reaproveitado e o agente só nasce uma vez (a decisão volta como
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 from langgraph.types import interrupt
@@ -38,10 +39,31 @@ def resumo_do_cartao(nome: str, papel: str) -> str:
     return f"A Sora quer criar o agente {nome}: {papel}"
 
 
+async def _agendar_expiracao(aprovacao_id, expira_em) -> None:
+    """Agenda ``expirar_aprovacao``. Se a fila falhar, o reconciliador do worker expira o
+    cartão vencido mesmo assim: a falha aqui não pode derrubar o pedido."""
+    from workers.fila import enfileirar
+
+    try:
+        await enfileirar(
+            "expirar_aprovacao",
+            id_job=f"expirar:{aprovacao_id}",
+            agendar_para=expira_em,
+            aprovacao_id=str(aprovacao_id),
+        )
+    except Exception:
+        logging.getLogger(__name__).warning("não agendei a expiração de %s", aprovacao_id)
+
+
 async def criar_agente(args: CriarAgente, contexto: ContextoFerramenta) -> str:
     """Cria o cartão de aprovação, interrompe e, se aprovado, cria o agente."""
     nome = args.nome.strip()
-    acao = {"ferramenta": "criar_agente", "nome": nome, "papel": args.papel}
+    acao = {
+        "ferramenta": "criar_agente",
+        "nome": nome,
+        "papel": args.papel,
+        "conversa_id": str(contexto.conversa_id),
+    }
     novo_cartao = None
     async with fabrica_sessoes()() as sessao:
         ativos = list(
@@ -68,6 +90,7 @@ async def criar_agente(args: CriarAgente, contexto: ContextoFerramenta) -> str:
                 Aprovacao.etapa_id == contexto.etapa_id,
                 Aprovacao.acao == acao,
             )
+            .order_by(Aprovacao.expira_em.desc())
             .limit(1)
         )
         if cartao is None:
@@ -93,6 +116,7 @@ async def criar_agente(args: CriarAgente, contexto: ContextoFerramenta) -> str:
         status_do_cartao = cartao.status
     if novo_cartao is not None:
         await emitir(contexto, novo_cartao)
+        await _agendar_expiracao(aprovacao_id, novo_cartao.expira_em)
 
     if status_do_cartao == StatusAprovacao.PENDENTE:
         decisao = interrupt({"tipo": "aprovacao", "aprovacao_id": str(aprovacao_id)})

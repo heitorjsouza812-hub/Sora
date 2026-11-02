@@ -40,6 +40,20 @@ class MiddlewareLembretes(AgentMiddleware):
         if not self._inicio_enviado and "falar" not in nomes:
             self._inicio_enviado = True
             return {"messages": [SystemMessage(content=carregar_prompt("lembrete_inicio_turno"))]}
+        # O lembrete de entrega entra na chamada seguinte ao resultado de uma ferramenta que não
+        # é ``falar``. Nunca logo depois da resposta do modelo: uma mensagem solta entre o
+        # ``AIMessage`` com chamadas e o ``ToolMessage`` quebra o roteamento do grafo e perde a
+        # pausa (``interrupt``) da ferramenta na retomada.
+        mensagens = self._mensagens(state)
+        if (
+            not self._entrega_enviada
+            and mensagens
+            and isinstance(mensagens[-1], ToolMessage)
+            and nomes
+            and nomes[-1] != "falar"
+        ):
+            self._entrega_enviada = True
+            return {"messages": [SystemMessage(content=carregar_prompt("lembrete_entrega"))]}
         chamadas_desde_falar = 0
         for nome in reversed(nomes):
             if nome == "falar":
@@ -48,16 +62,4 @@ class MiddlewareLembretes(AgentMiddleware):
         if chamadas_desde_falar >= CHAMADAS_ATE_LEMBRETE_DE_SILENCIO and not self._silencio_enviado:
             self._silencio_enviado = True
             return {"messages": [SystemMessage(content=carregar_prompt("lembrete_silencio"))]}
-        return None
-
-    async def aafter_model(self, state: Any, runtime: Runtime) -> dict[str, Any] | None:
-        if self._entrega_enviada:
-            return None
-        mensagens = self._mensagens(state)
-        if not mensagens or isinstance(mensagens[-1], ToolMessage):
-            return None
-        nomes = self._nomes_de_ferramentas(mensagens)
-        if nomes and nomes[-1] != "falar":
-            self._entrega_enviada = True
-            return {"messages": [SystemMessage(content=carregar_prompt("lembrete_entrega"))]}
         return None

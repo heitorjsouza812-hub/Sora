@@ -7,6 +7,7 @@
 As duas retomam pelo cabeçalho ``Last-Event-ID``.
 """
 
+import re
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 from uuid import UUID
@@ -38,9 +39,13 @@ RESPOSTA_SSE: dict[int | str, dict[str, object]] = {
         "description": "Fluxo `text/event-stream` com eventos nomeados (`event:`) e `id` do Redis.",
         "content": {"text/event-stream": {"schema": {"type": "string"}}},
     },
+    400: {"description": "`Last-Event-ID` com formato inválido."},
     404: {"description": "Conversa inexistente ou de outro usuário."},
     429: {"description": "O usuário já tem o máximo de streams abertos."},
 }
+
+ID_DE_EVENTO = re.compile(r"^\d{1,20}(-\d{1,20})?$")
+"""Formato dos ids do Redis Stream (``ms-seq``); outro formato é 400, nunca um replay vazio."""
 
 CABECALHOS_SSE = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -67,6 +72,13 @@ async def _transmitir(
 ) -> EventSourceResponse:
     """Reserva a vaga de stream do usuário (429 se cheio) e devolve o SSE que a libera ao
     terminar; o stream acaba quando o token vence (API-01, API-08)."""
+    if ultimo_evento_id is not None:
+        ultimo_evento_id = ultimo_evento_id.strip() or None
+    if ultimo_evento_id is not None and not ID_DE_EVENTO.fullmatch(ultimo_evento_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Last-Event-ID inválido. Use o id do último evento recebido (ex.: 1730000000000-0).",
+        )
     conexao = await registrar_conexao(redis, usuario_id)
     if conexao is None:
         raise HTTPException(

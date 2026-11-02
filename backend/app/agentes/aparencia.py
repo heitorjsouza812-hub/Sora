@@ -7,6 +7,7 @@ Escolhida por código, nunca pelo modelo. Nomes e paleta são os mesmos do app
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from app.modelos.enumeracoes import Movimento
@@ -52,25 +53,33 @@ class Aparencia:
 
 
 def escolher_nome(em_uso: set[str]) -> str:
-    """O primeiro nome livre de ``NOMES_AGENTES`` (nunca "Sora")."""
+    """O primeiro nome livre de ``NOMES_AGENTES`` (nunca "Sora").
+
+    Quando a lista acaba, repete os nomes com número ("Atlas 2"): nunca falha."""
     normalizados = {nome.casefold().strip() for nome in em_uso}
-    try:
-        return next(nome for nome in NOMES_AGENTES if nome.casefold() not in normalizados)
-    except StopIteration as erro:
-        raise ValueError("Não há nome de agente livre.") from erro
+    for rodada in range(1, len(normalizados) + 2):
+        for nome in NOMES_AGENTES:
+            candidato = nome if rodada == 1 else f"{nome} {rodada}"
+            if candidato.casefold() not in normalizados:
+                return candidato
+    raise AssertionError("inalcançável: há sempre um nome numerado livre")
 
 
-def escolher_cor(em_uso: set[str]) -> str:
-    """A primeira cor livre de ``PALETA_AGENTES`` (nunca ``COR_SORA``)."""
-    normalizadas = {cor.upper() for cor in em_uso}
-    try:
-        return next(cor for cor in PALETA_AGENTES if cor.upper() not in normalizadas)
-    except StopIteration as erro:
-        raise ValueError("Não há cor de agente livre.") from erro
+def escolher_cor(em_uso: Iterable[str]) -> str:
+    """A primeira cor livre de ``PALETA_AGENTES`` (nunca ``COR_SORA``).
+
+    Quando a paleta acaba, reutiliza a que tem menos agentes (a primeira da paleta no empate):
+    nunca falha e nunca devolve a cor da Sora. ``em_uso`` pode ser um ``set`` (cada cor conta
+    uma vez) ou uma lista (conta repetições)."""
+    usadas = [cor.upper() for cor in em_uso]
+    for cor in PALETA_AGENTES:
+        if cor.upper() not in usadas:
+            return cor
+    return min(PALETA_AGENTES, key=lambda cor: usadas.count(cor.upper()))
 
 
 def aparencia_do_especialista(
-    papel: str, nomes_em_uso: set[str], cores_em_uso: set[str]
+    papel: str, nomes_em_uso: set[str], cores_em_uso: Iterable[str]
 ) -> Aparencia:
     """Aparência completa de um especialista novo na cadeia."""
     try:

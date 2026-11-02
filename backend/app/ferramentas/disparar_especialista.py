@@ -9,10 +9,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from app.agentes.aparencia import aparencia_do_especialista
 from app.core.banco import fabrica_sessoes
+from app.eventos.tipos import AgenteCriado
+from app.ferramentas.ambiente import emitir
 from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
-from app.modelos.enumeracoes import Nivel
-from app.modelos.tabelas import Cadeia, Etapa
+from app.modelos.enumeracoes import Nivel, TipoAgente
+from app.modelos.tabelas import Agente, Cadeia, Etapa
 from app.orquestrador.estados import FINAIS_ETAPA
 
 
@@ -49,9 +52,62 @@ async def disparar_especialista(args: DispararEspecialista, contexto: ContextoFe
                 select(func.coalesce(func.max(Etapa.ordem), 0)).where(Etapa.cadeia_id == cadeia.id)
             )
         ) + 1
+        # A etapa precisa de um agente: reaproveita o da cadeia com o mesmo papel ou cria um.
+        agente = await sessao.scalar(
+            select(Agente).where(
+                Agente.cadeia_id == cadeia.id,
+                Agente.papel == args.papel,
+                Agente.usuario_id == cadeia.usuario_id,
+            )
+        )
+        novo_agente: AgenteCriado | None = None
+        if agente is None:
+            nomes = set(
+                (
+                    await sessao.scalars(
+                        select(Agente.nome).where(Agente.usuario_id == cadeia.usuario_id)
+                    )
+                ).all()
+            )
+            cores = list(
+                (
+                    await sessao.scalars(
+                        select(Agente.cor)
+                        .join(Cadeia, Cadeia.id == Agente.cadeia_id)
+                        .where(
+                            Agente.usuario_id == cadeia.usuario_id,
+                            Cadeia.conversa_id == cadeia.conversa_id,
+                        )
+                    )
+                ).all()
+            )
+            aparencia = aparencia_do_especialista(args.papel, nomes, cores)
+            agente = Agente(
+                usuario_id=cadeia.usuario_id,
+                tipo=TipoAgente.ESPECIALISTA,
+                nome=aparencia.nome,
+                funcao=aparencia.funcao,
+                papel=args.papel,
+                cor=aparencia.cor,
+                movimento=aparencia.movimento,
+                nivel_padrao=(args.nivel or Nivel.N2).value,
+                ferramentas=[],
+                cadeia_id=cadeia.id,
+            )
+            sessao.add(agente)
+            await sessao.flush()
+            novo_agente = AgenteCriado(
+                agente_id=agente.id,
+                tipo=agente.tipo,
+                nome=agente.nome,
+                funcao=agente.funcao,
+                cor=agente.cor,
+                movimento=agente.movimento,
+            )
         etapa = Etapa(
             cadeia_id=cadeia.id,
             ordem=ordem,
+            agente_id=agente.id,
             especialista=args.papel,
             titulo=args.tarefa[:80],
             nivel=(args.nivel or Nivel.N2).value,
@@ -60,5 +116,7 @@ async def disparar_especialista(args: DispararEspecialista, contexto: ContextoFe
         sessao.add(etapa)
         await sessao.commit()
         etapa_id = str(etapa.id)
+    if novo_agente is not None:
+        await emitir(contexto, novo_agente)
     await enfileirar("executar_etapa", etapa_id=etapa_id)
     return etapa_id

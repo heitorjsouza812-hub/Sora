@@ -18,7 +18,7 @@ from app.eventos.streams import publicar_evento
 from app.eventos.tipos import AprovacaoResolvida
 from app.modelos.enumeracoes import DecisaoAprovacao, StatusAprovacao
 from app.modelos.esquemas import DecisaoAprovacaoEntrada
-from app.modelos.tabelas import Aprovacao, Cadeia, Etapa, RegraPermissao
+from app.modelos.tabelas import Aprovacao, Cadeia, Conversa, Etapa, RegraPermissao
 
 roteador = APIRouter(
     prefix="/aprovacoes", tags=["aprovacoes"], dependencies=[Depends(usuario_atual)]
@@ -82,6 +82,21 @@ async def decidir_aprovacao(
             .join(Etapa, Etapa.cadeia_id == Cadeia.id)
             .where(Etapa.id == aprovacao.etapa_id, Cadeia.usuario_id == usuario_id)
         )
+    conversa_fora_de_cadeia: UUID | None = None
+    if aprovacao.etapa_id is None and isinstance(aprovacao.acao, dict):
+        # Aprovação pedida pela Sora ou por um agente individual, fora de cadeia: a conversa
+        # vem no próprio cartão (``acao.conversa_id``) e precisa ser do usuário.
+        try:
+            candidata = UUID(str(aprovacao.acao.get("conversa_id")))
+        except ValueError:
+            candidata = None
+        if candidata is not None:
+            conversa_fora_de_cadeia = await sessao.scalar(
+                select(Conversa.id).where(
+                    Conversa.id == candidata, Conversa.usuario_id == usuario_id
+                )
+            )
+            conversa_id = conversa_fora_de_cadeia
     novo_status = aprovacao.status
     etapa_id = aprovacao.etapa_id
     await sessao.commit()
@@ -97,6 +112,13 @@ async def decidir_aprovacao(
         await fila.enqueue_job(
             "executar_etapa",
             str(etapa_id),
+            {"aprovacao_id": str(aprovacao_id), "decisao": dados.decisao.value},
+            _job_id=f"aprovacao:{aprovacao_id}",
+        )
+    elif conversa_fora_de_cadeia is not None:
+        await fila.enqueue_job(
+            "retomar_conversa",
+            str(conversa_fora_de_cadeia),
             {"aprovacao_id": str(aprovacao_id), "decisao": dados.decisao.value},
             _job_id=f"aprovacao:{aprovacao_id}",
         )

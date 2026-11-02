@@ -9,6 +9,7 @@ worker fala por ele. Termina com ``sugestoes``.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -20,6 +21,8 @@ from app.eventos.tipos import SugestoesEvento
 from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
 from app.modelos.enumeracoes import TipoAgente
 from app.modelos.tabelas import Agente, Conversa, Mensagem
+
+registro = logging.getLogger(__name__)
 
 
 def _texto_da_resposta(resultado: dict[str, Any]) -> str:
@@ -33,7 +36,7 @@ def _texto_da_resposta(resultado: dict[str, Any]) -> str:
 async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
     """Roda a Sora (ou o agente individual) e manda o texto pelos eventos
     ``mensagem.*``, terminando com ``sugestoes``. Quem põe na fila: a API."""
-    from app.agentes import ContextoAgente, montar_e_rodar_agente
+    from app.agentes import ContextoAgente
     from app.ferramentas.base import ContextoFerramenta
     from app.ferramentas.falar import Falar, falar
     from app.orquestrador.modelos import modelos_do_papel
@@ -66,7 +69,7 @@ async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
         agente_id=agente_id,
         conversa_id=conversa_id,
         papel=papel,
-        dependencias=dependencias_da_etapa(),
+        dependencias=dependencias_da_etapa(ctx, usuario_id=usuario_id, conversa_id=conversa_id),
     )
     if modelo_falso_ativo():
         # O roteiro da Sora falsa chama ``falar`` em ciclo para servir outros fluxos do agente.
@@ -80,27 +83,99 @@ async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
             ctx["redis_eventos"], SugestoesEvento(itens=[]), conversa_id, usuario_id
         )
         return
-    resultado = await montar_e_rodar_agente(
-        contexto=contexto,
-        modelos=modelos,
-        checkpointer=ctx["checkpointer"],
-        entrada={"messages": [HumanMessage(texto)]},
+    await _rodar_e_falar(
+        ctx, contexto, modelos, antes=antes, entrada={"messages": [HumanMessage(texto)]}
     )
+
+
+MENSAGEM_FALHA = (
+    "Não consegui terminar essa resposta agora (o modelo de IA não respondeu). "
+    "Tente de novo em instantes ou confira o provedor em Configurações → Modelos de IA."
+)
+
+
+async def _rodar_e_falar(
+    ctx: dict[str, Any],
+    contexto: Any,
+    modelos: list[Any],
+    *,
+    antes: int | None,
+    entrada: dict[str, Any] | None = None,
+    resposta: Any | None = None,
+) -> None:
+    """Roda (ou retoma) o agente da conversa. Se o modelo respondeu em texto puro, o worker
+    fala por ele; se o provedor falhar, a conversa recebe um aviso em PT-BR em vez de ficar muda."""
+    from app.agentes import montar_e_rodar_agente
+    from app.ferramentas.base import ContextoFerramenta
+    from app.ferramentas.falar import Falar, falar
+
+    ferramenta = ContextoFerramenta(
+        usuario_id=contexto.usuario_id,
+        agente_id=contexto.agente_id,
+        conversa_id=contexto.conversa_id,
+    )
+    try:
+        resultado = await montar_e_rodar_agente(
+            contexto=contexto,
+            modelos=modelos,
+            checkpointer=ctx["checkpointer"],
+            entrada=entrada,
+            resposta=resposta,
+        )
+    except Exception:
+        registro.exception("o agente da conversa %s falhou", contexto.conversa_id)
+        await falar(Falar(texto=MENSAGEM_FALHA), ferramenta)
+        await publicar_evento(
+            ctx["redis_eventos"],
+            SugestoesEvento(itens=[]),
+            contexto.conversa_id,
+            contexto.usuario_id,
+        )
+        return
 
     if not resultado.get("__interrupt__"):
         async with ctx["sessoes"]() as sessao:
             depois = await sessao.scalar(
                 select(func.count())
                 .select_from(Mensagem)
-                .where(Mensagem.conversa_id == conversa_id)
+                .where(Mensagem.conversa_id == contexto.conversa_id)
             )
-        resposta = _texto_da_resposta(resultado)
-        if depois == antes and resposta:
+        texto = _texto_da_resposta(resultado)
+        if (antes is None or depois == antes) and texto:
             # O modelo respondeu em texto puro: o worker fala por ele.
-            await falar(
-                Falar(texto=resposta),
-                ContextoFerramenta(
-                    usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id
-                ),
-            )
-    await publicar_evento(ctx["redis_eventos"], SugestoesEvento(itens=[]), conversa_id, usuario_id)
+            await falar(Falar(texto=texto), ferramenta)
+    await publicar_evento(
+        ctx["redis_eventos"], SugestoesEvento(itens=[]), contexto.conversa_id, contexto.usuario_id
+    )
+
+
+async def retomar_conversa(ctx: dict[str, Any], conversa_id: str, resposta: Any) -> None:
+    """Retoma o agente de uma conversa fora de cadeia (Sora ou agente individual) depois que o
+    usuário respondeu uma pergunta ou decidiu uma aprovação. Quem põe na fila: a API."""
+    from app.agentes import ContextoAgente
+    from app.orquestrador.modelos import modelos_do_papel
+    from workers.cadeia import dependencias_da_etapa, valor_da_retomada
+
+    valor = valor_da_retomada(resposta)
+    if valor is None:
+        return
+    async with ctx["sessoes"]() as sessao:
+        conversa = await sessao.get(Conversa, UUID(conversa_id))
+        agente = await sessao.get(Agente, conversa.agente_id) if conversa else None
+        if conversa is None or agente is None:
+            return
+        papel = "sora" if agente.tipo == TipoAgente.SORA else "individual"
+        modelos = await modelos_do_papel(
+            sessao, conversa.usuario_id, papel, dificuldade=1, conversa_privada=conversa.privada
+        )
+        usuario_id, agente_id = conversa.usuario_id, agente.id
+    contexto = ContextoAgente(
+        usuario_id=usuario_id,
+        agente_id=agente_id,
+        conversa_id=UUID(conversa_id),
+        papel=papel,
+        dependencias=dependencias_da_etapa(
+            ctx, usuario_id=usuario_id, conversa_id=UUID(conversa_id)
+        ),
+    )
+    await _rodar_e_falar(ctx, contexto, modelos, antes=None, resposta=valor)

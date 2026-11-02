@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from arq import cron
 from arq.connections import RedisSettings
 
 from app.agentes.checkpointer import abrir_checkpointer, fechar_checkpointer
@@ -27,8 +28,9 @@ from workers.cadeia import (
     planejar_cadeia,
     verificar_cadeia,
 )
-from workers.conversa import responder_direto
+from workers.conversa import responder_direto, retomar_conversa
 from workers.fila import configurar_fila
+from workers.travados import reconciliar_travados
 
 
 def verificar_trava_de_producao() -> None:
@@ -75,8 +77,11 @@ class WorkerSettings:
         entregar_resultado,
         ajustar,
         responder_direto,
+        retomar_conversa,
         expirar_aprovacao,
+        reconciliar_travados,
     ]
+    cron_jobs: ClassVar[list[Any]] = [cron(reconciliar_travados, second=0, run_at_startup=False)]
     on_startup = ao_iniciar
     on_shutdown = ao_desligar
     max_tries = 3

@@ -29,6 +29,7 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
     "sora": (
         "falar",
         "perguntar",
+        "criar_agente",
         "disparar_especialista",
         "ver_especialista",
         "mensagem_especialista",
@@ -175,7 +176,9 @@ async def rodar_etapa(
     )
     configuracao = {"configurable": {"thread_id": thread_id}}
     chamada = Command(resume=resposta) if resposta is not None else entrada
-    resultado = await agente.ainvoke(chamada, config=configuracao)
+    # ``sync``: o checkpoint de cada passo é gravado antes de o job terminar. No modo padrão
+    # (assíncrono) uma pausa recém-criada pode ainda não estar gravada quando o usuário responde.
+    resultado = await agente.ainvoke(chamada, config=configuracao, durability="sync")
     return dict(resultado)
 
 

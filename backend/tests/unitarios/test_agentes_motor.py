@@ -50,11 +50,15 @@ def test_aparencia_e_deterministica_e_reserva_a_cor_da_sora() -> None:
     assert aparencia.movimento is Movimento.VIBRACAO
 
 
-def test_aparencia_recusa_lista_esgotada() -> None:
-    with pytest.raises(ValueError, match="nome"):
-        escolher_nome(set(NOMES_AGENTES))
-    with pytest.raises(ValueError, match="cor"):
-        escolher_cor(set(PALETA_AGENTES))
+def test_aparencia_reaproveita_quando_a_lista_esgota_sem_falhar() -> None:
+    nome = escolher_nome(set(NOMES_AGENTES))
+    assert nome not in NOMES_AGENTES and nome.startswith(NOMES_AGENTES[0])
+    assert escolher_nome(set(NOMES_AGENTES) | {nome}) not in {*NOMES_AGENTES, nome}
+    # paleta cheia: reutiliza a cor menos usada, nunca a da Sora
+    assert escolher_cor(set(PALETA_AGENTES)) == PALETA_AGENTES[0]
+    mais_usadas = [*PALETA_AGENTES, PALETA_AGENTES[0], PALETA_AGENTES[0], PALETA_AGENTES[1]]
+    assert escolher_cor(mais_usadas) == PALETA_AGENTES[2]
+    assert COR_SORA not in PALETA_AGENTES
 
 
 @pytest.mark.parametrize(
@@ -90,7 +94,8 @@ class AgenteGravador:
     def __init__(self) -> None:
         self.chamada: tuple[Any, Any] | None = None
 
-    async def ainvoke(self, entrada: Any, *, config: Any) -> dict[str, Any]:
+    async def ainvoke(self, entrada: Any, *, config: Any, durability: str) -> dict[str, Any]:
+        assert durability == "sync"  # o checkpoint da pausa precisa estar gravado ao terminar
         self.chamada = entrada, config
         return {"ok": True}
 

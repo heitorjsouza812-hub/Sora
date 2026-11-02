@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -138,6 +139,14 @@ async def _contexto_triagem(
     )
 
 
+registro = logging.getLogger(__name__)
+
+MENSAGEM_FALHA_DO_PROVEDOR = (
+    "Não consegui falar com o seu modelo de IA agora. Veja a chave e o limite do provedor em "
+    "Configurações → Modelos de IA e envie o pedido de novo. Sua mensagem foi guardada."
+)
+
+
 async def _publicar_primeira_resposta(
     redis: Redis,
     sessao: AsyncSession,
@@ -232,7 +241,22 @@ async def _encaminhar(
         }
     contexto = await _contexto_triagem(sessao, usuario_id, conversa.id)
     contexto.tem_modelo_de_imagem = any("imagem" in m.capacidades for m in seletor.modelos)
-    resultado = await triar(mensagem.conteudo, contexto, seletor, configs)
+    try:
+        resultado = await triar(mensagem.conteudo, contexto, seletor, configs)
+    except Exception as erro:
+        # Provedor fora do ar, chave inválida, limite estourado ou resposta ilegível: o texto
+        # do usuário não se perde. A conversa é criada e a Sora explica o que houve.
+        registro.warning("triagem falhou (%s): %s", type(erro).__name__, str(erro)[:200])
+        await sessao.commit()
+        await _publicar_primeira_resposta(
+            redis,
+            sessao,
+            usuario_id=usuario_id,
+            conversa_id=conversa.id,
+            texto=MENSAGEM_FALHA_DO_PROVEDOR,
+            agente_id=agente.id,
+        )
+        return
     sessao.add(
         Roteamento(
             mensagem_id=mensagem.id,

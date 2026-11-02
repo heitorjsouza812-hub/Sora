@@ -61,7 +61,7 @@ async def responder_pergunta(
 
     etapa_id: UUID | None = None
     if pergunta.cadeia_id is not None:
-        etapa_id = await sessao.scalar(
+        base = (
             select(Etapa.id)
             .join(Cadeia, Cadeia.id == Etapa.cadeia_id)
             .where(
@@ -72,6 +72,12 @@ async def responder_pergunta(
             .order_by(Etapa.ordem, Etapa.id)
             .limit(1)
         )
+        # A etapa guarda o id da pergunta que a pausou: com várias etapas esperando, acorda a certa.
+        etapa_id = await sessao.scalar(
+            base.where(Etapa.saida["pergunta_id"].astext == str(pergunta_id))
+        )
+        if etapa_id is None:
+            etapa_id = await sessao.scalar(base)
     pergunta.resposta = valor
     pergunta.respondida_em = datetime.now(UTC)
     await sessao.commit()
@@ -80,6 +86,14 @@ async def responder_pergunta(
         await fila.enqueue_job(
             "executar_etapa",
             str(etapa_id),
+            {"pergunta_id": str(pergunta_id), "valor": valor},
+            _job_id=f"pergunta:{pergunta_id}",
+        )
+    elif pergunta.cadeia_id is None:
+        # Pergunta da Sora ou de um agente individual, fora de cadeia: retoma a conversa.
+        await fila.enqueue_job(
+            "retomar_conversa",
+            str(pergunta.conversa_id),
             {"pergunta_id": str(pergunta_id), "valor": valor},
             _job_id=f"pergunta:{pergunta_id}",
         )

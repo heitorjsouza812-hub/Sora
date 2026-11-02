@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -197,7 +198,12 @@ async def test_veredito_grava_na_etapa(cenario: Cenario, fila) -> None:
         requisitos=[RequisitoVerificado(requisito="r", evidencia="e", status="parcial")],
         motivo="faltou fonte",
     )
-    texto = await veredito(v, cenario.contexto(etapa_id=etapa_id))
+    # o veredito vem do agente da etapa (a ferramenta cria esse agente ao disparar)
+    async with fabrica_sessoes()() as sessao:
+        dono = (await sessao.get(Etapa, etapa_id)).agente_id
+    assert dono is not None and dono != cenario.sora_id
+    contexto = replace(cenario.contexto(etapa_id=etapa_id), agente_id=dono)
+    texto = await veredito(v, contexto)
     assert "reprovado" in texto
     async with fabrica_sessoes()() as sessao:
         etapa = await sessao.get(Etapa, etapa_id)
