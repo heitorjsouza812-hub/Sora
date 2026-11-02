@@ -81,6 +81,10 @@ class ContextoAgente:
     ferramentas_extras: list[str] = field(default_factory=list)
     valores_do_prompt: dict[str, Any] = field(default_factory=dict)
     dependencias: DependenciasAgente = field(default_factory=DependenciasAgente)
+    sem_supervisao: bool = False
+    """Rotina sem ninguém olhando (Relógio): só ferramentas seguras, navegador efêmero."""
+    thread_proprio: str | None = None
+    """Thread do checkpointer só desta execução (rotina); senão vale a da conversa/etapa."""
 
 
 def nomes_das_ferramentas(contexto: ContextoAgente) -> list[str]:
@@ -132,6 +136,10 @@ async def montar_agente(
     from app.ferramentas.registro import criar_ferramentas
 
     nomes = nomes_das_ferramentas(contexto)
+    if contexto.sem_supervisao:
+        from app.revisor.politica import pode_sem_supervisao
+
+        nomes = [n for n in nomes if pode_sem_supervisao(n)]
     ferramentas = criar_ferramentas(
         nomes,
         ContextoFerramenta(
@@ -140,7 +148,13 @@ async def montar_agente(
             conversa_id=contexto.conversa_id,
             cadeia_id=contexto.cadeia_id,
             etapa_id=contexto.etapa_id,
+            sem_supervisao=contexto.sem_supervisao,
         ),
+    )
+    from app.conectores.carregar import ferramentas_dos_conectores
+
+    ferramentas += await ferramentas_dos_conectores(
+        contexto.usuario_id, sem_supervisao=contexto.sem_supervisao
     )
     return create_agent(
         model=modelos[0],
@@ -170,7 +184,9 @@ async def rodar_etapa(
     from app.agentes.checkpointer import thread_da_conversa, thread_da_etapa
 
     thread_id = (
-        thread_da_etapa(contexto.etapa_id)
+        contexto.thread_proprio
+        if contexto.thread_proprio is not None
+        else thread_da_etapa(contexto.etapa_id)
         if contexto.etapa_id is not None
         else thread_da_conversa(contexto.conversa_id)
     )
