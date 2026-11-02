@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.canais_equipe.interrupcao import pedir_interrupcao
 from app.canais_equipe.modelos import (
     MAX_INSTRUCOES,
     MAX_MEMBROS,
@@ -176,6 +177,7 @@ async def _exigir_agente(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID
 
 
 async def _publicar_mudancas(redis: Redis, usuario_id: UUID, mudancas: Mudancas) -> None:
+    await pedir_interrupcao(redis, mudancas.interromper)  # o worker dono do turno para
     for mensagem in mudancas.mensagens:
         await publicar_evento_equipe(redis, _mensagem(mensagem), usuario_id)
     for tarefa in mudancas.tarefas:
@@ -651,9 +653,7 @@ async def devolver_aba(
 
 
 @roteador.delete("/navegador/abas/{aba_id}", status_code=204)
-async def fechar_aba(
-    aba_id: UUID, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
-) -> None:
+async def fechar_aba(aba_id: UUID, usuario_id: Usuario, sessao: Sessao, redis: RedisDep) -> None:
     aba = await _aba_da_conta(sessao, usuario_id, aba_id)
     await sessao.delete(aba)
     await sessao.commit()
@@ -674,13 +674,9 @@ async def fechar_aba(
     )
 
 
-async def _aba_da_conta(
-    sessao: AsyncSession, usuario_id: UUID, aba_id: UUID
-) -> AbaNavegador:
+async def _aba_da_conta(sessao: AsyncSession, usuario_id: UUID, aba_id: UUID) -> AbaNavegador:
     aba = await sessao.scalar(
-        select(AbaNavegador).where(
-            AbaNavegador.id == aba_id, AbaNavegador.usuario_id == usuario_id
-        )
+        select(AbaNavegador).where(AbaNavegador.id == aba_id, AbaNavegador.usuario_id == usuario_id)
     )
     if aba is None:
         raise HTTPException(404, "Aba não encontrada.")

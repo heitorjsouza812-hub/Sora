@@ -222,13 +222,23 @@ class ArmazemCanaisSQL:
 
     @asynccontextmanager
     async def transacao_tarefa(self, tarefa_id: UUID) -> AsyncIterator[None]:
-        """Trava mae primeiro e depois filha; o chamador executa um turno inteiro dentro."""
-        pai_id = await self.sessao.scalar(
-            select(TarefaCanalTabela.pai_id).where(TarefaCanalTabela.id == tarefa_id)
-        )
-        if pai_id is not None:
+        """Trava a cadeia de ancestrais da raiz para baixo e por fim a tarefa (mãe antes de
+        filha, avó antes de mãe: ordem única, sem impasse); o chamador executa um turno inteiro."""
+        cadeia: list[UUID] = []
+        atual = tarefa_id
+        while len(cadeia) < 32:  # a profundidade real é pequena; o teto só protege de ciclo
+            pai_id = await self.sessao.scalar(
+                select(TarefaCanalTabela.pai_id).where(TarefaCanalTabela.id == atual)
+            )
+            if pai_id is None or pai_id in cadeia:
+                break
+            cadeia.append(pai_id)
+            atual = pai_id
+        for ancestral in reversed(cadeia):
             await self.sessao.scalar(
-                select(TarefaCanalTabela.id).where(TarefaCanalTabela.id == pai_id).with_for_update()
+                select(TarefaCanalTabela.id)
+                .where(TarefaCanalTabela.id == ancestral)
+                .with_for_update()
             )
         await self.sessao.scalar(
             select(TarefaCanalTabela.id).where(TarefaCanalTabela.id == tarefa_id).with_for_update()

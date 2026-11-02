@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from contextlib import suppress
 from typing import Any
 from uuid import UUID
 
@@ -10,6 +12,11 @@ from langchain_core.messages import HumanMessage
 from sqlalchemy import select
 
 from app.canais_equipe.contexto import montar_pacote
+from app.canais_equipe.interrupcao import (
+    interrupcao_pedida,
+    limpar_interrupcao,
+    pedir_interrupcao,
+)
 from app.canais_equipe.modelos import ErroCanal
 from app.canais_equipe.roteamento import DecisaoLider, Membro, conferir_decisao
 from app.canais_equipe.servico import Mudancas, ServicoCanais
@@ -22,12 +29,13 @@ from app.eventos.equipe import (
     acoes_da_tarefa,
     publicar_evento_equipe,
 )
-from app.filas import FilaAgente
+from app.filas import ErroFila, FilaAgente
 from app.filas.sql import ArmazemFilaSQL
 from app.llm.falso import modelo_falso_ativo
 from app.modelos.tabelas import Agente, CanalEquipe
 from app.orquestrador.modelos import modelos_do_papel
 from workers.fila import enfileirar
+from workers.travados import batimento, batimento_vivo
 
 registro = logging.getLogger(__name__)
 
@@ -62,6 +70,7 @@ def _mensagem_evento(mensagem) -> MensagemCanalEvento:
 
 
 async def _publicar_mudancas(ctx: dict[str, Any], usuario_id: UUID, mudancas: Mudancas) -> None:
+    await pedir_interrupcao(ctx["redis_eventos"], mudancas.interromper)
     for mensagem in mudancas.mensagens:
         await publicar_evento_equipe(ctx["redis_eventos"], _mensagem_evento(mensagem), usuario_id)
     for tarefa in mudancas.tarefas:
@@ -95,9 +104,24 @@ async def recuperar_equipe_apos_queda(ctx: dict[str, Any]) -> None:
     """Startup: persiste a recuperacao antes de o worker aceitar novos turnos."""
     async with ctx["sessoes"]() as sessao:
         fila = FilaAgente(ArmazemFilaSQL(sessao))
-        interrompidos = await fila.recuperar_apos_queda()
+
+        async def vivo(id_: UUID) -> bool:
+            return await batimento_vivo(ctx["redis_eventos"], id_)
+
+        # Só o que não tem batimento: turnos vivos de outros workers não são tocados.
+        interrompidos = await fila.recuperar_apos_queda(vivo)
         canais = ServicoCanais(ArmazemCanaisSQL(sessao))
-        tarefas = await canais.recuperar_apos_queda()
+        tarefas = await canais.recuperar_apos_queda(vivo)
+        agentes_com_espera = {
+            i.agente_id
+            for i in await ArmazemFilaSQL(sessao).todos_abertos()
+            if i.status.value == "na_fila"
+        }
+        canais_com_espera = {
+            t.canal_id
+            for t in await ArmazemCanaisSQL(sessao).tarefas_abertas()
+            if t.status.value == "na_fila"
+        }
         usuarios_canais = {
             canal.id: canal.usuario_id
             for canal in (
@@ -135,6 +159,11 @@ async def recuperar_equipe_apos_queda(ctx: dict[str, Any]) -> None:
             _tarefa_evento(tarefa),
             usuarios_canais[tarefa.canal_id],
         )
+    # O que ficou esperando (inclusive 'iniciando' devolvido a fila) volta a andar.
+    for agente_id in agentes_com_espera:
+        await enfileirar("despachar_equipe", agente_id=str(agente_id))
+    for canal_id in canais_com_espera:
+        await enfileirar("despachar_equipe", canal_id=str(canal_id))
 
 
 async def _rotear_com_lider(ctx: dict[str, Any], canal_id: UUID) -> None:
@@ -181,7 +210,87 @@ async def _rotear_com_lider(ctx: dict[str, Any], canal_id: UUID) -> None:
         await _publicar_mudancas(ctx, canal.usuario_id, mudancas)
 
 
+async def _turno_falso(ctx: dict[str, Any], tarefa, revisao: int) -> Mudancas:
+    """Turno do modelo falso (desenvolvimento e testes): responde na hora."""
+    async with ctx["sessoes"]() as sessao:
+        armazem = ArmazemCanaisSQL(sessao)
+        async with armazem.transacao_tarefa(tarefa.id):
+            mudancas = await ServicoCanais(armazem).registrar_resultado(
+                tarefa.id,
+                revisao,
+                por_agente=tarefa.dono_id,
+                texto="Resultado real do turno do modelo falso no canal.",
+            )
+        await sessao.commit()
+    return mudancas
+
+
+async def _turno_real(ctx: dict[str, Any], tarefa, canal, revisao: int, pacote: str) -> Mudancas:
+    from app.agentes import ContextoAgente, montar_e_rodar_agente
+
+    async with ctx["sessoes"]() as sessao:
+        modelos = await modelos_do_papel(sessao, canal.usuario_id, "individual", dificuldade=2)
+    contexto = ContextoAgente(
+        usuario_id=canal.usuario_id,
+        agente_id=tarefa.dono_id,
+        conversa_id=canal.id,
+        papel="canal",
+        canal_id=canal.id,
+        tarefa_canal_id=tarefa.id,
+        revisao_canal=revisao,
+        valores_do_prompt={"perfil_do_agente": pacote},
+    )
+    await montar_e_rodar_agente(
+        contexto=contexto,
+        modelos=modelos,
+        checkpointer=ctx["checkpointer"],
+        entrada={"messages": [HumanMessage(pacote)]},
+    )
+    async with ctx["sessoes"]() as sessao:
+        armazem = ArmazemCanaisSQL(sessao)
+        async with armazem.transacao_tarefa(tarefa.id):
+            mudancas = await ServicoCanais(armazem).fim_do_turno(tarefa.id, revisao)
+        await sessao.commit()
+    return mudancas
+
+
+INTERVALO_VIGIA_S = 0.5
+"""De quanto em quanto tempo o worker confere se pediram para parar o turno."""
+
+
+async def _vigiar_interrupcao(redis: Any, tarefa_id: UUID) -> None:
+    while not await interrupcao_pedida(redis, tarefa_id):  # noqa: ASYNC110
+        await asyncio.sleep(INTERVALO_VIGIA_S)
+
+
+async def _rodar_ate_interromper(redis: Any, tarefa_id: UUID, turno) -> Any | None:
+    """Roda o turno; se pedirem Parar/Cancelar/Arquivar, cancela o turno de verdade e devolve
+    ``None``. Cancelamento vindo de fora (worker desligando) continua propagando."""
+    tarefa_turno = asyncio.ensure_future(turno)
+    vigia = asyncio.create_task(_vigiar_interrupcao(redis, tarefa_id))
+    try:
+        await asyncio.wait({tarefa_turno, vigia}, return_when=asyncio.FIRST_COMPLETED)
+        if tarefa_turno.done():
+            return tarefa_turno.result()
+        tarefa_turno.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await tarefa_turno
+        return None
+    finally:
+        vigia.cancel()
+        if not tarefa_turno.done():
+            tarefa_turno.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await vigia
+
+
 async def _executar_tarefa(ctx: dict[str, Any], tarefa_id: UUID) -> None:
+    # O batimento começa antes de reservar a tarefa: outro worker que suba agora a vê viva.
+    async with batimento(ctx["redis_eventos"], tarefa_id):
+        await _executar_tarefa_viva(ctx, tarefa_id)
+
+
+async def _executar_tarefa_viva(ctx: dict[str, Any], tarefa_id: UUID) -> None:
     async with ctx["sessoes"]() as sessao:
         armazem = ArmazemCanaisSQL(sessao)
         servico = ServicoCanais(armazem)
@@ -207,47 +316,20 @@ async def _executar_tarefa(ctx: dict[str, Any], tarefa_id: UUID) -> None:
         )
         revisao = tarefa.revisao
         await sessao.commit()
-    await publicar_evento_equipe(ctx["redis_eventos"], _tarefa_evento(tarefa), canal.usuario_id)
+    redis = ctx["redis_eventos"]
+    await limpar_interrupcao(redis, tarefa_id)  # um pedido antigo não mata este turno novo
+    await publicar_evento_equipe(redis, _tarefa_evento(tarefa), canal.usuario_id)
     try:
         if modelo_falso_ativo():
-            async with ctx["sessoes"]() as sessao:
-                armazem = ArmazemCanaisSQL(sessao)
-                async with armazem.transacao_tarefa(tarefa_id):
-                    mudancas = await ServicoCanais(armazem).registrar_resultado(
-                        tarefa_id,
-                        revisao,
-                        por_agente=tarefa.dono_id,
-                        texto="Resultado real do turno do modelo falso no canal.",
-                    )
-                await sessao.commit()
+            turno = _turno_falso(ctx, tarefa, revisao)
         else:
-            from app.agentes import ContextoAgente, montar_e_rodar_agente
-
-            async with ctx["sessoes"]() as sessao:
-                modelos = await modelos_do_papel(
-                    sessao, canal.usuario_id, "individual", dificuldade=2
-                )
-            contexto = ContextoAgente(
-                usuario_id=canal.usuario_id,
-                agente_id=tarefa.dono_id,
-                conversa_id=canal.id,
-                papel="canal",
-                canal_id=canal.id,
-                tarefa_canal_id=tarefa.id,
-                revisao_canal=revisao,
-                valores_do_prompt={"perfil_do_agente": pacote},
-            )
-            await montar_e_rodar_agente(
-                contexto=contexto,
-                modelos=modelos,
-                checkpointer=ctx["checkpointer"],
-                entrada={"messages": [HumanMessage(pacote)]},
-            )
-            async with ctx["sessoes"]() as sessao:
-                armazem = ArmazemCanaisSQL(sessao)
-                async with armazem.transacao_tarefa(tarefa_id):
-                    mudancas = await ServicoCanais(armazem).fim_do_turno(tarefa_id, revisao)
-                await sessao.commit()
+            turno = _turno_real(ctx, tarefa, canal, revisao, pacote)
+        mudancas = await _rodar_ate_interromper(redis, tarefa_id, turno)
+        if mudancas is None:
+            registro.info("turno da tarefa de canal %s interrompido a pedido", tarefa_id)
+            await limpar_interrupcao(redis, tarefa_id)
+            await enfileirar("despachar_equipe", canal_id=str(canal.id))
+            return  # quem pediu já gravou o estado (parada/cancelada) e publicou o evento
     except Exception as erro:
         registro.exception("turno do canal %s falhou", tarefa_id)
         async with ctx["sessoes"]() as sessao:
@@ -288,11 +370,35 @@ async def executar_tarefa_canal(ctx: dict[str, Any], tarefa_id: str) -> None:
 
 
 async def executar_item_fila(ctx: dict[str, Any], item_id: str, agente_id: str) -> None:
-    """Reserva e conclui um item; as origens especializadas injetam seu turno antes de concluir."""
-    async with ctx["sessoes"]() as sessao:
-        fila = FilaAgente(ArmazemFilaSQL(sessao))
-        item = await fila.iniciar(UUID(item_id), UUID(agente_id))
-        await fila.rodando(item.id, item.agente_id)
-        await fila.concluir(item.id, item.agente_id)
-        await sessao.commit()
+    """Reserva o item, roda o turno do agente de verdade e conclui (ou marca a falha)."""
+    from workers.conversa import rodar_turno_do_item
+
+    async with batimento(ctx["redis_eventos"], UUID(item_id)):
+        async with ctx["sessoes"]() as sessao:
+            fila = FilaAgente(ArmazemFilaSQL(sessao))
+            try:
+                item = await fila.iniciar(UUID(item_id), UUID(agente_id))
+            except ErroFila as erro:
+                # Outro despacho já levou o item, ou ainda não é a vez dele (agente ocupado,
+                # fila pausada): quem terminar o item dispara o próximo despacho.
+                registro.info("item %s da fila ignorado: %s", item_id, erro)
+                return
+            await fila.rodando(item.id, item.agente_id)
+            await sessao.commit()
+        try:
+            await rodar_turno_do_item(ctx, item)
+        except BaseException as erro:
+            async with ctx["sessoes"]() as sessao:
+                await FilaAgente(ArmazemFilaSQL(sessao)).falhar(
+                    item.id, item.agente_id, type(erro).__name__
+                )
+                await sessao.commit()
+            if isinstance(erro, Exception):
+                registro.exception("turno do item %s falhou", item_id)
+                await enfileirar("despachar_equipe", agente_id=agente_id)
+                return
+            raise
+        async with ctx["sessoes"]() as sessao:
+            await FilaAgente(ArmazemFilaSQL(sessao)).concluir(item.id, item.agente_id)
+            await sessao.commit()
     await enfileirar("despachar_equipe", agente_id=agente_id)

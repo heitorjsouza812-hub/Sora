@@ -56,6 +56,9 @@ class ArmazemFilaSQL:
         agente.limite_tarefas = estado.limite_tarefas
         await self.sessao.flush()
 
+    async def travar_agente(self, agente_id: UUID) -> None:
+        await self.sessao.scalar(select(Agente.id).where(Agente.id == agente_id).with_for_update())
+
     async def itens(self, agente_id: UUID) -> list[ItemFila]:
         linhas = (
             await self.sessao.scalars(

@@ -221,3 +221,8 @@ async def _falhar(ctx: dict[str, Any], etapa_id: UUID) -> bool:
         await _publicar(ctx, cadeia, _evento_etapa(etapa))
         await _publicar(ctx, cadeia, _evento_cadeia(cadeia))
     return True
+
+
+async def batimento_vivo(redis: Any, id_: UUID) -> bool:
+    """Outro worker ainda está trabalhando neste id (etapa, item da fila, tarefa de canal)?"""
+    return bool(await redis.exists(_chave_batimento(id_)))

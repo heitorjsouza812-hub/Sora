@@ -36,7 +36,9 @@ def _texto_da_resposta(resultado: dict[str, Any]) -> str:
 
 
 async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
-    """Reserva o pedido na fila persistida antes de iniciar qualquer turno do agente."""
+    """Põe o pedido na fila persistida do agente e manda despachar. Quem roda o turno é
+    ``executar_item_fila`` (workers/equipe.py), para que a 2ª mensagem a um agente ocupado, a
+    fila retomada e o "Repetir" também sejam respondidos."""
     async with ctx["sessoes"]() as sessao:
         mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
         conversa = await sessao.get(Conversa, mensagem.conversa_id) if mensagem else None
@@ -51,32 +53,32 @@ async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
             anexos=(UUID(a) for a in mensagem.anexos),
             chave=f"conversa:{mensagem.id}",
         )
-        liberacao = await fila.proximos(conversa.agente_id)
-        if item.id not in {candidato.id for candidato in liberacao.iniciar}:
-            await sessao.commit()
-            return
-        await fila.iniciar(item.id, item.agente_id)
-        await fila.rodando(item.id, item.agente_id)
         await sessao.commit()
-    try:
-        await _responder_direto_sem_fila(ctx, mensagem_id)
-    except BaseException as erro:
-        async with ctx["sessoes"]() as sessao:
-            await FilaAgente(ArmazemFilaSQL(sessao)).falhar(
-                item.id, item.agente_id, type(erro).__name__
-            )
-            await sessao.commit()
-        raise
-    else:
-        async with ctx["sessoes"]() as sessao:
-            await FilaAgente(ArmazemFilaSQL(sessao)).concluir(item.id, item.agente_id)
-            await sessao.commit()
     from workers.fila import enfileirar
 
     await enfileirar("despachar_equipe", agente_id=str(item.agente_id))
 
 
-async def _responder_direto_sem_fila(ctx: dict[str, Any], mensagem_id: str) -> None:
+async def rodar_turno_do_item(ctx: dict[str, Any], item: Any) -> None:
+    """Roda o agente para um item da fila. Itens de mensagem trazem ``conversa:<id>`` na chave;
+    os demais (Repetir, outras origens) usam a conversa mais recente do agente e o texto do item."""
+    chave = item.chave or ""
+    if chave.startswith("conversa:"):
+        await _responder_direto_sem_fila(ctx, chave.split(":", 1)[1])
+    else:
+        await _responder_direto_sem_fila(
+            ctx, None, agente_id=item.agente_id, usuario_id=item.usuario_id, texto=item.texto
+        )
+
+
+async def _responder_direto_sem_fila(
+    ctx: dict[str, Any],
+    mensagem_id: str | None,
+    *,
+    agente_id: UUID | None = None,
+    usuario_id: UUID | None = None,
+    texto: str | None = None,
+) -> None:
     """Roda a Sora (ou o agente individual) e manda o texto pelos eventos
     ``mensagem.*``, terminando com ``sugestoes``. Quem põe na fila: a API."""
     from app.agentes import ContextoAgente
@@ -87,12 +89,21 @@ async def _responder_direto_sem_fila(ctx: dict[str, Any], mensagem_id: str) -> N
     from workers.cadeia import dependencias_da_etapa
 
     async with ctx["sessoes"]() as sessao:
-        mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
-        if mensagem is None:
-            return
-        conversa = await sessao.get(Conversa, mensagem.conversa_id)
+        if mensagem_id is not None:
+            mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
+            if mensagem is None:
+                return
+            conversa = await sessao.get(Conversa, mensagem.conversa_id)
+            texto = mensagem.conteudo
+        else:
+            conversa = await sessao.scalar(
+                select(Conversa)
+                .where(Conversa.usuario_id == usuario_id, Conversa.agente_id == agente_id)
+                .order_by(Conversa.atualizada_em.desc())
+                .limit(1)
+            )
         agente = await sessao.get(Agente, conversa.agente_id) if conversa else None
-        if conversa is None or agente is None:
+        if conversa is None or agente is None or texto is None:
             return
         papel = "sora" if agente.tipo == TipoAgente.SORA else "individual"
         modelos = await modelos_do_papel(
@@ -103,7 +114,6 @@ async def _responder_direto_sem_fila(ctx: dict[str, Any], mensagem_id: str) -> N
             conversa_privada=conversa.privada,
         )
         usuario_id, conversa_id, agente_id = conversa.usuario_id, conversa.id, agente.id
-        texto = mensagem.conteudo
         antes = await sessao.scalar(
             select(func.count()).select_from(Mensagem).where(Mensagem.conversa_id == conversa_id)
         )
