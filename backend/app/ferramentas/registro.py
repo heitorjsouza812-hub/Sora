@@ -53,6 +53,11 @@ from app.rotinas.registro import registrar as _registrar_relogio  # noqa: E402
 
 _registrar_relogio(ESQUEMAS, MODULO_DA_FERRAMENTA)
 
+# Âncora (etapa 4): memória, histórico, pendências, habilidades, instruções, envio entre agentes.
+from app.ferramentas.pecas_registro import registrar as _registrar_ancora  # noqa: E402
+
+_registrar_ancora(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
 
 def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     """Fases 2 e 3, adaptadas do Rakazo (``docs/referencias/rakazo.md``).
