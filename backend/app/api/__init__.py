@@ -9,16 +9,19 @@ from app.api import (
     auth,
     cadeias,
     canais,
+    conectores,
     conta,
     conversas,
     entregas,
     equipe,
     pecas,
     eventos,
+    habilidades,
     modelos,
     perguntas,
     preferencias,
     provedores,
+    rotinas,
     uso,
 )
 
@@ -41,6 +44,9 @@ for roteador in (
     canais.roteador,
     pecas.roteador,  # antes da equipe: as rotas de contexto são da Âncora
     equipe.roteador,
+    rotinas.roteador,
+    conectores.roteador,
+    habilidades.roteador,
 ):
     roteador_v1.include_router(roteador)
 

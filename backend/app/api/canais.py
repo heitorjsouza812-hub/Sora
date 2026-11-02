@@ -7,12 +7,14 @@ do cabeçalho ``X-Telegram-Bot-Api-Secret-Token``. Ele sempre responde 200 ao Te
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.canais.telegram import (
     CABECALHO_SEGREDO,
@@ -25,6 +27,7 @@ from app.canais.telegram import (
     usar_codigo_vinculo,
     webhook_autentico,
 )
+from app.core.banco import obter_sessao
 from app.core.config import obter_configuracao
 from app.core.dependencias import obter_redis, usuario_atual
 
@@ -44,6 +47,18 @@ class VinculoSaida(BaseModel):
     comando: str
 
 
+class VinculoCanal(BaseModel):
+    id: UUID
+    chat_id: str
+    criado_em: datetime
+
+
+class CanalSaida(BaseModel):
+    canal: str
+    disponivel: bool
+    vinculos: list[VinculoCanal]
+
+
 def _segredos() -> tuple[str, str]:
     config = obter_configuracao()
     token = config.telegram_token_bot.get_secret_value() if config.telegram_token_bot else ""
@@ -53,6 +68,54 @@ def _segredos() -> tuple[str, str]:
         else ""
     )
     return token, segredo
+
+
+@roteador.get("")
+async def listar_canais(
+    usuario_id: Annotated[UUID, Depends(usuario_atual)],
+    sessao: Annotated[AsyncSession, Depends(obter_sessao, scope="function")],
+) -> list[CanalSaida]:
+    """Canais externos e os chats ligados à conta (``disponivel=false``: servidor sem canal)."""
+    from sqlalchemy import select
+
+    from app.modelos.tabelas import CanalVinculado
+
+    token, segredo = _segredos()
+    linhas = (
+        await sessao.scalars(
+            select(CanalVinculado)
+            .where(CanalVinculado.usuario_id == usuario_id, CanalVinculado.canal == "telegram")
+            .order_by(CanalVinculado.criado_em)
+        )
+    ).all()
+    return [
+        CanalSaida(
+            canal="telegram",
+            disponivel=bool(token and segredo),
+            vinculos=[
+                VinculoCanal(id=v.id, chat_id=v.chat_id, criado_em=v.criado_em) for v in linhas
+            ],
+        )
+    ]
+
+
+@roteador.delete("/telegram/vinculos/{vinculo_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def desfazer_vinculo_telegram(
+    vinculo_id: UUID,
+    usuario_id: Annotated[UUID, Depends(usuario_atual)],
+    sessao: Annotated[AsyncSession, Depends(obter_sessao, scope="function")],
+) -> None:
+    from sqlalchemy import delete
+
+    from app.modelos.tabelas import CanalVinculado
+
+    apagados = await sessao.execute(
+        delete(CanalVinculado)
+        .where(CanalVinculado.id == vinculo_id, CanalVinculado.usuario_id == usuario_id)
+        .returning(CanalVinculado.id)
+    )
+    if apagados.first() is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Vínculo não encontrado.")
 
 
 @roteador.post("/telegram/vinculo", status_code=status.HTTP_201_CREATED)

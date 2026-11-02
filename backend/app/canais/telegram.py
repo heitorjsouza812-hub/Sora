@@ -145,15 +145,20 @@ def dividir(texto: str, limite: int = LIMITE_MENSAGEM) -> list[str]:
 class ClienteTelegram:
     """Chamadas à Bot API. O token nunca aparece em erro nem em log."""
 
-    def __init__(self, token: str, *, cliente: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self, token: str, *, cliente: httpx.AsyncClient | None = None, base_url: str | None = None
+    ) -> None:
+        from app.core.config import obter_configuracao
+
         self._token = token
         self._cliente = cliente
+        self._base = (base_url or obter_configuracao().telegram_api_url).rstrip("/")
 
     async def _chamar(self, metodo: str, dados: dict[str, Any]) -> Any:
         proprio = self._cliente is None
         cliente = self._cliente or httpx.AsyncClient(timeout=15, trust_env=False)
         try:
-            resposta = await cliente.post(f"{API}/bot{self._token}/{metodo}", json=dados)
+            resposta = await cliente.post(f"{self._base}/bot{self._token}/{metodo}", json=dados)
         except httpx.HTTPError as erro:
             raise ErroTelegram(
                 f"Falha ao falar com o Telegram: {sanitizar_erro(erro, [self._token])}"
