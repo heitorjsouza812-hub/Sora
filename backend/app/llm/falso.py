@@ -362,6 +362,35 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
     return None
 
 
+_GATILHO_PECAS = re.compile(r"\[(memoria|pendencia|catalogo|historico)\]")
+
+
+def _gatilho_das_pecas(tarefa: str, feitas: set[str | None]) -> AIMessage | None:
+    """Gatilhos das peças do Rakazo (Âncora): o especialista usa memória, pendência, catálogo e
+    histórico de verdade, uma ferramenta por vez, na ordem em que as tags aparecem."""
+    etiquetas = list(dict.fromkeys(_GATILHO_PECAS.findall(tarefa)))
+    roteiro = {
+        "memoria": [
+            (
+                "lembrar",
+                {"conteudo": "O usuário prefere respostas curtas (teste do modelo falso)."},
+            ),
+            ("buscar_memoria", {"consulta": "respostas curtas"}),
+        ],
+        "pendencia": [
+            ("adicionar_pendencia", {"titulo": "Conferir as fontes depois", "notas": "teste"}),
+            ("listar_pendencias", {}),
+        ],
+        "catalogo": [("catalogo_tarefas", {})],
+        "historico": [("buscar_historico", {"consulta": "cafeteria"})],
+    }
+    for etiqueta in etiquetas:
+        for nome, argumentos in roteiro[etiqueta]:
+            if nome not in feitas:
+                return _chamada(nome, argumentos)
+    return None
+
+
 def _triagem_para(mensagens: list[BaseMessage]) -> AIMessage:
     from app.sistema1.regras import aplicar_regras
 

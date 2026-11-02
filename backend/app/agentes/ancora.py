@@ -39,13 +39,27 @@ _CONVERSA = (
     "enviar_para_agente",
 )
 
+_ESPECIALISTA = (
+    "buscar_memoria",
+    "lembrar",
+    "buscar_historico",
+    "ler_historico",
+    "catalogo_tarefas",
+    "adicionar_pendencia",
+    "listar_pendencias",
+    "atualizar_pendencia",
+    "concluir_pendencia",
+    "ler_habilidade",
+)
+
 FERRAMENTAS_DA_ANCORA: dict[str, tuple[str, ...]] = {
     "sora": _CONVERSA,
     "individual": _CONVERSA,
-    # Especialistas de cadeia ficam enxutos: consultam, mas não mudam o que é do usuário.
-    "pesquisador": ("buscar_memoria", "ler_habilidade"),
-    "redator": ("buscar_memoria", "ler_habilidade"),
-    "designer": ("buscar_memoria", "ler_habilidade"),
+    # Especialistas de cadeia: lembram, anotam pendências e consultam, mas não apagam memória,
+    # não mudam habilidades nem instruções e não escrevem a colegas (a Sora coordena).
+    "pesquisador": _ESPECIALISTA,
+    "redator": _ESPECIALISTA,
+    "designer": _ESPECIALISTA,
     "verificador": (),
 }
 
