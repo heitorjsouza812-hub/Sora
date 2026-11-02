@@ -755,3 +755,30 @@ async def _novo_agente(mundo: Mundo, usuario_id: UUID) -> UUID:
         )
         await sessao.commit()
     return agente
+
+
+async def test_fechar_aba_pela_api_libera_a_vaga_no_worker(
+    mundo: Mundo, servidor_local: str
+) -> None:
+    """Abre e fecha 10 vezes pela API: o limite de 8 abas por agente não pode ser alcançado."""
+    from app.navegador.abas import MAX_ABAS_POR_AGENTE
+
+    email = "leme-j@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=90) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, email)
+        await mundo.iniciar_worker()
+        perfil = (
+            await cliente.post("/v1/navegador/perfis", headers=auth, json={"nome": "Vazamento"})
+        ).json()
+        for volta in range(MAX_ABAS_POR_AGENTE + 2):
+            aberta = await cliente.post(
+                f"/v1/navegador/perfis/{perfil['perfil_id']}/abrir",
+                headers=auth,
+                json={"url": servidor_local},
+            )
+            assert aberta.status_code == 202, (volta, aberta.text)
+            apagada = await cliente.delete(
+                f"/v1/navegador/abas/{aberta.json()['aba_id']}", headers=auth
+            )
+            assert apagada.status_code == 204
+        assert (await cliente.get("/v1/navegador/abas", headers=auth)).json() == []

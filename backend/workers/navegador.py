@@ -44,19 +44,24 @@ async def iniciar_navegador(ctx: dict[str, Any]) -> AmbienteNavegador:
         redis=ctx["redis_eventos"],
     )
     ctx["navegador"] = ambiente
-    ctx["navegador_salvador"] = asyncio.create_task(_salvar_logins(motor))
+    ctx["navegador_salvador"] = asyncio.create_task(_manter_navegador(ambiente))
     configurar(ambiente)
     return ambiente
 
 
-async def _salvar_logins(motor: MotorPlaywright) -> None:
-    """O usuário loga numa aba assumida sem nenhum agente rodando: grava o login aos poucos."""
+async def _manter_navegador(ambiente: AmbienteNavegador) -> None:
+    """A cada volta: grava o login das abas (o usuário loga numa aba assumida sem agente rodando)
+    e solta as abas que sumiram do banco (fechadas pela API ou por outra cópia do worker)."""
     while True:
         await asyncio.sleep(INTERVALO_SALVAR_S)
         try:
-            await motor.salvar_estados()
+            await ambiente.motor.salvar_estados()
         except Exception:
             registro.warning("não consegui salvar o login dos perfis", exc_info=True)
+        try:
+            await ambiente.soltar_abas_fechadas()
+        except Exception:
+            registro.warning("não consegui conferir as abas fechadas", exc_info=True)
 
 
 async def abrir_aba_de_perfil(
@@ -76,6 +81,17 @@ async def abrir_aba_de_perfil(
         )
         await sessao.commit()
     await ambiente.motor.recarregar_estado_da_particao(nome_particao)
+    await ambiente.soltar_abas_fechadas(agente)  # a API pode ter fechado abas: libera a vaga
+    ambiente.abrindo += 1
+    try:
+        return await _abrir_para_o_usuario(ambiente, usuario, agente, escolha, url)
+    finally:
+        ambiente.abrindo -= 1
+
+
+async def _abrir_para_o_usuario(
+    ambiente: AmbienteNavegador, usuario: UUID, agente: UUID, escolha: EscolhaPerfil, url: str
+) -> dict[str, Any]:
     aba = await ambiente.gerente.abrir(
         usuario_id=usuario, agente_id=agente, escolha=escolha, url=url
     )

@@ -44,6 +44,8 @@ class AmbienteNavegador:
     repositorio: RepositorioNavegador
     sessoes: Any
     redis: Any
+    abrindo: int = 0
+    """Abas sendo abertas agora (ainda não gravadas): a conferência com o banco espera."""
 
     async def _conversa(self, contexto: ContextoFerramenta) -> UUID | None:
         if contexto.conversa_id:
@@ -222,6 +224,13 @@ class AmbienteNavegador:
             return {"tipo": "perfil", "perfil_id": str(lida.perfil_id), "nome": nome or "Perfil"}
         return {"tipo": lida.tipo.value}
 
+    async def soltar_abas_fechadas(self, agente_id: UUID | None = None) -> None:
+        """Remove da memória (e fecha a página) as abas salvas que já não existem no banco."""
+        agentes = {agente_id} if agente_id else {a.agente_id for a in self.gerente.para_salvar()}
+        for agente in agentes:
+            salvas, perfis = await self.repositorio.carregar_abas_do_agente(agente)
+            await self.gerente.sincronizar_com_banco(agente, salvas, perfis_por_usuario=perfis)
+
     async def _sincronizar_abas(self, contexto: ContextoFerramenta) -> None:
         """Mais de um worker: a aba pode ter nascido em outro. O banco manda: aba salva que este
         worker não conhece volta (descarregada, recarrega ao usar) e aba que sumiu do banco
@@ -233,29 +242,34 @@ class AmbienteNavegador:
             contexto.agente_id, salvas, perfis_por_usuario=perfis
         )
 
+    async def _abrir(self, args: Any, contexto: ContextoFerramenta) -> Any:
+        escolha = await self.repositorio.escolha_do_agente(contexto.agente_id, contexto.usuario_id)
+        aba = await self.gerente.abrir(
+            usuario_id=contexto.usuario_id,
+            agente_id=contexto.agente_id,
+            escolha=escolha or EscolhaPerfil(),
+            url=args.url,
+            # rotina, ou agente configurado como efêmero: aba descartável sem login
+            sem_supervisao=contexto.sem_supervisao or escolha is None,
+        )
+        await self.repositorio.salvar_aba(aba)
+        await self.publicar_aba(aba, contexto)
+        return {
+            "resumo": "Aba aberta.",
+            "aba_id": str(aba.id),
+            "url": aba.url,
+            "titulo": aba.titulo,
+        }
+
     async def executar(self, nome: str, args: Any, contexto: ContextoFerramenta) -> Any:
         try:
             await self._sincronizar_abas(contexto)
             if nome == "navegador_abrir":
-                escolha = await self.repositorio.escolha_do_agente(
-                    contexto.agente_id, contexto.usuario_id
-                )
-                aba = await self.gerente.abrir(
-                    usuario_id=contexto.usuario_id,
-                    agente_id=contexto.agente_id,
-                    escolha=escolha or EscolhaPerfil(),
-                    url=args.url,
-                    # rotina, ou agente configurado como efêmero: aba descartável sem login
-                    sem_supervisao=contexto.sem_supervisao or escolha is None,
-                )
-                await self.repositorio.salvar_aba(aba)
-                await self.publicar_aba(aba, contexto)
-                return {
-                    "resumo": "Aba aberta.",
-                    "aba_id": str(aba.id),
-                    "url": aba.url,
-                    "titulo": aba.titulo,
-                }
+                self.abrindo += 1
+                try:
+                    return await self._abrir(args, contexto)
+                finally:
+                    self.abrindo -= 1
 
             if nome == "navegador_abas":
                 return {
