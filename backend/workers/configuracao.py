@@ -28,9 +28,17 @@ from workers.cadeia import (
     planejar_cadeia,
     verificar_cadeia,
 )
+from workers.canal import responder_canal
 from workers.ancora import compactar_historico
 from workers.conversa import responder_direto, retomar_conversa
+from workers.equipe import (
+    despachar_equipe,
+    executar_item_fila,
+    executar_tarefa_canal,
+    recuperar_equipe_apos_queda,
+)
 from workers.fila import configurar_fila
+from workers.navegador import fechar_navegador, iniciar_navegador
 from workers.rotinas import disparar_rotinas, executar_rotina
 from workers.travados import reconciliar_travados
 
@@ -53,11 +61,14 @@ async def ao_iniciar(ctx: dict[str, Any]) -> None:
     ctx["redis_eventos"] = criar_cliente_redis(config.redis_url)
     ctx["checkpointer"] = await abrir_checkpointer(config.database_url)
     configurar_fila(ctx.get("redis"))
+    await iniciar_navegador(ctx)
+    await recuperar_equipe_apos_queda(ctx)
 
 
 async def ao_desligar(ctx: dict[str, Any]) -> None:
     """Fecha o que ``ao_iniciar`` abriu."""
     configurar_fila(None)
+    await fechar_navegador(ctx)
     checkpointer = ctx.pop("checkpointer", None)
     if checkpointer is not None:
         await fechar_checkpointer(checkpointer)
@@ -84,6 +95,10 @@ class WorkerSettings:
         reconciliar_travados,
         executar_rotina,
         compactar_historico,
+        responder_canal,
+        despachar_equipe,
+        executar_item_fila,
+        executar_tarefa_canal,
     ]
     cron_jobs: ClassVar[list[Any]] = [
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),
