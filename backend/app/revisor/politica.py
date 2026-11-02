@@ -14,6 +14,40 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from urllib.parse import urlsplit
+
+_SUFIXOS_COMPOSTOS = frozenset(
+    {
+        "com.br",
+        "net.br",
+        "org.br",
+        "gov.br",
+        "edu.br",
+        "co.uk",
+        "org.uk",
+        "gov.uk",
+        "com.au",
+        "net.au",
+        "org.au",
+        "co.jp",
+        "co.nz",
+        "com.mx",
+        "com.ar",
+        "com.co",
+    }
+)
+"""Sufixos públicos compostos usuais; a comparação desconhecida fica mais restrita."""
+
+_SUFIXOS_PRIVADOS = frozenset(
+    {
+        "appspot.com",
+        "github.io",
+        "netlify.app",
+        "pages.dev",
+        "vercel.app",
+    }
+)
+"""Hospedagens em que cada subdomínio pertence a um cliente diferente."""
 
 
 class Politica(StrEnum):
@@ -149,6 +183,50 @@ def parece_somente_leitura(nome: str) -> bool:
     Qualquer verbo de escrita no nome derruba a dica de leitura.
     """
     return bool(_SOMENTE_LEITURA.search(nome)) and not _ESCRITA.search(nome)
+
+
+def dominio_registravel(url: str) -> str:
+    """Domínio usado para a aprovação contextual do navegador.
+
+    IPs e nomes locais ficam inteiros. Para sufixos privados conhecidos, um rótulo do cliente
+    também entra na chave, evitando que aprovar ``cliente.github.io`` aprove outro cliente.
+    """
+    host = (urlsplit(url).hostname or "").rstrip(".").lower()
+    if not host or ":" in host or host.replace(".", "").isdigit() or "." not in host:
+        return host
+    partes = host.split(".")
+    ultimas_duas = ".".join(partes[-2:])
+    if ultimas_duas in _SUFIXOS_PRIVADOS and len(partes) >= 3:
+        return ".".join(partes[-3:])
+    if ultimas_duas in _SUFIXOS_COMPOSTOS and len(partes) >= 3:
+        return ".".join(partes[-3:])
+    return ultimas_duas
+
+
+def politica_contextual_navegador(
+    nome: str,
+    *,
+    url: str,
+    perfil_tem_login: bool,
+    dominios_aprovados: set[str] | frozenset[str],
+) -> Politica:
+    """Eleva navegação para domínio novo quando o perfil contém uma sessão salva.
+
+    A checagem vale tanto para abertura direta quanto para navegações disparadas por ações ou
+    lotes. Perfil sem login preserva a política nominal existente.
+    """
+    base = politica_da_ferramenta(nome)
+    if nome not in {
+        "navegador_abrir",
+        "navegador_agir",
+        "navegador_acao",
+        "navegador_lote",
+    }:
+        return base
+    dominio = dominio_registravel(url)
+    if perfil_tem_login and dominio and dominio not in dominios_aprovados:
+        return Politica.REVISOR
+    return base
 
 
 def politica_da_ferramenta(nome: str, *, somente_leitura: bool | None = None) -> Politica:

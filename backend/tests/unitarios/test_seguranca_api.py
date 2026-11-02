@@ -809,6 +809,21 @@ def test_api09_producao_proibe_rede_local_por_padrao(monkeypatch: pytest.MonkeyP
     assert Configuracao(_env_file=None).rede_local_permitida is True  # type: ignore[call-arg]
 
 
+def test_api09_navegador_local_so_fora_de_producao(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AMBIENTE", "producao")
+    monkeypatch.delenv("NAVEGADOR_CDP_URL", raising=False)
+    with pytest.raises(ValueError, match="NAVEGADOR_CDP_URL"):
+        _ = Configuracao(_env_file=None).endpoint_navegador  # type: ignore[call-arg]
+    monkeypatch.setenv("NAVEGADOR_CDP_URL", "http://navegador:9222")
+    assert (
+        Configuracao(_env_file=None).endpoint_navegador  # type: ignore[call-arg]
+        == "http://navegador:9222"
+    )
+    monkeypatch.setenv("AMBIENTE", "desenvolvimento")
+    monkeypatch.delenv("NAVEGADOR_CDP_URL", raising=False)
+    assert Configuracao(_env_file=None).endpoint_navegador is None  # type: ignore[call-arg]
+
+
 def test_api09_producao_recusa_jwt_de_exemplo(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AMBIENTE", "producao")
     monkeypatch.setenv("JWT_SEGREDO", "troque-este-valor-por-um-segredo-aleatorio")

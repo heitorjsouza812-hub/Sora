@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -740,6 +741,7 @@ class MotorFalso:
     def __init__(self) -> None:
         self.abertas: set[UUID] = set()
         self.limpas: list[str] = []
+        self.estados: dict[str, dict[str, Any]] = {}
 
     async def abrir_pagina(self, aba: Aba) -> None:
         self.abertas.add(aba.id)
@@ -758,6 +760,16 @@ class MotorFalso:
 
     async def limpar_particao(self, particao_: str) -> None:
         self.limpas.append(particao_)
+
+    async def contexto_politica(self, aba: Aba) -> tuple[bool, set[str]]:
+        estado = self.estados.get(aba.particao)
+        return pf.perfil_tem_login(estado), pf.dominios_aprovados(estado)
+
+    async def aprovar_dominio(self, aba: Aba, dominio: str) -> None:
+        if not aba.perfil_efemero:
+            self.estados[aba.particao] = pf.com_dominio_aprovado(
+                self.estados.get(aba.particao), dominio
+            )
 
 
 async def test_abas_sobrevivem_e_respeitam_dono_e_usuario() -> None:
@@ -825,6 +837,50 @@ async def test_limite_de_abas_por_agente() -> None:
         await gerente.abrir(usuario_id=usuario, agente_id=agente, escolha=pf.EscolhaPerfil())
     with pytest.raises(ErroFerramenta, match="navegador_fechar_aba"):
         await gerente.abrir(usuario_id=usuario, agente_id=agente, escolha=pf.EscolhaPerfil())
+
+
+async def test_dominio_novo_de_perfil_logado_exige_revisao_e_aprovacao_fica_no_perfil() -> None:
+    from app.navegador.abas import RevisaoNavegacaoNecessaria
+
+    motor = MotorFalso()
+    gerente = GerenteAbas(motor)
+    usuario, agente = uuid4(), uuid4()
+    aba = await gerente.abrir(usuario_id=usuario, agente_id=agente, escolha=pf.EscolhaPerfil())
+    motor.estados[aba.particao] = {
+        "cookies": [{"name": "sessao", "value": "segredo"}],
+        "origins": [],
+    }
+    with pytest.raises(RevisaoNavegacaoNecessaria, match="domínio novo"):
+        await gerente.navegar(aba.id, agente, "https://loja.exemplo.com/produto")
+    assert (
+        await gerente.aprovar_dominio(aba.id, usuario, "https://conta.exemplo.com/")
+        == "exemplo.com"
+    )
+    navegada = await gerente.navegar(aba.id, agente, "https://loja.exemplo.com/produto")
+    assert navegada.url.endswith("/produto")
+    assert pf.dominios_aprovados(motor.estados[aba.particao]) == {"exemplo.com"}
+
+
+async def test_rotina_ignora_perfil_logado_e_abre_particao_efemera_sem_cookies() -> None:
+    motor = MotorFalso()
+    gerente = GerenteAbas(motor)
+    usuario, agente = uuid4(), uuid4()
+    escolha = pf.EscolhaPerfil(pf.TipoPerfil.AGENTE)
+    persistente = pf.particao(usuario, agente, escolha)
+    motor.estados[persistente] = {
+        "cookies": [{"name": "sessao", "value": "nao-pode-vazar"}],
+        "origins": [],
+    }
+    aba = await gerente.abrir(
+        usuario_id=usuario,
+        agente_id=agente,
+        escolha=escolha,
+        sem_supervisao=True,
+        url="https://exemplo.com/",
+    )
+    assert aba.perfil_efemero and aba.particao.startswith("efemero-")
+    assert aba.particao != persistente and aba.particao not in motor.estados
+    assert gerente.para_salvar() == []
 
 
 # ---------- eventos ----------
