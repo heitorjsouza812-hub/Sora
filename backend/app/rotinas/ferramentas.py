@@ -29,9 +29,7 @@ async def agendar(args: Agendar, contexto: ContextoFerramenta) -> str:
         return f"Agendado (id {rotina.id}). Próxima execução: {quando} ({rotina.fuso})."
 
 
-async def listar_agendamentos(
-    args: ListarAgendamentos, contexto: ContextoFerramenta
-) -> list[dict]:
+async def listar_agendamentos(args: ListarAgendamentos, contexto: ContextoFerramenta) -> list[dict]:
     async with abrir_sessao() as sessao:
         rotinas = await servico.listar(sessao, contexto.usuario_id, contexto.agente_id)
         return [servico.resumo_da_rotina(r) for r in rotinas if r.ativa]

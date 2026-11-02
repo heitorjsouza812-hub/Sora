@@ -148,9 +148,7 @@ async def executar_rotina(
             agente_id=agente_id,
             conversa_id=conversa_id,
             papel=papel,
-            dependencias=dependencias_da_etapa(
-                ctx, usuario_id=usuario_id, conversa_id=conversa_id
-            ),
+            dependencias=dependencias_da_etapa(ctx, usuario_id=usuario_id, conversa_id=conversa_id),
             sem_supervisao=True,
             thread_proprio=f"rotina:{exec_id}",
         )
@@ -209,9 +207,7 @@ async def executar_rotina(
         await sessao.commit()
     await publicar_evento(
         ctx["redis_eventos"],
-        RotinaExecutada(
-            rotina_id=rid, execucao_id=exec_id, status=status, mensagem_id=mensagem_id
-        ),  # type: ignore[arg-type]
+        RotinaExecutada(rotina_id=rid, execucao_id=exec_id, status=status, mensagem_id=mensagem_id),  # type: ignore[arg-type]
         conversa_id,
         usuario_id,
     )

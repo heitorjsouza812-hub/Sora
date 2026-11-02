@@ -156,7 +156,9 @@ def resumo_da_rotina(rotina: Rotina) -> dict[str, Any]:
         "titulo": rotina.titulo,
         "tipo": rotina.tipo,
         "expressao": rotina.expressao,
-        "proxima_execucao": rotina.proxima_execucao.isoformat() if rotina.proxima_execucao else None,
+        "proxima_execucao": rotina.proxima_execucao.isoformat()
+        if rotina.proxima_execucao
+        else None,
         "ativa": rotina.ativa,
         "silencioso": rotina.silencioso,
     }

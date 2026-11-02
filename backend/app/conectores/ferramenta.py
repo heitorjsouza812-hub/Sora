@@ -50,7 +50,9 @@ async def criar_conector(
 ) -> Conector:
     """Valida o endereço (https público) e grava com os cabeçalhos cifrados."""
     url_ok = await validar_servidor(url, ambiente_local=ambiente_local())
-    existentes = (await sessao.scalars(select(Conector).where(Conector.usuario_id == usuario_id))).all()
+    existentes = (
+        await sessao.scalars(select(Conector).where(Conector.usuario_id == usuario_id))
+    ).all()
     if len(existentes) >= MAX_SERVIDORES:
         raise ErroFerramenta(f"No máximo {MAX_SERVIDORES} servidores MCP por usuário.")
     if any(c.nome.lower() == nome.strip().lower() for c in existentes):
@@ -73,9 +75,7 @@ async def servidores_do_usuario(sessao: AsyncSession, usuario_id: UUID) -> list[
             select(Conector).where(Conector.usuario_id == usuario_id, Conector.ativo.is_(True))
         )
     ).all()
-    return [
-        ServidorMCP(nome=c.nome, url=c.url, cabecalhos=decifrar_cabecalhos(c)) for c in linhas
-    ]
+    return [ServidorMCP(nome=c.nome, url=c.url, cabecalhos=decifrar_cabecalhos(c)) for c in linhas]
 
 
 async def adicionar_servidor_mcp(args: AdicionarServidorMCP, contexto: ContextoFerramenta) -> str:

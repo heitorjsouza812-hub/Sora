@@ -44,7 +44,9 @@ class VetorizadorLiteLLM:
         return vetor
 
 
-async def vetorizador_do_usuario(sessao: AsyncSession, usuario_id: UUID) -> VetorizadorLiteLLM | None:
+async def vetorizador_do_usuario(
+    sessao: AsyncSession, usuario_id: UUID
+) -> VetorizadorLiteLLM | None:
     from sqlalchemy import select
 
     from app.llm.falso import modelo_falso_ativo
