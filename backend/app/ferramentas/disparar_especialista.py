@@ -72,11 +72,9 @@ async def disparar_especialista(args: DispararEspecialista, contexto: ContextoFe
             cores = list(
                 (
                     await sessao.scalars(
-                        select(Agente.cor)
-                        .join(Cadeia, Cadeia.id == Agente.cadeia_id)
-                        .where(
+                        select(Agente.cor).where(
                             Agente.usuario_id == cadeia.usuario_id,
-                            Cadeia.conversa_id == cadeia.conversa_id,
+                            Agente.apagado_em.is_(None),
                         )
                     )
                 ).all()

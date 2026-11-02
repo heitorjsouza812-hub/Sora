@@ -42,12 +42,14 @@ async function postar(request, caminho, dados) {
 }
 
 /** Entra (criando a conta de QA se faltar) usando o `request` do contexto, que divide os cookies com as páginas. */
-export async function entrarNoContexto(contexto, { pularOnboarding = true, email = QA_EMAIL } = {}) {
+export async function entrarNoContexto(contexto, { pularOnboarding = true, email = QA_EMAIL, limparConversas = false } = {}) {
   const { request } = contexto;
   let r = await postar(request, '/v1/auth/entrar', { email, senha: QA_SENHA });
   if (r.status === 401) {
     const c = await postar(request, '/v1/auth/cadastrar', { nome: QA_NOME, email, senha: QA_SENHA, convite: conviteDoCli() });
-    if (c.status !== 201) throw new Error(`Cadastro da conta de QA falhou (${c.status}): ${JSON.stringify(c.corpo)}`);
+    // Dois projetos visuais podem criar a mesma conta ao mesmo tempo. Quem perder a corrida
+    // recebe 409 e apenas repete o login, em vez de transformar a concorrência em falha de QA.
+    if (c.status !== 201 && c.status !== 409) throw new Error(`Cadastro da conta de QA falhou (${c.status}): ${JSON.stringify(c.corpo)}`);
     r = await postar(request, '/v1/auth/entrar', { email, senha: QA_SENHA });
   }
   if (r.status !== 200) {
@@ -57,6 +59,15 @@ export async function entrarNoContexto(contexto, { pularOnboarding = true, email
   // Os fluxos de QA não conectam provedor: o onboarding fica "para depois" (o aviso aparece na Home).
   if (pularOnboarding) {
     await contexto.addInitScript(() => { try { sessionStorage.setItem('sora.onboarding-pulado.v1', '1'); } catch { /* */ } });
+  }
+  if (limparConversas) {
+    const headers = { Authorization: `Bearer ${r.corpo.token_acesso}` };
+    const lista = await request.get(`${BASE}/v1/conversas`, { headers, failOnStatusCode: false });
+    if (lista.status() !== 200) throw new Error(`Não consegui listar conversas da conta de QA (${lista.status()}).`);
+    for (const conversa of await lista.json()) {
+      const apagada = await request.delete(`${BASE}/v1/conversas/${conversa.id}?manter_agentes=false`, { headers, failOnStatusCode: false });
+      if (![204, 404].includes(apagada.status())) throw new Error(`Não consegui limpar a conversa ${conversa.id} (${apagada.status()}).`);
+    }
   }
   return r.corpo;
 }

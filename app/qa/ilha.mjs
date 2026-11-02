@@ -16,7 +16,10 @@ await Promise.all((await readdir(shotsDir)).filter(a => a.endsWith('.png')).map(
 
 const browser = await chromium.launch({ headless: true });
 const contexto = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
-await entrarNoContexto(contexto);
+await entrarNoContexto(contexto, {
+  email: process.env.SORA_QA_ILHA_EMAIL ?? 'qa-ilha@sora.local',
+  limparConversas: true,
+});
 const page = await contexto.newPage();
 page.on('console', m => { if (m.type() === 'error') erros.push({ tipo: 'console', texto: m.text(), url: page.url() }); });
 page.on('pageerror', e => erros.push({ tipo: 'pageerror', texto: e.message, url: page.url() }));

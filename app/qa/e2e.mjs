@@ -33,7 +33,10 @@ await Promise.all((await readdir(shots)).filter(a => a.startsWith('e2e-') && a.e
 
 const browser = await chromium.launch({ headless: true });
 const contexto = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
-await entrarNoContexto(contexto);
+await entrarNoContexto(contexto, {
+  email: process.env.SORA_QA_E2E_EMAIL ?? 'qa-e2e@sora.local',
+  limparConversas: true,
+});
 const page = await contexto.newPage();
 observar(page, '1440x900');
 

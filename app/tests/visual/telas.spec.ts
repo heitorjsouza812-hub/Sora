@@ -35,7 +35,10 @@ async function captura(page: import('@playwright/test').Page, nome: string) {
 // teste exige a conta sem projetos: para regenerar as baselines, zere o banco de QA antes).
 const contaDoProjeto = () => `qa-projeto-${test.info().project.name}@sora.local`;
 test.beforeEach(async ({ page }) => {
-  await entrarNoContexto(page.context(), test.info().title.startsWith('projeto pronto') ? { email: contaDoProjeto() } : {});
+  await entrarNoContexto(page.context(), {
+    ...(test.info().title.startsWith('projeto pronto') ? { email: contaDoProjeto() } : {}),
+    limparConversas: true,
+  });
   await limparEstado(page);
 });
 
@@ -60,7 +63,7 @@ for (const [rota, titulo] of [
 test('projeto pronto', async ({ page }) => {
   // Backend real (modelo falso): cria o projeto pela própria interface e espera a equipe terminar.
   test.setTimeout(120_000);
-  expect(await page.evaluate(() => window.__sora.lerEstado().projetos.length), 'a conta do teste precisa estar sem projetos (zere o banco de QA)').toBe(0);
+  expect(await page.evaluate(() => window.__sora.lerEstado().projetos.length), 'o harness deve limpar os projetos antes do teste').toBe(0);
   await page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i }).fill(pedido);
   await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
   await page.waitForURL(/\/projeto\//);
