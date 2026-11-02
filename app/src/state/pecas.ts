@@ -1,6 +1,6 @@
 // Rotas de Configurações da etapa 4 (contrato em .maestri/contrato-etapa4.md): memória (Âncora),
 // rotinas, conectores MCP, habilidades e Telegram (Relógio). Sem estado global: cada seção carrega e recarrega a sua lista.
-import { api } from '../api/cliente';
+import { api, ehErroApi, mensagemDeErro } from '../api/cliente';
 
 export interface Memoria { id: string; agente_id: string | null; conteudo: string; tipo: string; origem: string; travada: boolean; criada_em: string }
 export const listarMemorias = () => api.get<Memoria[]>('/v1/memorias');
@@ -38,3 +38,16 @@ export interface CodigoVinculo { codigo: string; expira_em_segundos: number; com
 export const listarCanaisExternos = () => api.get<CanalExterno[]>('/v1/canais');
 export const gerarVinculoTelegram = () => api.post<CodigoVinculo>('/v1/canais/telegram/vinculo');
 export const removerVinculoTelegram = (id: string) => api.delete<void>(`/v1/canais/telegram/vinculos/${id}`);
+
+// ── Pendências do agente (Âncora): lista própria do agente, não acorda ninguém ────────────
+export type StatusPendencia = 'aberta' | 'estacionada' | 'concluida';
+export interface PendenciaAgente { id: string; agente_id: string; titulo: string; notas: string; status: StatusPendencia; criada_em: string; atualizada_em: string }
+export const listarPendenciasDoAgente = (agenteId: string) => api.get<PendenciaAgente[]>(`/v1/agentes/${agenteId}/pendencias?incluir_concluidas=true`);
+export const criarPendenciaDoAgente = (agenteId: string, p: { titulo: string; notas?: string; status?: 'aberta' | 'estacionada' }) => api.post<PendenciaAgente>(`/v1/agentes/${agenteId}/pendencias`, p);
+export const alterarPendenciaDoAgente = (id: string, patch: { titulo?: string; notas?: string; status?: StatusPendencia }) => api.patch<PendenciaAgente>(`/v1/pendencias/${id}`, patch);
+export const apagarPendenciaDoAgente = (id: string) => api.delete<void>(`/v1/pendencias/${id}`);
+
+export const LIMITE_PENDENCIAS_ABERTAS = 100;
+const MSG_LIMITE = `Este agente já tem ${LIMITE_PENDENCIAS_ABERTAS} pendências abertas. Conclua ou apague alguma antes de criar outra.`;
+/** O servidor responde 409 com um texto genérico; aqui o aviso diz o limite e o que fazer. */
+export const mensagemPendencia = (e: unknown): string => ehErroApi(e) && e.status === 409 ? MSG_LIMITE : mensagemDeErro(e);

@@ -41,3 +41,18 @@
 .eq-vazio { display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--text-2, #8B93A3); }
 @media (max-width: 720px) { .eq-pagina { grid-template-columns: 1fr; } }
 @media (max-width: 720px) { .eq-pagina { padding-top: 40px; } }
+
+/* Pendências do agente */
+.eq-pendencias { display: grid; gap: 10px; margin-top: 16px; }
+.eq-pend-novo { display: grid; gap: 8px; }
+.eq-pend-grupo { display: grid; gap: 6px; }
+.eq-pend-grupo h4, .eq-pend-grupo summary { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3, #6B7280); cursor: default; }
+.eq-pend-grupo summary { cursor: pointer; }
+.eq-pend-grupo ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.eq-pend { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; font-size: 13px; }
+.eq-pend[data-status='concluida'] .eq-pend-texto strong { text-decoration: line-through; color: var(--text-2, #8B93A3); }
+.eq-pend-texto p { margin: 2px 0 0; color: var(--text-2, #8B93A3); white-space: pre-wrap; word-break: break-word; }
+.eq-pend .eq-item-acoes { grid-column: auto; grid-row: auto; flex-wrap: wrap; }
+.eq-pend select { background: var(--panel-2, #14161B); color: inherit; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 8px; padding: 4px; font: inherit; font-size: 12px; }
+.eq-pend-form { display: grid; gap: 8px; }
+.eq-pendencias, .eq-fila { text-align: left; } .eq-pendencias label, .eq-pendencias textarea, .eq-pendencias input[type="text"] { text-align: left; }

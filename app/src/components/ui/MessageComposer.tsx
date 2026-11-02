@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
 import { BorderBeam } from 'border-beam';
+import { useGravacaoVoz } from './useGravacaoVoz';
 import { VoiceBeam, useMicrophone, type VoiceBeamMotion } from 'voice-glow';
 import { useProjetos } from '../../state/projetos';
 import { ToolsPopover } from '../review/ToolsPopover';
@@ -65,7 +66,13 @@ export function MessageComposer({
   const live = mic.state === 'live';
   const active = focused || value.trim().length > 0 || live;
   const avisoId = useId();
-  const aviso = avisoMic[mic.state];
+  const valorRef = useRef(value);
+  useEffect(() => { valorRef.current = value; });
+  const { transcrevendo, erro: erroVoz, descartarGravacao } = useGravacaoVoz(mic.stream, texto => {
+    const atual = valorRef.current;
+    setValue(atual && !/s$/.test(atual) ? `${atual} ${texto}` : `${atual}${texto}`);
+  });
+  const aviso = avisoMic[mic.state] ?? (transcrevendo ? 'Transcrevendo sua fala…' : erroVoz || undefined);
   const { pluginsConectados } = useProjetos();
   const { anexos, erro: erroAnexo, adicionar, remover, entregar } = useAnexos();
   const arquivoRef = useRef<HTMLInputElement>(null);
@@ -130,7 +137,7 @@ export function MessageComposer({
     onSend(text, entregar());
     setValue('');
     cb.current.typing = false;
-    if (live) mic.stop();
+    if (live) { descartarGravacao(); mic.stop(); }
   };
 
   return (

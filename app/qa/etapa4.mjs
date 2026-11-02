@@ -15,12 +15,13 @@ await Promise.all((await readdir(shots)).filter(a => a.startsWith('etapa4-') && 
 
 const EMAIL = process.env.SORA_QA_ETAPA4_EMAIL ?? 'qa-etapa4@sora.local';
 const erros = [];
-const browser = await chromium.launch({ headless: true });
+// microfone falso: o Chromium entrega um tom de teste, sem precisar de hardware
+const browser = await chromium.launch({ headless: true, args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
 let falha;
 try {
   for (const [largura, altura] of [[1440, 900], [390, 844]]) {
     const vp = `${largura}x${altura}`;
-    const contexto = await browser.newContext({ viewport: { width: largura, height: altura }, colorScheme: 'dark' });
+    const contexto = await browser.newContext({ viewport: { width: largura, height: altura }, colorScheme: 'dark', permissions: ['microphone'] });
     await entrarNoContexto(contexto, { email: EMAIL });
     const { request } = contexto;
     const entrar = await (await request.post(`${BASE}/v1/auth/entrar`, { data: { email: EMAIL, senha: QA_SENHA } })).json();
@@ -48,10 +49,12 @@ try {
 
     const page = await contexto.newPage();
     // o 422 do segredo na memória é provocado de propósito (uma vez por viewport)
-    let esperado422 = 1;
+    let esperado422 = 1; let esperado409 = 1; let esperado404 = 2; // 422 segredo, 409 limite, 404 voz (ditar + ouvir)
     page.on('console', m => {
       if (m.type() !== 'error') return;
       if (/status of 422/.test(m.text()) && esperado422-- > 0) return;
+      if (/status of 409/.test(m.text()) && esperado409-- > 0) return;
+      if (/status of 404/.test(m.text()) && esperado404-- > 0) return;
       erros.push(`${vp} console: ${m.text()}`);
     });
     page.on('pageerror', e => erros.push(`${vp} pageerror: ${e.message}`));
@@ -118,6 +121,33 @@ try {
     await page.getByRole('button', { name: 'Apagados' }).click();
     await page.getByRole('button', { name: /Lançamento/ }).first().waitFor({ timeout: 10_000 });
 
+
+    // ── Voz: sem provedor de voz o servidor responde 404 e o app avisa em PT-BR ─────────────
+    await ir(`/chat/${atlas.id}`);
+    const campo = page.getByRole('textbox', { name: /Mensagem para Atlas/ });
+    await campo.waitFor({ timeout: 20_000 });
+    await page.getByRole('button', { name: 'Ativar microfone' }).click();
+    await page.getByRole('button', { name: 'Parar microfone' }).waitFor({ timeout: 10_000 });
+    await page.waitForTimeout(2500); // o tom de teste precisa render mais que 1,5 KB de áudio
+    const transcricao = page.waitForResponse(r => r.url().includes('/v1/voz/transcrever'), { timeout: 20_000 });
+    await page.getByRole('button', { name: 'Parar microfone' }).click();
+    assert.equal((await transcricao).status(), 404, 'sem provedor de voz o servidor responde 404');
+    await page.locator('.composer-notice.is-on').getByText('conecte uma chave da OpenAI em Configurações → Modelos de IA').waitFor({ timeout: 10_000 });
+    assert.equal(await campo.inputValue(), '', 'o campo não recebe texto quando a voz falha');
+    await ver('voz-sem-provedor');
+
+    // ── "Ouvir" numa resposta: mesmo 404, com aviso em vez de falha ─────────────────────
+    await campo.fill('oi, tudo bem?');
+    await page.getByRole('button', { name: 'Enviar mensagem' }).click();
+    const ouvir = page.locator('.msg-acoes button[aria-label="Ouvir"]').first(); // a barra só aparece no hover
+    await ouvir.waitFor({ state: 'attached', timeout: 40_000 });
+    const ultima = page.locator('.chat-msg.is-assistant').last();
+    await ultima.hover();
+    if (largura <= 600) await ultima.getByRole('button', { name: 'Mais ações' }).click(); // no celular as ações ficam atrás do "…"
+    const [fala] = await Promise.all([page.waitForResponse(r => r.url().includes('/v1/voz/falar'), { timeout: 20_000 }), ouvir.click()]);
+    assert.equal(fala.status(), 404);
+    await page.getByText('conecte uma chave da OpenAI em Configurações → Modelos de IA').first().waitFor({ timeout: 10_000 });
+
     // ── Painel do agente: contexto e fila ───────────────────────────────────────────────
     await ir(`/chat/${atlas.id}`);
     if (largura <= 600) await page.locator('.work-pill').click(); // no celular o painel abre numa folha
@@ -125,10 +155,45 @@ try {
     await page.getByLabel('Contexto').first().waitFor({ state: 'attached', timeout: 15_000 });
     await ver('agente');
 
+    // ── Pendências do agente (rotas da Âncora) ──────────────────────────────────────────
+    await page.getByLabel('Nova pendência').fill('Ligar para o fornecedor');
+    await page.locator('.eq-pend-novo').getByLabel('Notas (opcional)').fill('depois das 14h');
+    await page.getByRole('button', { name: 'Adicionar pendência' }).click();
+    const item = page.locator('.eq-pend', { hasText: 'Ligar para o fornecedor' });
+    await item.waitFor({ timeout: 10_000 });
+    await item.getByText('depois das 14h').waitFor();
+    await page.getByLabel('Nova pendência').fill('Revisar o orçamento');
+    await page.getByLabel('Criar como estacionada').check();
+    await page.getByRole('button', { name: 'Adicionar pendência' }).click();
+    await page.getByText('Estacionadas (1)').waitFor({ timeout: 10_000 });
+    await ver('pendencias');
+    await item.getByRole('button', { name: 'Editar' }).click();
+    await page.getByRole('form', { name: /Editar pendência/ }).getByLabel('Título').fill('Ligar hoje para o fornecedor');
+    await page.getByRole('form', { name: /Editar pendência/ }).getByRole('button', { name: 'Salvar' }).click();
+    const editado = page.locator('.eq-pend', { hasText: 'Ligar hoje para o fornecedor' });
+    await editado.waitFor({ timeout: 10_000 });
+    await editado.getByLabel(/Status de/).selectOption('concluida');
+    await page.getByText('Concluídas (1)').waitFor({ timeout: 10_000 });
+    // o servidor guardou: confere pela API, não só pela tela
+    const guardadas = await api('GET', `/v1/agentes/${atlas.id}/pendencias?incluir_concluidas=true`);
+    assert.deepEqual(guardadas.map(p => [p.titulo, p.status]).sort(), [['Ligar hoje para o fornecedor', 'concluida'], ['Revisar o orçamento', 'estacionada']]);
+    await page.locator('.eq-pend', { hasText: 'Revisar o orçamento' }).getByRole('button', { name: 'Apagar' }).click();
+    await page.getByText('Estacionadas (1)').waitFor({ state: 'detached', timeout: 10_000 });
+
+    // limite: com 100 abertas o servidor responde 409 e a tela explica em PT-BR
+    for (let i = 0; i < 100; i++) await api('POST', `/v1/agentes/${nina.id}/pendencias`, { titulo: `Tarefa ${i}` });
+    await ir(`/chat/${nina.id}`);
+    if (largura <= 600) await page.locator('.work-pill').click();
+    await page.getByRole('tab', { name: 'Perfil' }).click();
+    await page.getByLabel('Nova pendência').fill('Uma a mais');
+    await page.getByRole('button', { name: 'Adicionar pendência' }).click();
+    await page.getByRole('alert').filter({ hasText: '100 pendências abertas' }).waitFor({ timeout: 10_000 });
+    await ver('pendencias-limite');
+
     await contexto.close();
   }
 } catch (e) { falha = e; }
 await browser.close();
 if (falha) { console.error(falha); process.exit(1); }
 assert.deepEqual(erros, [], `console deve ficar limpo:\n${erros.join('\n')}`);
-console.log('Etapa 4 aprovada: memória, rotinas (worker real), habilidades, conectores, Telegram, canais e painel do agente em 1440/390; console limpo.');
+console.log('Etapa 4 aprovada: memória, rotinas (worker real), habilidades, conectores, Telegram, canais e painel do agente em 1440/390; pendências (incl. limite 409) e voz pelo caminho 404 em 1440/390; console limpo.');
