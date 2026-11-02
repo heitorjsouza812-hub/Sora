@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -13,7 +12,6 @@ import pytest
 from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
 from app.navegador import perfis as pf
 from app.navegador.abas import Aba, GerenteAbas, RevisaoNavegacaoNecessaria
-from app.navegador.persistente import MotorPlaywright
 from app.revisor.politica import (
     dominio_registravel,
     navegacao_exige_revisao,
@@ -106,68 +104,8 @@ async def test_aprovar_exemplo_com_sem_esquema_funciona() -> None:
     await gerente.navegar(aba.id, agente, "https://www.exemplo.com/a")
 
 
-# ---------- achado 1 e 5: filtro de rota e redirecionamento no motor ----------
-
-
-class _Rota:
-    def __init__(self, url: str, navegacao: bool = True) -> None:
-        self.request = SimpleNamespace(url=url, is_navigation_request=lambda: navegacao)
-        self.acao = ""
-
-    async def continue_(self) -> None:
-        self.acao = "continuou"
-
-    async def abort(self, _motivo: str) -> None:
-        self.acao = "abortou"
-
-
-async def _nada(*_a: Any, **_k: Any) -> Any:
-    return None
-
-
-def _motor_playwright() -> MotorPlaywright:
-    return MotorPlaywright(ler_estado=_nada, gravar_estado=_nada, ao_console=lambda *_a: None)
-
-
-async def _livre(_url: str) -> None:
-    return None
-
-
-async def test_filtro_de_rota_so_barra_dominio_novo_de_perfil_logado(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("app.navegador.persistente.validar_destino", _livre)
-    motor = _motor_playwright()
-
-    async def tentar(url: str) -> str:
-        rota = _Rota(url)
-        await motor._filtrar("p", rota)
-        return rota.acao
-
-    motor._estados["p"] = None  # sem login
-    assert await tentar("https://qualquer.com/") == "continuou"
-    motor._estados["p"] = {"cookies": [{"name": "s", "value": "v"}], "origins": []}
-    assert await tentar("https://novo.com/") == "abortou"
-    assert motor._bloqueios["p"] == "novo.com"
-    motor._estados["p"] = pf.com_dominio_aprovado(motor._estados["p"], "novo.com")
-    assert await tentar("https://www.novo.com/x") == "continuou"
-
-
-async def test_redirecionamento_para_dominio_nao_aprovado_pede_revisao(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr("app.navegador.persistente.validar_destino", _livre)
-    motor = _motor_playwright()
-    aba = Aba(id=uuid4(), usuario_id=uuid4(), agente_id=uuid4(), particao="p")
-
-    class Pagina:
-        async def goto(self, *_a: Any, **_k: Any) -> None:
-            motor._bloqueios["p"] = "destino.com"  # o filtro barrou o redirecionamento
-            raise RuntimeError("net::ERR_BLOCKED_BY_CLIENT")
-
-    motor._paginas[aba.id] = Pagina()
-    with pytest.raises(RevisaoNavegacaoNecessaria, match=r"destino.com"):
-        await motor.navegar(aba, "https://origem.com/")
+# (filtro de rota, redirecionamento e contexto efêmero: testes com Chromium real em
+# test_navegador_chromium_real.py)
 
 
 # ---------- achado 6: rotina e aba efêmera ----------
@@ -188,30 +126,6 @@ async def test_rotina_nao_reusa_aba_persistente() -> None:
     assert [a.id for a in gerente.do_agente(agente, so_efemeras=True)] == [efemera.id]
     await gerente.usar(efemera.id, agente, sem_supervisao=True)
     assert ContextoFerramenta(uuid4(), agente, uuid4(), sem_supervisao=True).sem_supervisao
-
-
-async def test_fechar_aba_efemera_destroi_o_contexto_do_navegador() -> None:
-    motor = _motor_playwright()
-    fechado: list[str] = []
-
-    class Contexto:
-        async def close(self) -> None:
-            fechado.append("contexto")
-
-    efemera = Aba(
-        id=uuid4(),
-        usuario_id=uuid4(),
-        agente_id=uuid4(),
-        particao=pf.particao_efemera(),
-        perfil_efemero=True,
-    )
-    persistente = Aba(id=uuid4(), usuario_id=uuid4(), agente_id=uuid4(), particao="fixa")
-    motor._contextos[efemera.particao] = Contexto()
-    motor._contextos["fixa"] = Contexto()
-    await motor.fechar(efemera)
-    assert efemera.particao not in motor._contextos and fechado == ["contexto"]
-    await motor.fechar(persistente)
-    assert "fixa" in motor._contextos  # perfil salvo continua
 
 
 # ---------- achado 3: proxy ----------

@@ -8,8 +8,11 @@ proteção SSRF do ``ler_pagina``; downloads ficam desligados.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import urljoin
 from uuid import UUID
 
 from app.busca.ler_pagina import EnderecoBloqueado, ErroLeitura, validar_destino
@@ -82,7 +85,7 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
                 storage_state=estado_playwright(estado),
             )
             await contexto.route(
-                "**/*", lambda rota, _particao=particao_: self._filtrar(_particao, rota)
+                "**/*", lambda rota, _req=None, p=particao_: self._filtrar(p, rota)
             )
             self._contextos[particao_] = contexto
         return contexto
@@ -113,6 +116,61 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         pagina = await contexto.new_page()
         pagina.on("console", lambda m: self._ao_console(aba.id, m.type, m.text))
         self._paginas[aba.id] = pagina
+        await self._vigiar_redirecionamentos(aba, pagina)
+
+    async def _vigiar_redirecionamentos(self, aba: Aba, pagina: Any) -> None:
+        """Barra redirecionamento (3xx) de documento para domínio não aprovado, antes de seguir.
+
+        O ``context.route`` não vê os saltos de redirect (o Chromium os segue sozinho), então a
+        decisão sai de uma sessão CDP no estágio de *resposta*: o 3xx fica parado, o destino
+        nunca é requisitado, e o ``navegar`` vira ``RevisaoNavegacaoNecessaria``.
+        """
+        sessao = await pagina.context.new_cdp_session(pagina)
+        particao = aba.particao
+        tarefas: set[asyncio.Task[None]] = set()
+
+        async def decidir(ev: dict[str, Any]) -> None:
+            id_ = ev["requestId"]
+            try:
+                cabecalhos = {h["name"].lower(): h["value"] for h in ev.get("responseHeaders", [])}
+                destino = cabecalhos.get("location")
+                status = ev.get("responseStatusCode") or 0
+                if destino and 300 <= status < 400:
+                    alvo = urljoin(ev["request"]["url"], destino)
+                    await validar_destino(alvo)
+                    estado = self._estados.get(particao)
+                    if navegacao_exige_revisao(
+                        alvo,
+                        perfil_tem_login=perfil_tem_login(estado),
+                        dominios_aprovados=dominios_aprovados(estado),
+                    ):
+                        self._bloqueios[particao] = dominio_registravel(alvo)
+                        await sessao.send(
+                            "Fetch.failRequest",
+                            {"requestId": id_, "errorReason": "BlockedByClient"},
+                        )
+                        return
+                await sessao.send("Fetch.continueResponse", {"requestId": id_})
+            except Exception:  # falha fechada: na dúvida o salto não acontece
+                with contextlib.suppress(Exception):
+                    await sessao.send(
+                        "Fetch.failRequest", {"requestId": id_, "errorReason": "BlockedByClient"}
+                    )
+
+        def ao_pausar(ev: dict[str, Any]) -> None:
+            tarefa = asyncio.ensure_future(decidir(ev))
+            tarefas.add(tarefa)
+            tarefa.add_done_callback(tarefas.discard)
+
+        sessao.on("Fetch.requestPaused", ao_pausar)
+        await sessao.send(
+            "Fetch.enable",
+            {
+                "patterns": [
+                    {"urlPattern": "*", "requestStage": "Response", "resourceType": "Document"}
+                ]
+            },
+        )
 
     def pagina(self, aba: Aba) -> Any:
         """Página carregada da aba (para o navegador por árvore, ``app/navegador/arvore``).
@@ -131,13 +189,19 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             raise ErroFerramenta(f"Endereço recusado: {erro}") from erro
         pagina = self._paginas[aba.id]
         self._bloqueios.pop(aba.particao, None)
-        try:
-            await pagina.goto(url, wait_until="domcontentloaded", timeout=PRAZO_NAVEGACAO_MS)
-        except Exception as erro:
-            if dominio := self._bloqueios.pop(aba.particao, None):
-                # redirecionamento para domínio não aprovado: pede revisão, não é erro genérico
-                raise RevisaoNavegacaoNecessaria(dominio) from erro
-            raise ErroFerramenta("Não consegui abrir a página.") from erro
+        for tentativa in (1, 2):
+            try:
+                await pagina.goto(url, wait_until="domcontentloaded", timeout=PRAZO_NAVEGACAO_MS)
+                break
+            except Exception as erro:
+                if dominio := self._bloqueios.pop(aba.particao, None):
+                    # redirecionamento para domínio não aprovado: pede revisão, não erro genérico
+                    raise RevisaoNavegacaoNecessaria(dominio) from erro
+                # depois de um salto barrado o Chromium ainda está indo para a página de erro
+                if tentativa == 1 and "interrupted by another navigation" in str(erro):
+                    await asyncio.sleep(0.3)
+                    continue
+                raise ErroFerramenta("Não consegui abrir a página.") from erro
         return pagina.url, await pagina.title()
 
     async def descarregar(self, aba: Aba) -> None:
