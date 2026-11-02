@@ -115,6 +115,8 @@ class Agente(Base):
     perfil_navegador_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("perfis_navegador.id", use_alter=True, name="agentes_perfil_navegador_id_fkey")
     )
+    # 0008: instruções próprias aprovadas pelo usuário (``propor_instrucoes``)
+    instrucoes: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class Conversa(Base):
