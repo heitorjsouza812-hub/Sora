@@ -8,7 +8,7 @@ from contextlib import suppress
 from typing import Any
 from uuid import UUID
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy import select
 
 from app.canais_equipe.contexto import montar_pacote
@@ -18,7 +18,12 @@ from app.canais_equipe.interrupcao import (
     pedir_interrupcao,
 )
 from app.canais_equipe.modelos import ErroCanal
-from app.canais_equipe.roteamento import DecisaoLider, Membro, conferir_decisao
+from app.canais_equipe.roteamento import (
+    INSTRUCOES_LIDER,
+    DecisaoLider,
+    Membro,
+    conferir_decisao,
+)
 from app.canais_equipe.servico import Mudancas, ServicoCanais
 from app.canais_equipe.sql import ArmazemCanaisSQL
 from app.eventos.equipe import (
@@ -31,6 +36,7 @@ from app.eventos.equipe import (
 )
 from app.filas import ErroFila, FilaAgente
 from app.filas.sql import ArmazemFilaSQL
+from app.llm.estruturada import com_saida_estruturada, instrucoes_json
 from app.llm.falso import modelo_falso_ativo
 from app.modelos.tabelas import Agente, CanalEquipe
 from app.orquestrador.modelos import modelos_do_papel
@@ -189,17 +195,27 @@ async def _rotear_com_lider(ctx: dict[str, Any], canal_id: UUID) -> None:
                 modelos = await modelos_do_papel(
                     sessao, canal.usuario_id, "individual", dificuldade=1
                 )
-            modelo = modelos[0].with_structured_output(DecisaoLider)
-            bruto = await modelo.ainvoke(
-                [
-                    HumanMessage(
-                        "Escolha quem responde neste canal.\n"
-                        + "\n".join(f"- {m.nome} ({m.funcao}): {m.id}" for m in membros)
-                        + f"\nPedido: {mensagem.texto}"
-                    )
-                ]
-            )
-            bruto = bruto.model_dump(mode="json")
+            modelo = com_saida_estruturada(modelos[0], DecisaoLider)
+            try:
+                resposta = await modelo.ainvoke(
+                    [
+                        SystemMessage(INSTRUCOES_LIDER + "\n\n" + instrucoes_json(DecisaoLider)),
+                        HumanMessage(
+                            "Escolha quem responde neste canal.\n"
+                            + "\n".join(f"- {m.nome} ({m.funcao}): {m.id}" for m in membros)
+                            + f"\nPedido: {mensagem.texto}"
+                        ),
+                    ]
+                )
+                bruto = (
+                    resposta.model_dump(mode="json")
+                    if isinstance(resposta, DecisaoLider)
+                    else resposta
+                )
+            except Exception:
+                # sem decisão legível a tarefa para (o usuário reatribui); o canal não trava
+                registro.exception("O líder do canal %s não decidiu.", canal_id)
+                bruto = ""
         decisao = conferir_decisao(bruto, membros=membros, tarefas=tarefas, texto=mensagem.texto)
         async with ctx["sessoes"]() as sessao:
             servico = ServicoCanais(ArmazemCanaisSQL(sessao))

@@ -17,6 +17,7 @@ para com ``roteamento_ilegivel`` (nunca vira "manda para todo mundo").
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from collections.abc import Sequence
@@ -24,7 +25,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.canais_equipe.modelos import MAX_MEMBROS, MensagemCanal, StatusTarefa, TarefaCanal
 
@@ -197,13 +198,31 @@ def _paradas_do_ultimo_pedido(tarefas: Sequence[TarefaCanal]) -> list[TarefaCana
 # ---------- decisão do líder ----------
 
 
-class DecisaoLider(BaseModel):
-    """Esquema que o líder preenche num turno curto, sem ferramentas."""
+MAX_PERGUNTA_LIDER = 500
 
-    acao: Literal["atribuir", "tarefa_existente", "perguntar", "sem_resposta"]
-    agentes: list[UUID] = Field(default_factory=list, max_length=MAX_MEMBROS)
-    tarefa_id: UUID | None = None
-    pergunta: str | None = Field(default=None, max_length=500)
+
+class DecisaoLider(BaseModel):
+    """Esquema que o líder preenche num turno curto, sem ferramentas.
+
+    Compatível com a saída estruturada estrita (Groq, OpenAI): toda chave é obrigatória e as
+    que não se aplicam vêm ``null``; sem ``default``, limites nem ``format`` no esquema. Ids
+    chegam como texto e os limites são conferidos em ``conferir_decisao``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    acao: Literal["atribuir", "tarefa_existente", "perguntar", "sem_resposta"] = Field(
+        description="O que fazer com o pedido."
+    )
+    agentes: list[str] | None = Field(
+        description="Ids dos membros escolhidos (só em 'atribuir'); null nos outros casos."
+    )
+    tarefa_id: str | None = Field(
+        description="Id da tarefa aberta que o pedido continua (só em 'tarefa_existente')."
+    )
+    pergunta: str | None = Field(
+        description="Pergunta curta ao usuário (só em 'perguntar'); null nos outros casos."
+    )
 
 
 INSTRUCOES_LIDER = (
@@ -233,12 +252,17 @@ def conferir_decisao(
 ) -> DecisaoConferida:
     """Valida a resposta do líder. Qualquer coisa estranha vira ``ilegivel`` (a tarefa para)."""
     try:
-        decisao = (
-            DecisaoLider.model_validate_json(bruto)
-            if isinstance(bruto, str)
-            else DecisaoLider.model_validate(bruto)
-        )
-    except ValidationError:
+        dados = json.loads(bruto) if isinstance(bruto, str) else dict(bruto)
+        if not isinstance(dados, dict):
+            raise ValueError("decisão não é objeto")
+        # fora do modo estrito (modelo falso, queda json_object) as nulas podem faltar e
+        # pode sobrar chave: fica só o que o esquema conhece
+        decisao = DecisaoLider.model_validate({c: dados.get(c) for c in DecisaoLider.model_fields})
+        agentes = [UUID(str(a)) for a in decisao.agentes or []]
+        tarefa_id = UUID(decisao.tarefa_id) if decisao.tarefa_id else None
+    except (ValueError, TypeError):  # inclui ValidationError e JSON quebrado
+        return DecisaoConferida(None, ilegivel=True)
+    if len(agentes) > MAX_MEMBROS or len(decisao.pergunta or "") > MAX_PERGUNTA_LIDER:
         return DecisaoConferida(None, ilegivel=True)
     disponiveis = {m.id for m in membros if m.disponivel}
     if decisao.acao == "sem_resposta":
@@ -251,13 +275,13 @@ def conferir_decisao(
             else DecisaoConferida(None, ilegivel=True)
         )
     if decisao.acao == "tarefa_existente":
-        tarefa = next((t for t in tarefas if t.id == decisao.tarefa_id), None)
+        tarefa = next((t for t in tarefas if t.id == tarefa_id), None)
         if tarefa is None or tarefa.status in (StatusTarefa.CONCLUIDA, StatusTarefa.CANCELADA):
             return DecisaoConferida(None, ilegivel=True)
         return DecisaoConferida(
             Rota("seguimento", (tarefa.dono_id,), (tarefa.id,), texto=texto, determinista=False)
         )
-    escolhidos = tuple(dict.fromkeys(a for a in decisao.agentes if a in disponiveis))
+    escolhidos = tuple(dict.fromkeys(a for a in agentes if a in disponiveis))
     if not escolhidos:
         return DecisaoConferida(None, ilegivel=True)
     return DecisaoConferida(Rota("donos", escolhidos, texto=texto, determinista=False))
