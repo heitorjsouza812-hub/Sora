@@ -4,7 +4,7 @@ Configurações → Modelos de IA; sem provedor, 404. A chave nunca sai do servi
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 import httpx
@@ -17,13 +17,21 @@ from app.core.banco import obter_sessao
 from app.core.dependencias import usuario_atual
 from app.llm.provedores import (
     DestinoBloqueado,
+    ErroProvedor,
     criar_cliente_listagem,
+    listar_modelos,
     politica_de_rede,
     validar_base_url,
 )
 from app.modelos.enumeracoes import TipoProvedor
 from app.modelos.tabelas import Provedor
 from app.seletor.repositorio import config_do_provedor
+from app.voz.modelos import (
+    FALA_FALLBACK,
+    TRANSCRICAO_FALLBACK,
+    modelo_de_fala,
+    modelo_de_transcricao,
+)
 from app.voz.provedores import MAX_BYTES_AUDIO, PRAZO_SEGUNDOS, ErroVoz, VozOpenAI
 from app.voz.texto import falavel
 
@@ -31,6 +39,16 @@ roteador = APIRouter(prefix="/voz", tags=["voz"])
 
 Sessao = Annotated[AsyncSession, Depends(obter_sessao, scope="function")]
 UsuarioId = Annotated[UUID, Depends(usuario_atual)]
+
+
+SEM_MODELO_FALA = (
+    "O provedor conectado não oferece voz para falar. Conecte uma chave da OpenAI em "
+    "Configurações → Modelos de IA para usar a voz."
+)
+SEM_MODELO_TRANSCRICAO = (
+    "O provedor conectado não oferece transcrição. Conecte uma chave da OpenAI em "
+    "Configurações → Modelos de IA para usar a voz."
+)
 
 
 class Fala(BaseModel):
@@ -42,7 +60,9 @@ class Transcricao(BaseModel):
     texto: str
 
 
-async def _voz_do_usuario(sessao: AsyncSession, usuario_id: UUID) -> VozOpenAI:
+async def _voz_do_usuario(
+    sessao: AsyncSession, usuario_id: UUID, uso: Literal["transcricao", "fala"]
+) -> VozOpenAI:
     provedor_id = await sessao.scalar(
         select(Provedor.id)
         .where(
@@ -72,7 +92,29 @@ async def _voz_do_usuario(sessao: AsyncSession, usuario_id: UUID) -> VozOpenAI:
     voz = VozOpenAI(config.api_key.get_secret_value() if config.api_key else "", cliente=cliente)
     if base:
         voz.api = base
+    if config.tipo is TipoProvedor.COMPATIVEL_OPENAI:
+        await _escolher_modelo(voz, config, cliente, politica, uso)
     return voz
+
+
+async def _escolher_modelo(voz, config, cliente, politica, uso) -> None:  # type: ignore[no-untyped-def]
+    """Provedor compatível (Groq etc.): o modelo vem da lista dele, não do da OpenAI."""
+    try:
+        nomes = await listar_modelos(config, cliente=cliente, politica=politica)
+    except ErroProvedor:  # lista indisponível: tenta o nome mais comum
+        voz.modelo_transcricao = TRANSCRICAO_FALLBACK
+        voz.modelo_fala = FALA_FALLBACK
+        return
+    if uso == "transcricao":
+        modelo = modelo_de_transcricao(nomes)
+        if modelo is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, SEM_MODELO_TRANSCRICAO)
+        voz.modelo_transcricao = modelo
+    else:
+        modelo = modelo_de_fala(nomes)
+        if modelo is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, SEM_MODELO_FALA)
+        voz.modelo_fala = modelo
 
 
 @roteador.post("/transcrever")
@@ -82,7 +124,7 @@ async def transcrever(
     audio: Annotated[UploadFile, File()],
     idioma: Annotated[str, Form(max_length=8)] = "pt",
 ) -> Transcricao:
-    voz = await _voz_do_usuario(sessao, usuario_id)
+    voz = await _voz_do_usuario(sessao, usuario_id, "transcricao")
     conteudo = await audio.read(MAX_BYTES_AUDIO + 1)
     if not conteudo:
         raise HTTPException(422, "O áudio veio vazio.")
@@ -97,7 +139,7 @@ async def transcrever(
 
 @roteador.post("/falar")
 async def falar_texto(dados: Fala, usuario_id: UsuarioId, sessao: Sessao) -> Response:
-    voz = await _voz_do_usuario(sessao, usuario_id)
+    voz = await _voz_do_usuario(sessao, usuario_id, "fala")
     texto = falavel(dados.texto)
     try:
         audio = await voz.sintetizar(texto or dados.texto, dados.voz)
