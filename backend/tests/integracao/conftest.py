@@ -5,7 +5,9 @@ Docker instalado mas parado, a fixture ``servicos`` quebrava com ``DockerExcepti
 de skip).
 """
 
+import asyncio
 import shutil
+import sys
 
 import pytest
 
@@ -37,3 +39,14 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     pular = pytest.mark.skip(reason=motivo)
     for item in marcados:
         item.add_marker(pular)
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    """Só os testes de integração usam o loop "selector" no Windows (o checkpointer assíncrono do
+    psycopg não roda no Proactor, o padrão). Antes isso era trocado na importação de um módulo e
+    valia para a sessão inteira, o que quebrava o Playwright (que precisa do Proactor) nos
+    testes de navegador da mesma execução."""
+    if sys.platform == "win32":
+        return asyncio.WindowsSelectorEventLoopPolicy()
+    return asyncio.DefaultEventLoopPolicy()

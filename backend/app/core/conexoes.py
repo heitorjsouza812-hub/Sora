@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -23,6 +24,7 @@ from app.llm.provedores import (
     politica_de_rede,
     validar_base_url,
 )
+from app.llm.sonda import MAX_SONDAS_POR_CONEXAO, Sonda
 from app.modelos.enumeracoes import TipoProvedor
 from app.modelos.esquemas import ProvedorAtualizacao, ProvedorCriacao
 from app.modelos.tabelas import ModeloDisponivel, Provedor, Usuario
@@ -137,12 +139,31 @@ async def _provedor_do_usuario(
     return provedor
 
 
+async def _sondar_desconhecidos(
+    config: ConfigProvedor, modelos: list[ModeloDisponivel], sonda: Sonda | None
+) -> None:
+    """§5: modelo fora do catálogo é testado (até ``MAX_SONDAS_POR_CONEXAO`` por conexão) e ganha
+    as capacidades que o teste confirmar. Sem isso o Sistema 1 o recusaria por não ter ``json``."""
+    if sonda is None:
+        return
+    alvo = [m for m in modelos if m.origem == "usuario" and not m.capacidades][
+        :MAX_SONDAS_POR_CONEXAO
+    ]
+    resultados = await asyncio.gather(
+        *(sonda(config, m.modelo) for m in alvo), return_exceptions=True
+    )
+    for modelo, confirmadas in zip(alvo, resultados, strict=True):
+        if isinstance(confirmadas, list) and confirmadas:
+            modelo.capacidades = confirmadas
+
+
 async def conectar(
     sessao: AsyncSession,
     redis: Redis,
     usuario_id: UUID,
     dados: ProvedorCriacao,
     listador: ListadorModelos,
+    sonda: Sonda | None = None,
 ) -> tuple[Provedor, list[ModeloDisponivel]]:
     """Testa e grava um provedor e até 500 modelos classificados."""
     chave = _validar_chave(dados.tipo, dados.chave)
@@ -190,6 +211,7 @@ async def conectar(
     # Não há relacionamento ORM entre as tabelas; materializa o pai antes dos FKs dos modelos.
     await sessao.flush()
     modelos = [_novo_modelo(provedor_id, obter_catalogo().classificar(nome)) for nome in nomes]
+    await _sondar_desconhecidos(config, modelos, sonda)
     sessao.add_all(modelos)
     await sessao.flush()
     return provedor, modelos
@@ -217,6 +239,7 @@ async def atualizar(
     provedor_id: UUID,
     dados: ProvedorAtualizacao,
     listador: ListadorModelos,
+    sonda: Sonda | None = None,
 ) -> Provedor:
     """Atualiza o teto e, quando enviada, testa a chave e sincroniza os modelos."""
     provedor = await _provedor_do_usuario(sessao, usuario_id, provedor_id)
@@ -244,13 +267,16 @@ async def atualizar(
             if modelo is None:
                 sessao.add(_novo_modelo(provedor.id, classificacao))
                 continue
-            modelo.capacidades = list(classificacao.capacidades)
+            if classificacao.capacidades or not modelo.capacidades:
+                modelo.capacidades = list(classificacao.capacidades)
             modelo.contexto = classificacao.contexto
             modelo.preco_entrada = classificacao.preco_entrada
             modelo.preco_saida = classificacao.preco_saida
             modelo.velocidade_tps = classificacao.velocidade_tps
         for modelo in existentes.values():
             modelo.ativo = False
+        if sonda is not None:
+            await _sondar_desconhecidos(config, await _modelos_do(sessao, provedor.id), sonda)
 
         provedor.chave_cifrada = (
             seguranca.cifrar_segredo(chave, usuario_id=usuario_id, provedor=str(provedor.id))
@@ -266,6 +292,17 @@ async def atualizar(
         provedor.teto_mensal_usd = dados.teto_mensal_usd
     await sessao.flush()
     return provedor
+
+
+async def _modelos_do(sessao: AsyncSession, provedor_id: UUID) -> list[ModeloDisponivel]:
+    await sessao.flush()
+    return list(
+        (
+            await sessao.scalars(
+                select(ModeloDisponivel).where(ModeloDisponivel.provedor_id == provedor_id)
+            )
+        ).all()
+    )
 
 
 async def apagar(sessao: AsyncSession, usuario_id: UUID, provedor_id: UUID) -> None:

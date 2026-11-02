@@ -235,9 +235,15 @@ async def ambiente_http(
         corpo = await requisicao.json()
         provedor.chamadas.append(corpo)
         resultado = provedor.responder(corpo, len(provedor.chamadas))
+        if asyncio.iscoroutine(resultado):
+            resultado = await resultado
         if isinstance(resultado, tuple):
             return JSONResponse(resultado[1], status_code=resultado[0])
         return JSONResponse(resultado)
+
+    @api_modelo.get("/v1/models")
+    async def listar_modelos() -> JSONResponse:
+        return JSONResponse({"object": "list", "data": [{"id": "modelo-novo", "object": "model"}]})
 
     porta_modelo = _porta_livre()
     servidor_modelo = uvicorn.Server(
@@ -516,7 +522,11 @@ async def test_erro_do_provedor_dentro_da_etapa(ambiente_http: AmbienteHttp) -> 
         assert any(e["status"] == "falhou" for e in etapas)
     async with amb.fabrica() as sessao:
         etapa = await sessao.get(Etapa, etapa_id)
-        assert etapa.status == StatusEtapa.FALHOU and etapa.erro
+        assert etapa.status == StatusEtapa.FALHOU
+        from workers.cadeia import ERRO_SEGURO_DA_ETAPA
+
+        assert etapa.erro == ERRO_SEGURO_DA_ETAPA  # nada do texto cru do provedor
+        assert "indisponível" not in etapa.erro
         assert (await sessao.get(Cadeia, cadeia_id)).status == StatusCadeia.FALHOU
 
 
@@ -725,14 +735,8 @@ async def test_worker_morto_no_meio_da_etapa_e_retomado_pelo_reconciliador(
         processo.kill()  # morte de verdade: nada de desligamento limpo
         processo.wait(timeout=30)
 
-    # passou muito tempo desde que a etapa começou
-    async with fabrica() as sessao:
-        await sessao.execute(
-            text("update etapas set iniciada_em = now() - interval '10 minutes' where id = :i"),
-            {"i": etapa_id},
-        )
-        await sessao.commit()
-
+    # nada de envelhecer a etapa no banco nem de chamar o reconciliador à mão: sem batimento, o
+    # cron do worker saudável detecta a queda sozinho (carência 30 s + cron a cada 15 s)
     monkeypatch.setattr(signal, "SIGUSR1", signal.SIGTERM, raising=False)
     saudavel = create_worker(
         WorkerSettings,
@@ -741,14 +745,16 @@ async def test_worker_morto_no_meio_da_etapa_e_retomado_pelo_reconciliador(
         poll_delay=0.1,
     )
     tarefa = asyncio.create_task(saudavel.async_run())
+    inicio = asyncio.get_running_loop().time()
     try:
-        await _enfileirar(url_redis, "reconciliar_travados")
 
         async def concluiu() -> bool:
             async with fabrica() as sessao:
                 return (await sessao.get(Cadeia, cadeia_id)).status == StatusCadeia.CONCLUIDA
 
-        await esperar(concluiu, "a cadeia não concluiu depois da retomada", limite_s=90)
+        await esperar(concluiu, "a cadeia não concluiu depois da queda", limite_s=100)
+        detectou_em = asyncio.get_running_loop().time() - inicio
+        assert detectou_em < 90, detectou_em  # antes: 7 a 8 minutos
         assert await redis.get(f"retomadas:{etapa_id}") == "1"
         async with fabrica() as sessao:
             assert (await sessao.get(Etapa, etapa_id)).status == StatusEtapa.CONCLUIDA
@@ -940,7 +946,9 @@ async def test_reprovacao_sobe_para_n3_uma_vez_e_depois_falha(
         verificador = await sessao.scalar(
             select(Etapa).where(Etapa.cadeia_id == cadeia2, Etapa.especialista == "verificador")
         )
-        assert verificador.status == StatusEtapa.FALHOU and "provedor caiu" in verificador.erro
+        assert verificador.status == StatusEtapa.FALHOU
+        assert "provedor caiu" not in verificador.erro  # só mensagem segura em PT-BR
+        assert "Não consegui verificar" in verificador.erro
 
 
 async def test_ajustes_simultaneos_nao_repetem_a_versao(
@@ -1172,10 +1180,14 @@ def test_worker_sobe_no_windows_sem_sigusr1(monkeypatch: pytest.MonkeyPatch) -> 
 
     if sys.platform != "win32":
         pytest.skip("ajustes só do Windows")
+    politica = asyncio.get_event_loop_policy()
     monkeypatch.delattr(signal, "SIGUSR1", raising=False)
-    entrada.preparar_windows()
-    assert hasattr(signal, "SIGUSR1")
-    assert isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsSelectorEventLoopPolicy)
+    try:
+        entrada.preparar_windows()
+        assert hasattr(signal, "SIGUSR1")
+        assert isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsSelectorEventLoopPolicy)
+    finally:
+        asyncio.set_event_loop_policy(politica)  # não vaza para os outros testes
 
 
 # ------------------------------------------------ orçamento estourado e troca de modelo (§6)
@@ -1304,3 +1316,112 @@ async def test_troca_de_modelo_aparece_na_linha_do_tempo(ambiente_http: Ambiente
                 await sessao.scalars(select(Passo.texto).where(Passo.etapa_id == etapa_id))
             ).all()
         assert any(t.startswith("Troquei de modelo:") for t in textos), textos
+
+
+async def test_modelo_descoberto_fora_do_catalogo_e_testado_ao_conectar(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    """§5: fora do catálogo = sem capacidades confirmadas "até ser testado ou classificado pelo
+    usuário". Ao conectar, o teste real (chamada de ferramenta e JSON) confirma as capacidades;
+    o usuário também pode classificar à mão."""
+    amb = ambiente_http
+
+    def responder(corpo: dict[str, Any], n: int) -> Any:
+        if corpo.get("tools"):
+            return completar_ferramenta("eco", {"texto": "oi"})
+        return completar_texto('{"ok": true}')
+
+    amb.provedor.responder = responder
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=90) as cliente:
+        await cliente.post(
+            "/v1/auth/cadastrar",
+            json={
+                "nome": "Ana",
+                "email": "sonda@exemplo.com",
+                "senha": "uma-senha-bem-longa",
+                "convite": "FASE-B",
+            },
+        )
+        login = await cliente.post(
+            "/v1/auth/entrar", json={"email": "sonda@exemplo.com", "senha": "uma-senha-bem-longa"}
+        )
+        auth = {"Authorization": f"Bearer {login.json()['token_acesso']}"}
+        conexao = await cliente.post(
+            "/v1/provedores",
+            headers=auth,
+            json={"tipo": "compativel_openai", "base_url": amb.provedor_url, "chave": "sk-local-1"},
+        )
+        assert conexao.status_code == 201, conexao.text
+        modelo = conexao.json()["modelos"][0]
+        assert modelo["modelo"].endswith("modelo-novo")
+        assert sorted(modelo["capacidades"]) == ["ferramentas", "json"], modelo
+
+        # classificação do usuário (e rejeição de capacidade inventada)
+        ruim = await cliente.patch(
+            f"/v1/modelos/{modelo['id']}", headers=auth, json={"capacidades": ["voar"]}
+        )
+        assert ruim.status_code == 422
+        bom = await cliente.patch(
+            f"/v1/modelos/{modelo['id']}", headers=auth, json={"capacidades": ["json"]}
+        )
+        assert bom.status_code == 200 and bom.json()["capacidades"] == ["json"]
+
+
+async def test_cancelar_no_meio_deixa_a_etapa_cancelada(ambiente_http: AmbienteHttp) -> None:
+    """Cancelar com a etapa rodando: etapa `cancelada` (nunca `falhou`) e nenhuma entrega."""
+    amb = ambiente_http
+
+    async def lento(corpo: dict[str, Any], n: int) -> Any:
+        await asyncio.sleep(3)
+        return _entregar_do_provedor()
+
+    amb.provedor.responder = lambda corpo, n: lento(corpo, n)
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, usuario_id = await usuario_com_modelo_http(amb, cliente, "cancela@exemplo.com")
+        _, cadeia_id, etapa_id = await _cadeia_e_etapa(
+            amb.fabrica, usuario_id, StatusCadeia.EXECUTANDO
+        )
+        await _enfileirar(amb.url_redis, "executar_etapa", str(etapa_id))
+
+        async def chamou_o_modelo() -> bool:
+            return len(amb.provedor.chamadas) >= 1
+
+        await esperar(chamou_o_modelo, "a etapa não chegou ao modelo")
+        resposta = await cliente.post(f"/v1/cadeias/{cadeia_id}/cancelar", headers=auth)
+        assert resposta.status_code == 202, resposta.text
+        await asyncio.sleep(8)  # o modelo responde e o worker percebe o cancelamento
+    async with amb.fabrica() as sessao:
+        assert (await sessao.get(Etapa, etapa_id)).status == StatusEtapa.CANCELADA
+        assert (await sessao.get(Cadeia, cadeia_id)).status == StatusCadeia.CANCELADA
+        assert await sessao.scalar(select(Entrega.id).where(Entrega.etapa_id == etapa_id)) is None
+
+
+async def test_provedor_mudo_nao_segura_o_post_da_conversa(
+    ambiente_http: AmbienteHttp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Triagem com prazo: provedor sem resposta -> 201 rápido com o aviso em PT-BR."""
+    amb = ambiente_http
+    monkeypatch.setattr("app.api.conversas.PRAZO_TRIAGEM_S", 1.0)
+
+    async def mudo(corpo: dict[str, Any], n: int) -> Any:
+        await asyncio.sleep(30)
+        return completar_texto("tarde demais")
+
+    amb.provedor.responder = lambda corpo, n: mudo(corpo, n)
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, _ = await usuario_com_modelo_http(amb, cliente, "mudo@exemplo.com")
+        inicio = asyncio.get_running_loop().time()
+        resposta = await cliente.post(
+            "/v1/conversas",
+            headers=auth,
+            json={"texto": "crie uma campanha para a cafeteria", "anexos": []},
+        )
+        demorou = asyncio.get_running_loop().time() - inicio
+        assert resposta.status_code == 201, resposta.text
+        assert demorou < 10, demorou  # antes: 61 s
+        mensagens = await cliente.get(
+            f"/v1/conversas/{resposta.json()['id']}/mensagens", headers=auth
+        )
+        conteudos = [m["conteudo"] for m in mensagens.json()]
+        assert "crie uma campanha para a cafeteria" in conteudos
+        assert any("Não consegui falar com o seu modelo" in c for c in conteudos)

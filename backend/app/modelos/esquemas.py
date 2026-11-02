@@ -192,6 +192,8 @@ class ProvedorConexaoSaida(EsquemaBase):
 class ModeloAtualizacao(EsquemaBase):
     nivel: str | None = None
     ativo: bool | None = None
+    capacidades: list[str] | None = None
+    """Classificação do usuário para modelo fora do catálogo (§5)."""
 
 
 class ModeloSaida(EsquemaBase):

@@ -11,7 +11,7 @@ import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.provedores import obter_listador
+from app.api.provedores import obter_listador, obter_sonda
 from app.core import conexoes
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
@@ -58,6 +58,10 @@ class SessaoFalsa:
         self.flushes += 1
 
 
+async def _sonda_nula(_config: object, _modelo: str) -> list[str]:
+    return []
+
+
 @pytest.fixture
 async def redis_falso() -> AsyncIterator[Any]:
     redis = fakeredis.FakeAsyncRedis(decode_responses=True)
@@ -71,6 +75,7 @@ def _aplicacao(sessao: SessaoFalsa, redis: Any, listador: Any) -> Any:
     app.dependency_overrides[obter_sessao] = lambda: sessao
     app.dependency_overrides[obter_redis] = lambda: redis
     app.dependency_overrides[obter_listador] = lambda: listador
+    app.dependency_overrides[obter_sonda] = lambda: _sonda_nula
     return app
 
 

@@ -81,7 +81,9 @@ class WorkerSettings:
         expirar_aprovacao,
         reconciliar_travados,
     ]
-    cron_jobs: ClassVar[list[Any]] = [cron(reconciliar_travados, second=0, run_at_startup=False)]
+    cron_jobs: ClassVar[list[Any]] = [
+        cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False)
+    ]
     on_startup = ao_iniciar
     on_shutdown = ao_desligar
     max_tries = 3

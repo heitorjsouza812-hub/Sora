@@ -8,6 +8,9 @@ etapa para a fila uma vez; se acontecer de novo, a etapa (e a cadeia) falham com
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -17,10 +20,46 @@ from sqlalchemy import select, update
 from app.eventos.tipos import CadeiaAtualizada, EtapaAtualizada
 from app.modelos.enumeracoes import StatusAprovacao, StatusCadeia, StatusEtapa
 from app.modelos.tabelas import Aprovacao, Cadeia, Etapa
-from app.orquestrador.travados import Acao, EtapaParada, acao_para
+from app.orquestrador.travados import MAX_RETOMADAS, Acao, EtapaParada, acao_para
 from workers.fila import enfileirar
 
 PRAZO_CONTADOR_S = 7 * 24 * 60 * 60
+
+BATIMENTO_TTL_S = 15
+"""O worker renova a chave de batimento a cada ``BATIMENTO_INTERVALO_S`` enquanto a etapa roda;
+sem renovar por ``BATIMENTO_TTL_S``, o processo morreu."""
+BATIMENTO_INTERVALO_S = 5
+CARENCIA_S = 30
+"""Tempo mínimo desde o início da etapa antes de dar o worker por morto pela falta de batimento."""
+
+
+def _chave_batimento(etapa_id: UUID) -> str:
+    return f"batimento:{etapa_id}"
+
+
+@asynccontextmanager
+async def batimento(redis: Any, etapa_id: UUID) -> AsyncIterator[None]:
+    """Mantém o sinal de vida da etapa enquanto o bloco roda (etapa longa saudável nunca é
+    confundida com worker morto)."""
+
+    async def pulsar() -> None:
+        while True:
+            try:
+                await redis.set(_chave_batimento(etapa_id), "1", ex=BATIMENTO_TTL_S)
+            except Exception:
+                pass  # um tropeço do Redis não derruba a etapa; o próximo pulso tenta de novo
+            await asyncio.sleep(BATIMENTO_INTERVALO_S)
+
+    tarefa = asyncio.create_task(pulsar())
+    try:
+        await asyncio.sleep(0)  # o primeiro pulso sai antes de a etapa começar a trabalhar
+        yield
+    finally:
+        tarefa.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await tarefa
+        with suppress(Exception):
+            await redis.delete(_chave_batimento(etapa_id))
 
 
 def _chave_retomadas(etapa_id: UUID) -> str:
@@ -42,7 +81,17 @@ async def reconciliar_travados(ctx: dict[str, Any]) -> dict[str, int]:
         ).all()
     for etapa_id, iniciada_em in candidatas:
         ja = int(await redis.get(_chave_retomadas(etapa_id)) or 0)
-        acao = acao_para(EtapaParada(str(etapa_id), "executando", iniciada_em, retomadas=ja), agora)
+        morto = (
+            not await redis.exists(_chave_batimento(etapa_id))
+            and (agora - iniciada_em).total_seconds() >= CARENCIA_S
+        )
+        if morto:
+            # sem batimento: o processo do worker morreu; não precisa esperar o prazo da etapa
+            acao = Acao.RETOMAR if ja < MAX_RETOMADAS else Acao.FALHAR
+        else:
+            acao = acao_para(
+                EtapaParada(str(etapa_id), "executando", iniciada_em, retomadas=ja), agora
+            )
         if acao == Acao.RETOMAR and await _retomar(ctx, etapa_id):
             retomadas += 1
         elif acao == Acao.FALHAR and await _falhar(ctx, etapa_id):

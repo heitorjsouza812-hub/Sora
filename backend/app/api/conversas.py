@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Annotated
@@ -141,6 +142,10 @@ async def _contexto_triagem(
 
 registro = logging.getLogger(__name__)
 
+PRAZO_TRIAGEM_S = 15.0
+"""A triagem roda dentro do POST; provedor mudo não pode segurar a requisição (proxies cortam em
+60 s). Estourou o prazo, cai no mesmo caminho do erro de provedor."""
+
 MENSAGEM_FALHA_DO_PROVEDOR = (
     "Não consegui falar com o seu modelo de IA agora. Veja a chave e o limite do provedor em "
     "Configurações → Modelos de IA e envie o pedido de novo. Sua mensagem foi guardada."
@@ -242,7 +247,9 @@ async def _encaminhar(
     contexto = await _contexto_triagem(sessao, usuario_id, conversa.id)
     contexto.tem_modelo_de_imagem = any("imagem" in m.capacidades for m in seletor.modelos)
     try:
-        resultado = await triar(mensagem.conteudo, contexto, seletor, configs)
+        resultado = await asyncio.wait_for(
+            triar(mensagem.conteudo, contexto, seletor, configs), PRAZO_TRIAGEM_S
+        )
     except Exception as erro:
         # Provedor fora do ar, chave inválida, limite estourado ou resposta ilegível: o texto
         # do usuário não se perde. A conversa é criada e a Sora explica o que houve.

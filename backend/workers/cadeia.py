@@ -8,6 +8,7 @@ estado da cadeia.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -45,6 +46,9 @@ from app.modelos.tabelas import Agente, Cadeia, Conversa, Entrega, Etapa, Mensag
 from app.orquestrador.cadeia import EtapaResumo, decidir_avanco, pegar_etapa, retomar_etapa
 from app.orquestrador.planejador import Plano, titulo_da_etapa, validar_plano
 from workers.fila import enfileirar
+from workers.travados import batimento
+
+registro = logging.getLogger(__name__)
 
 
 def _uuid(valor: str) -> UUID:
@@ -419,6 +423,27 @@ def dependencias_da_etapa(
     )
 
 
+ERRO_SEGURO_DA_ETAPA = (
+    "A etapa não terminou porque o modelo de IA não respondeu. Confira o provedor em "
+    "Configurações → Modelos de IA e peça de novo."
+)
+ERRO_SEGURO_DO_VERIFICADOR = (
+    "Não consegui verificar o resultado porque o modelo de IA não respondeu. Peça de novo."
+)
+
+
+def _foi_cancelamento(erro: BaseException | None) -> bool:
+    from app.agentes.middleware.cancelamento import CadeiaCancelada
+
+    visto: set[int] = set()
+    while erro is not None and id(erro) not in visto:
+        if isinstance(erro, CadeiaCancelada):
+            return True
+        visto.add(id(erro))
+        erro = erro.__cause__ or erro.__context__
+    return False
+
+
 def _estourou_orcamento(erro: BaseException | None) -> bool:
     from app.agentes.middleware.orcamento import OrcamentoEstourado
 
@@ -579,21 +604,34 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
             dependencias=dependencias_da_etapa(ctx, cadeia=cadeia, etapa=etapa),
         )
         try:
-            resultado = await montar_e_rodar_agente(
-                contexto=contexto,
-                modelos=await _modelos_da_etapa(
-                    ctx, sessao, cadeia.usuario_id, etapa.especialista, etapa.nivel
-                ),
-                checkpointer=ctx["checkpointer"],
-                entrada=None if retomada else {"messages": [HumanMessage(etapa.tarefa)]},
-                resposta=resposta,
-            )
+            async with batimento(ctx["redis_eventos"], etapa.id):
+                resultado = await montar_e_rodar_agente(
+                    contexto=contexto,
+                    modelos=await _modelos_da_etapa(
+                        ctx, sessao, cadeia.usuario_id, etapa.especialista, etapa.nivel
+                    ),
+                    checkpointer=ctx["checkpointer"],
+                    entrada=None if retomada else {"messages": [HumanMessage(etapa.tarefa)]},
+                    resposta=resposta,
+                )
         except Exception as erro:
             if _estourou_orcamento(erro):
                 await _pausar_por_orcamento(ctx, sessao, cadeia, etapa)
                 return
+            await sessao.refresh(cadeia)
+            if _foi_cancelamento(erro) or cadeia.status == StatusCadeia.CANCELADA:
+                # cancelar no meio: a etapa fica `cancelada`, não `falhou`
+                etapa.status = StatusEtapa.CANCELADA
+                etapa.erro = None
+                await sessao.commit()
+                await _publicar(ctx, cadeia, _evento_etapa(etapa, 100))
+                return
+            # o texto cru do provedor (URL, trecho de chave) vai só para o log, nunca para a API
+            registro.warning(
+                "etapa %s falhou (%s): %s", etapa.id, type(erro).__name__, str(erro)[:300]
+            )
             etapa.status = StatusEtapa.FALHOU
-            etapa.erro = str(erro)[:500]
+            etapa.erro = ERRO_SEGURO_DA_ETAPA
             await sessao.commit()
             await _publicar(ctx, cadeia, _evento_etapa(etapa, 100))
             await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
@@ -740,14 +778,15 @@ async def _rodar_verificador(
         },
         dependencias=dependencias_da_etapa(ctx, cadeia=cadeia, etapa=verificador),
     )
-    await montar_e_rodar_agente(
-        contexto=contexto,
-        modelos=await _modelos_da_etapa(
-            ctx, sessao, cadeia.usuario_id, "verificador", verificador.nivel
-        ),
-        checkpointer=ctx["checkpointer"],
-        entrada={"messages": [HumanMessage(verificador.tarefa)]},
-    )
+    async with batimento(ctx["redis_eventos"], verificador.id):
+        await montar_e_rodar_agente(
+            contexto=contexto,
+            modelos=await _modelos_da_etapa(
+                ctx, sessao, cadeia.usuario_id, "verificador", verificador.nivel
+            ),
+            checkpointer=ctx["checkpointer"],
+            entrada={"messages": [HumanMessage(verificador.tarefa)]},
+        )
     await sessao.refresh(verificador)
     bruto = (verificador.saida or {}).get("veredito")
     if bruto is None:
@@ -774,7 +813,8 @@ async def _concluir_verificacao_com_falha(
     if cadeia is None or verificador is None:
         return
     verificador.status = StatusEtapa.FALHOU
-    verificador.erro = erro[:500]
+    registro.warning("verificador da cadeia %s falhou: %s", cadeia_id, erro[:300])
+    verificador.erro = ERRO_SEGURO_DO_VERIFICADOR
     if cadeia.status not in {StatusCadeia.CANCELADA, StatusCadeia.CONCLUIDA}:
         cadeia.status = StatusCadeia.FALHOU
     await sessao.commit()
@@ -866,7 +906,7 @@ async def verificar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
                 verificador.saida = {"veredito": veredito.model_dump(mode="json")}
         except Exception as erro:
             await _concluir_verificacao_com_falha(
-                ctx, sessao, cadeia.id, verificador_id, f"o Verificador falhou: {erro}"
+                ctx, sessao, cadeia.id, verificador_id, f"{type(erro).__name__}: {erro}"
             )
             return
         cadeia.rodada += 1

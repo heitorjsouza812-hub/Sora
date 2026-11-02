@@ -11,7 +11,6 @@ import asyncio
 import json
 import signal
 import socket
-import sys
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -61,10 +60,6 @@ from workers.configuracao import WorkerSettings
 from workers.fila import configurar_fila
 
 pytestmark = pytest.mark.integracao
-
-if sys.platform == "win32":
-    # O checkpointer Psycopg assíncrono não funciona no Proactor padrão do Windows.
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 RAIZ = Path(__file__).resolve().parents[2]
 SENHA = "uma-senha-bem-longa"

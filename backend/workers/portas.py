@@ -16,6 +16,7 @@ from sqlalchemy import update
 from app.core.banco import fabrica_sessoes
 from app.eventos.streams import publicar_evento
 from app.eventos.tipos import PassoEvento
+from app.ferramentas.base import ErroFerramenta
 from app.ferramentas.rotulos import (
     parametros_sem_segredos,
     resumir_resultado,
@@ -113,7 +114,11 @@ def construir_dependencias(
         status = StatusPasso.ERRO if erro is not None else StatusPasso.CONCLUIDO
         conteudo = getattr(resultado, "content", resultado)
         resumo = (
-            {"erro": str(erro)[:300]}
+            {
+                "erro": str(erro)[:300]
+                if isinstance(erro, ErroFerramenta)
+                else "A ferramenta falhou."
+            }
             if erro is not None
             else resumir_resultado(passo["acao"], conteudo)
         )
