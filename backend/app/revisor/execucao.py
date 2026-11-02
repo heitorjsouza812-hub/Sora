@@ -41,9 +41,15 @@ VALIDADE_DO_CARTAO = timedelta(minutes=10)
 CUIDAM_DO_PROPRIO_CARTAO: set[str] = {"criar_agente"}
 """Ferramentas que abrem o próprio cartão. Quem criar outra com cartão próprio acrescenta aqui."""
 
-PREFIXOS_PROPRIOS = ("navegador_", "conectores_executar_ferramenta")
-"""``navegador_*`` é decidido pela revisão de domínio (Leme); a meta-ferramenta de execução do
-catálogo preguiçoso é revisada com o nome da ferramenta de verdade, no gancho do catálogo."""
+PREFIXOS_PROPRIOS = ("conectores_executar_ferramenta",)
+"""A meta-ferramenta de execução do catálogo preguiçoso é revisada com o nome da ferramenta de
+verdade, no gancho do catálogo.
+
+``navegador_*`` **não** está aqui: a revisão de domínio do navegador (Leme) só cuida de domínio
+novo em perfil logado, dentro de ``navegador_abrir``. Clicar, digitar, tecla e lote
+(``navegador_acao``, ``navegador_tecla``, ``navegador_lote``, ``navegador_agir``) têm efeito e
+passam pelo juiz e pelo cartão como qualquer ferramenta; observar, procurar, esperar e capturar
+são leitura (política ``livre``) e rodam direto."""
 
 NEGADO = "O usuário não aprovou esta ação. Não tente de novo; siga sem ela e avise o usuário."
 SEM_SUPERVISAO = (

@@ -204,9 +204,8 @@ async def montar_agente(
             sem_supervisao=contexto.sem_supervisao,
         ),
     )
-    from app.conectores.carregar import ferramentas_dos_conectores
-
     from app.agentes.ancora import catalogo_dos_conectores
+    from app.conectores.carregar import ferramentas_dos_conectores
 
     ferramentas += catalogo_dos_conectores(
         await ferramentas_dos_conectores(

@@ -550,3 +550,64 @@ async def test_enviar_para_agente_respeita_o_limite_de_saltos(
     # a próxima ida e volta passaria de 2: recusada, com o texto que manda seguir sozinho
     with pytest.raises(ErroFerramenta, match="passou de 2 trocas"):
         await enviar_para_agente(EnviarParaAgente(agente_id=bia_id, texto="de novo"), de_ana)
+
+
+async def test_acao_do_navegador_vai_para_o_juiz_e_vira_cartao(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    """E4-A1: clicar em "Publicar" num perfil logado não pode pular o revisor. Com o juiz em
+    BLOQUEAR (modelo falso, falha fechada) o clique vira cartão e não roda antes da decisão."""
+    from langchain_core.messages import HumanMessage
+
+    from app.agentes import ContextoAgente, montar_e_rodar_agente
+    from app.agentes.checkpointer import abrir_checkpointer, fechar_checkpointer
+    from app.core.config import obter_configuracao
+    from app.ferramentas.base import ContextoFerramenta
+    from app.revisor.execucao import conferir_acao
+
+    cliente, fabrica, _ = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-navegador@exemplo.com")
+    usuario_id, agente_id, conversa_id = await _agente_e_conversa(
+        fabrica, "ancora-navegador@exemplo.com"
+    )
+    ctx = ContextoFerramenta(usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id)
+    # leitura e abertura seguem livres: quem decide domínio novo é o próprio navegador
+    for leitura in ("navegador_observar", "navegador_procurar", "navegador_esperar"):
+        assert await conferir_acao(leitura, {}, ctx, chamada_id="x") is None
+    assert await conferir_acao("navegador_abrir", {}, ctx, chamada_id="x") is None
+
+    checkpointer = await abrir_checkpointer(obter_configuracao().database_url)
+    try:
+        for nome, argumentos in (
+            ("navegador_acao", {"ref": "@s0000001:e7", "acao": "clicar"}),
+            ("navegador_tecla", {"tecla": "Enter"}),
+            ("navegador_lote", {"comandos": [{"comando": "tecla", "tecla": "Enter"}]}),
+        ):
+            agente = Agente(
+                usuario_id=usuario_id, tipo=TipoAgente.INDIVIDUAL, nome=f"N-{nome}", papel="x"
+            )
+            async with fabrica() as sessao:
+                sessao.add(agente)
+                await sessao.flush()
+                conversa = Conversa(usuario_id=usuario_id, agente_id=agente.id)
+                sessao.add(conversa)
+                await sessao.commit()
+                aid, cid = agente.id, conversa.id
+            resultado = await montar_e_rodar_agente(
+                contexto=ContextoAgente(
+                    usuario_id=usuario_id, agente_id=aid, conversa_id=cid, papel="individual",
+                    ferramentas_extras=[nome],
+                ),
+                modelos=[_modelo_roteirizado(_chamada(nome, **argumentos))],
+                checkpointer=checkpointer,
+                entrada={"messages": [HumanMessage("publique o post")]},
+            )  # fmt: skip
+            assert resultado.get("__interrupt__"), nome
+            async with fabrica() as sessao:
+                cartao = await sessao.scalar(select(Aprovacao).where(Aprovacao.agente_id == aid))
+                assert cartao is not None, nome
+                assert cartao.status == StatusAprovacao.PENDENTE
+                assert cartao.acao["ferramenta"] == nome
+                assert cartao.avaliacao["decisao"] == "BLOQUEAR"
+    finally:
+        await fechar_checkpointer(checkpointer)
