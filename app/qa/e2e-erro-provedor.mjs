@@ -35,21 +35,25 @@ try {
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
   const campo = page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i });
   await campo.waitFor({ state: 'visible', timeout: 15_000 });
-  // Conecta a API quebrada com a sessão da própria página (token só em memória: renova pelo cookie).
-  const conexao = await page.evaluate(async (url) => {
-    const cab = { 'content-type': 'application/json', 'X-Sora-Cliente': 'web' };
-    const renovado = await (await fetch('/v1/auth/renovar', { method: 'POST', credentials: 'include', headers: cab })).json();
-    const token = renovado.token_acesso ?? renovado.access_token ?? renovado.acesso;
-    const r = await fetch('/v1/provedores', { method: 'POST', credentials: 'include', headers: { ...cab, authorization: `Bearer ${token}` }, body: JSON.stringify({ tipo: 'compativel_openai', chave: 'qa-chave', base_url: url }) });
-    const corpo = await r.text();
-    if (r.status !== 201) return { status: r.status, corpo };
-    const auth = { ...cab, authorization: `Bearer ${token}` };
-    const modelos = await (await fetch('/v1/modelos', { credentials: 'include', headers: auth })).json();
-    const alvo = modelos.find(m => m.modelo.includes('modelo-local'));
-    const p = await fetch(`/v1/modelos/${alvo.id}`, { method: 'PATCH', credentials: 'include', headers: auth, body: JSON.stringify({ capacidades: ['ferramentas', 'json'] }) });
-    return { status: p.status === 200 ? 201 : p.status, corpo };
-  }, `http://127.0.0.1:${porta}/v1`);
-  assert.equal(conexao.status, 201, `conectar provedor de teste: ${conexao.status} ${conexao.corpo}`);
+  // Conecta o provedor quebrado pela própria tela (cartão Compatível com OpenAI, URL editável)
+  // e marca as capacidades do modelo fora do catálogo na tela Configurações > Modelos de IA.
+  await page.goto(BASE + '/configuracoes', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: /Compatível com OpenAI/ }).click();
+  await page.getByLabel('URL base').fill(`http://127.0.0.1:${porta}/v1`);
+  await page.getByLabel('Chave da API').fill('qa-chave-local');
+  await page.getByRole('button', { name: 'Testar e conectar', exact: true }).click();
+  const capacidades = page.locator('.cfg-capacidades');
+  await capacidades.waitFor({ state: 'visible', timeout: 30_000 });
+  await capacidades.getByText('Modelo fora do catálogo').waitFor({ state: 'visible' });
+  // o checkbox só muda depois do PATCH /v1/modelos/{id} (estado vem do servidor): clica e espera
+  await capacidades.getByLabel('Ferramentas').click();
+  await page.waitForFunction(() => document.querySelectorAll('.cfg-capacidades input:checked').length === 1, null, { timeout: 15_000 });
+  await page.waitForFunction(() => !document.querySelector('.cfg-capacidades[disabled]'), null, { timeout: 15_000 });
+  await capacidades.getByLabel('JSON').click();
+  await page.waitForFunction(() => document.querySelectorAll('.cfg-capacidades input:checked').length >= 2, null, { timeout: 15_000 });
+  assert.ok(await capacidades.getByLabel('Ferramentas').isChecked(), 'as capacidades marcadas precisam continuar na tela');
+  await page.screenshot({ path: join(shots, 'e2e-14-capacidades-1440x900.png') });
+  await page.goto(BASE, { waitUntil: 'domcontentloaded' });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await campo.waitFor({ state: 'visible', timeout: 15_000 });
   await campo.fill('crie uma campanha para minha cafeteria');
@@ -63,6 +67,6 @@ try {
   await page.waitForFunction(() => !/pensando/i.test(document.querySelector('.chat-header, header')?.textContent ?? '') && !document.querySelector('.thinking-row'), null, { timeout: 15_000 });
   await page.screenshot({ path: join(shots, 'e2e-10-erro-provedor-1440x900.png') });
   assert.deepEqual(erros, []);
-} catch (e) { falha = e; } finally { await contexto.close(); await browser.close(); stub.close(); }
+} catch (e) { falha = e; try { await contexto.pages()[0]?.screenshot({ path: join(shots, 'e2e-erro-provedor-FALHA.png') }); } catch { /* página encerrada */ } } finally { await contexto.close(); await browser.close(); stub.close(); }
 if (falha) { console.error(`FALHA erro do provedor: ${falha.stack ?? falha.message}`); process.exitCode = 1; }
 else console.log(`Erro do provedor aprovado: o provedor HTTP local recebeu ${chamadasDeChat.length} chamada(s) e falhou; 201, aviso da Sora em PT-BR, mensagem preservada e sem "pensando".`);

@@ -78,3 +78,10 @@
 @media (prefers-reduced-motion: reduce) { .cfg-chevron { transition: none; } }
 
 
+
+.cfg-capacidades { display: grid; gap: var(--sp-2); margin: 0 0 var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px dashed var(--line-strong); border-radius: var(--r-12, 12px); }
+.cfg-capacidades legend { padding: 0 var(--sp-2); color: var(--text-1); font-size: var(--fs-13, 13px); font-weight: 600; }
+.cfg-capacidades small { color: var(--text-2); line-height: 1.5; }
+.cfg-capacidades > div { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.cfg-capacidade { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 32px; color: var(--text-1); font-size: var(--fs-14); cursor: pointer; }
+.cfg-capacidade input { accent-color: var(--sora, #e2ecff); width: 16px; height: 16px; }

@@ -221,7 +221,15 @@ export async function desconectarTodosProvedores(): Promise<void> {
   await recarregarTudo();
 }
 
-export async function atualizarModelo(id: string, patch: { nivel?: NivelModelo; ativo?: boolean }): Promise<void> {
+export const CAPACIDADES_DO_MODELO: { id: string; rotulo: string; ajuda: string }[] = [
+  { id: 'ferramentas', rotulo: 'Ferramentas', ajuda: 'Chama ferramentas (busca, arquivos…)' },
+  { id: 'json', rotulo: 'JSON', ajuda: 'Responde em formato estruturado' },
+  { id: 'visao', rotulo: 'Visão', ajuda: 'Entende imagens' },
+  { id: 'imagem', rotulo: 'Imagem', ajuda: 'Gera imagens' },
+  { id: 'embeddings', rotulo: 'Embeddings', ajuda: 'Vetoriza textos para busca' },
+];
+
+export async function atualizarModelo(id: string, patch: { nivel?: NivelModelo; ativo?: boolean; capacidades?: string[] }): Promise<void> {
   const atualizado = await api.patch<ModeloConfigurado>(`/v1/modelos/${id}`, patch);
   const modelos = estado.modelos.map(modelo => modelo.id === id ? atualizado : modelo);
   publicar({ modelos, provedores: montarProvedores(Object.values(estado.provedores).flatMap(p => p.conexao ? [p.conexao] : []), modelos) });

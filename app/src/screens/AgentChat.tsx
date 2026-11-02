@@ -6,6 +6,7 @@ import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
 import { abrirEditorAgente } from '../components/builder';
 import { EntregaCard } from '../components/ui/EntregaCard';
+import { CartaoPendencia } from '../components/pendencias/Pendencias';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { PluginMark } from '../components/ui/PluginMark';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -21,7 +22,7 @@ import { IrParaFim } from '../components/ui/IrParaFim';
 import { MensagemChat } from '../components/ui/MensagemChat';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
 import {
-  anexarEnvio, enviarParaAgente, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararGeracao, passosDoAgente, textoVisivel, useAgora, useProjetos,
+  anexarEnvio, enviarParaAgente, pendenciasDa, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararGeracao, passosDoAgente, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos,
 } from '../state/projetos';
 
@@ -114,6 +115,7 @@ export default function AgentChat() {
         </> });
       }
     });
+    pendenciasDa(e, a.conversaId).forEach(x => itens.push({ t: 1e15 + x.desde, key: `pend-${x.id}`, node: <CartaoPendencia p={x} cor={a.cor} /> }));
     const todas = mensagensDa(e, a.id, agora);
     // erro simulado do modelo: a resposta depois da última pergunta vira o card de erro
     const pergunta = erroModelo ? todas.filter(m => m.autor === 'usuario').pop() : undefined;

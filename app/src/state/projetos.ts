@@ -1,7 +1,7 @@
 // Estado real de conversas, equipes e trabalho. A API hidrata o estado e os eventos SSE são
 // a única fonte das transições ao vivo. O relógio serve apenas para mostrar duração na interface.
 import { useEffect, useSyncExternalStore } from 'react';
-import { api } from '../api/cliente';
+import { api, ErroApi } from '../api/cliente';
 import { acompanharEventos, type EventoSse } from '../api/eventos';
 import { enviarAnexo } from '../api/anexos';
 import type { Anexo } from '../components/anexos';
@@ -44,7 +44,13 @@ export interface SoraPerfil { nome: string; cor: string }
 export interface EstadoProjetos {
   versao: 2; sora: SoraPerfil; agentes: Record<string, AgenteSora>; projetos: ProjetoSora[]; projetoAtivoId: string | null;
   execucoes: Execucao[]; mensagens: MensagemChat[]; pluginsConectados: string[]; carregando: boolean; erro?: string;
+  pendencias?: Pendencia[];
 }
+/** Algo que a equipe espera do usuário: pergunta (inclui o orçamento estourado: Continuar/Parar) ou aprovação. */
+export type Pendencia = (
+  | { tipo: 'pergunta'; texto: string; opcoes: { rotulo: string; valor: string }[]; respostaLivre: boolean }
+  | { tipo: 'aprovacao'; resumo: string; dano: string; quemRecebe: string | null; expiraEm: number }
+) & { id: string; conversaId: string; desde: number; enviando?: boolean; erro?: string };
 export type FaseProjeto = 'pensando' | 'conversa' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado' | 'erro';
 
 interface ConversaApi { id: string; agente_id: string; tipo: 'chat' | 'projeto' | 'agente'; titulo: string | null; aprovada_versao: number | null; criada_em: string; atualizada_em: string }
@@ -218,6 +224,21 @@ export async function enviarParaAgente(agenteId: string, texto: string, _agora?:
 }
 export async function pedirAjuste(projetoId: string, texto: string, agenteId?: string) { await api.post<void>(`/v1/conversas/${projetoId}/ajuste`, { texto, agente_id: agenteId ?? null }); acompanharConversa(projetoId); }
 export async function aprovarProjeto(id: string) { const p = estado.projetos.find(x => x.id === id); if (p) await api.post<void>(`/v1/conversas/${id}/aprovar`, { versao: p.versao }); }
+export const pendenciasDa = (e: EstadoProjetos, conversaId: string | null | undefined): Pendencia[] => conversaId ? (e.pendencias ?? []).filter(p => p.conversaId === conversaId) : [];
+const semPendencia = (id: string) => (e: EstadoProjetos): EstadoProjetos => ({ ...e, pendencias: (e.pendencias ?? []).filter(p => p.id !== id) });
+const marcarPendencia = (id: string, patch: Partial<Pick<Pendencia, 'enviando' | 'erro'>>) => (e: EstadoProjetos): EstadoProjetos => ({ ...e, pendencias: (e.pendencias ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
+async function enviarPendencia(id: string, chamada: () => Promise<unknown>) {
+  alterar(marcarPendencia(id, { enviando: true, erro: undefined }));
+  try { await chamada(); alterar(semPendencia(id)); }
+  catch (erro) {
+    // 404/409: já respondida ou vencida em outro lugar; o cartão não tem mais o que fazer
+    if (erro instanceof ErroApi && (erro.status === 404 || erro.status === 409)) { alterar(semPendencia(id)); return; }
+    alterar(marcarPendencia(id, { enviando: false, erro: erro instanceof Error ? erro.message : 'Não foi possível enviar. Tente de novo.' }));
+  }
+}
+export const responderPergunta = (id: string, valor: string) => enviarPendencia(id, () => api.post<void>(`/v1/perguntas/${id}/responder`, { valor }));
+export type DecisaoDeAprovacao = 'permitir_uma_vez' | 'sempre_permitir' | 'negar';
+export const decidirAprovacao = (id: string, decisao: DecisaoDeAprovacao) => enviarPendencia(id, () => api.post<void>(`/v1/aprovacoes/${id}/decidir`, { decisao }));
 export function renomearProjeto(id: string, titulo: string) { const limpo = titulo.trim(); if (!limpo) return; alterar(e => ({ ...e, projetos: e.projetos.map(p => p.id === id ? { ...p, titulo: limpo } : p) })); void api.patch(`/v1/conversas/${id}`, { titulo: limpo }).catch(() => void iniciarProjetos()); }
 
 export type Desfazer = () => void;

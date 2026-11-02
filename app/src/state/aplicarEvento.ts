@@ -31,6 +31,20 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
   const conversaId = texto(d.conversa_id) || estado.projetoAtivoId || '';
   if (!conversaId) return estado;
 
+  if (evento.tipo === 'pergunta') {
+    const id = texto(d.pergunta_id); if (!id || (estado.pendencias ?? []).some(p => p.id === id)) return estado;
+    const opcoes = (lista(d.opcoes) as Dados[]).map(o => ({ rotulo: texto(o.rotulo), valor: texto(o.valor) }));
+    return { ...estado, pendencias: [...(estado.pendencias ?? []), { tipo: 'pergunta', id, conversaId, texto: texto(d.texto), opcoes, respostaLivre: d.resposta_livre === true, desde: evento.recebidoEm }] };
+  }
+  if (evento.tipo === 'aprovacao.pedida') {
+    const id = texto(d.aprovacao_id); if (!id || (estado.pendencias ?? []).some(p => p.id === id)) return estado;
+    return { ...estado, pendencias: [...(estado.pendencias ?? []), {
+      tipo: 'aprovacao', id, conversaId, resumo: texto(d.resumo), dano: texto(d.dano), quemRecebe: texto(d.quem_recebe) || null,
+      expiraEm: Date.parse(texto(d.expira_em)) || 0, desde: evento.recebidoEm,
+    }] };
+  }
+  if (evento.tipo === 'aprovacao.resolvida') return { ...estado, pendencias: (estado.pendencias ?? []).filter(p => p.id !== texto(d.aprovacao_id)) };
+
   if (evento.tipo === 'conversa.atualizada') return atualizarProjeto(estado, conversaId, p => ({
     ...p, titulo: texto(d.titulo) || p.titulo, tipo: d.tipo === 'projeto' ? 'projeto' : 'chat',
     aprovadoEm: d.aprovada_versao ? evento.recebidoEm : undefined,
@@ -117,6 +131,10 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     const id = texto(d.entrega_id); const agenteId = texto(d.agente_id);
     const entrega: EntregaGerada = { id, agenteId, versao: numero(d.versao, 1), tipo: texto(d.tipo) as EntregaGerada['tipo'], titulo: texto(d.titulo), resumo: texto(d.resumo) };
     return atualizarProjeto(estado, conversaId, p => ({ ...p, versao: entrega.versao ?? p.versao, entregas: { ...p.entregas, [agenteId || id]: entrega } }));
+  }
+  if (evento.tipo === 'cadeia.atualizada' && texto(d.status) !== 'aguardando_usuario') {
+    // a cadeia seguiu em frente: perguntas dela já foram respondidas (o backend não emite "pergunta.resolvida")
+    estado = { ...estado, pendencias: (estado.pendencias ?? []).filter(p => !(p.tipo === 'pergunta' && p.conversaId === conversaId)) };
   }
   if (evento.tipo === 'cadeia.atualizada') return atualizarProjeto(estado, conversaId, p => ({
     ...p, mensagensPendentes: false, cadeiaStatus: texto(d.status) as ProjetoSora['cadeiaStatus'],

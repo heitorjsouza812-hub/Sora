@@ -64,6 +64,20 @@ describe('aplicarEvento', () => {
     expect(e.projetos[0]?.mensagensPendentes).toBe(false);
   });
 
+  it('pergunta e aprovação viram pendências; resolvida e progresso da cadeia as limpam', () => {
+    let e = aplicarEvento(estado(), evento('pergunta', { pergunta_id: 'p1', texto: 'Continuar?', opcoes: [{ rotulo: 'Continuar', valor: 'continuar' }, { rotulo: 'Parar', valor: 'parar' }], resposta_livre: false }));
+    e = aplicarEvento(e, evento('pergunta', { pergunta_id: 'p1', texto: 'Continuar?', opcoes: [], resposta_livre: false }, 1));
+    e = aplicarEvento(e, evento('aprovacao.pedida', { aprovacao_id: 'a1', resumo: 'Criar o agente Íris', dano: 'Passa a usar ferramentas', quem_recebe: null, expira_em: '2030-01-01T00:00:00Z' }, 2));
+    expect(e.pendencias?.map(x => [x.tipo, x.id])).toEqual([['pergunta', 'p1'], ['aprovacao', 'a1']]);
+    expect(e.pendencias?.[0]).toMatchObject({ opcoes: [{ rotulo: 'Continuar', valor: 'continuar' }, { rotulo: 'Parar', valor: 'parar' }] });
+    e = aplicarEvento(e, evento('aprovacao.resolvida', { aprovacao_id: 'a1', status: 'permitida' }, 3));
+    expect(e.pendencias?.map(x => x.id)).toEqual(['p1']);
+    e = aplicarEvento(e, evento('cadeia.atualizada', { cadeia_id: 'c', status: 'aguardando_usuario', tokens_usados: 0, custo_usd: 0 }, 4));
+    expect(e.pendencias).toHaveLength(1);
+    e = aplicarEvento(e, evento('cadeia.atualizada', { cadeia_id: 'c', status: 'executando', tokens_usados: 0, custo_usd: 0 }, 5));
+    expect(e.pendencias).toHaveLength(0);
+  });
+
   it('usa o relógio do servidor (id do Redis Stream) como horário do evento', () => {
     expect(horarioDoEvento('1730518324070-3')).toBe(1730518324070);
     vi.setSystemTime(AGORA);
@@ -81,9 +95,10 @@ describe('aplicarEvento', () => {
     expect(outra.projetos[0]?.tarefas.map(t => t.id)).toEqual(['a2']);
   });
 
-  it('ignora aprovacao.resolvida sem mexer no estado', () => {
-    const base = estado();
-    expect(aplicarEvento(base, evento('aprovacao.resolvida', { aprovacao_id: 'x', status: 'expirada' }))).toBe(base);
+  it('aprovacao.resolvida de um pedido que não está na tela não muda nada', () => {
+    const e = aplicarEvento(estado(), evento('aprovacao.resolvida', { aprovacao_id: 'x', status: 'expirada' }));
+    expect(e.pendencias ?? []).toEqual([]);
+    expect(e.projetos).toEqual(estado().projetos);
   });
 
   it('não duplica o texto quando o SSE repete a mensagem já carregada do histórico', () => {

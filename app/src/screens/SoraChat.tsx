@@ -19,9 +19,10 @@ import { MessageComposer } from '../components/ui/MessageComposer';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { PainelTrabalho } from '../components/work';
 import { ZonaSoltar } from '../components/anexos';
+import { CartaoPendencia } from '../components/pendencias/Pendencias';
 import { CardErroModelo, definirErroSimulado, useErroSimulado } from '../components/erros';
 import {
-  abrirProjeto, agentesDoProjeto, comparacaoDeVersao, anexarEnvio, conversarComSora, estadoAgente, estadoProjeto, gerandoNa, mensagensDa, pararGeracao, projetoAtivo,
+  abrirProjeto, agentesDoProjeto, pendenciasDa, comparacaoDeVersao, anexarEnvio, conversarComSora, estadoAgente, estadoProjeto, gerandoNa, mensagensDa, pararGeracao, projetoAtivo,
   podeRefazer, refazerResposta, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos, type ProjetoSora,
 } from '../state/projetos';
@@ -219,6 +220,8 @@ export default function SoraChat() {
       ) });
     }
   }
+  // o que a equipe espera do usuário fica sempre no fim da conversa
+  if (p) pendenciasDa(e, p.id).forEach(x => itens.push({ t: 1e15 + x.desde, key: `pend-${x.id}`, node: <CartaoPendencia p={x} cor={e.sora.cor} /> }));
   itens.sort((a, b) => a.t - b.t);
   const conversaId = p ? p.id : '';
   const gerando = !!p && !erroModelo && gerandoNa(e, conversaId, agora);

@@ -255,6 +255,19 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
     if (tocaSom) tocar('pronto');
   }, [alertaChave, alertaFim, oculta, tocaSom]);
 
+  // ---------- pendência nova (pergunta/aprovação): abre sozinha no Início, uma vez por pedido ----------
+  const pendenciasVistas = useRef(new Set<string>());
+  useEffect(() => {
+    if (oculta) return;
+    const nova = v.pendencias.find(x => !pendenciasVistas.current.has(x.id));
+    v.pendencias.forEach(x => pendenciasVistas.current.add(x.id));
+    // só pedido que acabou de chegar; pedido antigo (reabrir o app) fica no chat e na pílula
+    if (!nova || Date.now() - nova.desde > JANELA_ALERTA_MS) return;
+    porHover.current = false;
+    abrirIlha('inicio');
+    if (tocaSom) tocar('pronto');
+  }, [v.pendencias, oculta, tocaSom]);
+
   // ---------- pulso + som quando um agente conclui ----------
   const concluidos = v.agentes.filter(a => a.status === 'concluido').length;
   const projetoMostrado = v.projeto?.id ?? null;

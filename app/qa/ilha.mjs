@@ -1,5 +1,6 @@
 // Fase C: a Ilha deve refletir o stream agregado real, sem semear o store/localStorage.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,6 +58,18 @@ try {
   await ilha.getByRole('button', { name: 'Abrir chat do agente', exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await snap('04-detalhe-real-1440x900.png');
 
+
+  // Pendência na ilha: um pedido de aprovação aparece no Início (a ilha abre sozinha) e se decide ali.
+  // O modelo falso não pede aprovação: qa/injetar-pendencia.py grava e publica como o motor faria.
+  const conversaId = page.url().split('/').pop();
+  const r = spawnSync('uv', ['run', 'python', join(dirname(fileURLToPath(import.meta.url)), 'injetar-pendencia.py'), 'aprovacao', conversaId],
+    { cwd: join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'backend'), env: process.env, encoding: 'utf8', shell: process.platform === 'win32' });
+  assert.equal(r.status, 0, `injetar-pendencia: ${r.stderr}`);
+  const cartaoIlha = ilha.locator('[data-pendencia="aprovacao"]');
+  await cartaoIlha.waitFor({ state: 'visible', timeout: 20_000 });
+  await snap('07-pendencia-na-ilha-1440x900.png');
+  await cartaoIlha.getByRole('button', { name: 'Aprovar', exact: true }).click();
+  await cartaoIlha.waitFor({ state: 'detached', timeout: 15_000 });
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);

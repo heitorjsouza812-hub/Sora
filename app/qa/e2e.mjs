@@ -58,6 +58,7 @@ try {
   await screenshot(page, '04-pronto-1440x900');
 
   const url = page.url();
+  const urlDoProjeto = url;
   await page.reload({ waitUntil: 'domcontentloaded' });
   assert.equal(page.url(), url, 'recarregar deve manter a conversa real');
   await visivel(page, 'Plano', 30_000);
@@ -102,6 +103,62 @@ try {
   assert.equal(await page.getByText(/^Plano ·/).count(), 0, 'resposta direta não monta plano');
   assert.equal(await page.getByRole('button', { name: 'Revisar', exact: true }).count(), 0, 'resposta direta não pede revisão');
   await screenshot(page, '09-resposta-direta-1440x900');
+
+  // ── Cartões de pergunta e de aprovação ───────────────────────────────────────────────────
+  // O modelo falso nunca pergunta nem pede aprovação: qa/injetar-pendencia.py grava a linha e publica o
+  // evento como o motor faria; a resposta do usuário passa pelas rotas reais. A retomada da cadeia depois
+  // da resposta NÃO é coberta aqui (precisa de modelo que chame perguntar/criar_agente).
+  await page.goto(urlDoProjeto);
+  await page.getByRole('button', { name: 'Revisar', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+  const conversaId = page.url().split('/').pop();
+  const injetar = (...args) => {
+    const r = spawnSync('uv', ['run', 'python', join(qaDir, 'injetar-pendencia.py'), ...args], { cwd: join(qaDir, '..', '..', 'backend'), env: process.env, encoding: 'utf8', shell: process.platform === 'win32' });
+    assert.equal(r.status, 0, `injetar-pendencia ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim().split('\n').pop();
+  };
+  const fecharIlha = async () => { await page.keyboard.press('Escape'); await page.waitForTimeout(400); };
+
+  // pergunta com opções + resposta livre
+  const perguntaId = injetar('pergunta', conversaId);
+  const cartaoPergunta = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoPergunta.waitFor({ state: 'visible', timeout: 20_000 });
+  await visivel(page, 'A equipe precisa de você', 5_000);
+  await visivel(page, 'Aguardando você', 5_000);
+  await screenshot(page, '11-pergunta-1440x900');
+  await fecharIlha();
+  await cartaoPergunta.getByRole('button', { name: 'Clientes novos', exact: true }).click();
+  await cartaoPergunta.waitFor({ state: 'detached', timeout: 15_000 });
+  assert.match(injetar('estado', perguntaId), /resposta='novos' respondida=True/, 'a resposta precisa ter sido gravada pela rota real');
+
+  // orçamento estourado: pergunta Continuar/Parar
+  const orcamentoId = injetar('pergunta', conversaId, '--orcamento');
+  const cartaoOrcamento = page.locator('[data-pendencia="pergunta"]').first();
+  await cartaoOrcamento.waitFor({ state: 'visible', timeout: 20_000 });
+  await fecharIlha();
+  await cartaoOrcamento.getByRole('button', { name: 'Continuar', exact: true }).waitFor({ state: 'visible' });
+  await cartaoOrcamento.getByRole('button', { name: 'Parar', exact: true }).waitFor({ state: 'visible' });
+  await cartaoOrcamento.getByRole('button', { name: 'Continuar', exact: true }).click();
+  await cartaoOrcamento.waitFor({ state: 'detached', timeout: 15_000 });
+  assert.match(injetar('estado', orcamentoId), /resposta='continuar'/);
+
+  // aprovação de criar_agente
+  const aprovacaoId = injetar('aprovacao', conversaId);
+  const cartaoAprovacao = page.locator('[data-pendencia="aprovacao"]').first();
+  await cartaoAprovacao.waitFor({ state: 'visible', timeout: 20_000 });
+  await visivel(page, 'Criar o agente Íris', 5_000);
+  await fecharIlha();
+  await cartaoAprovacao.getByRole('button', { name: 'Recusar', exact: true }).waitFor({ state: 'visible' });
+  await screenshot(page, '12-aprovacao-1440x900');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  const largura3 = await page.evaluate(() => ({ pagina: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
+  assert.ok(largura3.pagina <= largura3.viewport, `cartão de aprovação não pode rolar na horizontal (${largura3.pagina}/${largura3.viewport})`);
+  await cartaoAprovacao.scrollIntoViewIfNeeded();
+  await screenshot(page, '13-aprovacao-390x844');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await cartaoAprovacao.getByRole('button', { name: 'Aprovar', exact: true }).click();
+  await cartaoAprovacao.waitFor({ state: 'detached', timeout: 15_000 });
+  assert.match(injetar('estado', aprovacaoId), /status='?permitida/, 'a aprovação precisa ter sido gravada pela rota real');
 
   // ── Aviso de erro do provedor (precisa de API sem modelo falso: SORA_QA_BASE_ERRO) ────────
   if (process.env.SORA_QA_BASE_ERRO) {
