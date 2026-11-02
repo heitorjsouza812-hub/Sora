@@ -9,7 +9,7 @@ import { estadoAgente, estadoProjeto, novoChat, useAgora, useProjetos, type Agen
 import { pedirApagar, pedirRenomear } from '../gestao';
 import { AccountMenu } from '../review/AccountMenu';
 import { Tooltip } from '../base';
-import { IndicadorCreditos } from '../creditos';
+import { IndicadorUso } from '../uso';
 import { MenuAgente } from '../builder';
 import { AgentsIcon, FolderIcon, GearIcon, GridIcon, PlusIcon } from '../ui/Icons';
 import { statusCurto } from './useSoraStatus';
@@ -188,7 +188,7 @@ export function Sidebar() {
         <SoraOrb size={22} color={sora.cor} glow={false} decorative seed={3} /><span>Sora</span>
       </NavLink>
       <div className="sidebar-scroll"><Navegacao /></div>
-      <IndicadorCreditos />
+      <IndicadorUso />
       <ContaRodape />
     </aside>
   );

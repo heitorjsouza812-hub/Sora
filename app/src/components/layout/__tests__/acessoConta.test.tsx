@@ -28,7 +28,7 @@ vi.mock('../../../state/modelos', () => ({
 
 vi.mock('../../mascot', () => ({ SoraOrb: () => <span data-testid="sora-orb" /> }));
 vi.mock('../../settings', () => ({ ProviderCard: ({ provedor }: { provedor: { nome: string } }) => <div>{provedor.nome}</div> }));
-vi.mock('../../creditos', () => ({ IndicadorCreditos: () => null }));
+vi.mock('../../uso', () => ({ IndicadorUso: () => null }));
 vi.mock('../../gestao', () => ({ GestaoHost: () => null, pedirApagar: vi.fn(), pedirRenomear: vi.fn() }));
 vi.mock('../../comandos', () => ({ Comandos: () => null }));
 vi.mock('../../ilha', () => ({ Ilha: () => null }));

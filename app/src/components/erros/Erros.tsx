@@ -1,4 +1,4 @@
-// Estados de erro projetados (item 47): sem conexão, modelo falhou, plugin desconectado, créditos.
+// Estados de erro projetados: sem conexão, modelo falhou e plugin desconectado.
 import { Link } from 'react-router-dom';
 import { useProjetos } from '../../state/projetos';
 import { Button } from '../base';
@@ -73,17 +73,6 @@ export function AvisoPluginDesconectado({ plugin }: { plugin: string }) {
   );
 }
 
-/** bloqueio suave: dá para escrever, mas não enviar */
-export function AvisoCreditos({ compacto = false }: { compacto?: boolean }) {
-  return (
-    <div className={`err-aviso err-aviso--creditos ${compacto ? 'is-compacto' : ''}`} role="status">
-      <IconeAlerta />
-      <p><strong>Seus créditos acabaram.</strong> Você ainda pode escrever; para enviar, escolha um plano ou espere o próximo ciclo.</p>
-      <Button tamanho="P" variante="primario" asChild><Link to="/configuracoes?secao=conta">Ver planos</Link></Button>
-    </div>
-  );
-}
-
 /** painel DEV para ligar/desligar os erros simulados (para o /lab/ui) */
 export function PainelErrosDev() {
   const atual = useErroSimulado();
@@ -97,7 +86,7 @@ export function PainelErrosDev() {
           <Button key={t.id} tamanho="P" variante={atual === t.id ? 'primario' : 'secundario'} aria-pressed={atual === t.id} onClick={() => definirErroSimulado(t.id)}>{t.rotulo}</Button>
         ))}
       </div>
-      <small>Também por URL: <code>?simularErro=conexao|modelo|plugin|creditos</code></small>
+      <small>Também por URL: <code>?simularErro=conexao|modelo|plugin</code></small>
     </fieldset>
   );
 }

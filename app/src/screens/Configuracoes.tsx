@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/base';
@@ -12,7 +12,7 @@ import { janelaAtual } from '../desktop/ponte';
 import '../components/ilha/ilha-partes.css';
 import { desconectarTodosProvedores, PROVEDORES_MODELO, useModelos } from '../state/modelos';
 import { limparTudo } from '../state/projetos';
-import { renovarCreditos, resumoCreditos, useCreditos } from '../state/creditos';
+import { carregarUso, totalTokens, useUso } from '../state/uso';
 import { mensagemDeErro } from '../api/cliente';
 import { apagarConta } from '../state/sessao';
 
@@ -45,11 +45,27 @@ function ConfiguracaoIlha() {
   </>;
 }
 
+const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' });
+const numero = new Intl.NumberFormat('pt-BR');
+
+function UsoDaConta() {
+  const uso = useUso();
+  useEffect(() => { void carregarUso(); }, []);
+  return <section className="cfg-plano" aria-labelledby="cfg-uso-titulo">
+    <div className="cfg-plano__topo"><div><span className="cfg-eyebrow">Últimos 30 dias</span><h3 id="cfg-uso-titulo">Uso do mês</h3></div><strong>{moeda.format(uso.custoTotalUsd)}</strong></div>
+    {uso.carregando && <p role="status">Carregando uso…</p>}
+    {uso.erro && <p role="alert">{uso.erro}</p>}
+    {!uso.carregando && !uso.erro && <p>{numero.format(totalTokens(uso))} tokens processados em {numero.format(uso.itens.length)} grupo(s) de chamadas de modelo.</p>}
+    <p>Os valores vêm das chamadas registradas pelo backend e podem variar conforme o provedor e o modelo.</p>
+  </section>;
+}
+
 export default function Configuracoes() {
   const [params] = useSearchParams();
   const [secao, setSecao] = useState<Secao>(() => SECOES.find(s => s.id === params.get('secao'))?.id ?? 'modelos');
-  const creditos = resumoCreditos(useCreditos());
   const [confirmarLimpeza, setConfirmarLimpeza] = useState(false);
+  const [apagandoDados, setApagandoDados] = useState(false);
+  const [erroLimpeza, setErroLimpeza] = useState('');
   const [confirmarChaves, setConfirmarChaves] = useState(false);
   const [confirmarConta, setConfirmarConta] = useState(false);
   const [senhaConta, setSenhaConta] = useState('');
@@ -79,10 +95,10 @@ export default function Configuracoes() {
           <div className="cfg-provider-grid">{PROVEDORES_MODELO.map(p => <ProviderCard key={p.id} provedor={p} />)}</div>
           <ModelDefaults estado={estado} />
           <section className="cfg-security"><h3>Segurança das suas chaves</h3><p>As chaves são enviadas ao backend da Sora e guardadas cifradas. O navegador recebe apenas os últimos caracteres para identificação.</p><Button className="cfg-btn-perigo" onClick={() => setConfirmarChaves(true)}>Desconectar todas as APIs</Button></section>
-        </> : secao === 'ilha' ? <ConfiguracaoIlha /> : secao === 'conta' ? <><header className="cfg-heading"><h2>Conta</h2><p>Gerencie os dados da sua conta e do seu plano.</p></header><section className="cfg-plano" aria-labelledby="cfg-plano-titulo"><div className="cfg-plano__topo"><div><span className="cfg-eyebrow">Plano atual</span><h3 id="cfg-plano-titulo">Plano Pro</h3></div><strong>{creditos.restantes.toLocaleString('pt-BR')} de {creditos.limite.toLocaleString('pt-BR')} créditos</strong></div><progress className="cfg-plano__barra" max={creditos.limite} value={creditos.restantes} aria-label="Créditos restantes" /><p>{creditos.esgotado ? 'Seus créditos acabaram. Os agentes voltam a trabalhar quando o ciclo renovar ou quando você mudar de plano.' : 'Cada passo concluído por um agente usa créditos. O saldo renova todo mês.'}</p><ul className="cfg-planos"><li><strong>Grátis</strong><span>300 créditos/mês</span></li><li data-atual><strong>Pro</strong><span>2.000 créditos/mês</span><small>Seu plano</small></li><li><strong>Empresa</strong><span>Créditos sob medida</span></li></ul><Button onClick={renovarCreditos}>Renovar créditos agora (simulação)</Button></section><section className="cfg-account"><div><h3>Dados da Sora</h3><p>Apague projetos, conversas e agentes criados neste navegador. As conexões de modelos não serão alteradas.</p></div><Button className="cfg-btn-perigo" onClick={() => setConfirmarLimpeza(true)}>Apagar todos os dados</Button></section><section className="cfg-account"><div><h3>Apagar conta</h3><p>Remove permanentemente a conta, as chaves cifradas e os dados guardados no servidor.</p></div><Button variante="perigo" onClick={() => setConfirmarConta(true)}>Apagar conta</Button></section></> : <><header className="cfg-heading"><h2>Aparência</h2><p>Personalize como a Sora aparece para você.</p></header><div className="cfg-placeholder">Esta seção estará disponível em breve.</div></>}
+        </> : secao === 'ilha' ? <ConfiguracaoIlha /> : secao === 'conta' ? <><header className="cfg-heading"><h2>Conta</h2><p>Gerencie os dados da sua conta.</p></header><UsoDaConta /><section className="cfg-account"><div><h3>Dados da Sora</h3><p>Apague projetos, conversas e agentes. As conexões de modelos não serão alteradas.</p></div><Button className="cfg-btn-perigo" onClick={() => setConfirmarLimpeza(true)}>Apagar todos os dados</Button></section><section className="cfg-account"><div><h3>Apagar conta</h3><p>Remove permanentemente a conta, as chaves cifradas e os dados guardados no servidor.</p></div><Button variante="perigo" onClick={() => setConfirmarConta(true)}>Apagar conta</Button></section></> : <><header className="cfg-heading"><h2>Aparência</h2><p>Personalize como a Sora aparece para você.</p></header><div className="cfg-placeholder">Esta seção estará disponível em breve.</div></>}
       </section>
     </div>
-    <Modal open={confirmarLimpeza} onClose={() => setConfirmarLimpeza(false)} title="Apagar todos os dados?" description="Esta ação não pode ser desfeita." size="sm" footer={<div className="cfg-modal-actions"><Button onClick={() => setConfirmarLimpeza(false)}>Cancelar</Button><Button variante="perigo" onClick={() => { limparTudo(); setConfirmarLimpeza(false); navigate('/'); }}>Apagar todos os dados</Button></div>}><p className="cfg-modal-copy">Todos os projetos, chats e agentes serão removidos deste navegador.</p></Modal>
+    <Modal open={confirmarLimpeza} onClose={() => { if (!apagandoDados) setConfirmarLimpeza(false); }} title="Apagar todos os dados?" description="Esta ação não pode ser desfeita." size="sm" footer={<div className="cfg-modal-actions"><Button disabled={apagandoDados} onClick={() => setConfirmarLimpeza(false)}>Cancelar</Button><Button variante="perigo" carregando={apagandoDados} onClick={() => { setErroLimpeza(''); setApagandoDados(true); void limparTudo().then(() => { setConfirmarLimpeza(false); navigate('/'); }).catch(erro => setErroLimpeza(mensagemDeErro(erro))).finally(() => setApagandoDados(false)); }}>Apagar todos os dados</Button></div>}><p className="cfg-modal-copy">Todos os projetos, chats e agentes serão removidos do servidor.</p>{erroLimpeza && <p role="alert">{erroLimpeza}</p>}</Modal>
     <Modal open={confirmarChaves} onClose={() => setConfirmarChaves(false)} title="Desconectar todas as APIs?" description="As conexões e chaves cifradas serão removidas do servidor." size="sm" footer={<div className="cfg-modal-actions"><Button onClick={() => setConfirmarChaves(false)}>Cancelar</Button><Button variante="perigo" onClick={() => { void desconectarTodosProvedores().finally(() => setConfirmarChaves(false)); }}>Desconectar APIs</Button></div>}><p className="cfg-modal-copy">Seus projetos e agentes continuam, mas não poderão usar modelos até que uma API seja conectada novamente.</p></Modal>
     <Modal open={confirmarConta} onClose={() => setConfirmarConta(false)} title="Apagar sua conta?" description="Esta ação não pode ser desfeita." size="sm" footer={<div className="cfg-modal-actions"><Button onClick={() => setConfirmarConta(false)}>Cancelar</Button><Button variante="perigo" disabled={!senhaConta} onClick={() => { setErroConta(''); void apagarConta(senhaConta).catch(erro => setErroConta(mensagemDeErro(erro))); }}>Apagar conta</Button></div>}><label className="cfg-delete-account"><span>Confirme sua senha</span><input type="password" value={senhaConta} onChange={e => setSenhaConta(e.target.value)} autoComplete="current-password" />{erroConta && <small role="alert">{erroConta}</small>}</label></Modal>
   </main></AppShell>;

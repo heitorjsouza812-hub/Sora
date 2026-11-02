@@ -265,7 +265,23 @@ export function capturarSnapshot() { return estado; }
 export function restaurarSnapshot(snapshot: EstadoProjetos) { definir(snapshot); }
 export function atualizarSora(patch: Partial<SoraPerfil>) { alterar(e => ({ ...e, sora: { ...e.sora, ...patch } })); }
 export function restaurarSora() { atualizarSora({ nome: 'Sora', cor: COR_SORA }); }
-export function limparTudo() { definir({ ...inicial(), carregando: false }); }
+export async function limparTudo() {
+  const conversas = new Set([
+    ...estado.projetos.map(projeto => projeto.id),
+    ...Object.values(estado.agentes).map(agente => agente.conversaId).filter((id): id is string => !!id),
+  ]);
+  const individuais = Object.values(estado.agentes).filter(agente => agente.avulso).map(agente => agente.id);
+  try {
+    for (const conversaId of conversas) {
+      await api.delete(`/v1/conversas/${conversaId}?manter_agentes=false`);
+    }
+    for (const agenteId of individuais) await api.delete(`/v1/agentes/${agenteId}`);
+    definir({ ...inicial(), carregando: false });
+  } catch (erro) {
+    await iniciarProjetos().catch(() => undefined);
+    throw erro;
+  }
+}
 export function alternarPlugin(_nome: string) { /* plugins seguem congelados */ }
 
 export interface TextoVisivel { texto: string; gerando: boolean; interrompida: boolean }

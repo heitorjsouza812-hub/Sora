@@ -5,7 +5,7 @@ import { useProjetos } from '../../state/projetos';
 import { ToolsPopover } from '../review/ToolsPopover';
 import { EVENTO_ANEXAR, ListaAnexos, MAX_ANEXOS, useAnexos, type Anexo } from '../anexos';
 import '../anexos/anexos.css';
-import { AvisoCreditos, useConexao, useCreditosEsgotados } from '../erros';
+import { useConexao } from '../erros';
 import { Button } from '../base';
 import { MicIcon, PlusIcon, SendIcon } from './Icons';
 
@@ -70,8 +70,7 @@ export function MessageComposer({
   const { anexos, erro: erroAnexo, adicionar, remover, entregar } = useAnexos();
   const arquivoRef = useRef<HTMLInputElement>(null);
   const { online, tentarDeNovo } = useConexao();
-  const semCreditos = useCreditosEsgotados();
-  const bloqueado = !online || semCreditos;
+  const bloqueado = !online;
   const podeEnviar = Boolean(onSend) && !bloqueado && (value.trim().length > 0 || anexos.length > 0);
   const podeParar = gerando && Boolean(onParar);
 
@@ -199,9 +198,7 @@ export function MessageComposer({
           </div>
           <span id={avisoId} className={`composer-notice ${aviso ? 'is-on' : ''}`} role="status" aria-live="polite">{aviso ?? ''}</span>
           {erroAnexo && <p className="composer-erro" role="alert">{erroAnexo}</p>}
-          {!online
-            ? <div className="composer-bloqueio" role="status"><span>Sem conexão: dá para escrever, e você envia quando a internet voltar.</span><Button tamanho="P" onClick={tentarDeNovo}>Tentar de novo</Button></div>
-            : semCreditos && <AvisoCreditos compacto />}
+          {!online && <div className="composer-bloqueio" role="status"><span>Sem conexão: dá para escrever, e você envia quando a internet voltar.</span><Button tamanho="P" onClick={tentarDeNovo}>Tentar de novo</Button></div>}
         </form>
       </VoiceBeam>
     </BorderBeam>

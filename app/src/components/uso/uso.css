@@ -1,0 +1,7 @@
+.uso-indicador { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); width: 100%; padding: var(--sp-2) var(--sp-3); box-sizing: border-box; color: var(--text-2); text-decoration: none; border-radius: var(--r-10); font-size: var(--fs-12); transition: background var(--dur-fast); }
+.uso-indicador:hover { background: var(--white-a04); }
+.uso-indicador:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.uso-indicador strong { color: var(--text-1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.uso-dica-titulo { display: block; margin-bottom: var(--sp-1); }
+.b-tooltip-alvo:has(> .uso-indicador) { display: flex; width: 100%; }
+@media (max-width: 767px) { .uso-indicador { min-height: 44px; } }
