@@ -163,6 +163,8 @@ class GerenteAbas:
         aba = await self._garantir_carregada(
             self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
         )
+        if (conferir := getattr(self._motor, "validar_destino", None)) is not None:
+            await conferir(url)  # SSRF primeiro: destino interno nunca vira cartão
         tem_login, aprovados = await self._motor.contexto_politica(aba)
         politica = politica_contextual_navegador(
             "navegador_abrir",

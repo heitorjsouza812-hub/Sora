@@ -18,6 +18,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
+from app.core.config import obter_configuracao
 from app.modelos.enumeracoes import StatusEtapa
 from app.modelos.tabelas import (
     AbaNavegador,
@@ -67,6 +68,16 @@ class _Pagina(BaseHTTPRequestHandler):
 
     def log_message(self, *_a: Any) -> None:
         return
+
+
+@pytest.fixture(autouse=True)
+def _navegador_local(monkeypatch: pytest.MonkeyPatch):
+    """Estes testes lançam o Chromium local: não herdam ``NAVEGADOR_CDP_URL`` do ``.env`` nem do
+    ``tests/conftest.py``. Valem igual com a variável definida ou não."""
+    monkeypatch.setenv("NAVEGADOR_CDP_URL", "")
+    obter_configuracao.cache_clear()
+    yield
+    obter_configuracao.cache_clear()
 
 
 @pytest.fixture
@@ -782,3 +793,51 @@ async def test_fechar_aba_pela_api_libera_a_vaga_no_worker(
             )
             assert apagada.status_code == 204
         assert (await cliente.get("/v1/navegador/abas", headers=auth)).json() == []
+
+
+async def test_destino_interno_e_recusado_sem_cartao_de_dominio(
+    mundo: Mundo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """E4F2-B3: SSRF antes da revisão. Endereço privado: erro em português, nenhum cartão e
+    nenhum domínio aprovado, nem pela navegação do agente nem por /abrir."""
+    from uuid import uuid4
+
+    from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
+    from app.navegador import NavegadorAbrir
+
+    async def compartilhado(self, agente_id, usuario_id):
+        return pf.EscolhaPerfil(tipo=pf.TipoPerfil.COMPARTILHADO)
+
+    monkeypatch.setattr(
+        "app.navegador.repositorio.RepositorioNavegador.escolha_do_agente", compartilhado
+    )
+    email = "leme-k@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=60) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, email)
+        usuario_id = await _perfil_logado(mundo, email)
+        await mundo.iniciar_worker()
+
+        async def pronto() -> Any:
+            return (mundo._worker.ctx or {}).get("navegador")
+
+        amb = await esperar(pronto, 60)
+        agente = await _novo_agente(mundo, usuario_id)
+        ctx = ContextoFerramenta(usuario_id=usuario_id, agente_id=agente, conversa_id=uuid4())
+        for alvo in ("http://127.0.0.1:9/", "http://10.0.0.5/painel", "http://localhost:9/"):
+            with pytest.raises(ErroFerramenta, match="Endereço recusado"):
+                await amb.executar("navegador_abrir", NavegadorAbrir(url=alvo), ctx)
+        assert await _todos_os_cartoes(mundo, usuario_id) == []
+
+        perfil = (
+            await cliente.post("/v1/navegador/perfis", headers=auth, json={"nome": "Interno"})
+        ).json()
+        recusada = await cliente.post(
+            f"/v1/navegador/perfis/{perfil['perfil_id']}/abrir",
+            headers=auth,
+            json={"url": "http://10.0.0.5/painel"},
+        )
+        assert recusada.status_code == 409
+        assert "Endereço recusado" in recusada.json()["detail"]
+        lista = (await cliente.get("/v1/navegador/perfis", headers=auth)).json()
+        assert all(p["dominios_aprovados"] == [] for p in lista)
+        assert await _todos_os_cartoes(mundo, usuario_id) == []

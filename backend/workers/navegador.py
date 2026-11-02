@@ -74,6 +74,7 @@ async def abrir_aba_de_perfil(
     ambiente: AmbienteNavegador = ctx["navegador"]
     usuario, agente, perfil = UUID(usuario_id), UUID(agente_id), UUID(perfil_id)
     escolha = EscolhaPerfil(tipo=TipoPerfil.NOMEADO, perfil_id=perfil)
+    await ambiente.motor.validar_destino(url)  # antes de aprovar qualquer domínio
     nome_particao = particao(usuario, agente, escolha)
     async with ctx["sessoes"]() as sessao:
         await aprovar_dominio_no_perfil(

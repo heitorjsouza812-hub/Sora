@@ -195,11 +195,15 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             raise ErroFerramenta("Essa aba não está carregada. Use a aba de novo.")
         return pagina
 
-    async def navegar(self, aba: Aba, url: str) -> tuple[str, str]:
+    async def validar_destino(self, url: str) -> None:
+        """Destino interno ou privado é recusado de vez (antes de qualquer cartão de domínio)."""
         try:
             await validar_destino(url)
         except (EnderecoBloqueado, ErroLeitura) as erro:
             raise ErroFerramenta(f"Endereço recusado: {erro}") from erro
+
+    async def navegar(self, aba: Aba, url: str) -> tuple[str, str]:
+        await self.validar_destino(url)
         pagina = self._paginas[aba.id]
         self._bloqueios.pop(aba.particao, None)
         self._urls_bloqueadas.pop(aba.particao, None)
