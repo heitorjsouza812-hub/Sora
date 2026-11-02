@@ -27,8 +27,9 @@ async def compactar_historico(
     ctx: dict[str, Any], conversa_id: str, agente_id: str, fio: str = "principal"
 ) -> str:
     """Resume o começo do histórico da conversa. Devolve ``compactado``, ``nada`` ou ``falhou``."""
-    from app.agentes import ContextoAgente, montar_agente
+    from app.agentes import ContextoAgente
     from app.agentes.checkpointer import thread_da_conversa
+    from app.agentes.montagem import montar_agente
     from app.orquestrador.modelos import modelos_do_papel
 
     redis = ctx["redis_eventos"]
@@ -50,10 +51,10 @@ async def compactar_historico(
     contexto = ContextoAgente(
         usuario_id=usuario_id, agente_id=agente.id, conversa_id=UUID(conversa_id), papel=papel
     )
-    grafo = await montar_agente(contexto, modelos, ctx["checkpointer"])
     config = {"configurable": {"thread_id": thread_da_conversa(UUID(conversa_id))}}
     estado_atual = await ler(redis, agente.id, fio)
     try:
+        grafo = await montar_agente(contexto, modelos, ctx["checkpointer"])
         instantaneo = await grafo.aget_state(config)
         mensagens = list((instantaneo.values or {}).get("messages", []))
         janela = (estado_atual.janela if estado_atual else None) or janela_do_modelo(None)

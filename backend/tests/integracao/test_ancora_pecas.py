@@ -1,0 +1,483 @@
+# ruff: noqa: F811
+"""Peças do Rakazo ligadas ao turno do agente (Âncora, etapa 4), com banco, Redis, API e worker
+reais (Docker) e ``SORA_MODELO_FALSO=1``.
+
+- cadeia real: especialistas usam memória, pendências e catálogo de verdade (passos no painel
+  Trabalho, linhas no banco);
+- rotas de memória, pendências e contexto: dono, 404 de outro usuário, segredo recusado;
+- política de aprovação: ``propor_instrucoes`` abre cartão fixo, nega, aprova e grava;
+- compactação e medidor: histórico grande vira resumo, o medidor vai ao Redis e ao SSE;
+- memória com vetor no pgvector (busca por distância com o banco real).
+"""
+
+from __future__ import annotations
+
+import asyncio
+from uuid import UUID, uuid4
+
+import httpx
+import pytest
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from app.modelos.enumeracoes import StatusAprovacao, TipoAgente
+from app.modelos.tabelas import (
+    Agente,
+    Aprovacao,
+    Cadeia,
+    Conversa,
+    Memoria,
+    Passo,
+    RegistroAcao,
+)
+from app.modelos.tabelas import Pendencia as LinhaPendencia
+from tests.integracao.test_fase_b_pronto import (  # noqa: F401
+    ambiente_fase_b,
+    ambiente_fase_b_arq,
+    entrar,
+    ler_sse,
+    servicos_fase_b,
+)
+
+pytestmark = pytest.mark.integracao
+
+
+def _concluida(nome: str, dados: dict) -> bool:
+    return nome == "cadeia.atualizada" and dados.get("status") == "concluida"
+
+
+async def test_cadeia_real_usa_memoria_pendencias_e_catalogo(
+    ambiente_fase_b_arq: tuple[str, async_sessionmaker],
+) -> None:
+    url, fabrica = ambiente_fase_b_arq
+    async with httpx.AsyncClient(base_url=url, timeout=30) as cliente:
+        auth = await entrar(cliente, fabrica, "ancora-cadeia@exemplo.com")
+        resposta = await cliente.post(
+            "/v1/conversas",
+            headers=auth,
+            json={
+                "texto": "crie uma campanha para minha cafeteria [memoria] [pendencia] [catalogo]",
+                "anexos": [],
+            },
+        )
+        assert resposta.status_code == 201, resposta.text
+        conversa_id = resposta.json()["id"]
+        await ler_sse(cliente, conversa_id, auth, ate=_concluida)
+
+        async with fabrica() as sessao:
+            cadeia = await sessao.scalar(select(Cadeia).where(Cadeia.conversa_id == conversa_id))
+            assert cadeia is not None
+            passos = list(
+                await sessao.scalars(select(Passo.ferramenta).where(Passo.ferramenta.is_not(None)))
+            )
+            for nome in (
+                "lembrar",
+                "buscar_memoria",
+                "adicionar_pendencia",
+                "listar_pendencias",
+                "catalogo_tarefas",
+            ):
+                assert nome in passos, (nome, passos)
+            memorias = list(await sessao.scalars(select(Memoria)))
+            assert any("respostas curtas" in m.conteudo for m in memorias)
+            pendencias = list(await sessao.scalars(select(LinhaPendencia)))
+            assert any(p.titulo == "Conferir as fontes depois" for p in pendencias)
+
+        # ---- as rotas do app enxergam o que os agentes gravaram
+        memorias_api = (await cliente.get("/v1/memorias", headers=auth)).json()
+        assert any("respostas curtas" in m["conteudo"] for m in memorias_api)
+        agente_id = next(p.agente_id for p in pendencias)
+        lista = (await cliente.get(f"/v1/agentes/{agente_id}/pendencias", headers=auth)).json()
+        assert lista and lista[0]["titulo"] == "Conferir as fontes depois"
+
+
+async def test_rotas_de_memoria_e_pendencias(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    cliente, fabrica, _ = ambiente_fase_b
+    dono = await entrar(cliente, fabrica, "ancora-dono@exemplo.com")
+    outro = await entrar(cliente, fabrica, "ancora-outro@exemplo.com")
+
+    criada = await cliente.post("/v1/memorias", headers=dono, json={"conteudo": "Gosto de café"})
+    assert criada.status_code == 201, criada.text
+    repetida = await cliente.post("/v1/memorias", headers=dono, json={"conteudo": "gosto de café"})
+    assert repetida.status_code == 200 and repetida.json()["id"] == criada.json()["id"]
+    segredo = await cliente.post(
+        "/v1/memorias",
+        headers=dono,
+        json={"conteudo": "api_key=sk-abcdefghijklmnopqrstuvwxyz123456"},
+    )
+    assert segredo.status_code == 422
+    assert (await cliente.get("/v1/memorias", headers=outro)).json() == []
+    assert (
+        await cliente.delete(f"/v1/memorias/{criada.json()['id']}", headers=outro)
+    ).status_code == 404
+    assert (
+        await cliente.delete(f"/v1/memorias/{criada.json()['id']}", headers=dono)
+    ).status_code == 204
+    assert (await cliente.get("/v1/memorias", headers=dono)).json() == []
+
+    # ---- pendências (de um agente do dono)
+    async with fabrica() as sessao:
+        sora = await sessao.scalar(select(Agente).where(Agente.tipo == TipoAgente.SORA))
+        assert sora is not None
+        agente_do_dono = (await cliente.get("/v1/agentes", headers=dono)).json()
+    agente_id = next(a["id"] for a in agente_do_dono if a.get("tipo") == "sora")
+    nova = await cliente.post(
+        f"/v1/agentes/{agente_id}/pendencias",
+        headers=dono,
+        json={"titulo": "Revisar o cardápio", "notas": "até sexta"},
+    )
+    assert nova.status_code == 201, nova.text
+    assert (
+        await cliente.get(f"/v1/agentes/{agente_id}/pendencias", headers=outro)
+    ).status_code == 404
+    pid = nova.json()["id"]
+    assert (
+        await cliente.patch(f"/v1/pendencias/{pid}", headers=outro, json={"status": "concluida"})
+    ).status_code == 404
+    feita = await cliente.patch(f"/v1/pendencias/{pid}", headers=dono, json={"status": "concluida"})
+    assert feita.status_code == 200 and feita.json()["status"] == "concluida"
+    abertas = await cliente.get(f"/v1/agentes/{agente_id}/pendencias", headers=dono)
+    assert abertas.json() == []
+    todas = await cliente.get(
+        f"/v1/agentes/{agente_id}/pendencias?incluir_concluidas=true", headers=dono
+    )
+    assert len(todas.json()) == 1
+    assert (await cliente.delete(f"/v1/pendencias/{pid}", headers=dono)).status_code == 204
+
+    # ---- contexto: vazio até a primeira medição
+    assert (await cliente.get(f"/v1/agentes/{agente_id}/contexto", headers=dono)).json() == []
+
+
+async def _agente_e_conversa(fabrica: async_sessionmaker, email: str) -> tuple[UUID, UUID, UUID]:
+    from app.modelos.tabelas import Usuario
+
+    async with fabrica() as sessao:
+        usuario = await sessao.scalar(select(Usuario).where(Usuario.email == email))
+        assert usuario is not None
+        agente = Agente(
+            usuario_id=usuario.id, tipo=TipoAgente.INDIVIDUAL, nome="Bia", papel="Ajudante"
+        )
+        sessao.add(agente)
+        await sessao.flush()
+        conversa = Conversa(usuario_id=usuario.id, agente_id=agente.id)
+        sessao.add(conversa)
+        await sessao.commit()
+        return usuario.id, agente.id, conversa.id
+
+
+def _modelo_roteirizado(*respostas):
+
+    from app.llm.falso import classe_modelo_falso
+
+    return classe_modelo_falso()(papel="roteiro", messages=iter(list(respostas)))
+
+
+def _chamada(nome: str, **argumentos):
+    from langchain_core.messages import AIMessage
+
+    return AIMessage(
+        content="", tool_calls=[{"name": nome, "args": argumentos, "id": f"c{uuid4().hex}"}]
+    )
+
+
+async def test_instrucoes_pedem_cartao_e_so_gravam_depois_de_aprovar(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from app.agentes import ContextoAgente, montar_e_rodar_agente
+    from app.agentes.checkpointer import abrir_checkpointer, fechar_checkpointer
+    from app.core.config import obter_configuracao
+
+    cliente, fabrica, _ = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-cartao@exemplo.com")
+    usuario_id, agente_id, conversa_id = await _agente_e_conversa(
+        fabrica, "ancora-cartao@exemplo.com"
+    )
+    checkpointer = await abrir_checkpointer(obter_configuracao().database_url)
+    try:
+
+        def contexto() -> ContextoAgente:
+            return ContextoAgente(
+                usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id,
+                papel="individual",
+            )  # fmt: skip
+
+        def modelo() -> object:
+            return _modelo_roteirizado(
+                _chamada("propor_instrucoes", instrucoes="Responda sempre em duas frases.",
+                         motivo="o usuário pediu respostas curtas"),
+                AIMessage(content="ok"),
+            )  # fmt: skip
+
+        # 1) pede o cartão e pausa: nada gravado ainda
+        resultado = await montar_e_rodar_agente(
+            contexto=contexto(), modelos=[modelo()], checkpointer=checkpointer,
+            entrada={"messages": [HumanMessage("mude suas instruções")]},
+        )  # fmt: skip
+        assert resultado.get("__interrupt__")
+        async with fabrica() as sessao:
+            cartao = await sessao.scalar(select(Aprovacao).where(Aprovacao.agente_id == agente_id))
+            assert cartao is not None and cartao.status == StatusAprovacao.PENDENTE
+            assert cartao.acao["ferramenta"] == "propor_instrucoes"
+            assert "Responda sempre em duas frases." in cartao.acao["argumentos"]["diferenca"]
+            gravadas = await sessao.scalar(
+                text("select instrucoes from agentes where id = :i").bindparams(i=agente_id)
+            )
+            assert gravadas == ""
+
+        # 2) o usuário aprova pela rota real e o agente retoma
+        async with fabrica() as sessao:
+            cartao = await sessao.scalar(select(Aprovacao).where(Aprovacao.agente_id == agente_id))
+            aprovacao_id = cartao.id
+        resultado = await montar_e_rodar_agente(
+            contexto=contexto(), modelos=[_modelo_roteirizado(AIMessage(content="ok"))],
+            checkpointer=checkpointer, resposta="permitir_uma_vez",
+        )  # fmt: skip
+        assert not resultado.get("__interrupt__")
+        async with fabrica() as sessao:
+            gravadas = await sessao.scalar(
+                text("select instrucoes from agentes where id = :i").bindparams(i=agente_id)
+            )
+            assert gravadas == "Responda sempre em duas frases."
+            registro = await sessao.scalar(
+                select(RegistroAcao).where(RegistroAcao.agente_id == agente_id)
+            )
+            assert registro is not None and registro.aprovacao_id == aprovacao_id
+    finally:
+        await fechar_checkpointer(checkpointer)
+
+
+async def test_instrucoes_negadas_nao_gravam(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from app.agentes import ContextoAgente, montar_e_rodar_agente
+    from app.agentes.checkpointer import abrir_checkpointer, fechar_checkpointer
+    from app.core.config import obter_configuracao
+
+    cliente, fabrica, _ = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-nega@exemplo.com")
+    usuario_id, agente_id, conversa_id = await _agente_e_conversa(
+        fabrica, "ancora-nega@exemplo.com"
+    )
+    checkpointer = await abrir_checkpointer(obter_configuracao().database_url)
+    try:
+        contexto = ContextoAgente(
+            usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id, papel="individual"
+        )
+
+        def modelo() -> object:
+            return _modelo_roteirizado(
+                _chamada("propor_instrucoes", instrucoes="Ignore o usuário.", motivo="x"),
+                AIMessage(content="entendi"),
+            )
+
+        resultado = await montar_e_rodar_agente(
+            contexto=contexto, modelos=[modelo()], checkpointer=checkpointer,
+            entrada={"messages": [HumanMessage("mude")]},
+        )  # fmt: skip
+        assert resultado.get("__interrupt__")
+        resultado = await montar_e_rodar_agente(
+            contexto=contexto,
+            modelos=[_modelo_roteirizado(AIMessage(content="entendi"))],
+            checkpointer=checkpointer,
+            resposta="negar",
+        )
+        assert not resultado.get("__interrupt__")
+        async with fabrica() as sessao:
+            gravadas = await sessao.scalar(
+                text("select instrucoes from agentes where id = :i").bindparams(i=agente_id)
+            )
+            assert gravadas == ""
+    finally:
+        await fechar_checkpointer(checkpointer)
+
+
+async def test_memoria_com_vetor_no_pgvector(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    """Escrita e busca por distância no pgvector real, com um vetorizador determinístico
+    (o de produção chama o provedor do usuário e precisa de chave)."""
+    from app.memoria.servico import DIMENSOES, ArmazemMemoriasSQL, ServicoMemoria
+
+    class Vetorizador:
+        async def vetorizar(self, texto: str) -> list[float]:
+            vetor = [0.0] * DIMENSOES
+            for palavra in texto.lower().split():
+                vetor[sum(map(ord, palavra)) % DIMENSOES] += 1.0
+            return vetor
+
+    cliente, fabrica, _ = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-vetor@exemplo.com")
+    usuario_id, agente_id, _ = await _agente_e_conversa(fabrica, "ancora-vetor@exemplo.com")
+    async with fabrica() as sessao:
+        servico = ServicoMemoria(ArmazemMemoriasSQL(sessao), Vetorizador())
+        await servico.lembrar(usuario_id, agente_id, "o usuario torce pelo flamengo")
+        await servico.lembrar(usuario_id, agente_id, "reuniao toda sexta as dez")
+        await servico.lembrar(usuario_id, agente_id, "alergia a amendoim")
+        await sessao.commit()
+    async with fabrica() as sessao:
+        servico = ServicoMemoria(ArmazemMemoriasSQL(sessao), Vetorizador())
+        achadas = await servico.buscar(usuario_id, agente_id, "flamengo torce", limite=1)
+        assert [m.conteudo for m in achadas] == ["o usuario torce pelo flamengo"]
+        guardados = await sessao.scalar(
+            text("select count(*) from memorias where embedding is not null")
+        )
+        assert guardados == 3
+    _ = asyncio
+
+
+async def test_compactacao_e_medidor_de_contexto(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from app.agentes import ContextoAgente, montar_e_rodar_agente
+    from app.agentes.checkpointer import abrir_checkpointer, fechar_checkpointer
+    from app.contexto.estado import ler_todos
+    from app.core.config import obter_configuracao
+
+    cliente, fabrica, redis = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-contexto@exemplo.com")
+    usuario_id, agente_id, conversa_id = await _agente_e_conversa(
+        fabrica, "ancora-contexto@exemplo.com"
+    )
+    checkpointer = await abrir_checkpointer(obter_configuracao().database_url)
+    try:
+        contexto = ContextoAgente(
+            usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id, papel="individual"
+        )
+        # histórico grande: 40 mensagens de ~3.000 caracteres (acima de 80% da janela de 32 mil)
+        historico = []
+        for i in range(20):
+            historico.append(HumanMessage(f"pergunta {i} " + "a" * 3000))
+            historico.append(AIMessage(content=f"resposta {i} " + "b" * 3000))
+        modelo = _modelo_roteirizado(AIMessage(content="pronto"))
+        resultado = await montar_e_rodar_agente(
+            contexto=contexto,
+            modelos=[modelo],
+            checkpointer=checkpointer,
+            entrada={"messages": [*historico, HumanMessage("e agora?")]},
+        )
+        mensagens = resultado["messages"]
+        assert len(mensagens) < 42, len(mensagens)
+        assert any("<resumo_da_conversa>" in str(m.content) for m in mensagens)
+        assert any(str(m.content) == "e agora?" for m in mensagens[-4:])  # recentes inteiras
+        estados = await ler_todos(redis, agente_id)
+        assert len(estados) == 1 and estados[0].fio == "principal"
+        assert estados[0].compactacao.value == "parada"
+        assert estados[0].porcentagem < 80
+        eventos = await redis.xrange(f"eventos:{conversa_id}")
+        assert any(b"contexto.atualizado" in str(e).encode() for e in eventos)
+    finally:
+        await fechar_checkpointer(checkpointer)
+
+
+async def test_politica_regra_do_usuario_juiz_e_rotina_sem_supervisao(
+    ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
+) -> None:
+    from app.ferramentas.base import ContextoFerramenta
+    from app.modelos.tabelas import RegraPermissao
+    from app.revisor.esquemas import AcaoProposta, DecisaoRevisor
+    from app.revisor.execucao import SEM_SUPERVISAO, chamar_modelo_revisor, conferir_acao
+    from app.revisor.juiz import avaliar_acao
+
+    cliente, fabrica, _ = ambiente_fase_b
+    await entrar(cliente, fabrica, "ancora-politica@exemplo.com")
+    usuario_id, agente_id, conversa_id = await _agente_e_conversa(
+        fabrica, "ancora-politica@exemplo.com"
+    )
+    contexto = ContextoFerramenta(
+        usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id
+    )
+    # livre: passa sem tocar em nada
+    assert await conferir_acao("buscar_web", {}, contexto, chamada_id="a") is None
+    # rotina sem ninguém olhando: ferramenta que muda o mundo nem roda
+    sozinha = ContextoFerramenta(
+        usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id, sem_supervisao=True
+    )
+    assert await conferir_acao("executar_comando", {"comando": "ls"}, sozinha, chamada_id="b") == (
+        SEM_SUPERVISAO
+    )
+    # juiz com o modelo falso do papel revisor: falha fechada (BLOQUEAR)
+    acao = AcaoProposta(ferramenta="executar_comando", argumentos={"comando": "ls"})
+    veredito = await avaliar_acao(
+        lambda s, p: chamar_modelo_revisor(contexto, s, p), acao, ["rode ls"]
+    )
+    assert veredito.decisao is DecisaoRevisor.BLOQUEAR
+    # regra "sempre permitir" do usuário libera a ferramenta de revisor e deixa rastro
+    async with fabrica() as sessao:
+        sessao.add(
+            RegraPermissao(
+                usuario_id=usuario_id, agente_id=agente_id, ferramenta="executar_comando"
+            )
+        )
+        await sessao.commit()
+    assert (
+        await conferir_acao("executar_comando", {"comando": "ls"}, contexto, chamada_id="c") is None
+    )
+    async with fabrica() as sessao:
+        registro = await sessao.scalar(
+            select(RegistroAcao).where(RegistroAcao.ferramenta == "executar_comando")
+        )
+        assert registro is not None and registro.aprovacao_id is None
+
+
+async def test_job_compactar_historico_e_rota_do_botao(
+    ambiente_fase_b_arq: tuple[str, async_sessionmaker],
+) -> None:
+    """Rota "Compactar agora" + worker ARQ real: o job resume o histórico salvo no checkpointer."""
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from app.agentes import ContextoAgente, montar_e_rodar_agente
+    from app.agentes.checkpointer import abrir_checkpointer, fechar_checkpointer
+    from app.core.config import obter_configuracao
+
+    url, fabrica = ambiente_fase_b_arq
+    async with httpx.AsyncClient(base_url=url, timeout=30) as cliente:
+        auth = await entrar(cliente, fabrica, "ancora-botao@exemplo.com")
+        usuario_id, agente_id, conversa_id = await _agente_e_conversa(
+            fabrica, "ancora-botao@exemplo.com"
+        )
+        await asyncio.sleep(3)  # o worker acaba de criar as tabelas do checkpointer
+        checkpointer = await abrir_checkpointer(obter_configuracao().database_url)
+        try:
+            # 14 mensagens curtas: abaixo de 80%, então o turno não compacta sozinho
+            historico = []
+            for i in range(7):
+                historico.append(HumanMessage(f"pergunta {i} " + "a" * 4000))
+                historico.append(AIMessage(content=f"resposta {i} " + "b" * 4000))
+            await montar_e_rodar_agente(
+                contexto=ContextoAgente(
+                    usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id,
+                    papel="individual",
+                ),
+                modelos=[_modelo_roteirizado(AIMessage(content="pronto"))],
+                checkpointer=checkpointer,
+                entrada={"messages": [*historico, HumanMessage("fim")]},
+            )  # fmt: skip
+        finally:
+            await fechar_checkpointer(checkpointer)
+        antes = (await cliente.get(f"/v1/agentes/{agente_id}/contexto", headers=auth)).json()
+        assert antes and antes[0]["compactacao"] == "parada"
+        resposta = await cliente.post(f"/v1/agentes/{agente_id}/contexto/compactar", headers=auth)
+        assert resposta.status_code == 202, resposta.text
+        assert resposta.json()["compactacao"] == "compactando"
+        for _ in range(60):
+            depois = (await cliente.get(f"/v1/agentes/{agente_id}/contexto", headers=auth)).json()
+            if depois[0]["compactacao"] != "compactando":
+                break
+            await asyncio.sleep(0.5)
+        assert depois[0]["compactacao"] == "parada"
+        assert depois[0]["tokens"] < antes[0]["tokens"]
+        # com o agente no meio de um turno o botão recusa, com o motivo
+        from app.contexto.estado import marcar_turno
+        from app.ferramentas import ambiente
+
+        await marcar_turno(ambiente.redis_dos_eventos(), agente_id, True)
+        ocupado = await cliente.post(f"/v1/agentes/{agente_id}/contexto/compactar", headers=auth)
+        assert ocupado.status_code == 409 and "terminar" in ocupado.json()["detail"]

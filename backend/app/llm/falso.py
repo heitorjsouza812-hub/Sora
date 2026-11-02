@@ -162,7 +162,9 @@ def _triagem_json(*, direto: bool) -> str:
 
 
 GATILHOS = ("pergunta", "aprovacao", "orcamento")
-_GATILHO = re.compile(r"\[(pergunta|aprovacao|orcamento)\]")
+_GATILHO = re.compile(
+    r"\[(pergunta|aprovacao|orcamento|memoria|pendencia|catalogo|historico)\]"
+)
 
 
 def gatilhos_do_texto(texto: str) -> list[str]:
@@ -346,6 +348,11 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
     tarefa = "\n".join(str(m.content) for m in mensagens if isinstance(m, HumanMessage))
     feitas = {m.name for m in mensagens if isinstance(m, ToolMessage)}
     gatilhos = gatilhos_do_texto(tarefa)
+    das_pecas = _gatilho_das_pecas(tarefa, feitas)
+    if das_pecas is not None:
+        return das_pecas
+    if (do_navegador := _gatilho_do_navegador(mensagens, tarefa)) is not None:
+        return do_navegador
     if "pergunta" in gatilhos and "perguntar" not in feitas:
         from app.ferramentas.perguntar import Opcao, Perguntar
 
@@ -359,6 +366,30 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
 
         proposta = CriarAgente(nome="Organizadora", papel="Organizar pesquisas")
         return _chamada("criar_agente", proposta.model_dump(mode="json"))
+    return None
+
+
+_GATILHO_NAVEGADOR = re.compile(r"\[navegador:(\S+?)\]")
+
+
+def _gatilho_do_navegador(mensagens: list[BaseMessage], tarefa: str) -> AIMessage | None:
+    """Gatilho ``[navegador:URL]`` (Leme): abre a URL (de novo, se o domínio acabou de ser
+    aprovado), observa a página como árvore e captura a tela, uma ferramenta por vez."""
+    from langchain_core.messages import ToolMessage
+
+    achou = _GATILHO_NAVEGADOR.search(tarefa)
+    if achou is None:
+        return None
+    resultados = [m for m in mensagens if isinstance(m, ToolMessage)]
+    aberturas = [str(m.content) for m in resultados if m.name == "navegador_abrir"]
+    feitas = {m.name for m in resultados}
+    if not aberturas or aberturas[-1].startswith("Domínio aprovado"):
+        return _chamada("navegador_abrir", {"url": achou.group(1)})
+    if "Aba aberta" not in aberturas[-1] and "aba_id" not in aberturas[-1]:
+        return None  # negado ou falhou: o agente segue para a entrega
+    for nome in ("navegador_observar", "navegador_capturar"):
+        if nome not in feitas:
+            return _chamada(nome, {})
     return None
 
 
