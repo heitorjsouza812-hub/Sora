@@ -100,10 +100,11 @@ const enviosAgenteEmVoo = new Map<string, Promise<void>>();
 let iniciando: Promise<void> | null = null;
 
 function receber(evento: EventoSse) {
+  const conversaId = String(evento.dados.conversa_id ?? '');
+  if (conversaId && !estado.projetos.some(p => p.id === conversaId) && !Object.values(estado.agentes).some(a => a.conversaId === conversaId)) return;
   alterar(e => aplicarEvento(e, evento));
   if (evento.tipo === 'entrega' || (evento.tipo === 'cadeia.atualizada' && evento.dados.status === 'concluida')) {
-    const conversaId = String(evento.dados.conversa_id ?? '');
-    if (conversaId) void carregarEntregas(conversaId);
+    if (conversaId) void carregarEntregas(conversaId).catch(() => undefined);
   }
 }
 
@@ -187,8 +188,17 @@ export function iniciarProjetos(): Promise<void> {
 }
 export function encerrarProjetos() {
   controladorGeral?.abort(); controladorGeral = null;
-  for (const c of controladoresConversa.values()) c.abort();
-  controladoresConversa.clear(); errosEventosPorCanal.clear();
+  encerrarConversas(); errosEventosPorCanal.clear();
+}
+
+function encerrarConversa(conversaId: string) {
+  controladoresConversa.get(conversaId)?.abort();
+  controladoresConversa.delete(conversaId);
+  definirErroEventos(`conversa:${conversaId}`);
+}
+
+function encerrarConversas() {
+  for (const id of [...controladoresConversa.keys()]) encerrarConversa(id);
 }
 
 export function progressoExecucao(x: Execucao, _agora: number) { return x.progresso; }
@@ -298,6 +308,7 @@ export function renomearProjeto(id: string, titulo: string) { const limpo = titu
 
 export type Desfazer = () => void;
 export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } = {}): Desfazer {
+  encerrarConversa(id);
   const antes = estado; alterar(e => ({ ...e, projetos: e.projetos.filter(p => p.id !== id), projetoAtivoId: e.projetoAtivoId === id ? null : e.projetoAtivoId }));
   void api.delete(`/v1/conversas/${id}?manter_agentes=${opcoes.manterAgentes ? 'true' : 'false'}`).catch(() => definir(antes)); return () => { definir(antes); void iniciarProjetos(); };
 }
@@ -314,6 +325,7 @@ export function restaurarSnapshot(snapshot: EstadoProjetos) { definir(snapshot);
 export function atualizarSora(patch: Partial<SoraPerfil>) { alterar(e => ({ ...e, sora: { ...e.sora, ...patch } })); }
 export function restaurarSora() { atualizarSora({ nome: 'Sora', cor: COR_SORA }); }
 export async function limparTudo() {
+  encerrarConversas();
   const conversas = new Set([
     ...estado.projetos.map(projeto => projeto.id),
     ...Object.values(estado.agentes).map(agente => agente.conversaId).filter((id): id is string => !!id),
