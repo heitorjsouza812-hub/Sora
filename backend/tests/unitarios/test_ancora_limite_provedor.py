@@ -552,3 +552,70 @@ async def test_agente_que_entrega_depois_do_aviso_termina_sem_erro(groq) -> None
     )
     resultado = await _rodar([_modelo(servidor.url)], middleware_de_limites(3, 10), [passo])
     assert resultado["messages"][-1].content == "entreguei o que tinha"
+
+
+# ---------------------------------------------------------------- rodada 8 (rotina)
+
+
+def _modelo_literal():
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+
+    class Literal(GenericFakeChatModel):
+        chamadas: int = 0
+
+        def bind_tools(self, *args: Any, **kwargs: Any):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            from langchain_core.messages import AIMessage
+            from langchain_core.outputs import ChatGeneration, ChatResult
+
+            self.chamadas += 1
+            texto = " ".join(str(m.content) for m in messages)
+            if "`falar`" in texto:
+                resposta = AIMessage(
+                    content="", tool_calls=[{"name": "falar", "args": {"texto": "x"}, "id": "f"}]
+                )
+            else:
+                resposta = AIMessage(content="Passe o café logo depois de moer os grãos.")
+            return ChatResult(generations=[ChatGeneration(message=resposta)])
+
+    return Literal(messages=iter(()))
+
+
+async def test_rotina_sem_ferramentas_responde_com_uma_chamada() -> None:
+    from app.agentes.middleware import montar_middleware
+    from app.agentes.montagem import ContextoAgente, montar_prompt_de_sistema
+
+    contexto = ContextoAgente(
+        usuario_id=uuid.uuid4(),
+        agente_id=uuid.uuid4(),
+        conversa_id=uuid.uuid4(),
+        papel="individual",
+        sem_supervisao=True,
+        thread_proprio="rotina:teste",
+    )
+    prompt = montar_prompt_de_sistema(contexto)
+    assert "`falar`" not in prompt
+    modelo = _modelo_literal()
+    agente = create_agent(
+        model=modelo,
+        tools=[],
+        system_prompt=prompt,
+        middleware=montar_middleware(contexto, [modelo]),
+    )
+    resultado = await agente.ainvoke({"messages": [HumanMessage("Escreva uma dica de café")]})
+
+    assert modelo.chamadas == 1
+    assert resultado["messages"][-1].content.startswith("Passe o café")
+
+
+def test_mensagens_de_falha_da_rotina_sao_verdadeiras() -> None:
+    from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
+
+    from app.agentes.middleware.limites import estourou_limite_de_passos
+    from workers.rotinas import MENSAGEM_LIMITE_DE_PASSOS_ROTINA
+
+    assert estourou_limite_de_passos(ModelCallLimitExceededError(10, 10, None, 10))
+    assert "máximo de passos" in MENSAGEM_LIMITE_DE_PASSOS_ROTINA
+    assert "não respondeu" not in MENSAGEM_LIMITE_DE_PASSOS_ROTINA

@@ -52,7 +52,7 @@ def montar_middleware(
     itens.extend(
         [middleware_de_conserto(), MiddlewareLoop(), MiddlewarePrazoFerramenta(), MiddlewareCerca()]
     )
-    if contexto.papel in {"sora", "individual"}:
+    if contexto.papel in {"sora", "individual"} and not contexto.sem_supervisao:
         from app.agentes.middleware.encerra_depois_de_falar import (
             MiddlewareEncerraDepoisDeFalar,
         )

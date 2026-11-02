@@ -22,6 +22,7 @@ _TAG_DA_CERCA = re.compile(r"<(/?)(dado_externo)", re.IGNORECASE)
 
 VERSOES: dict[str, int] = {
     "sora_base": 1,
+    "rotina_sem_supervisao": 1,
     "sistema1": 1,
     "planejador": 1,
     "especialista_comum": 1,

@@ -34,6 +34,14 @@ registro = logging.getLogger(__name__)
 
 PRAZO_EXECUCAO_S = 300
 ORFA_APOS = timedelta(minutes=10)
+MENSAGEM_LIMITE_DE_PASSOS_ROTINA = (
+    "A rotina usou o máximo de passos permitido sem terminar. "
+    "Simplifique o pedido da rotina e rode de novo."
+)
+MENSAGEM_LIMITE_DO_PROVEDOR_ROTINA = (
+    "O provedor recusou: limite por minuto do plano. Tente de novo em alguns instantes "
+    "ou use um modelo com limite maior."
+)
 MENSAGEM_FALHA = "A rotina não terminou: o modelo de IA não respondeu. Confira em Configurações."
 
 
@@ -206,9 +214,18 @@ async def executar_rotina(
                     .order_by(Mensagem.criada_em.desc())
                     .limit(1)
                 )
-    except Exception:
+    except Exception as falha:
+        from app.agentes.middleware.limites import estourou_limite_de_passos
+        from app.llm.limite import limite_do_provedor
+
         registro.exception("a rotina %s falhou", rid)
-        status, erro = "falhou", MENSAGEM_FALHA
+        status = "falhou"
+        if estourou_limite_de_passos(falha):
+            erro = MENSAGEM_LIMITE_DE_PASSOS_ROTINA
+        elif limite_do_provedor(falha):
+            erro = MENSAGEM_LIMITE_DO_PROVEDOR_ROTINA
+        else:
+            erro = MENSAGEM_FALHA
     async with ctx["sessoes"]() as sessao:
         await sessao.execute(
             update(RotinaExecucao)

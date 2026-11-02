@@ -142,7 +142,11 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     from app.agentes.prompts import carregar_prompt, preencher
 
     valores = contexto.valores_do_prompt
-    if contexto.papel in {"sora", "individual", "canal"}:
+    if contexto.sem_supervisao and contexto.papel in {"sora", "individual"}:
+        # Rotina: não há ``falar`` (nem ninguém para ouvir). O prompt da Sora manda "sempre falar"
+        # e o agente ficava chamando uma ferramenta que não existe até estourar o limite.
+        prompt = carregar_prompt("rotina_sem_supervisao")
+    elif contexto.papel in {"sora", "individual", "canal"}:
         padroes = {
             "idioma": "pt-BR",
             "perfil_do_agente": (
