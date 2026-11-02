@@ -41,9 +41,11 @@ export function RastroNavegador({ passo }: { passo: PassoTrabalho }) {
   const rastro = r?.rastro;
   const abas = Object.values(equipe.abas).filter(a => a.agenteId === passo.agenteId);
   const argumentos = rastro?.args?.length ? rastro.args.join(' ') : '';
+  const mostraAbas = passo.status === 'executando' && abas.length > 0 || abas.some(a => a.assumida || a.pedidoDeAjuda);
+  if (!rastro && !r?.titulo && !r?.url && !r?.anexo_id && !mostraAbas) return null; // nada a mostrar ainda
   return (
     <div className="wk-nav">
-      {(r?.titulo || r?.url) && <div className="wk-nav-pagina"><b>{r.titulo || r.url}</b>{r.titulo && r.url && <small title={r.url}>{r.url}</small>}</div>}
+      {!r?.anexo_id && (r?.titulo || r?.url) && <div className="wk-nav-pagina"><b>{r.titulo || r.url}</b>{r.titulo && r.url && <small title={r.url}>{r.url}</small>}</div>}
       {rastro && (
         <div className={`wk-nav-rastro ${rastro.ok ? '' : 'wk-nav-falha'}`}>
           <code>{rastro.comando}{argumentos ? ` ${argumentos}` : ''}</code>
@@ -51,7 +53,7 @@ export function RastroNavegador({ passo }: { passo: PassoTrabalho }) {
         </div>
       )}
       {r?.anexo_id && <Captura anexoId={r.anexo_id} nome={r.nome ?? 'captura'} />}
-      {passo.status === 'executando' || abas.some(a => a.assumida || a.pedidoDeAjuda) ? abas.map(a => <ControleAba key={a.id} aba={a} />) : null}
+      {mostraAbas ? abas.map(a => <ControleAba key={a.id} aba={a} />) : null}
     </div>
   );
 }

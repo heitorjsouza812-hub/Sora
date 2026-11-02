@@ -51,7 +51,7 @@ describe('eventos de equipe (contrato do Tear, Âncora e Leme)', () => {
     const base = { versao: 2, projetos: [], agentes: {}, execucoes: [], mensagens: [], pendencias: [] } as unknown as EstadoProjetos;
     const r = aplicarEvento(base, { id: '1-0', tipo: 'aprovacao.pedida', recebidoEm: 1, dados: {
       conversa_id: 'c', aprovacao_id: 'ap', resumo: 'Abrir banco.com', dano: '', quem_recebe: null, expira_em: '2026-11-02T10:00:00Z', tipo: 'aprovar_dominio',
-      dominio: 'banco.com', url: 'https://banco.com/x', perfil: { tipo: 'nomeado', nome: 'Trabalho' }, agente_id: A, opcoes: [{ rotulo: 'Aprovar domínio', valor: 'sempre_permitir' }, { rotulo: 'Negar', valor: 'negar' }],
+      dominio: 'banco.com', url: 'https://banco.com/x', perfil: { tipo: 'perfil', nome: 'Trabalho' }, agente_id: A, opcoes: [{ rotulo: 'Aprovar domínio', valor: 'sempre_permitir' }, { rotulo: 'Negar', valor: 'negar' }],
     } });
     const p = r.pendencias![0];
     expect(p.tipo === 'aprovacao' && p.revisaoDominio).toMatchObject({ dominio: 'banco.com', perfil: { nome: 'Trabalho' }, agenteId: A });

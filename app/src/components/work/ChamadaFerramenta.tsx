@@ -28,6 +28,7 @@ export function Miniaturas({ resultado, cor, quantidade }: { resultado: Resultad
 }
 
 export function ResultadoResumo({ resultado, cor }: { resultado: ResultadoPasso; cor: string }) {
+  if (!resultado.resumo && !resultado.links?.length && !resultado.imagens?.length) return null; // ex.: passo do navegador que só traz rastro
   return (
     <div className="wk-result">
       <span className="wk-result-sum">{resultado.resumo}</span>

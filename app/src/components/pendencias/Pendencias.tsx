@@ -44,7 +44,7 @@ function CartaoPergunta({ p, cor }: { p: PerguntaP; cor: string }) {
   );
 }
 
-const PERFIL_ROTULO: Record<string, string> = { compartilhado: 'perfil compartilhado', agente: 'perfil do agente', nomeado: 'perfil' };
+const PERFIL_ROTULO: Record<string, string> = { compartilhado: 'perfil compartilhado', agente: 'perfil do agente', perfil: 'perfil', nomeado: 'perfil' };
 
 /** Domínio novo num perfil com login salvo: o agente só continua depois que o usuário aprovar o domínio. */
 function CartaoDominio({ p, cor }: { p: AprovacaoP; cor: string }) {

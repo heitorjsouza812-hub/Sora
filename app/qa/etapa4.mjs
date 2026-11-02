@@ -34,17 +34,18 @@ try {
       return r.status() === 204 ? null : r.json();
     };
     // limpa o que sobrou de rodadas anteriores
+    for (const cv of await api('GET', '/v1/conversas')) await api('DELETE', `/v1/conversas/${cv.id}?manter_agentes=false`); // a Ilha avisaria de projetos prontos por cima da tela
     for (const c of await api('GET', '/v1/canais-equipe')) await api('POST', `/v1/canais-equipe/${c.canal_id}/arquivar`);
     for (const m of await api('GET', '/v1/memorias')) await api('DELETE', `/v1/memorias/${m.id}`);
     for (const r of await api('GET', '/v1/rotinas')) await api('DELETE', `/v1/rotinas/${r.id}`);
     for (const ab of await api('GET', '/v1/navegador/abas')) await api('DELETE', `/v1/navegador/abas/${ab.aba_id}`);
     for (const pf of await api('GET', '/v1/navegador/perfis')) await api('DELETE', `/v1/navegador/perfis/${pf.perfil_id}`);
     for (const h of await api('GET', '/v1/habilidades')) await api('DELETE', `/v1/habilidades/${h.id}`);
-    for (const a of await api('GET', '/v1/agentes')) if (a.tipo !== 'sora') await api('DELETE', `/v1/agentes/${a.id}`);
+    for (const a of await api('GET', '/v1/agentes')) if (a.tipo === 'individual') await api('DELETE', `/v1/agentes/${a.id}`);
 
     const mk = nome => api('POST', '/v1/agentes', { nome, funcao: 'Pesquisa', papel: `Você é ${nome}, especialista em pesquisa.`, cor: nome === 'Atlas' ? '#56A8FF' : '#46E8A8', movimento: 'vibracao', ferramentas: [] });
     const atlas = await mk('Atlas'); const nina = await mk('Nina');
-    const canal = await api('POST', '/v1/canais-equipe', { nome: 'Lançamento', membros: [atlas.id, nina.id], lider_id: atlas.id });
+    const canal = await api('POST', '/v1/canais-equipe', { nome: `Lançamento ${vp} ${Date.now().toString(36)}`, membros: [atlas.id, nina.id], lider_id: atlas.id });
     const canalId = canal.canal_id;
     await api('POST', `/v1/canais-equipe/${canalId}/mensagens`, { texto: 'Vamos montar o lançamento.' });
     await api('POST', '/v1/memorias', { conteudo: 'A cafeteria fecha às segundas.' });
@@ -170,7 +171,7 @@ try {
 
     // ── Canais de equipe ────────────────────────────────────────────────────────────────
     await ir('/canais');
-    await page.getByRole('button', { name: /Lançamento/ }).click();
+    await page.getByRole('button', { name: new RegExp(`Lançamento ${vp} ${canal.nome.split(' ').pop()}`) }).click();
     await page.getByText('Vamos montar o lançamento.').waitFor({ timeout: 15_000 });
     await page.getByLabel('Mensagem para o canal').fill('Atlas, pesquise concorrentes.');
     await page.getByRole('button', { name: 'Enviar', exact: true }).click();
@@ -180,7 +181,7 @@ try {
     await page.getByRole('button', { name: 'Reagir com 👍' }).first().filter({ hasText: '1' }).waitFor({ timeout: 10_000 });
     await page.getByRole('button', { name: 'Apagar' }).first().click();
     await page.getByRole('button', { name: 'Apagados' }).click();
-    await page.getByRole('button', { name: /Lançamento/ }).first().waitFor({ timeout: 10_000 });
+    await page.getByRole('button', { name: new RegExp(`Lançamento ${vp} ${canal.nome.split(' ').pop()}`) }).first().waitFor({ timeout: 10_000 });
 
 
     // ── Voz: sem provedor de voz o servidor responde 404 e o app avisa em PT-BR ─────────────
@@ -233,6 +234,57 @@ try {
     await page.getByRole('tab', { name: 'Perfil' }).click();
     await page.waitForFunction(() => document.querySelector('[aria-label="Perfil do navegador deste agente"]')?.value === 'efemero', null, { timeout: 15_000 });
 
+    // ── Revisão de domínio AO VIVO: a equipe abre um domínio novo no perfil compartilhado com login (Chromium real) ──
+    const semear = (nome, ...dominios) => execFileSync('uv', ['run', 'python', join(qaDir, 'semear_perfil.py'), EMAIL, nome, ...dominios],
+      { cwd: backendDir, env: { ...process.env, AMBIENTE: process.env.AMBIENTE ?? 'desenvolvimento' }, shell: process.platform === 'win32' }).toString().trim().split(String.fromCharCode(10)).pop().trim();
+    semear('@compartilhado', 'banco.com');
+    const dominiosDoCompartilhado = async () => ((await api('GET', '/v1/navegador/perfis')).find(x => x.tipo === 'compartilhado')?.dominios_aprovados ?? []);
+    const pedirDominio = async (url) => {
+      // o contexto do navegador fica vivo no worker entre rodadas: parte sempre de um domínio ainda não aprovado
+      const pf = (await api('GET', '/v1/navegador/perfis')).find(x => x.tipo === 'compartilhado');
+      for (const d of ['example.com', 'example.org']) if (pf?.dominios_aprovados.includes(d)) await api('DELETE', `/v1/navegador/perfis/${pf.perfil_id}/dominios/${d}`);
+      await ir('/');
+      await page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i }).fill(`pesquise a página [navegador:${url}]`);
+      await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
+      await page.waitForURL(u => u.pathname.startsWith('/projeto/'), { timeout: 30_000 });
+      const c = page.locator('[data-pendencia="dominio"]');
+      await c.first().waitFor({ timeout: 150_000 });
+      return c.first();
+    };
+    // o mesmo cartão aparece no chat e na Ilha (no celular a Ilha fica por cima): clica no que o usuário alcança
+    const cartoes = page.locator('[data-pendencia="dominio"]');
+    const botaoDoCartao = async (nome) => ((await page.locator('.ilha-ancora [data-pendencia="dominio"]').count()) ? page.locator('.ilha-ancora [data-pendencia="dominio"]') : cartoes).first().getByRole('button', { name: nome });
+    let cartaoDominio = await pedirDominio('https://example.com/');
+    await cartaoDominio.getByText('example.com').first().waitFor();
+    await ver('dominio-cartao');
+    await (await botaoDoCartao('Aprovar domínio')).click();
+    await cartoes.first().waitFor({ state: 'detached', timeout: 30_000 });
+    for (let i = 0; i < 120; i++) { // o agente repete a navegação e o servidor grava o domínio no perfil
+      if ((await dominiosDoCompartilhado()).includes('example.com')) break;
+      if (i === 119) throw new Error('example.com não foi aprovado no perfil');
+      await page.waitForTimeout(500);
+    }
+    await page.getByText('Nada é publicado sem a sua aprovação').first().waitFor({ timeout: 150_000 });
+    if (largura <= 600) await page.locator('.work-pill').click();
+    await page.getByRole('tab', { name: /Trabalho/ }).first().click();
+    // o painel mostra um agente por vez: percorre os chips até achar quem navegou
+    const chips = page.locator('.wk-picker [role="tab"]');
+    const nChips = await chips.count();
+    for (let i = 0; i < nChips && !(await page.locator('.wk-nav').count()); i++) { await chips.nth(i).click(); await page.waitForTimeout(400); }
+    await page.locator('.wk-nav').first().waitFor({ timeout: 30_000 });
+    await page.getByText('Example Domain').first().waitFor({ timeout: 30_000 });
+    await ver('dominio-rastro');
+    // negar: o domínio não é gravado
+    cartaoDominio = await pedirDominio('https://example.org/');
+    await (await botaoDoCartao('Negar')).click();
+    await cartoes.first().waitFor({ state: 'detached', timeout: 30_000 });
+    await page.waitForTimeout(4000);
+    assert.equal((await dominiosDoCompartilhado()).includes('example.org'), false, 'negar não grava o domínio');
+
+    // volta ao Perfil do Atlas (o bloco anterior terminou na página do projeto)
+    await ir(`/chat/${atlas.id}`);
+    if (largura <= 600) await page.locator('.work-pill').click();
+    await page.getByRole('tab', { name: 'Perfil' }).click();
     // ── Pendências do agente (rotas da Âncora) ──────────────────────────────────────────
     await page.getByLabel('Nova pendência').fill('Ligar para o fornecedor');
     await page.locator('.eq-pend-novo').getByLabel('Notas (opcional)').fill('depois das 14h');
@@ -274,4 +326,4 @@ try {
 await browser.close();
 if (falha) { console.error(falha); process.exit(1); }
 assert.deepEqual(erros, [], `console deve ficar limpo:\n${erros.join('\n')}`);
-console.log('Etapa 4 aprovada: memória, rotinas (worker real), habilidades, conectores, navegador (perfis: criar, 409, abrir para entrar, revogar, apagar, perfil do agente), Telegram, canais e painel do agente em 1440/390; pendências (incl. limite 409) e voz pelo caminho 404 em 1440/390; console limpo.');
+console.log('Etapa 4 aprovada: memória, rotinas (worker real), habilidades, conectores, navegador (perfis: criar, 409, abrir para entrar, revogar, apagar, perfil do agente; revisão de domínio ao vivo: aprovar, negar, rastro), Telegram, canais e painel do agente em 1440/390; pendências (incl. limite 409) e voz pelo caminho 404 em 1440/390; console limpo.');

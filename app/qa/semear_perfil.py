@@ -4,8 +4,9 @@ Os domínios só nascem de um cartão de aprovação de um agente com Chromium r
 provocar isso. Então este script grava, com as MESMAS funções do backend (cifra incluída), o que o
 fluxo real gravaria. Roda no `backend/` (`uv run python ../app/qa/semear_perfil.py ...`).
 
-Uso: semear_perfil.py <email> <nome do perfil> <dominio> [<dominio> ...]
-Imprime o perfil_id (id da linha do perfil nomeado).
+Uso: semear_perfil.py <email> <nome do perfil | @compartilhado> <dominio> [<dominio> ...]
+Com "@compartilhado" o login vai para o perfil compartilhado (o padrão dos agentes); senão cria um perfil
+nomeado. Imprime o perfil_id (id da linha do perfil nomeado; no compartilhado, "compartilhado").
 """
 
 from __future__ import annotations
@@ -26,6 +27,15 @@ async def semear(email: str, nome: str, dominios: list[str]) -> str:
         usuario_id = await sessao.scalar(select(Usuario.id).where(Usuario.email == email))
         if usuario_id is None:
             raise SystemExit(f"Usuário {email} não existe.")
+        if nome == "@compartilhado":
+            chave = particao(usuario_id, uuid4(), EscolhaPerfil(TipoPerfil.COMPARTILHADO))
+            await sessao.execute(delete(EstadoNavegador).where(EstadoNavegador.particao == chave))
+            estado = {"cookies": [{"name": "sessao", "value": "x", "domain": dominios[0], "path": "/"}], "origins": []}
+            for dominio in dominios:
+                estado = com_dominio_aprovado(estado, dominio)
+            sessao.add(EstadoNavegador(particao=chave, usuario_id=usuario_id, estado_cifrado=cifrar_estado(estado, usuario_id=usuario_id, particao_=chave)))
+            await sessao.commit()
+            return "compartilhado"
         antigo = await sessao.scalar(select(PerfilNavegador).where(PerfilNavegador.usuario_id == usuario_id, PerfilNavegador.nome == nome))
         if antigo is not None:
             await sessao.execute(delete(EstadoNavegador).where(EstadoNavegador.particao == particao(usuario_id, uuid4(), EscolhaPerfil(TipoPerfil.NOMEADO, antigo.id))))
