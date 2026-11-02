@@ -53,6 +53,8 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         self._bloqueios: dict[Any, str] = {}
         self._urls_bloqueadas: dict[Any, str] = {}
         self._apagadas: set[str] = set()
+        self._trava_inicio = asyncio.Lock()
+        self._travas_contexto: dict[str, asyncio.Lock] = {}
         self._loop_proprio: LoopDoPlaywright | None = None
         """Partições cujo perfil o usuário apagou: o login em memória não volta para o banco."""
         """Último domínio barrado por revisão em cada partição (para o erro certo no goto)."""
@@ -61,6 +63,14 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
     async def _iniciar(self) -> None:
         if self._navegador is not None:
             return
+        # Um só Playwright por worker: duas chamadas no primeiro uso esperam a primeira.
+        # A trava é do loop de quem chama (o do worker); o loop do Playwright, no Windows, só
+        # recebe as chamadas já serializadas por ela.
+        async with self._trava_inicio:
+            if self._navegador is None:
+                await self._iniciar_sem_trava()
+
+    async def _iniciar_sem_trava(self) -> None:
         try:
             from playwright.async_api import async_playwright
         except ImportError as erro:
@@ -91,20 +101,26 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
     async def _contexto(self, particao_: str, *, efemero: bool = False) -> Any:
         await self._iniciar()
         contexto = self._contextos.get(particao_)
-        if contexto is None:
-            estado = None if efemero else await self._ler_estado(particao_)
-            self._estados[particao_] = estado
-            contexto = await self._navegador.new_context(
-                accept_downloads=False,
-                locale="pt-BR",
-                service_workers="block",
-                storage_state=estado_playwright(estado),
-            )
-            await contexto.route(
-                "**/*", lambda rota, _req=None, p=particao_: self._filtrar(p, rota)
-            )
-            self._contextos[particao_] = contexto
-        return contexto
+        if contexto is not None:
+            return contexto
+        # um só contexto por partição: abas do mesmo perfil abrindo juntas esperam o primeiro
+        trava = self._travas_contexto.setdefault(particao_, asyncio.Lock())
+        async with trava:
+            contexto = self._contextos.get(particao_)
+            if contexto is None:
+                estado = None if efemero else await self._ler_estado(particao_)
+                self._estados[particao_] = estado
+                contexto = await self._navegador.new_context(
+                    accept_downloads=False,
+                    locale="pt-BR",
+                    service_workers="block",
+                    storage_state=estado_playwright(estado),
+                )
+                await contexto.route(
+                    "**/*", lambda rota, _req=None, p=particao_: self._filtrar(p, rota)
+                )
+                self._contextos[particao_] = contexto
+            return contexto
 
     def _chave_da_rota(self, particao_: str, rota: Any) -> Any:
         """O bloqueio é da aba que pediu (várias abas dividem o perfil); sem aba, da partição."""

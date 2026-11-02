@@ -9,6 +9,7 @@ alvo é loopback; essa guarda tem testes próprios.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import threading
 from collections.abc import AsyncIterator
@@ -210,3 +211,57 @@ async def test_rotina_efemera_nao_ve_cookie_do_perfil_logado(ambiente: _Ambiente
     assert cookies == []  # contexto efêmero: nada do perfil salvo
     await ambiente.gerente.fechar(aba.id, agente, sem_supervisao=True)
     assert aba.particao not in ambiente.motor._contextos  # contexto destruído ao fechar
+
+
+async def test_primeiro_uso_com_duas_navegacoes_juntas_cria_um_so_navegador(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E4F2-M3: worker frio, duas abas abrindo ao mesmo tempo: um Playwright, um contexto."""
+    pytest.importorskip("playwright.async_api")
+    import playwright.async_api as api
+
+    from app.core.config import obter_configuracao
+
+    monkeypatch.setenv("NAVEGADOR_CDP_URL", "")  # Chromium local, não o CDP do conftest
+    obter_configuracao.cache_clear()
+    monkeypatch.setattr("app.navegador.persistente.validar_destino", _sem_guarda)
+    servidor = ThreadingHTTPServer(("127.0.0.1", 0), _Servidor)
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+    inicios = 0
+    original = api.async_playwright
+
+    def contando() -> Any:
+        nonlocal inicios
+        inicios += 1
+        return original()
+
+    monkeypatch.setattr(api, "async_playwright", contando)
+    motor = MotorPlaywright(ler_estado=_nada, gravar_estado=_nada, ao_console=lambda *_a: None)
+    gerente = GerenteAbas(motor)
+    usuario = uuid4()
+    escolha = pf.EscolhaPerfil(tipo=pf.TipoPerfil.COMPARTILHADO)
+    url = f"http://127.0.0.1:{servidor.server_address[1]}/"
+    try:
+        try:
+            abas = await asyncio.wait_for(
+                asyncio.gather(
+                    *(
+                        gerente.abrir(
+                            usuario_id=usuario, agente_id=uuid4(), escolha=escolha, url=url
+                        )
+                        for _ in range(2)
+                    )
+                ),
+                timeout=60,
+            )
+        except Exception as erro:  # Chromium ausente na máquina: não é o que se testa aqui
+            if "Executable doesn't exist" in str(erro):
+                pytest.skip("Chromium indisponível")
+            raise
+        assert inicios == 1
+        assert len(motor._contextos) == 1
+        assert all(a.url.startswith(url) and a.carregada for a in abas)
+    finally:
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(motor.encerrar(), timeout=20)
+        servidor.shutdown()
