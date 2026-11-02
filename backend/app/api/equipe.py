@@ -95,15 +95,6 @@ class ReacaoEntrada(BaseModel):
     emoji: str = Field(min_length=1, max_length=8)
 
 
-class PerfilEntrada(BaseModel):
-    nome: str = Field(min_length=1, max_length=60)
-
-
-class PerfilDoAgenteEntrada(BaseModel):
-    tipo: Literal["compartilhado", "agente", "nomeado"]
-    perfil_id: UUID | None = None
-
-
 def _http(erro: Exception) -> HTTPException:
     codigo = 404 if "encontrad" in str(erro).casefold() else 409
     return HTTPException(codigo, str(erro))
@@ -612,10 +603,6 @@ async def reagir(
     return dict(resumo(await armazem.da_mensagem(mensagem_id)))
 
 
-def _fora_do_escopo() -> None:
-    raise HTTPException(501, "Esta peca sera ligada pelo dono do escopo nesta etapa.")
-
-
 @roteador.get("/navegador/abas")
 async def abas_abertas(
     usuario_id: Usuario,
@@ -693,23 +680,3 @@ async def _evento_aba(redis: Redis, aba: AbaNavegador) -> AbaNavegadorEvento:
         carregada=False,
         assumida_pelo_usuario=assumida,
     )
-
-
-@roteador.get("/navegador/perfis")
-async def perfis_do_navegador() -> list[dict[str, str]]:
-    _fora_do_escopo()
-
-
-@roteador.post("/navegador/perfis", status_code=201)
-async def criar_perfil(dados: PerfilEntrada) -> dict[str, str]:
-    _fora_do_escopo()
-
-
-@roteador.delete("/navegador/perfis/{perfil_id}", status_code=204)
-async def apagar_perfil(perfil_id: UUID) -> None:
-    _fora_do_escopo()
-
-
-@roteador.put("/agentes/{agente_id}/navegador")
-async def perfil_do_agente(agente_id: UUID, dados: PerfilDoAgenteEntrada) -> None:
-    _fora_do_escopo()
