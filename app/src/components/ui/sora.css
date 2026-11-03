@@ -101,6 +101,18 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 .delivery-card > a:hover { color: var(--focus); }
 .piece-strip { height: 110px; display: flex; gap: var(--sp-1); }
 .piece-strip img { min-width: 0; width: 33.333%; object-fit: cover; border-radius: var(--r-6); }
+/* imagens reais da entrega (captura do navegador, peça gerada); sem imagem não há nada aqui */
+.delivery-images { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }
+.delivery-image { flex: 1 1 0; min-width: 0; margin: 0; display: grid; gap: var(--sp-1); }
+.delivery-image img { width: 100%; max-height: 180px; object-fit: cover; object-position: top; border: 1px solid var(--line); border-radius: var(--r-6); background: var(--white-a04); }
+.delivery-image figcaption { display: grid; min-width: 0; font-size: var(--fs-12); }
+.delivery-image figcaption b { overflow: hidden; color: var(--text-1); font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.delivery-image figcaption a { overflow: hidden; color: var(--text-2); white-space: nowrap; text-overflow: ellipsis; }
+.delivery-image figcaption a:hover { color: var(--focus); }
+.wk-thumbs .delivery-image { flex: 0 0 56px; }
+.wk-thumbs .delivery-image img { width: 56px; height: 56px; }
+.review-images .delivery-image img { max-height: 320px; }
+.rv-ok-mini--imagem .delivery-image, .rv-ok-mini--imagem .delivery-image img { width: 64px; height: 64px; max-height: none; }
 .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--sp-1); }
 .calendar > b { color: var(--text-3); font-size: var(--fs-12); text-align: center; }
 .calendar > span { min-width: 0; height: 52px; padding: var(--sp-2); background: var(--white-a04); border-radius: var(--r-6); }

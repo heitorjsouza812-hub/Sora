@@ -1,8 +1,9 @@
 // Conteúdo de uma entrega (links, peças, calendário ou texto) — usado na revisão e na tela de aprovado.
 import type { EntregaGerada } from '../../state/projetos';
-import { PecaCampanha } from '../ui/CampaignPiece';
+import { ImagensEntrega } from '../ui/ImagensEntrega';
+import { imagensDaEntrega } from '../ui/imagensDaEntrega';
 
-export function DeliveryContent({ entrega, color }: { entrega?: EntregaGerada; color: string }) {
+export function DeliveryContent({ entrega }: { entrega?: EntregaGerada; color?: string }) {
   if (!entrega) return <div className="review-empty">Entrega não disponível nesta versão.</div>;
 
   const heading = <div className="review-delivery__heading"><h4>{entrega.titulo}</h4><span>{entrega.resumo}</span></div>;
@@ -14,8 +15,10 @@ export function DeliveryContent({ entrega, color }: { entrega?: EntregaGerada; c
   }
 
   if (entrega.tipo === 'imagem') {
-    const images = entrega.imagens ?? [];
-    return <>{heading}<div className="review-images">{Array.from({ length: Math.max(3, images.length) }, (_, index) => <figure className="review-image" key={index}><PecaCampanha indice={index} imagem={images[index]} cor={color} /><span>Peça {index + 1}</span></figure>)}</div></>;
+    // só imagens reais (anexo ou URL de imagem); sem nenhuma, diz isso em vez de inventar peças
+    return <>{heading}{imagensDaEntrega(entrega).length
+      ? <ImagensEntrega entrega={entrega} className="review-images" />
+      : <div className="review-empty">Esta entrega não trouxe imagem.</div>}</>;
   }
 
   if (entrega.tipo === 'calendario') {

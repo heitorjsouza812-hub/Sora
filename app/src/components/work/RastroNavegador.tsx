@@ -1,23 +1,16 @@
 // Rastro do navegador no painel Trabalho (Leme): o que o agente fez na aba (comando, resultado), a captura
 // e o botão "Assumir aba" para o usuário fazer login/captcha. Vem no passo padrão, em `resultado.rastro`.
-import { useEffect, useState } from 'react';
-import { buscarAutenticado, mensagemDeErro } from '../../api/cliente';
+import { useState } from 'react';
+import { mensagemDeErro } from '../../api/cliente';
+import { ImagemAnexo } from '../ui/ImagemAnexo';
 import type { PassoTrabalho } from '../../types';
 import { assumirAba, devolverAba, useEquipe, type AbaNavegador } from '../../state/equipe';
 import { Button } from '../base';
 
 
-/** Captura (PNG anexo): precisa do token, então vira blob e não um <img src> direto. */
+/** Captura (PNG anexo): blob autenticado, o mesmo das entregas (ImagemAnexo). */
 function Captura({ anexoId, nome }: { anexoId: string; nome: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [falhou, setFalhou] = useState(false);
-  useEffect(() => {
-    const ac = new AbortController(); let objeto: string | null = null;
-    buscarAutenticado(`/v1/anexos/${anexoId}`, { signal: ac.signal }).then(r => r.blob()).then(b => { objeto = URL.createObjectURL(b); setUrl(objeto); }).catch(() => { if (!ac.signal.aborted) setFalhou(true); });
-    return () => { ac.abort(); if (objeto) URL.revokeObjectURL(objeto); };
-  }, [anexoId]);
-  if (falhou) return <small className="wk-nav-erro">Não foi possível carregar a captura.</small>;
-  return url ? <img className="wk-nav-captura" src={url} alt={`Captura da página: ${nome}`} /> : <small className="shimmer">Carregando captura…</small>;
+  return <ImagemAnexo anexoId={anexoId} alt={`Captura da página: ${nome}`} className="wk-nav-captura" carregando="Carregando captura…" erro="Não foi possível carregar a captura." />;
 }
 
 function ControleAba({ aba }: { aba: AbaNavegador }) {
