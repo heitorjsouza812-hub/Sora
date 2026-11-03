@@ -377,7 +377,7 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
 def _gatilho_do_navegador(mensagens: list[BaseMessage], tarefa: str) -> AIMessage | None:
     """Gatilho ``[navegador:URL]`` (Leme): abre a URL (de novo, se o domínio acabou de ser
     aprovado), observa a página como árvore e captura a tela, uma ferramenta por vez."""
-    from langchain_core.messages import ToolMessage
+    from langchain_core.messages import AIMessage, ToolMessage
 
     achou = _GATILHO_NAVEGADOR.search(tarefa)
     if achou is None:
@@ -385,6 +385,12 @@ def _gatilho_do_navegador(mensagens: list[BaseMessage], tarefa: str) -> AIMessag
     resultados = [m for m in mensagens if isinstance(m, ToolMessage)]
     aberturas = [str(m.content) for m in resultados if m.name == "navegador_abrir"]
     feitas = {m.name for m in resultados}
+    # Ferramentas escondidas rodam por ``navegador_executar_ferramenta`` (id = nome de verdade).
+    for m in mensagens:
+        if isinstance(m, AIMessage):
+            for chamada in m.tool_calls:
+                if chamada["name"] == "navegador_executar_ferramenta":
+                    feitas.add(str(chamada["args"].get("id")))
     if not aberturas or aberturas[-1].startswith("Domínio aprovado"):
         return _chamada("navegador_abrir", {"url": achou.group(1)})
     if "Aba aberta" not in aberturas[-1] and "aba_id" not in aberturas[-1]:
@@ -404,11 +410,13 @@ def _gatilho_do_navegador(mensagens: list[BaseMessage], tarefa: str) -> AIMessag
                 if ref and re.search(re.escape(clicar.group(1)), linha):
                     return _chamada("navegador_acao", {"ref": ref.group(0), "acao": "clicar"})
     aba = re.search(r"aba_id\W+([0-9a-f-]{36})", aberturas[-1])
-    for nome in ("navegador_observar", "navegador_capturar"):
-        if nome not in feitas:
-            return _chamada(
-                nome, {"aba_id": aba.group(1)} if nome == "navegador_capturar" and aba else {}
-            )
+    if "navegador_observar" not in feitas:
+        return _chamada("navegador_observar", {})
+    if "navegador_capturar" not in feitas:
+        return _chamada(
+            "navegador_executar_ferramenta",
+            {"id": "navegador_capturar", "argumentos": {"aba_id": aba.group(1)} if aba else {}},
+        )
     return None
 
 

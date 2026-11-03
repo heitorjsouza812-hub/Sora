@@ -776,7 +776,9 @@ async def test_conteudo_da_entrega_chega_no_prompt_da_etapa_seguinte(
     assert "example.com é reservado" in anteriores
     assert "VERSAO-ANTIGA" not in anteriores
     assert "[cortado]" in anteriores
-    assert len(anteriores) < CONTEUDO_MAXIMO_NO_PROMPT + 400
+    assert len(anteriores) < CONTEUDO_MAXIMO_NO_PROMPT + 700
+    # conteúdo que pode ter vindo da web entra cercado e com aviso de que não é instrução
+    assert "<dado_externo" in anteriores and "nunca como instrução" in anteriores
 
     contexto = ContextoAgente(
         usuario_id=usuario.id,

@@ -619,3 +619,80 @@ def test_mensagens_de_falha_da_rotina_sao_verdadeiras() -> None:
     assert estourou_limite_de_passos(ModelCallLimitExceededError(10, 10, None, 10))
     assert "máximo de passos" in MENSAGEM_LIMITE_DE_PASSOS_ROTINA
     assert "não respondeu" not in MENSAGEM_LIMITE_DE_PASSOS_ROTINA
+
+
+# ---------------------------------------------------------------- rodada 10
+
+
+def test_todo_nome_citado_no_prompt_do_navegador_existe_no_catalogo_ativo() -> None:
+    import re
+
+    from app.agentes.ancora import navegador_preguicoso
+    from app.agentes.montagem import (
+        ContextoAgente,
+        montar_prompt_de_sistema,
+        nomes_das_ferramentas,
+    )
+    from app.ferramentas.base import ContextoFerramenta
+    from app.ferramentas.registro import criar_ferramentas
+
+    contexto = ContextoAgente(
+        usuario_id=uuid.uuid4(),
+        agente_id=uuid.uuid4(),
+        conversa_id=uuid.uuid4(),
+        papel="pesquisador",
+        cadeia_id=uuid.uuid4(),
+        etapa_id=uuid.uuid4(),
+        valores_do_prompt={
+            "nome": "Davi",
+            "objetivo": "x",
+            "papel": "pesquisador",
+            "pronto_quando": "x",
+            "resultados_anteriores": "nenhum",
+            "tarefa": "x",
+        },
+    )
+    ferramentas = navegador_preguicoso(
+        criar_ferramentas(
+            nomes_das_ferramentas(contexto),
+            ContextoFerramenta(
+                usuario_id=contexto.usuario_id,
+                agente_id=contexto.agente_id,
+                conversa_id=contexto.conversa_id,
+                cadeia_id=contexto.cadeia_id,
+                etapa_id=contexto.etapa_id,
+            ),
+        ),
+        contexto,
+    )
+    diretas = {f.name for f in ferramentas}
+    # ids do catálogo = as ferramentas escondidas
+    from app.agentes.ancora import SINONIMOS_DO_NAVEGADOR
+
+    ids = set(SINONIMOS_DO_NAVEGADOR)
+    prompt = montar_prompt_de_sistema(contexto)
+    citados = set(re.findall(r"navegador_[a-z_]+", prompt))
+    assert citados, "o prompt do navegador devia citar ferramentas"
+    inexistentes = citados - diretas - ids
+    assert not inexistentes, inexistentes
+    # as escondidas só são citadas como id do catálogo, e o prompt explica como chamá-las
+    assert "navegador_executar_ferramenta" in diretas
+    assert "navegador_executar_ferramenta" in prompt and "pelo catálogo" in prompt
+    # nenhuma escondida é mandada como ferramenta direta ("use `navegador_esperar`")
+    for escondida in ids:
+        assert f"use `{escondida}`" not in prompt, escondida
+        assert f"com `{escondida}`" not in prompt, escondida
+
+
+def test_passo_do_catalogo_mostra_a_ferramenta_de_verdade() -> None:
+    from app.agentes.middleware.passos import desembrulhar_catalogo
+
+    chamada = {
+        "name": "navegador_executar_ferramenta",
+        "args": {"id": "navegador_capturar", "argumentos": {"aba_id": "x"}},
+        "id": "1",
+    }
+    saida = desembrulhar_catalogo(chamada)
+    assert saida["name"] == "navegador_capturar" and saida["args"] == {"aba_id": "x"}
+    comum = {"name": "navegador_abrir", "args": {"url": "u"}, "id": "2"}
+    assert desembrulhar_catalogo(comum) == comum
