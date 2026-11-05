@@ -99,6 +99,11 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 .delivery-card header span { grid-column: 2; color: var(--text-2); font-size: var(--fs-12); }
 .delivery-card > a { display: block; overflow: hidden; margin: 8px 0; color: var(--text-1); font-size: var(--fs-12); white-space: nowrap; text-overflow: ellipsis; }
 .delivery-card > a:hover { color: var(--focus); }
+/* link em duas linhas: no celular o título genérico cortado ("Referênci…") não distinguia dois links */
+.delivery-card > a.delivery-link { display: grid; min-width: 0; white-space: normal; }
+/* a linha principal (o que distingue: título bom ou domínio/caminho) quebra em até 2 linhas, em qualquer ponto */
+.delivery-link span { min-width: 0; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.delivery-link small { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-2); }
 .piece-strip { height: 110px; display: flex; gap: var(--sp-1); }
 .piece-strip img { min-width: 0; width: 33.333%; object-fit: cover; border-radius: var(--r-6); }
 /* imagens reais da entrega (captura do navegador, peça gerada); sem imagem não há nada aqui */

@@ -2,7 +2,7 @@
 // real da entrega; o que não veio aparece como estado vazio, nunca como exemplo.
 import type { CSSProperties } from 'react';
 import type { AgenteSora, EntregaGerada } from '../../state/projetos';
-import { eventosDaEntrega, linksDaEntrega, textosDaEntrega } from './conteudoDaEntrega';
+import { eventosDaEntrega, linksDaEntrega, rotuloDoLink, textosDaEntrega } from './conteudoDaEntrega';
 import { ImagensEntrega } from './ImagensEntrega';
 import { imagensDaEntrega } from './imagensDaEntrega';
 
@@ -16,7 +16,11 @@ export function EntregaCard({ entrega, agente }: { entrega: EntregaGerada; agent
     <article className="delivery-card card" style={{ '--agent': agente.cor } as CSSProperties}>
       <header><i aria-hidden="true" /><h3>{entrega.titulo}</h3><span>{agente.nome} · {entrega.resumo}</span></header>
       {entrega.tipo === 'links' && (links.length
-        ? links.slice(0, LIMITE_LINKS).map(l => <a key={l.url} href={l.url} target="_blank" rel="noreferrer" title={l.url}>↗ {l.titulo} <small>{l.dominio}</small></a>)
+        ? links.slice(0, LIMITE_LINKS).map(l => { const r = rotuloDoLink(l); return (
+          <a key={l.url} className="delivery-link" href={l.url} target="_blank" rel="noreferrer" title={l.titulo === l.dominio ? l.url : `${l.titulo} · ${l.url}`}>
+            {/* espaço não separável: a seta não fica sozinha numa linha; a quebra cai dentro do caminho */}
+            <span>{`↗ ${r.principal}`}</span>{r.secundario && <small>{r.secundario}</small>}
+          </a>); })
         : <p className="delivery-text">Esta entrega não trouxe links.</p>)}
       {/* imagens reais (captura, peça gerada) de qualquer tipo de entrega; sem imagem, nada inventado */}
       <ImagensEntrega entrega={entrega} limite={3} />

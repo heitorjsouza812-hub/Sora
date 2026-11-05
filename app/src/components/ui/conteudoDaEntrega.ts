@@ -4,6 +4,32 @@
 import type { EntregaGerada } from '../../state/projetos';
 
 export interface LinkEntrega { titulo: string; url: string; dominio: string }
+
+const TITULO_GENERICO = /^(refer[eê]ncias?|links?|fontes?|artigos?|p[aá]ginas?|sites?|resultados?|leia mais|saiba mais|aqui)\b/i;
+const TITULO_LONGO = 48;
+
+const CAMINHO_LONGO = 32;
+
+/** "exemplo.com/a/b" (domínio + caminho, sem barra final nem ?query): o que distingue dois links.
+ *  Caminho longo vira "exemplo.com/…/ultimo-trecho": o fim costuma ser o que difere. */
+export function caminhoDoLink(l: Pick<LinkEntrega, 'url' | 'dominio'>): string {
+  try {
+    const caminho = new URL(l.url).pathname.replace(/\/+$/, '');
+    if (!caminho || caminho === '/') return l.dominio;
+    const inteiro = l.dominio + caminho;
+    const partes = caminho.split('/').filter(Boolean);
+    return inteiro.length > CAMINHO_LONGO && partes.length > 1 ? `${l.dominio}/…/${partes.at(-1)}` : inteiro;
+  } catch { return l.dominio; }
+}
+
+/** Linha principal e secundária de um link. Título genérico ("Referência…") ou longo não distingue
+ *  dois links numa tela estreita: aí a principal é o domínio/caminho e o título vai para baixo. */
+export function rotuloDoLink(l: LinkEntrega): { principal: string; secundario: string } {
+  const caminho = caminhoDoLink(l);
+  const fraco = l.titulo === l.dominio || TITULO_GENERICO.test(l.titulo.trim()) || l.titulo.length > TITULO_LONGO;
+  if (l.titulo === l.dominio) return { principal: caminho, secundario: '' };
+  return fraco ? { principal: caminho, secundario: l.titulo } : { principal: l.titulo, secundario: caminho };
+}
 export interface EventoCalendario { quando: string; titulo: string }
 
 type Entrada = Pick<EntregaGerada, 'conteudo' | 'links' | 'itens'>;

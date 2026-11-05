@@ -1,7 +1,7 @@
 // Conteúdo de uma entrega (links, peças, calendário ou texto) — usado na revisão e na tela de aprovado.
 // Tudo sai do conteúdo real da entrega; o que não veio é dito com um estado vazio, nunca com exemplo.
 import type { EntregaGerada } from '../../state/projetos';
-import { eventosDaEntrega, linksDaEntrega, textosDaEntrega } from '../ui/conteudoDaEntrega';
+import { eventosDaEntrega, linksDaEntrega, rotuloDoLink, textosDaEntrega } from '../ui/conteudoDaEntrega';
 import { ImagensEntrega } from '../ui/ImagensEntrega';
 import { imagensDaEntrega } from '../ui/imagensDaEntrega';
 
@@ -11,9 +11,10 @@ export function DeliveryContent({ entrega }: { entrega?: EntregaGerada; color?: 
   const heading = <div className="review-delivery__heading"><h4>{entrega.titulo}</h4><span>{entrega.resumo}</span></div>;
   if (entrega.tipo === 'links') {
     const links = linksDaEntrega(entrega);
-    return <>{heading}<div className="review-links">{links.map((link) => (
-      <a key={link.url} href={link.url} target="_blank" rel="noreferrer" title={link.url}><span>{link.titulo}</span><small>↗ {link.dominio}</small></a>
-    ))}{!links.length && <div className="review-empty">Esta entrega não trouxe links.</div>}</div></>;
+    return <>{heading}<div className="review-links">{links.map((link) => {
+      const r = rotuloDoLink(link);
+      return <a key={link.url} href={link.url} target="_blank" rel="noreferrer" title={link.url}><span>{r.principal}</span><small>↗ {r.secundario || link.dominio}</small></a>;
+    })}{!links.length && <div className="review-empty">Esta entrega não trouxe links.</div>}</div></>;
   }
 
   if (entrega.tipo === 'imagem') {

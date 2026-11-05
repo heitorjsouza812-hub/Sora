@@ -65,3 +65,16 @@ describe('cards de entrega sem demonstração', () => {
     for (const falsa of ['Perplexity', 'Notion', 'Figma', 'Canva', 'Gmail']) expect(screen.queryByText(falsa)).toBeNull();
   });
 });
+
+describe('links parecidos no card (celular)', () => {
+  it('dois títulos genéricos ficam distinguíveis pelo caminho, visível na 1ª linha', () => {
+    render(<EntregaCard entrega={comConteudo('links', [
+      { titulo: 'Referência de exemplo A', url: 'https://example.com/a' },
+      { titulo: 'Referência de exemplo B', url: 'https://example.com/b' },
+    ])} agente={agente} />);
+    const [a, b] = screen.getAllByRole('link');
+    expect(a.querySelector('span')?.textContent).toBe('↗ example.com/a');
+    expect(b.querySelector('span')?.textContent).toBe('↗ example.com/b');
+    expect(a.querySelector('small')?.textContent).toBe('Referência de exemplo A');
+  });
+});

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MODELOS_AGENTE } from '../../projetos/modelos';
 import { FERRAMENTAS_AGENTE, ferramentasParaSalvar } from '../../../data/ferramentas';
-import { eventosDaEntrega, linksDaEntrega, textosDaEntrega } from '../conteudoDaEntrega';
+import { eventosDaEntrega, linksDaEntrega, rotuloDoLink, textosDaEntrega } from '../conteudoDaEntrega';
 
 const envelope = (dados: unknown, fontes: unknown[] = []) => ({ conteudo: { dados, fontes, pendencias: [] } });
 
@@ -40,5 +40,26 @@ describe('ferramentas do agente', () => {
 
   it('modelos de agente só usam ferramentas que o backend aceita', () => {
     for (const m of MODELOS_AGENTE) for (const f of m.rascunho.ferramentas) expect(catalogo.has(f), `${m.id}: ${f}`).toBe(true);
+  });
+});
+
+describe('rótulo do link (celular: "Referênci…" não distinguia dois links)', () => {
+  const link = (titulo: string, url: string) => ({ titulo, url, dominio: new URL(url).hostname.replace(/^www\./, '') });
+
+  it('título genérico ou longo: domínio/caminho em cima, título embaixo', () => {
+    expect(rotuloDoLink(link('Referência de exemplo A', 'https://example.com/a'))).toEqual({ principal: 'example.com/a', secundario: 'Referência de exemplo A' });
+    expect(rotuloDoLink(link('x'.repeat(60), 'https://www.loja.com/produtos/cafe/?utm=1'))).toEqual({ principal: 'loja.com/produtos/cafe', secundario: 'x'.repeat(60) });
+  });
+
+  it('título bom fica em cima; sem título, só o caminho', () => {
+    expect(rotuloDoLink(link('Guia de cafés especiais', 'https://cafe.org/guia'))).toEqual({ principal: 'Guia de cafés especiais', secundario: 'cafe.org/guia' });
+    expect(rotuloDoLink(link('b.com', 'https://b.com/'))).toEqual({ principal: 'b.com', secundario: '' });
+  });
+});
+
+describe('caminho longo', () => {
+  it('mostra o domínio e o último trecho, que é o que costuma diferir', () => {
+    expect(rotuloDoLink({ titulo: 'Referência', url: 'https://www.loja.com.br/categorias/bebidas/cafes/especial-da-casa', dominio: 'loja.com.br' }).principal)
+      .toBe('loja.com.br/…/especial-da-casa');
   });
 });
