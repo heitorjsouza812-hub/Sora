@@ -1,10 +1,19 @@
 # Onde paramos
 
+## Etapa 4 — peças ligadas ao worker (concluída em 2026-11-04)
+
+- O worker real usa navegador por árvore com perfis e revisão de domínio, fila persistente, canais de equipe e correio, contexto e compactação, memória, pendências, revisor, habilidades, rotinas, conectores MCP, Telegram, sandbox e voz. O app mostra canais, fila, contexto, memória, rotinas, habilidades, conectores, Telegram, pendências, voz, perfis do navegador, cartão de domínio e rastro da aba. Plano: `log/etapa4-pecas.md`. Diário: `log/2026-11-02.md`.
+- Segurança: ações do navegador passam pelo revisor; rotinas só recebem ferramentas seguras e perfil efêmero; voz e conectores conferem o IP na conexão; sandbox de produção só liga com host separado; recuperação de fila/canal respeita batimento; uma ocorrência de rotina não roda duas vezes; conteúdo vindo de etapa anterior entra no prompt como dado externo.
+- **Teste com modelo real (Groq, 2026-11-02, ao vivo no Chrome):** equipe pesquisa → redação → verificação, navegador por árvore (abrir, procurar, 2 cliques, captura, entrega aprovada pelo verificador), cartões de aprovação e pergunta, pendência, memória, rotina "Rodar agora", canal de equipe com delegação e recuperação depois de reiniciar o worker. Achou 12 defeitos que o modelo falso escondia (limite por minuto do provedor, pedido grande demais, conteúdo entre etapas, catálogo do navegador, limite de chamadas, espera falsa após ação, leitura antes do load, laço da rotina, esquema estrito do líder, verificador sem os passos, letras engolidas, ordem das mensagens), todos corrigidos e retestados; depois a varredura tirou do app o conteúdo de demonstração que ainda parecia real.
+- Verde no Aferidor (conferência final, HEAD `a2d78b8`): backend unitários 1097/0, ruff limpo, `test_navegador_worker` 11/11, `test_ancora_pecas` 14/14 (antes: `test_equipe_tear` 13, `test_relogio_rotinas` 6, `fase_b_pronto` 2, `fase_b_robustez` 26); app build, oxlint, npm test 184, `qa/e2e.mjs`, `qa/ilha.mjs`, `qa/digitacao.mjs`, `qa/etapa4.mjs` com Chromium real e `test:visual` (baseline "projeto pronto" atualizada pela mudança do card de links).
+- Ficou de fora: transcrição de voz com chave real (precisa da fala do usuário); o grupo decide a tela Plugins (marca plugins como conectados), o botão "Aprovar e publicar" e as ferramentas do agente no `AgenteSaida`.
+- **Próximo (pedido do Heitor):** (1) a Ilha da Sora só aparece quando o usuário está fora do app (desktop, sobre outras janelas); dentro do app não aparece nem abre sozinha com cartões; (2) refazer a interface, hoje confusa, no estilo OpenBot/Grok (só referência de experiência; OpenBot é PolyForm Noncommercial). Depois: domínio real da API no CSP do Tauri e instalador assinado. Plugins continuam congelados.
+
 ## Etapa 3 — motor de ponta a ponta (concluída em 2026-11-02)
 
 - Conversa → plano → especialistas → etapas → entrega no worker, com pausa/retomada, perguntas, aprovações, orçamento, cancelamento e batimento; app ligado por REST + SSE, sem simulação; decisões de segurança do navegador aplicadas. Plano: `log/etapa3-motor.md`. Diário: `log/2026-11-02.md`.
 - Verde: backend 1130 passed / 2 skipped com integração, ruff, build, oxlint, npm test 130, e2e e ilha.
-- **Próximo:** etapa 4 / passo 6 (`log/etapa4-pecas.md`), em andamento no ramo `etapa4-pecas` (worktree `C:\dev\sora-e4`). Depois: teste com chave real, CSP do Tauri, instalador assinado.
+- Seguiu para a etapa 4 (acima).
 
 _Atualizado em 2026-11-01 — **navegador por árvore adaptado do agent-desktop** (refs conferidas, ações com verificação, esperas, lote) e, no mesmo dia, **peças inspiradas no OpenBot escritas do zero no backend** (contexto, filas, correio, canais de equipe, navegador persistente; migração 0005). Antes, 2026-10-17: **etapa 1 do backend (conexão das APIs) concluída** e **peças do Rakazo portadas** (fases 1, 2 e 3), as duas juntadas no mesmo `main`; **etapa 2 (app ligado ao backend, login real, chaves fora do navegador) concluída**. Antes, 2026-10-15: revisão de segurança concluída e validada; APP-003 e hover da ilha corrigidos no Tauri real._
 
@@ -13,7 +22,7 @@ _Atualizado em 2026-11-01 — **navegador por árvore adaptado do agent-desktop*
 - agent-desktop (Vercel Labs) é **Apache 2.0**; trouxemos o modelo (observar → agir numa ref → conferir) para o Chromium da Sora, escrito em Python + JS, sem cópia literal. Mapa e licença: [`docs/referencias/agent-desktop.md`](../docs/referencias/agent-desktop.md). Diário: `log/2026-11-01.md`.
 - Novo: `backend/app/navegador/arvore/` e as ferramentas `navegador_observar|procurar|elemento|esperar|acao|tecla|lote`; prompt `navegador_arvore.v1`.
 - Verde: ruff, format, pytest **969 passed** (32 novos em `test_navegador_arvore.py`, com Chromium real).
-- **Próximo:** ligar no worker no lugar de `navegador_ler`/`navegador_agir`; rastro no painel Trabalho; cursor colorido na transmissão da aba.
+- Ligado ao worker na etapa 4; estado atual no topo deste arquivo.
 
 ## Peças inspiradas no OpenBot (2026-11-01)
 
@@ -21,7 +30,7 @@ _Atualizado em 2026-11-01 — **navegador por árvore adaptado do agent-desktop*
 - Novo no backend: `app/contexto` (medidor + compactar antes do turno), `app/filas` (FIFO por agente com pausa, pistas paralelas, edição, recuperação após queda), `app/correio` (respostas, reações, arquivos e imagens entre agentes com cópia e hash), `app/canais_equipe` (canal com líder, responsável por tarefa, delegação, Parar/Retomar/Reatribuir/Cancelar/Arquivar/Restaurar), `app/navegador/{perfis,abas,persistente}` (perfis com login cifrado, abas que sobrevivem ao turno, "assumir aba", captura e console). Migração `0005`, rotas em `app/api/equipe.py`, eventos em `app/eventos/equipe.py`.
 - Verde: ruff, format, pytest **937 passed** (`tests/unitarios/test_pecas_openbot.py`).
 - Revisão no mesmo dia: 3 bugs de canais (filha que falha trava a mãe, resultado perdido, pingue-pongue em transferir) e 3 menores corrigidos. **Decidir:** política do navegador com perfil logado (`log/2026-11-01.md`).
-- **Próximo:** repositórios no banco + ligar no worker (junto com o worker de ponta a ponta), telas no app.
+- Ligado ao worker na etapa 4; estado atual no topo deste arquivo.
 
 ## Etapa 2 — app ligado ao backend (concluída em 2026-10-17)
 
