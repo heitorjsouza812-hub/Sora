@@ -113,13 +113,6 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 .wk-thumbs .delivery-image img { width: 56px; height: 56px; }
 .review-images .delivery-image img { max-height: 320px; }
 .rv-ok-mini--imagem .delivery-image, .rv-ok-mini--imagem .delivery-image img { width: 64px; height: 64px; max-height: none; }
-.calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--sp-1); }
-.calendar > b { color: var(--text-3); font-size: var(--fs-12); text-align: center; }
-.calendar > span { min-width: 0; height: 52px; padding: var(--sp-2); background: var(--white-a04); border-radius: var(--r-6); }
-.calendar small { color: var(--text-3); }
-.calendar i { display: block; overflow: hidden; margin-top: 7px; padding: var(--sp-1) var(--sp-1); color: var(--ok); background: var(--nina-line); border-radius: var(--r-6); font-size: var(--fs-12); font-style: normal; white-space: nowrap; }
-.calendar i[data-kind="Post"] { color: var(--luna); background: var(--luna-soft); }.calendar i[data-kind="Story"] { color: var(--focus); background: var(--atlas-line); }
-.calendar-compact { gap: var(--sp-1); }.calendar-compact > span { height: 19px; padding: 0; }.calendar-compact small { display: none; }.calendar-compact i { height: 7px; margin: 6px 2px 0; padding: 0; font-size: 0; }
 .review-row { display: flex; align-items: center; gap: var(--sp-5); margin: 22px 0 0; }
 .primary-button { height: 48px; padding: 0 var(--sp-6); color: var(--btn-text); font-weight: 650; border: 0; border-radius: var(--r-24); background: var(--btn-bg); }
 .review-row p { color: var(--text-2); font-size: var(--fs-13); }
@@ -376,6 +369,9 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 .delivery-card > a small { margin-left: 4px; color: var(--text-3); }
 .delivery-text { margin: 0; color: var(--text-2); font-size: var(--fs-13); line-height: 1.5; }
 .delivery-items { display: grid; gap: var(--sp-2); margin: 0; padding: 0 0 0 var(--sp-4); color: var(--text-1); font-size: var(--fs-13); line-height: 1.4; }
+.delivery-dates { padding-left: 0; list-style: none; }
+.delivery-dates b { margin-right: var(--sp-1); color: var(--agent); font-weight: 600; }
+.delivery-more { display: block; margin-top: var(--sp-2); color: var(--text-3); font-size: var(--fs-12); }
 .piece-strip img, .piece-generated { min-width: 0; width: 33.333%; object-fit: cover; border-radius: var(--r-6); }
 .piece-generated { display: block; background: radial-gradient(circle at calc(30% + var(--i) * 20%) 35%, color-mix(in srgb, var(--agent), white 20%) 0, transparent 50%), linear-gradient(135deg, color-mix(in srgb, var(--agent), black 50%), color-mix(in srgb, var(--agent), black 80%)); }
 .version-compare ul { margin: 8px 0 0; padding-left: var(--sp-4); color: var(--text-1); font-size: var(--fs-13); line-height: 1.45; }

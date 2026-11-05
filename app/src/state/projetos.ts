@@ -1,5 +1,6 @@
 // Estado real de conversas, equipes e trabalho. A API hidrata o estado e os eventos SSE são
 // a única fonte das transições ao vivo. O relógio serve apenas para mostrar duração na interface.
+import { ferramentasParaSalvar } from '../data/ferramentas';
 import { useEffect, useSyncExternalStore } from 'react';
 import { api, ErroApi } from '../api/cliente';
 import { acompanharEventos, type EventoSse } from '../api/eventos';
@@ -320,7 +321,7 @@ export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } =
   void api.delete(`/v1/conversas/${id}?manter_agentes=${opcoes.manterAgentes ? 'true' : 'false'}`).catch(() => definir(antes)); return () => { definir(antes); void iniciarProjetos(); };
 }
 export async function salvarAgente(dados: RascunhoAgente & { id?: string }): Promise<AgenteSora> {
-  const corpo = { nome: dados.nome, funcao: dados.funcao, papel: dados.instrucoes, cor: dados.cor, movimento: dados.tipoMovimento, ferramentas: dados.ferramentas };
+  const corpo = { nome: dados.nome, funcao: dados.funcao, papel: dados.instrucoes, cor: dados.cor, movimento: dados.tipoMovimento, ferramentas: ferramentasParaSalvar(dados.ferramentas) };
   const saida = dados.id ? await api.patch<AgenteApi>(`/v1/agentes/${dados.id}`, corpo) : await api.post<AgenteApi>('/v1/agentes', corpo);
   const agente = { ...agenteDaApi(saida), ferramentas: dados.ferramentas, instrucoes: dados.instrucoes }; alterar(e => ({ ...e, agentes: { ...e.agentes, [agente.id]: { ...e.agentes[agente.id], ...agente } } })); return agente;
 }

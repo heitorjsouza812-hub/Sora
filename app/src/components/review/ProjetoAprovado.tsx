@@ -78,7 +78,7 @@ export function ProjetoAprovado({
       <nav className="rv-ok-passos" aria-label="Próximos passos">
         <h2>Próximos passos</h2>
         <div>
-          <Button variante="primario" onClick={onAgendarProxima}>Agendar próxima campanha</Button>
+          <Button variante="primario" onClick={onAgendarProxima}>Planejar a próxima etapa</Button>
           {itens.length > 0 && (
             <Button aria-expanded={verEntregas} aria-controls={detalhesId} onClick={() => setVerEntregas((v) => !v)}>
               {verEntregas ? 'Ocultar entregas' : 'Ver entregas'}

@@ -1,5 +1,5 @@
 // Revisão do projeto: entregas por agente, Aprovar e publicar / Pedir ajuste (versões comparadas);
-// depois de aprovado, mostra o que foi publicado e os próximos passos.
+// depois de aprovado, mostra o que foi aprovado e os próximos passos (nada é publicado fora daqui).
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/base';
 import { AppShell } from '../components/layout/AppShell';
@@ -16,7 +16,8 @@ export default function Revisao() {
   if (!p) return <Navigate to="/" replace />;
   const fase = estadoProjeto(e, p, agora).fase;
   const voltar = () => { abrirProjeto(p.id); navigate(`/projeto/${p.id}`); };
-  const proxima = `Agende a próxima campanha seguindo o que funcionou em “${p.titulo}”: novas referências, peças e um calendário de posts para o próximo mês.`;
+  // pedido neutro: vale para qualquer projeto (pesquisa, landing, roteiro…), não só para campanha
+  const proxima = `Continue o trabalho de “${p.titulo}”: a partir do que foi aprovado, proponha e faça a próxima etapa.`;
   return (
     <AppShell titulo={`Revisão · ${p.titulo}`} acoes={p.aprovadoEm ? undefined : <Button tamanho="P" onClick={voltar}>Voltar ao projeto</Button>}>
       <div className="review-screen">

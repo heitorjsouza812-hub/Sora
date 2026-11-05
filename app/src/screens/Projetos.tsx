@@ -14,7 +14,7 @@ export default function Projetos() {
   const agora = useAgora();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  // ?pedido=… (ex.: "Agendar próxima campanha" da tela de aprovado) ou ?modelo=<id> pré-preenchem o compositor
+  // ?pedido=… (ex.: "Planejar a próxima etapa" da tela de aprovado) ou ?modelo=<id> pré-preenchem o compositor
   const [texto, setTexto] = useState(() => params.get('pedido') ?? MODELOS_PROJETO.find((m) => m.id === params.get('modelo'))?.pedido ?? '');
   const [pensando, setPensando] = useState(false);
   const [filtro, setFiltro] = useState<FiltroProjetos>('todos');

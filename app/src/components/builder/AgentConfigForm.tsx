@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import type { CSSProperties } from 'react';
+import { FERRAMENTAS_AGENTE } from '../../data/ferramentas';
 import { COR_SORA, MOVIMENTOS, PALETA_AGENTES } from '../../data/planejador';
 import { modelosAtivos, useModelos, type EscolhaModelo, type ProvedorModeloId } from '../../state/modelos';
 import { SoraOrb } from '../mascot';
 import type { RascunhoConstrutor } from './types';
 
-const FERRAMENTAS = ['Perplexity', 'Notion', 'Google Drive', 'Figma', 'Canva', 'GitHub', 'Gmail', 'Google Agenda', 'Planilhas Google'];
 export interface AgentConfigFormProps {
   rascunho: RascunhoConstrutor;
   onChange: (valor: RascunhoConstrutor) => void;
@@ -43,7 +43,7 @@ export function AgentConfigForm({ rascunho: r, onChange, onExcluir, modo = 'agen
       <label><span>Frase inicial sugerida</span><input value={r.frasesIniciais[0] ?? ''} onChange={e => set('frasesIniciais', [e.target.value])} placeholder="Ex.: Analise estas referências" /></label>
     </div></details>
     <details><summary>Modelo<span>Provedor usado por este agente</span></summary><div className="bld-section-grid"><label className="bld-wide"><span>Modelo de IA</span><select value={valorModelo} onChange={e => { const [provedor, modelo] = e.target.value.split('::'); set('modelo', provedor ? { provedor: provedor as ProvedorModeloId, modelo } as EscolhaModelo : null); }}><option value="">Usar padrão dos novos agentes</option>{opcoesModelo.map(x => <option key={`${x.p}::${x.m}`} value={`${x.p}::${x.m}`}>{x.label}</option>)}</select>{!opcoesModelo.length && <small>Nenhum provedor conectado. <Link to="/configuracoes">Conectar modelos</Link></small>}</label></div></details>
-    <details><summary>Ferramentas<span>O que ele pode usar</span></summary><div className="bld-tool-grid">{FERRAMENTAS.map(f => <label key={f}><input type="checkbox" checked={r.ferramentas.includes(f)} onChange={e => set('ferramentas', e.target.checked ? [...r.ferramentas, f] : r.ferramentas.filter(x => x !== f))} /><span>{f}</span></label>)}</div></details>
+    <details><summary>Ferramentas<span>O que ele pode usar</span></summary><div className="bld-tool-grid">{FERRAMENTAS_AGENTE.map(({ id: f, rotulo }) => <label key={f}><input type="checkbox" checked={r.ferramentas.includes(f)} onChange={e => set('ferramentas', e.target.checked ? [...r.ferramentas, f] : r.ferramentas.filter(x => x !== f))} /><span>{rotulo}</span></label>)}</div></details>
     {r.id && <details className="bld-danger"><summary>Zona de perigo<span>Ações irreversíveis</span></summary><div><p>Excluir remove o agente e a conversa associada.</p><button type="button" onClick={onExcluir}>Excluir agente</button></div></details>}
   </div>;
 }
