@@ -18,6 +18,8 @@ from sqlalchemy import func, select
 
 from app.eventos.streams import publicar_evento
 from app.eventos.tipos import SugestoesEvento
+from app.filas import FilaAgente, OrigemItem
+from app.filas.sql import ArmazemFilaSQL
 from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
 from app.modelos.enumeracoes import TipoAgente
 from app.modelos.tabelas import Agente, Conversa, Mensagem
@@ -34,21 +36,74 @@ def _texto_da_resposta(resultado: dict[str, Any]) -> str:
 
 
 async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
+    """Põe o pedido na fila persistida do agente e manda despachar. Quem roda o turno é
+    ``executar_item_fila`` (workers/equipe.py), para que a 2ª mensagem a um agente ocupado, a
+    fila retomada e o "Repetir" também sejam respondidos."""
+    async with ctx["sessoes"]() as sessao:
+        mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
+        conversa = await sessao.get(Conversa, mensagem.conversa_id) if mensagem else None
+        if mensagem is None or conversa is None:
+            return
+        fila = FilaAgente(ArmazemFilaSQL(sessao))
+        item = await fila.enfileirar(
+            usuario_id=conversa.usuario_id,
+            agente_id=conversa.agente_id,
+            texto=mensagem.conteudo,
+            origem=OrigemItem.USUARIO,
+            anexos=(UUID(a) for a in mensagem.anexos),
+            chave=f"conversa:{mensagem.id}",
+        )
+        await sessao.commit()
+    from workers.fila import enfileirar
+
+    await enfileirar("despachar_equipe", agente_id=str(item.agente_id))
+
+
+async def rodar_turno_do_item(ctx: dict[str, Any], item: Any) -> None:
+    """Roda o agente para um item da fila. Itens de mensagem trazem ``conversa:<id>`` na chave;
+    os demais (Repetir, outras origens) usam a conversa mais recente do agente e o texto do item."""
+    chave = item.chave or ""
+    if chave.startswith("conversa:"):
+        await _responder_direto_sem_fila(ctx, chave.split(":", 1)[1])
+    else:
+        await _responder_direto_sem_fila(
+            ctx, None, agente_id=item.agente_id, usuario_id=item.usuario_id, texto=item.texto
+        )
+
+
+async def _responder_direto_sem_fila(
+    ctx: dict[str, Any],
+    mensagem_id: str | None,
+    *,
+    agente_id: UUID | None = None,
+    usuario_id: UUID | None = None,
+    texto: str | None = None,
+) -> None:
     """Roda a Sora (ou o agente individual) e manda o texto pelos eventos
     ``mensagem.*``, terminando com ``sugestoes``. Quem põe na fila: a API."""
     from app.agentes import ContextoAgente
+    from app.agentes.ancora import aplicar_habilidade_forcada
     from app.ferramentas.base import ContextoFerramenta
     from app.ferramentas.falar import Falar, falar
     from app.orquestrador.modelos import modelos_do_papel
     from workers.cadeia import dependencias_da_etapa
 
     async with ctx["sessoes"]() as sessao:
-        mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
-        if mensagem is None:
-            return
-        conversa = await sessao.get(Conversa, mensagem.conversa_id)
+        if mensagem_id is not None:
+            mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
+            if mensagem is None:
+                return
+            conversa = await sessao.get(Conversa, mensagem.conversa_id)
+            texto = mensagem.conteudo
+        else:
+            conversa = await sessao.scalar(
+                select(Conversa)
+                .where(Conversa.usuario_id == usuario_id, Conversa.agente_id == agente_id)
+                .order_by(Conversa.atualizada_em.desc())
+                .limit(1)
+            )
         agente = await sessao.get(Agente, conversa.agente_id) if conversa else None
-        if conversa is None or agente is None:
+        if conversa is None or agente is None or texto is None:
             return
         papel = "sora" if agente.tipo == TipoAgente.SORA else "individual"
         modelos = await modelos_do_papel(
@@ -59,7 +114,6 @@ async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
             conversa_privada=conversa.privada,
         )
         usuario_id, conversa_id, agente_id = conversa.usuario_id, conversa.id, agente.id
-        texto = mensagem.conteudo
         antes = await sessao.scalar(
             select(func.count()).select_from(Mensagem).where(Mensagem.conversa_id == conversa_id)
         )
@@ -84,7 +138,11 @@ async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
         )
         return
     await _rodar_e_falar(
-        ctx, contexto, modelos, antes=antes, entrada={"messages": [HumanMessage(texto)]}
+        ctx,
+        contexto,
+        modelos,
+        antes=antes,
+        entrada={"messages": [HumanMessage(await aplicar_habilidade_forcada(usuario_id, texto))]},
     )
 
 
@@ -92,6 +150,16 @@ MENSAGEM_FALHA = (
     "Não consegui terminar essa resposta agora (o modelo de IA não respondeu). "
     "Tente de novo em instantes ou confira o provedor em Configurações → Modelos de IA."
 )
+
+
+async def _ja_falou_neste_turno(ctx: dict[str, Any], conversa_id: Any, antes: int | None) -> bool:
+    if antes is None:
+        return False
+    async with ctx["sessoes"]() as sessao:
+        depois = await sessao.scalar(
+            select(func.count()).select_from(Mensagem).where(Mensagem.conversa_id == conversa_id)
+        )
+    return (depois or 0) > antes
 
 
 async def _rodar_e_falar(
@@ -122,9 +190,29 @@ async def _rodar_e_falar(
             entrada=entrada,
             resposta=resposta,
         )
-    except Exception:
+    except Exception as erro:
+        from app.llm.limite import MENSAGEM_LIMITE, limite_do_provedor
+
         registro.exception("o agente da conversa %s falhou", contexto.conversa_id)
-        await falar(Falar(texto=MENSAGEM_FALHA), ferramenta)
+        if await _ja_falou_neste_turno(ctx, contexto.conversa_id, antes):
+            # O usuário já tem a resposta: um aviso de falha agora a contradiria. Fica no log.
+            registro.warning(
+                "falha depois da resposta; sem aviso ao usuário (%s)", type(erro).__name__
+            )
+        else:
+            from app.agentes.middleware.limites import (
+                MENSAGEM_LIMITE_DE_PASSOS,
+                estourou_limite_de_passos,
+            )
+
+            texto = (
+                MENSAGEM_LIMITE_DE_PASSOS
+                if estourou_limite_de_passos(erro)
+                else MENSAGEM_LIMITE
+                if limite_do_provedor(erro)
+                else MENSAGEM_FALHA
+            )
+            await falar(Falar(texto=texto), ferramenta)
         await publicar_evento(
             ctx["redis_eventos"],
             SugestoesEvento(itens=[]),

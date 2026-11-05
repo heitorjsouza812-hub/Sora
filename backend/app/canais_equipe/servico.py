@@ -7,7 +7,7 @@ O serviço não chama modelo nem fila: ele decide e grava. O worker lê o que mu
 from __future__ import annotations
 
 import itertools
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol
@@ -329,6 +329,9 @@ class ServicoCanais:
                     mudancas.tarefas.append(tarefa)
         elif rota.tipo == "lider":
             mudancas.precisa_lider = mensagem.id
+            if mensagem.id not in canal.pedidos_sem_lider:
+                canal.pedidos_sem_lider.append(mensagem.id)
+                await self._armazem.salvar_canal(canal)
         else:  # sem_lider
             canal.pedidos_sem_lider.append(mensagem.id)
             await self._armazem.salvar_canal(canal)
@@ -499,11 +502,16 @@ class ServicoCanais:
         await self._acordar_pai(tarefa, mudancas)
         return mudancas
 
-    async def recuperar_apos_queda(self) -> list[TarefaCanal]:
-        """Turno que estava rodando quando o servidor caiu vira "parada (interrompida)"."""
+    async def recuperar_apos_queda(
+        self, vivo: Callable[[UUID], Awaitable[bool]] | None = None
+    ) -> list[TarefaCanal]:
+        """Turno que estava rodando quando o servidor caiu vira "parada (interrompida)".
+        ``vivo(tarefa_id)``: outro worker ainda está no turno (batimento); esse não se mexe."""
         afetadas = []
         for tarefa in await self._armazem.tarefas_abertas():
             if tarefa.status is StatusTarefa.RODANDO:
+                if vivo is not None and await vivo(tarefa.id):
+                    continue
                 self._parar(tarefa, MotivoParada.INTERROMPIDA)
                 await self._armazem.gravar_tarefa(tarefa)
                 afetadas.append(tarefa)

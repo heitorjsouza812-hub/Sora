@@ -23,7 +23,25 @@ if TYPE_CHECKING:
 
     from app.llm.troca import EventoTroca
 
-PapelAgente = Literal["sora", "pesquisador", "redator", "designer", "verificador", "individual"]
+PapelAgente = Literal[
+    "sora", "pesquisador", "redator", "designer", "verificador", "individual", "canal"
+]
+
+FERRAMENTAS_NAVEGADOR = (
+    "navegador_abrir",
+    "navegador_abas",
+    "navegador_fechar_aba",
+    "navegador_capturar",
+    "navegador_console",
+    "navegador_pedir_ajuda",
+    "navegador_observar",
+    "navegador_procurar",
+    "navegador_elemento",
+    "navegador_esperar",
+    "navegador_acao",
+    "navegador_tecla",
+    "navegador_lote",
+)
 
 FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
     "sora": (
@@ -36,10 +54,10 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "parar_especialista",
         "ler_anexo",
     ),
-    "pesquisador": ("buscar_web", "ler_pagina", "ler_anexo", "entregar"),
+    "pesquisador": ("buscar_web", "ler_pagina", "ler_anexo", *FERRAMENTAS_NAVEGADOR, "entregar"),
     "redator": ("ler_anexo", "escrever_arquivo", "entregar"),
     "designer": ("ler_anexo", "gerar_imagem", "entregar"),
-    "verificador": ("buscar_web", "ler_pagina", "ler_anexo", "veredito"),
+    "verificador": ("buscar_web", "ler_pagina", "ler_anexo", *FERRAMENTAS_NAVEGADOR, "veredito"),
     "individual": (
         "falar",
         "perguntar",
@@ -47,7 +65,9 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "buscar_web",
         "ler_pagina",
         "escrever_arquivo",
+        *FERRAMENTAS_NAVEGADOR,
     ),
+    "canal": ("canal_historico", "canal_delegar", "canal_transferir", "canal_resultado"),
 }
 
 
@@ -57,6 +77,7 @@ class DependenciasAgente:
 
     esta_cancelada: Callable[[UUID], Awaitable[bool]] | None = None
     ao_trocar_modelo: Callable[[EventoTroca], Awaitable[None]] | None = None
+    ao_esperar_limite: Callable[[int], Awaitable[None]] | None = None
     orcamento_tokens: int | None = None
     reservar_tokens: Callable[[UUID, int, int], Awaitable[bool]] | None = None
     corrigir_tokens: Callable[[UUID, int, int], Awaitable[None]] | None = None
@@ -78,15 +99,30 @@ class ContextoAgente:
     papel: PapelAgente
     cadeia_id: UUID | None = None
     etapa_id: UUID | None = None
+    canal_id: UUID | None = None
+    tarefa_canal_id: UUID | None = None
+    revisao_canal: int | None = None
     ferramentas_extras: list[str] = field(default_factory=list)
     valores_do_prompt: dict[str, Any] = field(default_factory=dict)
     dependencias: DependenciasAgente = field(default_factory=DependenciasAgente)
+    sem_supervisao: bool = False
+    """Rotina sem ninguém olhando (Relógio): só ferramentas seguras, navegador efêmero."""
+    thread_proprio: str | None = None
+    """Thread do checkpointer só desta execução (rotina); senão vale a da conversa/etapa."""
 
 
 def nomes_das_ferramentas(contexto: ContextoAgente) -> list[str]:
     """Ferramentas do papel seguidas das extras, sem repetição."""
+    from app.agentes.ancora import ferramentas_do_papel
+
     return list(
-        dict.fromkeys((*FERRAMENTAS_POR_PAPEL[contexto.papel], *contexto.ferramentas_extras))
+        dict.fromkeys(
+            (
+                *FERRAMENTAS_POR_PAPEL[contexto.papel],
+                *ferramentas_do_papel(contexto.papel),
+                *contexto.ferramentas_extras,
+            )
+        )
     )
 
 
@@ -97,10 +133,20 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     from app.agentes.prompts import carregar_prompt, preencher
 
     valores = contexto.valores_do_prompt
-    if contexto.papel in {"sora", "individual"}:
+    if contexto.sem_supervisao and contexto.papel in {"sora", "individual"}:
+        # Rotina: não há ``falar`` (nem ninguém para ouvir). O prompt da Sora manda "sempre falar"
+        # e o agente ficava chamando uma ferramenta que não existe até estourar o limite.
+        prompt = carregar_prompt("rotina_sem_supervisao")
+    elif contexto.papel in {"sora", "individual", "canal"}:
         padroes = {
             "idioma": "pt-BR",
-            "perfil_do_agente": "Sora" if contexto.papel == "sora" else "Agente individual",
+            "perfil_do_agente": (
+                "Sora"
+                if contexto.papel == "sora"
+                else "Agente trabalhando em um canal de equipe"
+                if contexto.papel == "canal"
+                else "Agente individual"
+            ),
             "data_hora": "não informada",
             "fuso": "America/Sao_Paulo",
             "memorias_relevantes": "nenhuma",
@@ -108,11 +154,24 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
         }
         prompt = preencher(carregar_prompt("sora_base"), **(padroes | valores))
     elif contexto.papel == "verificador":
-        prompt = preencher(carregar_prompt("verificador"), **valores)
+        prompt = preencher(carregar_prompt("verificador"), **({"passos": "nenhum"} | valores))
     else:
         trecho = carregar_prompt(f"especialista_{contexto.papel}")
         prompt = preencher(carregar_prompt("especialista_comum"), trecho_do_papel=trecho, **valores)
-    return f"{prompt}\n\n{montar_instrucoes(nomes_das_ferramentas(contexto))}"
+    nomes = nomes_das_ferramentas(contexto)
+    instrucoes = montar_instrucoes(nomes)
+    if any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes):
+        instrucoes += "\n\n" + carregar_prompt("navegador_arvore")
+    return f"{prompt}\n\n{instrucoes}"
+
+
+async def _prompt_do_turno(contexto: ContextoAgente) -> str:
+    """Prompt do papel + instruções próprias, memórias, pendências, habilidades e colegas."""
+    from app.agentes.ancora import blocos_do_turno
+
+    base = montar_prompt_de_sistema(contexto)
+    extras = await blocos_do_turno(contexto)
+    return f"{base}\n\n{extras}" if extras else base
 
 
 async def montar_agente(
@@ -132,6 +191,10 @@ async def montar_agente(
     from app.ferramentas.registro import criar_ferramentas
 
     nomes = nomes_das_ferramentas(contexto)
+    if contexto.sem_supervisao:
+        from app.revisor.politica import pode_sem_supervisao
+
+        nomes = [n for n in nomes if pode_sem_supervisao(n)]
     ferramentas = criar_ferramentas(
         nomes,
         ContextoFerramenta(
@@ -140,12 +203,27 @@ async def montar_agente(
             conversa_id=contexto.conversa_id,
             cadeia_id=contexto.cadeia_id,
             etapa_id=contexto.etapa_id,
+            canal_id=contexto.canal_id,
+            tarefa_canal_id=contexto.tarefa_canal_id,
+            revisao_canal=contexto.revisao_canal,
+            sem_supervisao=contexto.sem_supervisao,
         ),
+    )
+    from app.agentes.ancora import catalogo_dos_conectores, navegador_preguicoso
+    from app.conectores.carregar import ferramentas_dos_conectores
+
+    ferramentas = navegador_preguicoso(ferramentas, contexto)
+
+    ferramentas += catalogo_dos_conectores(
+        await ferramentas_dos_conectores(
+            contexto.usuario_id, sem_supervisao=contexto.sem_supervisao
+        ),
+        contexto,
     )
     return create_agent(
         model=modelos[0],
         tools=ferramentas,
-        system_prompt=montar_prompt_de_sistema(contexto),
+        system_prompt=await _prompt_do_turno(contexto),
         middleware=montar_middleware(contexto, modelos),
         checkpointer=checkpointer,
         name=f"sora_{contexto.papel}",
@@ -170,7 +248,9 @@ async def rodar_etapa(
     from app.agentes.checkpointer import thread_da_conversa, thread_da_etapa
 
     thread_id = (
-        thread_da_etapa(contexto.etapa_id)
+        contexto.thread_proprio
+        if contexto.thread_proprio is not None
+        else thread_da_etapa(contexto.etapa_id)
         if contexto.etapa_id is not None
         else thread_da_conversa(contexto.conversa_id)
     )

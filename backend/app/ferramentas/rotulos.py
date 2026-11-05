@@ -213,9 +213,33 @@ def resumir_resultado(acao: str, resultado: Any) -> dict[str, Any]:
     resumo = _detalhe(texto) if texto else "Concluído"
     if isinstance(resultado, dict) and isinstance(resultado.get("resumo"), str):
         resumo = _detalhe(limpar_texto_sensivel(resultado["resumo"]))
-    return {"resumo": resumo, "links": links, "itens": itens}
+    saida: dict[str, Any] = {"resumo": resumo, "links": links, "itens": itens}
+    # Navegador (Leme): rastro redigido, aba atual e captura chegam ao painel Trabalho.
+    dados = resultado
+    if isinstance(dados, str) and dados.lstrip().startswith("{"):
+        try:
+            dados = json.loads(dados)
+        except ValueError:
+            dados = None
+    if isinstance(dados, dict):
+        if isinstance(dados.get("resumo"), str) and not isinstance(resultado, dict):
+            saida["resumo"] = _detalhe(limpar_texto_sensivel(dados["resumo"]))
+        for chave in CAMPOS_EXTRAS_DO_PASSO:
+            if chave in dados:
+                saida[chave] = dados[chave]
+    return saida
 
 
+CAMPOS_EXTRAS_DO_PASSO = (
+    "rastro",
+    "url",
+    "titulo",
+    "aba_id",
+    "anexo_id",
+    "nome",
+    "tipo",
+    "tamanho",
+)
 MAXIMO_ITENS = 10
 
 

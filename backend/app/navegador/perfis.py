@@ -186,3 +186,13 @@ def decifrar_estado(valor: bytes, *, usuario_id: UUID, particao_: str) -> dict[s
     if not isinstance(estado, dict):
         raise ValueError("Estado do navegador inválido.")
     return estado
+
+
+def sem_dominio_aprovado(estado: dict[str, Any] | None, dominio: str) -> dict[str, Any]:
+    """Estado sem a aprovação de ``dominio`` (o login salvo continua)."""
+    novo = dict(estado or {"cookies": [], "origins": []})
+    metadados = dict(novo.get(CHAVE_METADADOS) or {})
+    restantes = dominios_aprovados(novo) - {dominio.lower()}
+    metadados["dominios_aprovados"] = sorted(restantes)
+    novo[CHAVE_METADADOS] = metadados
+    return novo

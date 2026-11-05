@@ -1,0 +1,26 @@
+.pc-secao { display: grid; gap: 16px; }
+.pc-form { display: flex; gap: 8px; align-items: end; }
+.pc-form > :first-child { flex: 1; }
+.pc-form-coluna { display: grid; align-items: stretch; max-width: 560px; }
+.pc-linha { display: flex; flex-wrap: wrap; gap: 12px; }
+.pc-linha label { display: grid; gap: 4px; font-size: 13px; color: var(--text-2, #8B93A3); }
+.pc-linha input, .pc-linha select { background: var(--panel-2, #14161B); color: var(--text-1, #F2F5FB); border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; padding: 8px 10px; font: inherit; }
+.pc-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pc-lista > li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding: 12px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 12px; background: var(--panel, #0F1115); }
+.pc-lista > li[data-ativa='false'] { opacity: .7; }
+.pc-lista p { margin: 2px 0; white-space: pre-wrap; word-break: break-word; }
+.pc-lista small { display: block; color: var(--text-3, #6B7280); }
+.pc-lista > li > span:first-child { flex: 1; min-width: 200px; }
+.pc-acoes { display: flex; flex-wrap: wrap; gap: 6px; align-items: start; }
+.pc-execs { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--text-2, #8B93A3); }
+.pc-vazio { color: var(--text-2, #8B93A3); margin: 0; }
+.pc-erro { color: #ff9b9b; margin: 0; }
+.pc-codigo code { padding: 2px 6px; border-radius: 6px; background: var(--panel-2, #14161B); }
+.pc-dominios { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-dominios > li { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 999px; font-size: 13px; }
+.pc-dominios button { background: none; border: 0; border-radius: 999px; color: var(--text-2, #8B93A3); cursor: pointer; font: inherit; font-size: 12px; padding: 4px 8px; }
+.pc-dominios button:hover { color: #ff9b9b; }
+.pc-abrir { margin-top: 10px; flex-wrap: wrap; }
+.pc-abrir > :first-child { min-width: 240px; }
+.pc-aba { display: grid; gap: 6px; margin-top: 10px; padding: 10px; border: 1px solid rgba(126,242,196,.35); border-radius: 10px; }
+.pc-aba p { margin: 0; }

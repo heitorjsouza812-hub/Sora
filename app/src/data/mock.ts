@@ -1,13 +1,7 @@
-// Dados fixos da conta de exemplo e catálogo de plugins. (Agentes e equipes vêm do planejador.)
-import type { Plugin, Usuario } from '../types';
+// Catálogo da tela Plugins (congelada por decisão do grupo; os estados "Conectado" daqui não são reais).
+// A conta de exemplo que morava aqui saiu: a conta vem da sessão (/v1/eu).
+import type { Plugin } from '../types';
 import { PLUGIN_ICONS } from './pluginIcons';
-
-export const usuario: Usuario = {
-  id: 'cafeteria-aroma',
-  nome: 'Cafeteria Aroma',
-  empresa: 'Cafeteria Aroma',
-  plano: 'Plano Pro',
-};
 
 const destaques = new Map([
   ['Higgsfield', ['Imagens e vídeo com IA', false]],

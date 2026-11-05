@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import unicodedata
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -163,6 +164,32 @@ class Seletor:
             raise argumentos_invalidos("Seletor vazio. Use 'papel:texto', 'papel' ou ':texto'.")
         return cls(papel.casefold() if papel else None, texto)
 
+    @classmethod
+    def da_acao(cls, valor: str | None) -> Seletor | None:
+        """Lê ``esperar_por``/``esperar_sumir`` de uma ação, tolerando o que o modelo inventa.
+
+        Vazio ou valor de exemplo copiado da descrição (``"texto"``, ``"papel:texto"``…) → ``None``
+        (sem espera). Palavra solta que não é papel ARIA (``"Enviado"``) e ``"x:y"`` cujo ``x`` não
+        é papel (``"Total: 3"``) viram texto.
+        """
+        bruto = (valor or "").strip().strip("'\"`").strip()
+        if _sem_acento(bruto).casefold() in _SELETORES_DE_EXEMPLO:
+            return None
+        papel, sep, texto = bruto.partition(":")
+        papel_canonico = _papel_canonico(papel) if papel.strip() else None
+        if sep and papel_canonico in {"texto", "text"}:  # "texto:Salvo!" = só texto
+            papel_canonico = None
+        if papel_canonico is not None and papel_canonico not in PAPEIS_ARIA:
+            return cls(None, bruto)  # não é papel: tudo é texto
+        if not sep:
+            return cls(papel_canonico, None)
+        texto = texto.strip()
+        if _sem_acento(texto).casefold() in _SELETORES_DE_EXEMPLO:
+            texto = ""
+        if papel_canonico is None and not texto:
+            return None
+        return cls(papel_canonico, texto or None)
+
     def descricao(self) -> str:
         return f"{self.papel or ''}:{self.texto or ''}"
 
@@ -299,6 +326,28 @@ class NavegadorArvore:
             raise ErroNavegador(Codigo.REF_VELHA, f"{ref} sumiu enquanto era conferida.")
         return leitura, entrada
 
+    async def _esperar_carregar(self, prazo_ms: int = 4_000) -> bool:
+        """Antes de ler: se a página ainda carrega, espera o ``load`` e um ``networkidle`` curto.
+
+        Página já pronta não paga nada. Devolve se ela terminou de carregar."""
+        try:
+            if await self._pagina.evaluate("document.readyState") == "complete":
+                return True
+        except Exception:  # navegando agora: o contexto da página trocou
+            pass
+        try:
+            await self._pagina.wait_for_load_state("load", timeout=prazo_ms)
+        except Exception:
+            pass
+        try:
+            await self._pagina.wait_for_load_state("networkidle", timeout=1_500)
+        except Exception:  # site que nunca fica quieto (polling): segue com o que tem
+            pass
+        try:
+            return await self._pagina.evaluate("document.readyState") == "complete"
+        except Exception:
+            return False
+
     async def _resolver_esperando(self, ref: str, fim: float) -> tuple[Leitura, EntradaRef]:
         """Espera a ref voltar a existir até o prazo (página carregando)."""
         while True:
@@ -347,6 +396,7 @@ class NavegadorArvore:
             }
             if raiz is not None:
                 return await self._perfurar(raiz, opcoes)
+            carregada = await self._esperar_carregar()
             leitura = self.leituras.nova(url=self._pagina.url, completa=True)
             bruto = await self._js("observar", {**opcoes, "id_leitura": leitura.id})
             leitura.url = str(bruto.get("url") or "")
@@ -365,6 +415,10 @@ class NavegadorArvore:
             if not leitura.completa:
                 dados["parcial"] = True
                 dados["nos_observados"] = bruto.get("nos_observados")
+            if esqueleto:
+                dados["esqueleto"] = True
+            if not carregada:
+                dados["carregando"] = True
             superficies = await self._superficies()
             if superficies:
                 dados["superficies"] = superficies
@@ -451,6 +505,8 @@ class NavegadorArvore:
                 "contar": contar,
                 "limite": max(1, min(limite, 50)),
             }
+            if raiz is None:
+                await self._esperar_carregar()
             if raiz is not None:
                 leitura, _ = await self._resolver(raiz)
                 filtro.update(usar_alvo=True, id_leitura=leitura.id, comeco=leitura.proximo_numero)
@@ -472,6 +528,12 @@ class NavegadorArvore:
             }
             if "papeis_presentes" in bruto:
                 dados["papeis_presentes"] = bruto["papeis_presentes"]
+            if not dados["total"]:
+                dados["url"] = bruto.get("url") or self._pagina.url
+                dados["dica"] = (
+                    "Nada com isso nesta página. A busca já ignora maiúsculas e acentos e aceita "
+                    "trecho: confira se está na página certa (url) ou leia com navegador_observar."
+                )
             return dados
 
         return await self._executar("procurar", args, corpo)
@@ -580,6 +642,7 @@ class NavegadorArvore:
             antes = await self._js("estado")
             url_antes = self._pagina.url
             dialogos_antes = self._dialogos_vistos
+            retrato_antes = await self._retrato()
             try:
                 feito = await self._despachar(
                     acao, ref, entrada, relatorio.ponto, evidencia, antes,
@@ -604,8 +667,14 @@ class NavegadorArvore:
             dados["_senha"] = True
         if rolou_antes:
             dados["rolagem_preparatoria"] = True
-        await self._assentar(url_antes, dados, dialogos_antes)
+        await self._assentar(url_antes, dados, dialogos_antes, retrato_antes)
         return dados
+
+    async def _retrato(self) -> dict[str, Any] | None:
+        try:
+            return dict(await self._js("assinatura"))
+        except ErroNavegador:
+            return None
 
     async def _esperar_pronto(self, ref: str, exigencia: Exigencia, fim: float, prazo: int) -> bool:
         """Espera (fora da trava) até o elemento passar nas checagens. Devolve se rolou a tela."""
@@ -1023,15 +1092,32 @@ class NavegadorArvore:
             **feito.extra,
         }
 
-    async def _assentar(self, url_antes: str, dados: dict[str, Any], dialogos_antes: int) -> None:
-        """Depois da ação: espera a navegação começar/terminar e diz o que abriu."""
+    async def _assentar(
+        self,
+        url_antes: str,
+        dados: dict[str, Any],
+        dialogos_antes: int,
+        retrato_antes: dict[str, Any] | None = None,
+    ) -> None:
+        """Depois da ação: espera a navegação começar/terminar e diz o que abriu.
+
+        Sem espera pedida, é aqui que a ação se confere, rápido: URL nova confirma a entrega;
+        senão, ``pagina_mudou`` diz se o DOM mudou (contagem de elementos/texto)."""
         await asyncio.sleep(0.05)
+        sem_confirmar = Entrega.ENTREGUE_SEM_CONFIRMAR.value
         if self._pagina.url != url_antes:
             try:
                 await self._pagina.wait_for_load_state("domcontentloaded", timeout=5_000)
             except Exception:
                 pass
             dados["navegou"] = {"de": url_antes, "para": self._pagina.url}
+            if dados.get("entrega", {}).get("entrega") == sem_confirmar:
+                dados["entrega"] = Disposicao(Entrega.ENTREGUE_CONFIRMADA).para_json()
+                dados["confirmado_por"] = "navegou"
+        elif retrato_antes is not None:
+            depois = await self._retrato()
+            if depois is not None:
+                dados["pagina_mudou"] = depois != retrato_antes
         superficies = await self._superficies()
         if superficies:
             dados["superficies"] = superficies
@@ -1082,7 +1168,14 @@ class NavegadorArvore:
     ) -> None:  # fmt: skip
         if not esperar_por and not esperar_sumir:
             return
-        seletor = Seletor.ler(esperar_por or esperar_sumir or "")
+        seletor = Seletor.da_acao(esperar_por or esperar_sumir)
+        if seletor is None:
+            # valor de exemplo ("texto", "papel:texto"): a ação já foi conferida, sem espera
+            dados["espera_ignorada"] = (
+                f"{esperar_por or esperar_sumir!r} não diz o que esperar; nada foi esperado. "
+                "Use ':texto que deve aparecer' ou 'papel:nome', ou deixe vazio."
+            )
+            return
         try:
             achou = await self._esperar_seletor(seletor, presente=bool(esperar_por),
                                                 prazo_ms=_prazo_espera(prazo_ms))  # fmt: skip
@@ -1410,6 +1503,36 @@ _PAPEIS_EQUIVALENTES = {
     "botao": "button", "botão": "button", "caixa": "checkbox", "titulo": "heading",
     "título": "heading", "imagem": "img", "lista": "list", "opcao": "option", "opção": "option",
 }  # fmt: skip
+
+
+PAPEIS_ARIA = frozenset(
+    {
+        "alert", "alertdialog", "application", "article", "banner", "blockquote", "button",
+        "caption", "cell", "checkbox", "code", "columnheader", "combobox", "complementary",
+        "contentinfo", "definition", "deletion", "dialog", "directory", "document", "emphasis",
+        "feed", "figure", "form", "generic", "grid", "gridcell", "group", "heading", "img",
+        "insertion", "link", "list", "listbox", "listitem", "log", "main", "marquee", "math",
+        "menu", "menubar", "menuitem", "menuitemcheckbox", "menuitemradio", "meter",
+        "navigation", "none", "note", "option", "paragraph", "presentation", "progressbar",
+        "radio", "radiogroup", "region", "row", "rowgroup", "rowheader", "scrollbar", "search",
+        "searchbox", "separator", "slider", "spinbutton", "status", "strong", "switch", "tab",
+        "table", "tablist", "tabpanel", "term", "text", "textbox", "time", "timer", "toolbar",
+        "tooltip", "tree", "treegrid", "treeitem",
+    }
+)  # fmt: skip
+# o que o modelo copia da descrição do campo em vez de deixar vazio
+_SELETORES_DE_EXEMPLO = frozenset(
+    {
+        "", ":", "texto", "papel", "papel:texto", ":texto", "texto:", "papel:", "role:text",
+        "text", "role", "string", "str", "none", "null", "nenhum", "nada", "-", "...", "…",
+        "seletor", "selector", "n/a",
+    }
+)  # fmt: skip
+
+
+def _sem_acento(texto: str) -> str:
+    decomposto = unicodedata.normalize("NFKD", texto)
+    return "".join(c for c in decomposto if not unicodedata.combining(c))
 
 
 def _papel_canonico(papel: str | None) -> str | None:

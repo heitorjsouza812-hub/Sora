@@ -3,7 +3,8 @@ import { useId, useState, type CSSProperties } from 'react';
 import type { AgenteSora, EntregaGerada, ProjetoSora } from '../../state/projetos';
 import { Badge, Button } from '../base';
 import { SoraOrb } from '../mascot';
-import { PecaCampanha } from '../ui/CampaignPiece';
+import { ImagensEntrega } from '../ui/ImagensEntrega';
+import { imagensDaEntrega } from '../ui/imagensDaEntrega';
 import { DeliveryContent } from './Entregas';
 
 export interface ProjetoAprovadoProps {
@@ -20,7 +21,12 @@ export interface ProjetoAprovadoProps {
 const fmtQuando = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 
 function Miniatura({ entrega, cor }: { entrega: EntregaGerada; cor: string }) {
-  if (entrega.tipo === 'imagem') return <PecaCampanha indice={0} imagem={entrega.imagens?.[0]} cor={cor} compacta className="rv-ok-mini" />;
+  if (entrega.tipo === 'imagem') {
+    // a imagem real (1ª); sem imagem, o mesmo ícone neutro do texto — nada de peça inventada
+    return imagensDaEntrega(entrega).length
+      ? <ImagensEntrega entrega={entrega} className="rv-ok-mini rv-ok-mini--imagem" limite={1} compacta />
+      : <span className="rv-ok-mini rv-ok-mini--texto" style={{ '--agent': cor } as CSSProperties} aria-hidden="true"><i /><i /><i /><i /></span>;
+  }
   if (entrega.tipo === 'calendario') {
     return <span className="rv-ok-mini rv-ok-mini--cal" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} className={i % 3 === 0 ? 'is-on' : undefined} />)}</span>;
   }
@@ -72,7 +78,7 @@ export function ProjetoAprovado({
       <nav className="rv-ok-passos" aria-label="Próximos passos">
         <h2>Próximos passos</h2>
         <div>
-          <Button variante="primario" onClick={onAgendarProxima}>Agendar próxima campanha</Button>
+          <Button variante="primario" onClick={onAgendarProxima}>Planejar a próxima etapa</Button>
           {itens.length > 0 && (
             <Button aria-expanded={verEntregas} aria-controls={detalhesId} onClick={() => setVerEntregas((v) => !v)}>
               {verEntregas ? 'Ocultar entregas' : 'Ver entregas'}

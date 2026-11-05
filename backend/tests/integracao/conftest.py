@@ -6,6 +6,7 @@ de skip).
 """
 
 import asyncio
+import os
 import shutil
 import sys
 
@@ -14,6 +15,8 @@ import pytest
 
 def docker_disponivel() -> tuple[bool, str]:
     """(pode rodar?, motivo para pular)."""
+    if os.environ.get("SORA_TESTE_PG") and os.environ.get("SORA_TESTE_REDIS"):
+        return True, ""  # serviços já de pé (contêiner Linux dos testes do navegador)
     if not shutil.which("docker"):
         return False, "Docker não está instalado"
     try:

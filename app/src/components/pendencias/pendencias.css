@@ -15,3 +15,4 @@
 .ilha .pend-card { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-12, 12px); }
 @media (max-width: 767px) { .pend-acoes > * { flex: 1 1 auto; } .pend-livre { flex-direction: column; align-items: stretch; } }
 .ilha-visao > .ilha-pendencias { grid-column: 1 / -1; }
+.pend-url { word-break: break-all; font-size: 12px; }

@@ -24,6 +24,12 @@ from app.navegador.perfis import (
     estado_playwright,
     perfil_tem_login,
 )
+from app.navegador.ponte_loop import (
+    LoopDoPlaywright,
+    desembrulhar,
+    embrulhar,
+    precisa_de_loop_proprio,
+)
 from app.revisor.politica import dominio_registravel, navegacao_exige_revisao
 
 PRAZO_NAVEGACAO_MS = 20_000
@@ -44,20 +50,40 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         self._navegador: Any = None
         self._contextos: dict[str, Any] = {}
         self._estados: dict[str, dict[str, Any] | None] = {}
-        self._bloqueios: dict[str, str] = {}
+        self._bloqueios: dict[Any, str] = {}
+        self._urls_bloqueadas: dict[Any, str] = {}
+        self._apagadas: set[str] = set()
+        self._trava_inicio = asyncio.Lock()
+        self._travas_contexto: dict[str, asyncio.Lock] = {}
+        self._loop_proprio: LoopDoPlaywright | None = None
+        """Partições cujo perfil o usuário apagou: o login em memória não volta para o banco."""
         """Último domínio barrado por revisão em cada partição (para o erro certo no goto)."""
         self._paginas: dict[UUID, Any] = {}
 
     async def _iniciar(self) -> None:
         if self._navegador is not None:
             return
+        # Um só Playwright por worker: duas chamadas no primeiro uso esperam a primeira.
+        # A trava é do loop de quem chama (o do worker); o loop do Playwright, no Windows, só
+        # recebe as chamadas já serializadas por ela.
+        async with self._trava_inicio:
+            if self._navegador is None:
+                await self._iniciar_sem_trava()
+
+    async def _iniciar_sem_trava(self) -> None:
         try:
             from playwright.async_api import async_playwright
         except ImportError as erro:
             raise ErroFerramenta(
                 "O navegador não está instalado neste servidor (uv sync --group navegador)."
             ) from erro
-        self._playwright = await async_playwright().start()
+        if precisa_de_loop_proprio():
+            # worker no Windows (loop sem subprocesso): o Playwright ganha o loop dele
+            self._loop_proprio = LoopDoPlaywright()
+            bruto = await self._loop_proprio.executar(async_playwright().start())
+            self._playwright = embrulhar(bruto, self._loop_proprio)
+        else:
+            self._playwright = await async_playwright().start()
         from app.core.config import obter_configuracao
 
         config = obter_configuracao()
@@ -75,20 +101,37 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
     async def _contexto(self, particao_: str, *, efemero: bool = False) -> Any:
         await self._iniciar()
         contexto = self._contextos.get(particao_)
-        if contexto is None:
-            estado = None if efemero else await self._ler_estado(particao_)
-            self._estados[particao_] = estado
-            contexto = await self._navegador.new_context(
-                accept_downloads=False,
-                locale="pt-BR",
-                service_workers="block",
-                storage_state=estado_playwright(estado),
-            )
-            await contexto.route(
-                "**/*", lambda rota, _req=None, p=particao_: self._filtrar(p, rota)
-            )
-            self._contextos[particao_] = contexto
-        return contexto
+        if contexto is not None:
+            return contexto
+        # um só contexto por partição: abas do mesmo perfil abrindo juntas esperam o primeiro
+        trava = self._travas_contexto.setdefault(particao_, asyncio.Lock())
+        async with trava:
+            contexto = self._contextos.get(particao_)
+            if contexto is None:
+                estado = None if efemero else await self._ler_estado(particao_)
+                self._estados[particao_] = estado
+                contexto = await self._navegador.new_context(
+                    accept_downloads=False,
+                    locale="pt-BR",
+                    service_workers="block",
+                    storage_state=estado_playwright(estado),
+                )
+                await contexto.route(
+                    "**/*", lambda rota, _req=None, p=particao_: self._filtrar(p, rota)
+                )
+                self._contextos[particao_] = contexto
+            return contexto
+
+    def _chave_da_rota(self, particao_: str, rota: Any) -> Any:
+        """O bloqueio é da aba que pediu (várias abas dividem o perfil); sem aba, da partição."""
+        try:
+            pagina = rota.request.frame.page
+        except Exception:
+            return particao_
+        for aba_id, guardada in self._paginas.items():
+            if desembrulhar(guardada) is pagina:
+                return aba_id
+        return particao_
 
     async def _filtrar(self, particao_: str, rota: Any) -> None:
         url = rota.request.url
@@ -106,7 +149,9 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             perfil_tem_login=perfil_tem_login(estado),
             dominios_aprovados=dominios_aprovados(estado),
         ):
-            self._bloqueios[particao_] = dominio_registravel(url)
+            chave = self._chave_da_rota(particao_, rota)
+            self._bloqueios[chave] = dominio_registravel(url)
+            self._urls_bloqueadas[chave] = url
             await rota.abort("blockedbyclient")
             return
         await rota.continue_()
@@ -144,7 +189,8 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
                         perfil_tem_login=perfil_tem_login(estado),
                         dominios_aprovados=dominios_aprovados(estado),
                     ):
-                        self._bloqueios[particao] = dominio_registravel(alvo)
+                        self._bloqueios[aba.id] = dominio_registravel(alvo)
+                        self._urls_bloqueadas[aba.id] = alvo
                         await sessao.send(
                             "Fetch.failRequest",
                             {"requestId": id_, "errorReason": "BlockedByClient"},
@@ -182,21 +228,31 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             raise ErroFerramenta("Essa aba não está carregada. Use a aba de novo.")
         return pagina
 
-    async def navegar(self, aba: Aba, url: str) -> tuple[str, str]:
+    async def validar_destino(self, url: str) -> None:
+        """Destino interno ou privado é recusado de vez (antes de qualquer cartão de domínio)."""
         try:
             await validar_destino(url)
         except (EnderecoBloqueado, ErroLeitura) as erro:
             raise ErroFerramenta(f"Endereço recusado: {erro}") from erro
+
+    async def navegar(self, aba: Aba, url: str) -> tuple[str, str]:
+        await self.validar_destino(url)
         pagina = self._paginas[aba.id]
-        self._bloqueios.pop(aba.particao, None)
+        self._bloqueios.pop(aba.id, None)
+        self._urls_bloqueadas.pop(aba.id, None)
         for tentativa in (1, 2):
             try:
                 await pagina.goto(url, wait_until="domcontentloaded", timeout=PRAZO_NAVEGACAO_MS)
                 break
             except Exception as erro:
-                if dominio := self._bloqueios.pop(aba.particao, None):
+                if dominio := (
+                    self._bloqueios.pop(aba.id, None) or self._bloqueios.pop(aba.particao, None)
+                ):
                     # redirecionamento para domínio não aprovado: pede revisão, não erro genérico
-                    raise RevisaoNavegacaoNecessaria(dominio) from erro
+                    alvo = self._urls_bloqueadas.pop(aba.id, url)
+                    raise RevisaoNavegacaoNecessaria(
+                        dominio, aba_id=aba.id, url=alvo, particao=aba.particao
+                    ) from erro
                 # depois de um salto barrado o Chromium ainda está indo para a página de erro
                 if tentativa == 1 and "interrupted by another navigation" in str(erro):
                     await asyncio.sleep(0.3)
@@ -210,12 +266,13 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
             await pagina.close()
 
     async def fechar(self, aba: Aba) -> None:
+        self._bloqueios.pop(aba.id, None)
+        self._urls_bloqueadas.pop(aba.id, None)
         await self.descarregar(aba)
         if aba.perfil_efemero:
             # a partição efêmera é só desta aba: destrói o contexto (cookies e memória)
             contexto = self._contextos.pop(aba.particao, None)
             self._estados.pop(aba.particao, None)
-            self._bloqueios.pop(aba.particao, None)
             if contexto is not None:
                 await contexto.close()
 
@@ -245,12 +302,39 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         self._estados[aba.particao] = estado
         await self._gravar_estado(aba.particao, estado)
 
+    async def recarregar_estado(self, aba: Aba) -> None:
+        """Relê metadados persistidos pela API (por exemplo, aprovação de domínio)."""
+        if not aba.perfil_efemero:
+            await self.recarregar_estado_da_particao(aba.particao)
+
+    async def recarregar_estado_da_particao(self, particao_: str) -> None:
+        if particao_.startswith("efemero-"):
+            return
+        novo = await self._ler_estado(particao_)
+        if novo is None and self._estados.get(particao_) is not None:
+            # a linha sumiu: o usuário apagou o perfil (nada do que está em memória volta ao banco)
+            self._apagadas.add(particao_)
+        else:
+            self._apagadas.discard(particao_)
+        self._estados[particao_] = novo
+
+    def consumir_revisao(self, aba: Aba) -> RevisaoNavegacaoNecessaria | None:
+        """Converte clique/redirecionamento barrado em pedido de revisão do orquestrador."""
+        chave = aba.id if aba.id in self._bloqueios else aba.particao
+        dominio = self._bloqueios.pop(chave, None)
+        if dominio is None:
+            return None
+        url = self._urls_bloqueadas.pop(chave, aba.url)
+        return RevisaoNavegacaoNecessaria(dominio, aba_id=aba.id, url=url, particao=aba.particao)
+
     async def salvar_estados(self) -> None:
         for particao_, contexto in self._contextos.items():
-            if particao_.startswith("efemero-"):
+            if particao_.startswith("efemero-") or particao_ in self._apagadas:
                 continue
             estado = await contexto.storage_state()
-            anterior = self._estados.get(particao_) or {}
+            # as aprovações de domínio são da API: o banco manda, não a memória do worker
+            atual = await self._ler_estado(particao_)
+            anterior = atual if atual is not None else (self._estados.get(particao_) or {})
             if metadados := anterior.get("_sora"):
                 estado["_sora"] = metadados
             self._estados[particao_] = estado
@@ -268,3 +352,6 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         if self._playwright is not None:
             await self._playwright.stop()
         self._navegador = self._playwright = None
+        if self._loop_proprio is not None:
+            self._loop_proprio.parar()
+            self._loop_proprio = None

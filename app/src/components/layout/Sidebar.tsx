@@ -11,7 +11,7 @@ import { AccountMenu } from '../review/AccountMenu';
 import { Tooltip } from '../base';
 import { IndicadorUso } from '../uso';
 import { MenuAgente } from '../builder';
-import { AgentsIcon, FolderIcon, GearIcon, GridIcon, PlusIcon } from '../ui/Icons';
+import { AgentsIcon, FolderIcon, GearIcon, GridIcon, PlusIcon, TeamIcon } from '../ui/Icons';
 import { statusCurto } from './useSoraStatus';
 
 function LinhaAgente({ a, onNavegar, filho }: { a: AgenteSora; onNavegar?: () => void; filho?: boolean }) {
@@ -137,6 +137,7 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
         <NavLink to="/" end onClick={() => { novoChat(); onNavegar?.(); }}><PlusIcon /><span>Novo chat</span></NavLink>
         <NavLink to="/projetos" onClick={onNavegar}><FolderIcon /><span>Projetos</span></NavLink>
         <NavLink to="/agentes" onClick={onNavegar}><AgentsIcon /><span>Agentes</span></NavLink>
+        <NavLink to="/canais" onClick={onNavegar}><TeamIcon /><span>Canais</span></NavLink>
         <NavLink to="/plugins" onClick={onNavegar}><GridIcon /><span>Plugins</span></NavLink>
       </nav>
       {itens.length > 0 && <>

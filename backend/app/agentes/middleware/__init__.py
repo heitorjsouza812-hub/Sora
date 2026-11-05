@@ -37,12 +37,28 @@ def montar_middleware(
     itens: list[AgentMiddleware] = list(
         montar_middleware_de_troca(modelos, ao_trocar=contexto.dependencias.ao_trocar_modelo)
     )
-    itens.extend(middleware_de_limites(max_chamadas_modelo=10, max_chamadas_ferramenta=10))
+    from app.agentes.middleware.limite_provedor import MiddlewareLimiteDoProvedor
+
+    # Por dentro da nova tentativa e da troca: espera o limite do plano em vez de trocar de modelo.
+    itens.append(MiddlewareLimiteDoProvedor(ao_esperar=contexto.dependencias.ao_esperar_limite))
+    from app.agentes.middleware.limites import limites_do_agente
+
+    chamadas_modelo, chamadas_ferramenta = limites_do_agente(contexto)
+    itens.extend(
+        middleware_de_limites(
+            max_chamadas_modelo=chamadas_modelo, max_chamadas_ferramenta=chamadas_ferramenta
+        )
+    )
     itens.extend(
         [middleware_de_conserto(), MiddlewareLoop(), MiddlewarePrazoFerramenta(), MiddlewareCerca()]
     )
-    if contexto.papel in {"sora", "individual"}:
+    if contexto.papel in {"sora", "individual"} and not contexto.sem_supervisao:
+        from app.agentes.middleware.encerra_depois_de_falar import (
+            MiddlewareEncerraDepoisDeFalar,
+        )
+
         itens.append(MiddlewareLembretes())
+        itens.append(MiddlewareEncerraDepoisDeFalar())
     if contexto.cadeia_id is not None and contexto.dependencias.esta_cancelada is not None:
         itens.append(
             MiddlewareCancelamento(
@@ -75,6 +91,36 @@ def montar_middleware(
                 contexto.agente_id,
                 iniciar=deps.iniciar_passo,
                 finalizar=deps.finalizar_passo,
+            )
+        )
+    # Âncora (etapa 4): aprovação por ferramenta e medidor/compactação do contexto.
+    from app.agentes.middleware.contexto import MiddlewareContexto
+    from app.agentes.middleware.revisor import MiddlewareRevisor
+    from app.contexto.porta import PortaContexto
+    from app.ferramentas import ambiente
+    from app.ferramentas.base import ContextoFerramenta
+
+    itens.append(
+        MiddlewareRevisor(
+            ContextoFerramenta(
+                usuario_id=contexto.usuario_id,
+                agente_id=contexto.agente_id,
+                conversa_id=contexto.conversa_id,
+                cadeia_id=contexto.cadeia_id,
+                etapa_id=contexto.etapa_id,
+                sem_supervisao=contexto.sem_supervisao,
+            )
+        )
+    )
+    if contexto.etapa_id is None and contexto.thread_proprio is None:
+        itens.append(
+            MiddlewareContexto(
+                PortaContexto(
+                    redis=ambiente.redis_dos_eventos(),
+                    usuario_id=contexto.usuario_id,
+                    conversa_id=contexto.conversa_id,
+                    agente_id=contexto.agente_id,
+                )
             )
         )
     if contexto.etapa_id is not None and deps.ler_mensagens_pendentes is not None:

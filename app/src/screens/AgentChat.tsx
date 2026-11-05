@@ -6,6 +6,10 @@ import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
 import { abrirEditorAgente } from '../components/builder';
 import { EntregaCard } from '../components/ui/EntregaCard';
+import { MedidorContexto } from '../components/equipe/MedidorContexto';
+import { FilaDoAgente } from '../components/equipe/FilaDoAgente';
+import { PendenciasDoAgente } from '../components/equipe/PendenciasDoAgente';
+import { PerfilNavegadorDoAgente } from '../components/equipe/PerfilNavegadorDoAgente';
 import { CartaoPendencia } from '../components/pendencias/Pendencias';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { PluginMark } from '../components/ui/PluginMark';
@@ -13,6 +17,7 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import { ShimmerText } from '../components/ui/ShimmerText';
 import { useCelular } from '../components/ui/useMedia';
 import { PainelTrabalho, pluginInfo } from '../components/work';
+import { FERRAMENTAS_BASE, rotuloFerramenta } from '../data/ferramentas';
 import { ZonaSoltar } from '../components/anexos';
 import { CardErroModelo, definirErroSimulado, useErroSimulado } from '../components/erros';
 import { PainelLateral } from '../components/layout/PainelLateral';
@@ -37,6 +42,9 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
     if (ps.length) return 'Usado';
     return e.pluginsConectados.includes(nome) ? 'Conectado' : 'Disponível';
   };
+  // o backend não devolve as ferramentas do agente (AgenteSaida): valem as salvas aqui + as que ele usou de verdade
+  const base: readonly string[] = FERRAMENTAS_BASE;
+  const ferramentas = [...new Set([...a.ferramentas, ...passos.map(p => p.ferramenta ?? '')])].filter(n => n && !base.includes(n));
   return (
     <div className="agent-profile">
       <div className="agent-orb"><SoraOrb size={180} color={a.cor} movimento={a.tipoMovimento} title={a.nome}
@@ -47,13 +55,17 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
       <ProgressBar value={st.progresso} color={a.cor} label={a.nome} status={st.rotulo} />
       <p className="eyebrow tools-label">Ferramentas</p>
       <div className="tools-list">
-        {a.ferramentas.map(nome => {
+        {ferramentas.map(nome => {
           const p = pluginInfo(nome);
           const s = estadoFerramenta(nome);
-          return <div key={nome}><PluginMark nome={nome} cor={p?.hex ?? a.cor} path={p?.path ?? null} size={25} /><strong>{nome}</strong><span className={s === 'Em uso' ? 'agent-color' : ''}>{s}</span></div>;
+          return <div key={nome}><PluginMark nome={rotuloFerramenta(nome)} cor={p?.hex ?? a.cor} path={p?.path ?? null} size={25} /><strong>{rotuloFerramenta(nome)}</strong><span className={s === 'Em uso' ? 'agent-color' : ''}>{s}</span></div>;
         })}
-        {!a.ferramentas.length && <p className="tools-empty">Sem ferramentas: este agente só conversa.</p>}
+        {!ferramentas.length && <p className="tools-empty">Nenhuma ferramenta usada ainda.</p>}
       </div>
+      <MedidorContexto agenteId={a.id} />
+      <FilaDoAgente agenteId={a.id} />
+      <PerfilNavegadorDoAgente agenteId={a.id} />
+      <PendenciasDoAgente agenteId={a.id} />
       {a.instrucoes && <><p className="eyebrow tools-label">Instruções</p><p className="agent-instructions">{a.instrucoes}</p></>}
       <button type="button" className="st-btn-ghost agent-edit" onClick={() => abrirEditorAgente(a.id)}>Editar agente</button>
     </div>

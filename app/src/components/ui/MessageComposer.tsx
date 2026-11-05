@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
 import { BorderBeam } from 'border-beam';
+import { useGravacaoVoz } from './useGravacaoVoz';
 import { VoiceBeam, useMicrophone, type VoiceBeamMotion } from 'voice-glow';
 import { useProjetos } from '../../state/projetos';
 import { ToolsPopover } from '../review/ToolsPopover';
@@ -35,6 +36,17 @@ interface Props {
   extras?: ReactNode;
 }
 
+// O BorderBeam e o VoiceBeam têm um efeito que depende de `children` e grava um objeto novo a cada execução: com `children`
+// novo a cada tecla, cada letra dispara uma atualização extra e, digitando rápido, o React estoura o limite de
+// atualizações aninhadas e engole teclas. Então os dois recebem SEMPRE o mesmo elemento (CorpoDoCampo / CorpoDoFormulario), e o
+// conteúdo de verdade chega por contexto.
+const ConteudoDoCampo = createContext<ReactNode>(null);
+function CorpoDoCampo() { return <>{useContext(ConteudoDoCampo)}</>; }
+const FormularioDoCampo = createContext<ReactNode>(null);
+function CorpoDoFormulario() { return <>{useContext(FormularioDoCampo)}</>; }
+const CORPO_DO_FORMULARIO = <CorpoDoFormulario />;
+const CORPO_ESTAVEL = <CorpoDoCampo />;
+
 const processingMotion = (): VoiceBeamMotion => ({
   gather: .8,
   offset: Math.sin(Date.now() / 650) * .72,
@@ -65,7 +77,13 @@ export function MessageComposer({
   const live = mic.state === 'live';
   const active = focused || value.trim().length > 0 || live;
   const avisoId = useId();
-  const aviso = avisoMic[mic.state];
+  const valorRef = useRef(value);
+  useEffect(() => { valorRef.current = value; });
+  const { transcrevendo, erro: erroVoz, descartarGravacao } = useGravacaoVoz(mic.stream, texto => {
+    const atual = valorRef.current;
+    setValue(atual && !/s$/.test(atual) ? `${atual} ${texto}` : `${atual}${texto}`);
+  });
+  const aviso = avisoMic[mic.state] ?? (transcrevendo ? 'Transcrevendo sua fala…' : erroVoz || undefined);
   const { pluginsConectados } = useProjetos();
   const { anexos, erro: erroAnexo, adicionar, remover, entregar } = useAnexos();
   const arquivoRef = useRef<HTMLInputElement>(null);
@@ -130,21 +148,10 @@ export function MessageComposer({
     onSend(text, entregar());
     setValue('');
     cb.current.typing = false;
-    if (live) mic.stop();
+    if (live) { descartarGravacao(); mic.stop(); }
   };
 
-  return (
-    <BorderBeam size="md" colorVariant="colorful" strength={0.7} theme="dark" active={active} className="composer-beam">
-      <VoiceBeam
-        type={mobile ? 'mobile' : undefined}
-        stream={mic.stream}
-        motion={processing ? processingMotion : undefined}
-        active={live || processing}
-        theme="dark"
-        strength={0.72}
-        className="voice-beam-wrap"
-        data-processing={processing ? 'true' : 'false'}
-      >
+  const formulario = (
         <form className={`composer ${compact ? 'composer-compact' : ''}`} onSubmit={submit} style={accent ? { borderColor: `${accent}45` } : undefined}>
           <ListaAnexos anexos={anexos} onRemover={remover} />
           <textarea
@@ -200,7 +207,27 @@ export function MessageComposer({
           {erroAnexo && <p className="composer-erro" role="alert">{erroAnexo}</p>}
           {!online && <div className="composer-bloqueio" role="status"><span>Sem conexão: dá para escrever, e você envia quando a internet voltar.</span><Button tamanho="P" onClick={tentarDeNovo}>Tentar de novo</Button></div>}
         </form>
+  );
+  const conteudo = (
+      <VoiceBeam
+        type={mobile ? 'mobile' : undefined}
+        stream={mic.stream}
+        motion={processing ? processingMotion : undefined}
+        active={live || processing}
+        theme="dark"
+        strength={0.72}
+        className="voice-beam-wrap"
+        data-processing={processing ? 'true' : 'false'}
+      >
+        {CORPO_DO_FORMULARIO}
       </VoiceBeam>
-    </BorderBeam>
+  );
+
+  return (
+    <FormularioDoCampo.Provider value={formulario}>
+    <ConteudoDoCampo.Provider value={conteudo}>
+      <BorderBeam size="md" colorVariant="colorful" strength={0.7} theme="dark" active={active} className="composer-beam">{CORPO_ESTAVEL}</BorderBeam>
+    </ConteudoDoCampo.Provider>
+    </FormularioDoCampo.Provider>
   );
 }

@@ -75,6 +75,25 @@ async def decidir_aprovacao(
                 condicao=condicao if isinstance(condicao, dict) else {},
             )
         )
+    if (
+        not negada
+        and isinstance(aprovacao.acao, dict)
+        and aprovacao.acao.get("tipo") == "aprovar_dominio"
+    ):
+        from app.navegador.repositorio import aprovar_dominio_no_perfil
+
+        try:
+            await aprovar_dominio_no_perfil(
+                sessao,
+                particao=str(aprovacao.acao["particao"]),
+                usuario_id=usuario_id,
+                dominio=str(aprovacao.acao["dominio"]),
+            )
+        except (KeyError, TypeError, ValueError) as erro:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "O perfil desta aprovação não está mais disponível.",
+            ) from erro
     conversa_id = None
     if aprovacao.etapa_id is not None:
         conversa_id = await sessao.scalar(

@@ -1,11 +1,20 @@
 import type { Movimento, PassoTrabalho } from '../types';
-import type { AgenteSora, EntregaGerada, EstadoProjetos, Execucao, ProjetoSora, TarefaGerada } from './projetos';
+import type { RevisaoDominio, AgenteSora, EntregaGerada, EstadoProjetos, Execucao, ProjetoSora, TarefaGerada } from './projetos';
 import type { EventoSse } from '../api/eventos';
 
 type Dados = Record<string, unknown>;
 const texto = (v: unknown) => typeof v === 'string' ? v : '';
 const numero = (v: unknown, padrao = 0) => typeof v === 'number' ? v : padrao;
 const lista = (v: unknown) => Array.isArray(v) ? v : [];
+
+function revisaoDominioDe(d: Dados): RevisaoDominio {
+  const perfil = (d.perfil && typeof d.perfil === 'object' ? d.perfil : {}) as Dados;
+  const opcoes = (lista(d.opcoes) as Dados[]).map(o => ({ rotulo: texto(o.rotulo), valor: (texto(o.valor) === 'negar' ? 'negar' : 'sempre_permitir') as 'negar' | 'sempre_permitir' }));
+  return {
+    dominio: texto(d.dominio), url: texto(d.url), perfil: { tipo: texto(perfil.tipo), nome: texto(perfil.nome) || null }, agenteId: texto(d.agente_id) || null,
+    opcoes: opcoes.length ? opcoes : [{ rotulo: 'Aprovar domínio', valor: 'sempre_permitir' }, { rotulo: 'Negar', valor: 'negar' }],
+  };
+}
 
 function atualizarProjeto(estado: EstadoProjetos, conversaId: string, fn: (p: ProjetoSora) => ProjetoSora): EstadoProjetos {
   return { ...estado, projetos: estado.projetos.map(p => p.id === conversaId ? fn(p) : p) };
@@ -41,6 +50,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     return { ...estado, pendencias: [...(estado.pendencias ?? []), {
       tipo: 'aprovacao', id, conversaId, resumo: texto(d.resumo), dano: texto(d.dano), quemRecebe: texto(d.quem_recebe) || null,
       expiraEm: Date.parse(texto(d.expira_em)) || 0, desde: evento.recebidoEm,
+      ...(d.tipo === 'aprovar_dominio' ? { revisaoDominio: revisaoDominioDe(d) } : {}),
     }] };
   }
   if (evento.tipo === 'aprovacao.resolvida') return { ...estado, pendencias: (estado.pendencias ?? []).filter(p => p.id !== texto(d.aprovacao_id)) };
@@ -142,4 +152,21 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
   }));
   if (evento.tipo === 'erro') return atualizarProjeto(estado, conversaId, p => ({ ...p, mensagensPendentes: false, erro: texto(d.mensagem) || 'O trabalho foi interrompido.' }));
   return estado;
+}
+
+/**
+ * Balão do usuário assim que o servidor aceita o envio. `enviadoEm` é o instante do clique (antes do POST),
+ * não o da resposta: a resposta da Sora pode chegar por SSE antes do POST voltar, e um carimbo tardio
+ * colocaria o balão do usuário DEPOIS dela. Se o eco do servidor já chegou, só garante a ordem.
+ */
+export function registrarEnvioDoUsuario(
+  estado: EstadoProjetos,
+  m: { id: string; conversaId: string; agenteId?: string; texto: string; enviadoEm: number; anexos?: EstadoProjetos['mensagens'][number]['anexos'] },
+): EstadoProjetos {
+  const existente = estado.mensagens.find(x => x.id === m.id);
+  if (existente) {
+    return existente.criadoEm <= m.enviadoEm ? estado
+      : { ...estado, mensagens: estado.mensagens.map(x => x.id === m.id ? { ...x, criadoEm: m.enviadoEm } : x) };
+  }
+  return { ...estado, mensagens: [...estado.mensagens, { id: m.id, conversaId: m.conversaId, agenteId: m.agenteId, autor: 'usuario', texto: m.texto, criadoEm: m.enviadoEm, anexos: m.anexos ?? [], gerando: false }] };
 }

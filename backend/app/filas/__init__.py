@@ -24,7 +24,7 @@ Regras da Sora:
 from __future__ import annotations
 
 import itertools
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -250,6 +250,9 @@ class FilaAgente:
 
     async def iniciar(self, item_id: UUID, agente_id: UUID) -> ItemFila:
         """O worker reservou o item (antes de chamar o modelo)."""
+        travar = getattr(self._armazem, "travar_agente", None)
+        if travar is not None:
+            await travar(agente_id)  # dois workers não reservam o mesmo item
         item = await self._buscar(item_id, agente_id)
         if item.status is not StatusItem.NA_FILA:
             raise ErroFila("Este item já saiu da fila.")
@@ -388,10 +391,16 @@ class FilaAgente:
 
     # ---------- queda do worker ----------
 
-    async def recuperar_apos_queda(self) -> list[ItemFila]:
-        """Chamado uma vez quando o worker sobe. Devolve os itens que pedem atenção do usuário."""
+    async def recuperar_apos_queda(
+        self, vivo: Callable[[UUID], Awaitable[bool]] | None = None
+    ) -> list[ItemFila]:
+        """Chamado quando o worker sobe. Devolve os itens que pedem atenção do usuário.
+        ``vivo(item_id)`` diz se outro worker ainda está trabalhando no item (batimento);
+        esses ficam como estão."""
         atencao = []
         for item in await self._armazem.todos_abertos():
+            if item.status in ATIVOS and vivo is not None and await vivo(item.id):
+                continue
             if item.status is StatusItem.INICIANDO:
                 await self._mudar(item, status=StatusItem.NA_FILA, iniciado_em=None)
             elif item.status is StatusItem.RODANDO:

@@ -29,6 +29,7 @@ mentir. As classes do LangChain só são importadas na primeira vez que o modelo
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Iterator
@@ -162,7 +163,11 @@ def _triagem_json(*, direto: bool) -> str:
 
 
 GATILHOS = ("pergunta", "aprovacao", "orcamento")
-_GATILHO = re.compile(r"\[(pergunta|aprovacao|orcamento)\]")
+_GATILHO = re.compile(r"\[(pergunta|aprovacao|orcamento|memoria|pendencia|catalogo|historico)\]")
+
+
+_GATILHO_NAVEGADOR = re.compile(r"\[navegador:(\S+?)\]")
+_GATILHO_CLICAR = re.compile(r"\[navegador-clicar:([^\]]+)\]")
 
 
 def gatilhos_do_texto(texto: str) -> list[str]:
@@ -170,7 +175,7 @@ def gatilhos_do_texto(texto: str) -> list[str]:
     return list(dict.fromkeys(_GATILHO.findall(texto)))
 
 
-def _plano_json(gatilhos: list[str] | None = None) -> str:
+def _plano_json(gatilhos: list[str] | None = None, pedido: str = "") -> str:
     from app.modelos.enumeracoes import Nivel
     from app.orquestrador.planejador import EtapaPlano, Plano
 
@@ -183,7 +188,9 @@ def _plano_json(gatilhos: list[str] | None = None) -> str:
                 especialista="pesquisador",
                 nivel=Nivel.N2,
                 tarefa="Pesquisar referências sobre o pedido do usuário."
-                + "".join(f" [{g}]" for g in (gatilhos or []) if g != "orcamento"),
+                + "".join(f" [{g}]" for g in (gatilhos or []) if g != "orcamento")
+                + "".join(f" [navegador:{u}]" for u in _GATILHO_NAVEGADOR.findall(pedido))
+                + "".join(f" [navegador-clicar:{u}]" for u in _GATILHO_CLICAR.findall(pedido)),
                 pronto_quando="Há pelo menos duas referências com link.",
             ),
             EtapaPlano(
@@ -346,6 +353,11 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
     tarefa = "\n".join(str(m.content) for m in mensagens if isinstance(m, HumanMessage))
     feitas = {m.name for m in mensagens if isinstance(m, ToolMessage)}
     gatilhos = gatilhos_do_texto(tarefa)
+    das_pecas = _gatilho_das_pecas(tarefa, feitas)
+    if das_pecas is not None:
+        return das_pecas
+    if (do_navegador := _gatilho_do_navegador(mensagens, tarefa)) is not None:
+        return do_navegador
     if "pergunta" in gatilhos and "perguntar" not in feitas:
         from app.ferramentas.perguntar import Opcao, Perguntar
 
@@ -359,6 +371,81 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
 
         proposta = CriarAgente(nome="Organizadora", papel="Organizar pesquisas")
         return _chamada("criar_agente", proposta.model_dump(mode="json"))
+    return None
+
+
+def _gatilho_do_navegador(mensagens: list[BaseMessage], tarefa: str) -> AIMessage | None:
+    """Gatilho ``[navegador:URL]`` (Leme): abre a URL (de novo, se o domínio acabou de ser
+    aprovado), observa a página como árvore e captura a tela, uma ferramenta por vez."""
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    achou = _GATILHO_NAVEGADOR.search(tarefa)
+    if achou is None:
+        return None
+    resultados = [m for m in mensagens if isinstance(m, ToolMessage)]
+    aberturas = [str(m.content) for m in resultados if m.name == "navegador_abrir"]
+    feitas = {m.name for m in resultados}
+    # Ferramentas escondidas rodam por ``navegador_executar_ferramenta`` (id = nome de verdade).
+    for m in mensagens:
+        if isinstance(m, AIMessage):
+            for chamada in m.tool_calls:
+                if chamada["name"] == "navegador_executar_ferramenta":
+                    feitas.add(str(chamada["args"].get("id")))
+    if not aberturas or aberturas[-1].startswith("Domínio aprovado"):
+        return _chamada("navegador_abrir", {"url": achou.group(1)})
+    if "Aba aberta" not in aberturas[-1] and "aba_id" not in aberturas[-1]:
+        return None  # negado ou falhou: o agente segue para a entrega
+    if (clicar := _GATILHO_CLICAR.search(tarefa)) and "navegador_observar" in feitas:
+        acoes = [str(m.content) for m in resultados if m.name == "navegador_acao"]
+        observacoes = [str(m.content) for m in resultados if m.name == "navegador_observar"]
+        if not acoes or acoes[-1].startswith("Domínio aprovado"):
+            if len(observacoes) <= len(acoes):
+                return _chamada("navegador_observar", {})  # leitura nova antes de repetir
+            arvore = observacoes[-1]
+            with contextlib.suppress(ValueError, TypeError):
+                arvore = str(json.loads(arvore)["resumo"])
+            arvore = arvore.replace("\\n", "\n")  # o resultado pode vir como JSON em texto
+            for linha in arvore.splitlines():
+                ref = re.search(r"@s\w+:e\d+", linha)
+                if ref and re.search(re.escape(clicar.group(1)), linha):
+                    return _chamada("navegador_acao", {"ref": ref.group(0), "acao": "clicar"})
+    aba = re.search(r"aba_id\W+([0-9a-f-]{36})", aberturas[-1])
+    if "navegador_observar" not in feitas:
+        return _chamada("navegador_observar", {})
+    if "navegador_capturar" not in feitas:
+        return _chamada(
+            "navegador_executar_ferramenta",
+            {"id": "navegador_capturar", "argumentos": {"aba_id": aba.group(1)} if aba else {}},
+        )
+    return None
+
+
+_GATILHO_PECAS = re.compile(r"\[(memoria|pendencia|catalogo|historico)\]")
+
+
+def _gatilho_das_pecas(tarefa: str, feitas: set[str | None]) -> AIMessage | None:
+    """Gatilhos das peças do Rakazo (Âncora): o especialista usa memória, pendência, catálogo e
+    histórico de verdade, uma ferramenta por vez, na ordem em que as tags aparecem."""
+    etiquetas = list(dict.fromkeys(_GATILHO_PECAS.findall(tarefa)))
+    roteiro = {
+        "memoria": [
+            (
+                "lembrar",
+                {"conteudo": "O usuário prefere respostas curtas (teste do modelo falso)."},
+            ),
+            ("buscar_memoria", {"consulta": "respostas curtas"}),
+        ],
+        "pendencia": [
+            ("adicionar_pendencia", {"titulo": "Conferir as fontes depois", "notas": "teste"}),
+            ("listar_pendencias", {}),
+        ],
+        "catalogo": [("catalogo_tarefas", {})],
+        "historico": [("buscar_historico", {"consulta": "cafeteria"})],
+    }
+    for etiqueta in etiquetas:
+        for nome, argumentos in roteiro[etiqueta]:
+            if nome not in feitas:
+                return _chamada(nome, argumentos)
     return None
 
 
@@ -429,8 +516,17 @@ def classe_modelo_falso() -> type[BaseChatModel]:
         ) -> ChatResult:
             if self.papel == "sistema1":
                 resposta = _triagem_para(messages)
+            elif self.papel == "rotina":
+                from app.rotinas.falso import resposta_da_rotina
+
+                resposta = resposta_da_rotina(messages)
             elif self.papel == "planejador":
-                resposta = _texto(_plano_json(gatilhos_do_texto(_texto_das_mensagens(messages))))
+                resposta = _texto(
+                    _plano_json(
+                        gatilhos_do_texto(_texto_das_mensagens(messages)),
+                        _texto_das_mensagens(messages),
+                    )
+                )
             else:
                 resposta = _gatilho_pendente(self.papel, messages)
                 if resposta is None:

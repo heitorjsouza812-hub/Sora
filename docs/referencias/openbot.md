@@ -15,6 +15,10 @@ Isso é diferente do [Rakazo](rakazo.md), que é Apache 2.0 e permite adaptar c�
 
 > Se um dia a equipe quiser usar código do OpenBot de verdade, precisa da licença comercial antes.
 
+## Estado na etapa 4 (passo 6)
+
+As peças abaixo deixaram de ser só fundação. No ramo `etapa4-pecas`, fila, canais, correio, contexto e navegador persistente estão ligados ao worker e ao app. Os armazéns usam PostgreSQL, os eventos chegam pelo stream global, e a recuperação consulta batimento antes de mexer num turno que outro worker ainda executa. A etapa continua aguardando o veredito final do Aferidor; este texto descreve o que está implementado e provado pelos donos, não uma aprovação final.
+
 ## O que entrou na Sora
 
 | Peça na Sora | Ideia vista no OpenBot | O que faz na Sora |
@@ -24,12 +28,12 @@ Isso é diferente do [Rakazo](rakazo.md), que é Apache 2.0 e permite adaptar c�
 | `app/correio/` + `enviar_para_agente` | Mensagens entre agentes com respostas, reações, imagens e arquivos | `enviar_para_agente` ganhou `responde_a`, `anexos` e `espera_resposta`. Reações com lista curta de emojis (não iniciam turno nem contam salto). Transferência gerenciada: confere acesso, tipo e tamanho, copia para a pasta do destinatário com SHA-256 e cria um anexo novo. Respostas de uma pergunta feita a vários colegas entram juntas num turno só. |
 | `app/canais_equipe/` | Canais compartilhados com um responsável por tarefa, delegação explícita, histórico compartilhado e Parar/Retomar/Reatribuir/Arquivar/Restaurar | Roteamento sem modelo quando dá (destinatário, `@menção`, `@todos`, "continua", resposta a uma tarefa, canal de um membro) e com o **líder** quando não dá (resposta em esquema, conferida; nunca vira "manda para todos"). Delegação com limite de 8 por pedido, 2 tarefas rodando por canal, sem devolver para quem passou. Revisão por tarefa recusa resultado de turno velho. Pacote de contexto com limite, que esconde a resposta dos colegas ao mesmo pedido até o agente dar a dele. |
 | `app/navegador/perfis.py`, `abas.py`, `persistente.py` | Navegador persistente que os agentes abrem, inspecionam e controlam | Perfis compartilhado / só do agente / nomeado; partição pelo id (nunca pelo nome); logins cifrados com a chave mestra. Abas sobrevivem ao turno, só o agente ou o usuário fecha, o usuário pode **assumir** a aba (login, captcha), aba ociosa descarrega em 30 min, captura de tela e console redigido, restauração depois de reiniciar descartando partição inválida. Todo pedido de rede passa pela proteção SSRF que já existia. |
-| `app/eventos/equipe.py` | — | Eventos para a interface (`contexto.atualizado`, `fila.atualizada`, `canal.mensagem`, `canal.tarefa`, `canal.atualizado`, `reacao`, `navegador.aba`). Ficam fora do contrato congelado (`tests/contrato`) até o app ter as telas. |
-| `app/api/equipe.py` | — | Rotas do contrato (canais, tarefas, fila, contexto, reações, abas e perfis). Como as outras rotas ainda não ligadas, respondem `NotImplementedError` até o repositório no banco existir. |
+| `app/eventos/equipe.py` | — | Eventos para a interface (`contexto.atualizado`, `fila.atualizada`, `canal.mensagem`, `canal.tarefa`, `canal.atualizado`, `reacao`, `navegador.aba`). Estão ligados ao stream global `GET /v1/eventos` e alimentam as telas da etapa 4. |
+| `app/api/equipe.py` + `app/api/navegador.py` | — | Rotas reais de canais, tarefas, fila, contexto, reações, abas e perfis. Os `NotImplementedError` foram removidos; cada rota filtra pelo dono e usa os armazéns SQL. |
 
 ### Ferramentas novas dos agentes
 
-`reagir`, `canal_historico`, `canal_delegar`, `canal_transferir`, `canal_resultado`, `navegador_abas`, `navegador_fechar_aba`, `navegador_capturar`, `navegador_console`, `navegador_pedir_ajuda`. Todas estão em `esquemas_das_proximas_fases()` (fora de `ESQUEMAS` até ligar no worker), com política **livre** em `app/revisor/politica.py` (nada sai da Sora) e rótulo no painel Trabalho.
+`reagir`, `canal_historico`, `canal_delegar`, `canal_transferir`, `canal_resultado`, `navegador_abas`, `navegador_fechar_aba`, `navegador_capturar`, `navegador_console` e `navegador_pedir_ajuda` estão no catálogo ativo do worker. As ferramentas de canal rodam em tarefas persistidas; as de navegador usam o perfil do agente e recusam uma aba assumida pelo usuário. Ações que podem mudar o mundo passam pelo revisor; leitura continua livre.
 
 ### Banco: migração `0005_pecas_inspiradas_no_openbot`
 
@@ -43,16 +47,19 @@ Colunas novas em `agentes` (`fila_pausada`, `limite_tarefas`, `perfil_navegador`
 - **Integrações Slack/Discord**: o modelo é `app/canais` (Telegram); os outros seguem o mesmo formato.
 - **Controle do computador (Computer Use)**: fora do escopo do servidor.
 
-## Antes de ligar em produção
+## O que foi ligado no worker
 
-- Escrever os repositórios SQLAlchemy dos armazéns (`ArmazemFila`, `ArmazemCanais`, `ArmazemReacoes`) e trocar os `NotImplementedError` de `app/api/equipe.py`.
-- No worker: medir o contexto depois de cada chamada, consultar `FilaAgente.proximos` antes de começar turnos, rodar `recuperar_apos_queda` da fila e dos canais ao subir, e o turno curto do líder para `precisa_lider`.
-- Rodar `tests/integracao` com Docker para a migração 0005 (PostgreSQL 15+ por causa do `NULLS NOT DISTINCT`).
-- Navegador: o worker que abre o Chromium precisa ficar fora do servidor principal, como as sandboxes de `executar_comando`.
-- Navegador (Fase A, 2026-11-01): em produção o Chromium roda em contêiner próprio (`navegador`), em redes `internal: true`, e toda saída passa pelo `proxy-egresso`, que resolve o DNS e recusa IP privado, loopback, link-local e metadados depois de resolver. O worker conecta por CDP (`NAVEGADOR_CDP_URL`; sem ele, produção recusa subir o navegador). Prova com Docker real: `sh infra/scripts/provar-isolamento-navegador.sh`.
-- Domínio novo em perfil com login passa por revisão (aprovação guardada no perfil, por domínio registrável); rotinas e execuções sem supervisão sempre usam perfil efêmero (`sem_supervisao=True`). Falta: as ferramentas do navegador passarem `sem_supervisao` nas rotinas e tratarem `RevisaoNavegacaoNecessaria` quando forem ligadas no worker.
-- Navegador, para quando for ligado ao worker (passo 6), achados do Faro que só valem aí: (a) o despachante das rotinas passa `sem_supervisao=True` no `ContextoFerramenta` e nas chamadas a `GerenteAbas` (a resolução de aba já recusa aba com perfil salvo nesse modo, e fechar a aba efêmera destrói o contexto); (b) o orquestrador captura `RevisaoNavegacaoNecessaria`, pausa a cadeia, avisa por SSE e espera a decisão; (c) `POST /v1/aprovacoes/{id}/decidir` chama `GerenteAbas.aprovar_dominio()` para gravar a aprovação no perfil; (d) iniciar `MotorPlaywright` e `GerenteAbas` no startup do worker e pôr as ferramentas `navegador_*` no catálogo; (e) navegação disparada por clique que cai em domínio barrado volta hoje como erro do Playwright na ação (só `navegar` converte para pedido de revisão).
-- Canais de equipe: aplicar a migração 0006 (`tarefas_canal.turno_seq` e `fim_no_turno_do_pai`). A ordem dos turnos vem desses contadores, não do relógio; os repositórios SQL precisam gravar os dois campos.
-- Domínios: a lista pública de sufixos vem do pacote `publicsuffixlist` (versão fixada no `uv.lock`, offline). Atualizar o pacote periodicamente.
-- Armazém SQL dos canais (passo 6): `iniciar`, `fim_do_turno`, `registrar_resultado`, `falhar` e `_marcar_fim_na_mae` leem a mãe e gravam a filha em passos separados. No SQL, cada turno roda numa transação com `SELECT ... FOR UPDATE` na tarefa e na mãe (nessa ordem, mãe primeiro) para que `turno_seq` e `fim_no_turno_do_pai` não corram entre processos.
-- Redirecionamento no navegador: o `context.route` não vê os saltos de redirect (o Chromium os segue). A barreira é uma sessão CDP por página no estágio de resposta (`Fetch.enable`, `MotorPlaywright._vigiar_redirecionamentos`); testada com Chromium real em `test_navegador_chromium_real.py`. Esta barreira cobre só documentos (navegação e iframes), não `fetch`/XHR.
+- **Contexto:** medição depois das chamadas de modelo, compactação automática antes de encher e job para "Compactar agora". O botão recusa quando há turno, fila ou compactação em andamento.
+- **Fila:** `responder_direto` só enfileira; `executar_item_fila` reserva, roda o turno real e chama o próximo. Pausar, retomar, Repetir e recuperação após queda usam o mesmo caminho. Um worker novo não interrompe trabalho com batimento vivo.
+- **Canais e correio:** mensagens, tarefas, delegação, reações e anexos ficam no PostgreSQL. Parar e Cancelar mandam interrupção pelo Redis ao worker dono do turno. As travas cobrem a cadeia inteira de tarefas.
+- **Navegador persistente:** `MotorPlaywright`, `GerenteAbas` e o navegador por árvore sobem com o worker. Perfis e logins são cifrados; abas são sincronizadas pelo banco entre workers; domínio novo vira cartão; rotina só vê aba efêmera. O app mostra perfis, rastro, captura e Assumir/Devolver.
+
+## O que segue de fora ou pendente
+
+- A fase 2 do Aferidor ainda precisa validar a ponta atual do ramo com integração, dois workers, reinício, e2e e o Teste de pronto completo.
+- O Chromium de produção continua fora do servidor principal: contêiner `navegador`, redes `internal: true`, saída pelo `proxy-egresso` e conexão por `NAVEGADOR_CDP_URL`. A prova da Fase A existe em `infra/scripts/provar-isolamento-navegador.sh`, mas o fluxo completo da etapa 4 ainda precisa ser repetido nesse desenho.
+- O login "último que grava vence" ainda é possível quando dois workers mantêm o mesmo perfil aberto. As aprovações de domínio vêm sempre do banco, o que reduz o risco, mas não elimina essa disputa de cookies.
+- Abrir um perfil cria uma aba assumida no worker; **espelhar essa aba ao vivo** para o usuário digitar senha ou resolver captcha não entrou.
+- A árvore ainda não lê o conteúdo de iframes. A barreira de redirect por CDP cobre documentos, inclusive iframe, mas não `fetch`/XHR.
+- A lista pública de sufixos vem de `publicsuffixlist`, fixada no `uv.lock`; precisa de atualização periódica.
+- Ramificação de conversa, fios laterais, Slack/Discord, WebRTC entre computadores e controle do sistema operacional continuam fora do escopo desta etapa.

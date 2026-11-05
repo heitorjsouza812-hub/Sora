@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from app.canais_equipe.ferramentas import FERRAMENTAS_DO_CANAL
+from app.correio.reacoes import ReagirMensagem
 from app.ferramentas.base import ContextoFerramenta
 from app.ferramentas.buscar_web import BuscarWeb
 from app.ferramentas.criar_agente import CriarAgente
@@ -42,8 +44,28 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
     "entregar": Entregar,
     "veredito": Veredito,
     "criar_agente": CriarAgente,
+    "reagir": ReagirMensagem,
+    **FERRAMENTAS_DO_CANAL,
 }
 """Ferramentas da fase 1: nome → esquema dos argumentos."""
+
+MODULO_DA_FERRAMENTA: dict[str, str] = {}
+"""Ferramentas cuja função mora fora de ``app.ferramentas`` (nome → módulo)."""
+
+# Relógio (etapa 4): rotinas, sandbox e conectores MCP; ``relogio_registro`` só liga o que existe.
+from app.rotinas.registro import registrar as _registrar_relogio  # noqa: E402
+
+_registrar_relogio(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
+# Âncora (etapa 4): memória, histórico, pendências, habilidades, instruções, envio entre agentes.
+from app.ferramentas.pecas_registro import registrar as _registrar_ancora  # noqa: E402
+
+_registrar_ancora(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
+# Leme (etapa 4): navegador persistente por árvore no worker.
+from app.ferramentas.navegador_registro import registrar as _registrar_leme  # noqa: E402
+
+_registrar_leme(ESQUEMAS, MODULO_DA_FERRAMENTA)
 
 
 def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
@@ -53,10 +75,8 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     de cada nome está em ``app/revisor/politica.py``.
     """
     # Peças inspiradas no OpenBot, escritas pela Sora (``docs/referencias/openbot.md``).
-    from app.canais_equipe.ferramentas import FERRAMENTAS_DO_CANAL
     from app.computador import ExecutarComando
     from app.conectores.servidores import AdicionarServidorMCP
-    from app.correio.reacoes import ReagirMensagem
     from app.ferramentas.catalogo_tarefas import CatalogoTarefas
     from app.ferramentas.enviar_para_agente import EnviarParaAgente
     from app.ferramentas.gerar_grafico import GerarGrafico
@@ -119,8 +139,6 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
         "navegador_capturar": NavegadorCapturar,
         "navegador_console": NavegadorConsole,
         "navegador_pedir_ajuda": NavegadorPedirAjuda,
-        "reagir": ReagirMensagem,
-        **FERRAMENTAS_DO_CANAL,
         # navegador por árvore, adaptado do agent-desktop (docs/referencias/agent-desktop.md)
         **FERRAMENTAS_DA_ARVORE,
     }
@@ -144,7 +162,8 @@ def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[Ba
         esquema = ESQUEMAS.get(nome)
         if esquema is None:
             raise ValueError(f"Ferramenta desconhecida: {nome}")
-        funcao = getattr(import_module(f"app.ferramentas.{nome}"), nome)
+        modulo = MODULO_DA_FERRAMENTA.get(nome, f"app.ferramentas.{nome}")
+        funcao = getattr(import_module(modulo), nome)
 
         async def executar(**argumentos):
             try:
@@ -163,4 +182,6 @@ def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[Ba
     return [montar(nome) for nome in dict.fromkeys(nomes)]
 
 
-FERRAMENTAS_QUE_ENCERRAM: frozenset[str] = frozenset({"entregar", "veredito"})
+FERRAMENTAS_QUE_ENCERRAM: frozenset[str] = frozenset(
+    {"entregar", "veredito", "canal_transferir", "canal_resultado"}
+)

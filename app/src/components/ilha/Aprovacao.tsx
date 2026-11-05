@@ -30,7 +30,7 @@ export function Aprovacao({ alerta, onFeito }: AprovacaoProps) {
   const aprovar = () => {
     void aprovarProjeto(alerta.projetoId);
     if (som) tocar('aprovado');
-    toast({ mensagem: 'Projeto aprovado e publicado', descricao: alerta.titulo, tom: 'sucesso' });
+    toast({ mensagem: 'Projeto aprovado', descricao: alerta.titulo, tom: 'sucesso' });
     onFeito();
   };
 

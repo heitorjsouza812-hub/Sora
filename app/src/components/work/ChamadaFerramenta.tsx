@@ -2,10 +2,11 @@ import { useState } from 'react';
 import type { PassoTrabalho, ResultadoPasso } from '../../types';
 import { SoraOrb } from '../mascot';
 import { AvisoPluginDesconectado, useErroSimulado } from '../erros';
-import { PecaCampanha } from '../ui/CampaignPiece';
+import { ImagensEntrega } from '../ui/ImagensEntrega';
 import { PluginMark } from '../ui/PluginMark';
 import type { Movimento } from '../../types';
-import { duracao, pluginInfo } from './util';
+import { duracao, ehPassoNavegador, pluginInfo } from './util';
+import { RastroNavegador } from './RastroNavegador';
 
 
 /** JSON compacto numa linha (ex.: {consulta: "café", limite: 8}). */
@@ -15,25 +16,20 @@ function jsonCompacto(v: unknown): string {
   return typeof v === 'string' ? `"${v}"` : String(v);
 }
 
-/** Miniaturas do resultado: imagens reais ou, sem imagem, quadros gerados na cor do agente. */
-export function Miniaturas({ resultado, cor, quantidade }: { resultado: ResultadoPasso; cor: string; quantidade?: number }) {
-  const n = resultado.imagens?.length || quantidade || 0;
-  if (!n) return null;
-  return (
-    <div className="wk-thumbs">
-      {Array.from({ length: n }, (_, i) => <PecaCampanha key={i} indice={i} imagem={resultado.imagens?.[i]} cor={cor} compacta />)}
-    </div>
-  );
+/** Miniaturas do resultado: só imagens reais (anexo ou URL de imagem). Sem imagem, nada (sem simulação). */
+export function Miniaturas({ resultado }: { resultado: ResultadoPasso; cor?: string }) {
+  return <ImagensEntrega entrega={{ titulo: resultado.resumo, imagens: resultado.imagens }} className="wk-thumbs" limite={4} compacta />;
 }
 
-export function ResultadoResumo({ resultado, cor }: { resultado: ResultadoPasso; cor: string }) {
+export function ResultadoResumo({ resultado }: { resultado: ResultadoPasso; cor?: string }) {
+  if (!resultado.resumo && !resultado.links?.length && !resultado.imagens?.length) return null; // ex.: passo do navegador que só traz rastro
   return (
     <div className="wk-result">
       <span className="wk-result-sum">{resultado.resumo}</span>
       {resultado.links && resultado.links.length > 0 && (
         <ul className="wk-links">{resultado.links.map(l => <li key={l.titulo}><span>{l.titulo}</span><small>{l.dominio}</small></li>)}</ul>
       )}
-      <Miniaturas resultado={resultado} cor={cor} quantidade={/imag|cena|conceit|tela/i.test(resultado.resumo) ? Math.min(4, parseInt(resultado.resumo, 10) || 0) : 0} />
+      <Miniaturas resultado={resultado} />
     </div>
   );
 }
@@ -64,6 +60,7 @@ export function ChamadaFerramenta({ passo, cor, movimento, agora }: { passo: Pas
       {aberto && <pre className="wk-params-full">{JSON.stringify(params, null, 2)}</pre>}
       {pluginCaiu && <AvisoPluginDesconectado plugin={p?.name ?? passo.ferramenta!} />}
       {passo.resultado && <ResultadoResumo resultado={passo.resultado} cor={cor} />}
+      {ehPassoNavegador(passo) && <RastroNavegador passo={passo} />}
     </div>
   );
 }

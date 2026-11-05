@@ -132,6 +132,11 @@ class Configuracao(BaseSettings):
     """Token do bot da Sora no Telegram (``app/canais/telegram.py``). Vazio: canal desligado."""
     telegram_segredo_webhook: SecretStr | None = None
     """Segredo que o Telegram manda em ``X-Telegram-Bot-Api-Secret-Token``."""
+    telegram_api_url: str = "https://api.telegram.org"
+    """Base da Bot API. Só muda nos testes (servidor local de mentira)."""
+    sandbox_docker_host: str | None = None
+    """``DOCKER_HOST`` do computador isolado (``ssh://…`` ou ``tcp://…``). Em produção o
+    ``executar_comando`` exige isto: nunca roda no Docker do servidor principal."""
     sandbox_provedor: Literal["nenhum", "docker"] = "nenhum"
     """Onde roda ``executar_comando`` (``app/computador``). ``nenhum`` desliga a ferramenta."""
     sandbox_imagem: str = "python:3.12-slim"
@@ -208,6 +213,14 @@ class Configuracao(BaseSettings):
         if self.producao and not valor:
             raise ValueError("NAVEGADOR_CDP_URL é obrigatório em produção.")
         return valor or None
+
+    @property
+    def sandbox_ativo(self) -> bool:
+        """``executar_comando`` liga? Em produção só com host separado (``SANDBOX_DOCKER_HOST``);
+        ``SANDBOX_PROVEDOR=docker`` sozinho em produção continua desligado."""
+        if self.sandbox_provedor != "docker":
+            return False
+        return not self.producao or bool((self.sandbox_docker_host or "").strip())
 
     @property
     def database_url_sqlalchemy(self) -> str:

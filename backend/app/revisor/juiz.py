@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable, Sequence
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -111,15 +112,23 @@ async def avaliar_acao(
     *,
     segredos: Sequence[str] = (),
     prazo_segundos: float = PRAZO_PADRAO_SEGUNDOS,
+    dormir: Any = None,
 ) -> AvaliacaoRevisor:
     """Roda o revisor com prazo. Prazo estourado ou erro do provedor → BLOQUEAR."""
     prompt = montar_prompt_revisor(acao, pedidos_do_usuario, regras_bloqueio, segredos)
     try:
-        texto = await asyncio.wait_for(
-            chamar_modelo(carregar_prompt("juiz_rapido"), prompt), timeout=prazo_segundos
+        # O prazo vale para CADA tentativa; o limite por minuto do plano espera o retry-after
+        # (teto 60 s, 3 vezes) fora dele, em vez de cair direto no cartão por falha.
+        from app.llm.limite import com_espera_de_limite
+
+        texto = await com_espera_de_limite(
+            lambda: asyncio.wait_for(
+                chamar_modelo(carregar_prompt("juiz_rapido"), prompt), timeout=prazo_segundos
+            ),
+            dormir=dormir,
         )
     except TimeoutError:
         return bloqueio("O revisor demorou demais; a decisão fica com você.")
     except Exception:
-        return bloqueio("O revisor falhou; a decisão fica com você.")
+        return bloqueio("Não consegui avaliar o risco agora; a decisão fica com você.")
     return interpretar_avaliacao(texto)

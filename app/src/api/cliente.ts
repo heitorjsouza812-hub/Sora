@@ -197,7 +197,7 @@ export async function corpoRenovacaoDesktop(): Promise<{ token_renovacao: string
 
 // ── Pedido genérico ──────────────────────────────────────────────────────────────────────
 
-type Metodo = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Metodo = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 async function pedir<T>(metodo: Metodo, caminho: string, corpo: unknown, opcoes: OpcoesPedido = {}): Promise<T> {
   const montar = (): RequestInit => {
@@ -243,6 +243,7 @@ async function pedir<T>(metodo: Metodo, caminho: string, corpo: unknown, opcoes:
 export const api = {
   get: <T>(caminho: string, opcoes?: OpcoesPedido) => pedir<T>('GET', caminho, undefined, opcoes),
   post: <T>(caminho: string, corpo?: unknown, opcoes?: OpcoesPedido) => pedir<T>('POST', caminho, corpo, opcoes),
+  put: <T>(caminho: string, corpo?: unknown, opcoes?: OpcoesPedido) => pedir<T>('PUT', caminho, corpo, opcoes),
   patch: <T>(caminho: string, corpo?: unknown, opcoes?: OpcoesPedido) => pedir<T>('PATCH', caminho, corpo, opcoes),
   delete: <T>(caminho: string, corpo?: unknown, opcoes?: OpcoesPedido) => pedir<T>('DELETE', caminho, corpo, opcoes),
 };

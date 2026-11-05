@@ -24,6 +24,9 @@ class ContextoFerramenta:
     conversa_id: UUID
     cadeia_id: UUID | None = None
     etapa_id: UUID | None = None
+    canal_id: UUID | None = None
+    tarefa_canal_id: UUID | None = None
+    revisao_canal: int | None = None
     sem_supervisao: bool = False
     """Rotina sem ninguém olhando: o navegador só usa abas efêmeras (sem login salvo)."""
 

@@ -68,8 +68,18 @@ class Aba:
 class RevisaoNavegacaoNecessaria(ErroFerramenta):
     """A navegação fica parada até o revisor aprovar o domínio para este perfil."""
 
-    def __init__(self, dominio: str) -> None:
+    def __init__(
+        self,
+        dominio: str,
+        *,
+        aba_id: UUID | None = None,
+        url: str | None = None,
+        particao: str | None = None,
+    ) -> None:
         self.dominio = dominio
+        self.aba_id = aba_id
+        self.url = url
+        self.particao = particao
         super().__init__(f"O perfil tem login salvo; o domínio novo {dominio!r} exige revisão.")
 
 
@@ -153,6 +163,8 @@ class GerenteAbas:
         aba = await self._garantir_carregada(
             self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
         )
+        if (conferir := getattr(self._motor, "validar_destino", None)) is not None:
+            await conferir(url)  # SSRF primeiro: destino interno nunca vira cartão
         tem_login, aprovados = await self._motor.contexto_politica(aba)
         politica = politica_contextual_navegador(
             "navegador_abrir",
@@ -161,7 +173,9 @@ class GerenteAbas:
             dominios_aprovados=aprovados,
         )
         if politica is Politica.REVISOR:
-            raise RevisaoNavegacaoNecessaria(dominio_registravel(url))
+            raise RevisaoNavegacaoNecessaria(
+                dominio_registravel(url), aba_id=aba.id, url=url, particao=aba.particao
+            )
         url_final, titulo = await self._motor.navegar(aba, url)
         return self._gravar(replace(aba, url=url_final, titulo=titulo[:200], usada_em=_agora()))
 
@@ -195,8 +209,8 @@ class GerenteAbas:
             key=lambda a: a.aberta_em,
         )
 
-    def descrever(self, agente_id: UUID) -> str:
-        abas = self.do_agente(agente_id)
+    def descrever(self, agente_id: UUID, *, so_efemeras: bool = False) -> str:
+        abas = self.do_agente(agente_id, so_efemeras=so_efemeras)
         if not abas:
             return "Você não tem abas abertas. Use navegador_abrir."
         linhas = []
@@ -220,6 +234,13 @@ class GerenteAbas:
     def devolver(self, aba_id: UUID, usuario_id: UUID) -> Aba:
         aba = self._da_conta(aba_id, usuario_id)
         return self._gravar(replace(aba, assumida_pelo_usuario=False, usada_em=_agora()))
+
+    def sincronizar_pagina(self, aba_id: UUID, *, url: str, titulo: str) -> Aba:
+        """Atualiza o registro depois de uma ação por árvore navegar a página."""
+        aba = self._abas[aba_id]
+        return self._gravar(
+            replace(aba, url=url, titulo=titulo[:200], usada_em=_agora(), carregada=True)
+        )
 
     async def fechar_pelo_usuario(self, aba_id: UUID, usuario_id: UUID) -> None:
         await self._remover(self._da_conta(aba_id, usuario_id))
@@ -308,6 +329,22 @@ class GerenteAbas:
             self._console[restaurada.id] = deque(maxlen=MAX_LINHAS_CONSOLE)
             voltaram.append(restaurada)
         return voltaram
+
+    async def sincronizar_com_banco(
+        self,
+        agente_id: UUID,
+        salvas: Sequence[Aba],
+        *,
+        perfis_por_usuario: dict[UUID, set[UUID]],
+    ) -> None:
+        """Várias cópias do worker: deixa as abas do agente iguais ao que está salvo no banco."""
+        ids_salvos = {aba.id for aba in salvas}
+        for aba in list(self._abas.values()):
+            if aba.agente_id == agente_id and not aba.perfil_efemero and aba.id not in ids_salvos:
+                await self._remover(aba)
+        faltando = [aba for aba in salvas if aba.id not in self._abas]
+        if faltando:
+            await self.restaurar(faltando, perfis_por_usuario=perfis_por_usuario)
 
     # ---------- interno ----------
 

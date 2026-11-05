@@ -1,12 +1,14 @@
 // Estado real de conversas, equipes e trabalho. A API hidrata o estado e os eventos SSE são
 // a única fonte das transições ao vivo. O relógio serve apenas para mostrar duração na interface.
+import { ferramentasParaSalvar } from '../data/ferramentas';
 import { useEffect, useSyncExternalStore } from 'react';
 import { api, ErroApi } from '../api/cliente';
 import { acompanharEventos, type EventoSse } from '../api/eventos';
+import { receberEventoEquipe } from './equipe';
 import { enviarAnexo } from '../api/anexos';
 import type { Anexo } from '../components/anexos';
 import type { Movimento, PassoTrabalho, Status } from '../types';
-import { aplicarEvento } from './aplicarEvento';
+import { aplicarEvento, registrarEnvioDoUsuario } from './aplicarEvento';
 
 export const COR_SORA = '#E2ECFF';
 export const PLUGINS_PADRAO: string[] = [];
@@ -50,8 +52,10 @@ export interface EstadoProjetos {
 /** Algo que a equipe espera do usuário: pergunta (inclui o orçamento estourado: Continuar/Parar) ou aprovação. */
 export type Pendencia = (
   | { tipo: 'pergunta'; texto: string; opcoes: { rotulo: string; valor: string }[]; respostaLivre: boolean }
-  | { tipo: 'aprovacao'; resumo: string; dano: string; quemRecebe: string | null; expiraEm: number }
+  | { tipo: 'aprovacao'; resumo: string; dano: string; quemRecebe: string | null; expiraEm: number; revisaoDominio?: RevisaoDominio }
 ) & { id: string; conversaId: string; desde: number; enviando?: boolean; erro?: string };
+/** Cartão `aprovar_dominio` (Leme): o agente quer abrir um domínio novo num perfil com login salvo. */
+export interface RevisaoDominio { dominio: string; url: string; perfil: { tipo: string; nome: string | null }; agenteId: string | null; opcoes: { rotulo: string; valor: 'sempre_permitir' | 'negar' }[] }
 export type FaseProjeto = 'pensando' | 'conversa' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado' | 'erro';
 
 interface ConversaApi { id: string; agente_id: string; tipo: 'chat' | 'projeto' | 'agente'; titulo: string | null; aprovada_versao: number | null; criada_em: string; atualizada_em: string }
@@ -100,6 +104,7 @@ const enviosAgenteEmVoo = new Map<string, Promise<void>>();
 let iniciando: Promise<void> | null = null;
 
 function receber(evento: EventoSse) {
+  receberEventoEquipe(evento);
   const conversaId = String(evento.dados.conversa_id ?? '');
   if (conversaId && !estado.projetos.some(p => p.id === conversaId) && !Object.values(estado.agentes).some(a => a.conversaId === conversaId)) return;
   alterar(e => aplicarEvento(e, evento));
@@ -256,8 +261,10 @@ export async function criarAgenteIndependente(pedido: string, _agora?: number, a
 }
 export async function conversarComSora(texto: string, _agora?: number, anexos: Anexo[] = []): Promise<ProjetoSora> {
   const p = projetoAtivo(estado); if (!p) return criarProjeto(texto, undefined, { tipo: 'chat', anexos });
-  const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${p.id}/mensagens`, { texto, anexos: await idsDosAnexos(anexos) });
-  alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId: p.id, autor: 'usuario', texto, criadoEm: Date.now(), anexos: [], gerando: false }] })); acompanharConversa(p.id); return p;
+  const idsEnvio = await idsDosAnexos(anexos);
+  const enviadoEm = Date.now();
+  const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${p.id}/mensagens`, { texto, anexos: idsEnvio });
+  alterar(e => registrarEnvioDoUsuario(e, { id: aceita.mensagem_id, conversaId: p.id, texto, enviadoEm })); acompanharConversa(p.id); return p;
 }
 export async function enviarParaAgente(agenteId: string, texto: string, _agora?: number, _registrar = true, anexos: Anexo[] = []) {
   const anterior = enviosAgenteEmVoo.get(agenteId) ?? Promise.resolve();
@@ -279,8 +286,9 @@ export async function enviarParaAgente(agenteId: string, texto: string, _agora?:
       acompanharConversa(conversaId);
       return;
     }
+    const enviadoEm = Date.now();
     const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${conversaId}/mensagens`, { texto, anexos: idsAnexos, para_agente_id: projeto ? agenteId : null });
-    alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: aceita.mensagem_id, conversaId, agenteId, autor: 'usuario', texto, criadoEm: Date.now(), gerando: false }] }));
+    alterar(e => registrarEnvioDoUsuario(e, { id: aceita.mensagem_id, conversaId, agenteId, texto, enviadoEm }));
     acompanharConversa(conversaId);
   });
   enviosAgenteEmVoo.set(agenteId, envio);
@@ -313,7 +321,7 @@ export function removerProjeto(id: string, opcoes: { manterAgentes?: boolean } =
   void api.delete(`/v1/conversas/${id}?manter_agentes=${opcoes.manterAgentes ? 'true' : 'false'}`).catch(() => definir(antes)); return () => { definir(antes); void iniciarProjetos(); };
 }
 export async function salvarAgente(dados: RascunhoAgente & { id?: string }): Promise<AgenteSora> {
-  const corpo = { nome: dados.nome, funcao: dados.funcao, papel: dados.instrucoes, cor: dados.cor, movimento: dados.tipoMovimento, ferramentas: dados.ferramentas };
+  const corpo = { nome: dados.nome, funcao: dados.funcao, papel: dados.instrucoes, cor: dados.cor, movimento: dados.tipoMovimento, ferramentas: ferramentasParaSalvar(dados.ferramentas) };
   const saida = dados.id ? await api.patch<AgenteApi>(`/v1/agentes/${dados.id}`, corpo) : await api.post<AgenteApi>('/v1/agentes', corpo);
   const agente = { ...agenteDaApi(saida), ferramentas: dados.ferramentas, instrucoes: dados.instrucoes }; alterar(e => ({ ...e, agentes: { ...e.agentes, [agente.id]: { ...e.agentes[agente.id], ...agente } } })); return agente;
 }

@@ -101,9 +101,16 @@ class NavegadorAcao(_Base):
     destino: str | None = Field(default=None, pattern=_REF, description="Para 'arrastar'.")
     prazo_ms: int | None = Field(default=None, ge=0, le=PRAZO_ESPERA_MAXIMO_MS)
     esperar_por: str | None = Field(
-        default=None, max_length=200, description="Depois de agir, espera 'papel:texto'."
+        default=None,
+        max_length=200,
+        description=(
+            "Opcional; deixe vazio na maioria das vezes (a ação já é conferida). Só use para "
+            "esperar algo concreto aparecer depois, ex.: ':Salvo com sucesso' ou 'dialog'."
+        ),
     )
-    esperar_sumir: str | None = Field(default=None, max_length=200)
+    esperar_sumir: str | None = Field(
+        default=None, max_length=200, description="Opcional, como esperar_por (ex.: ':Carregando')."
+    )
     prazo_espera_ms: int | None = Field(default=None, ge=0, le=PRAZO_ESPERA_MAXIMO_MS)
 
 
@@ -245,6 +252,12 @@ def para_modelo(resposta: Resposta, limite: int = LIMITE_RESULTADO_CARACTERES) -
         ]
         if dados.get("raiz"):
             cabecalho[1] += f" · região {dados['raiz']}"
+        if dados.get("esqueleto"):
+            cabecalho.append(
+                "Esqueleto: mapa raso, não a página toda. Perfure com raiz ou leia sem esqueleto."
+            )
+        if dados.get("carregando"):
+            cabecalho.append("A página ainda estava carregando: leia de novo se faltar algo.")
         rolagem = dados.get("rolagem") or {}
         if rolagem.get("tem_mais_abaixo"):
             cabecalho.append("Há mais página abaixo (navegador_acao acao=rolar).")
@@ -313,6 +326,12 @@ class ServicoArvore:
 
     def esquecer_aba(self, aba_id: UUID) -> None:
         self._por_aba.pop(aba_id, None)
+
+    def ultimo_rastro(self, aba_id: UUID) -> dict[str, Any] | None:
+        guardado = self._por_aba.get(aba_id)
+        if guardado is None or not guardado[1].rastro.eventos:
+            return None
+        return dict(guardado[1].rastro.eventos[-1])
 
     async def executar(self, nome: str, args: BaseModel, contexto: ContextoFerramenta) -> Resposta:
         comando = COMANDO_DA_FERRAMENTA.get(nome)

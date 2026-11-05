@@ -5,6 +5,8 @@ import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   avaliarMensagem, editarPergunta, podeEditar, podeRefazer, previaDoAnexo, refazerResposta, textoVisivel, useProjetos, type MensagemChat as Msg,
 } from '../../state/projetos';
+import { ouvirTexto, pararFala } from '../../api/voz';
+import { mensagemDeErro } from '../../api/cliente';
 import { ListaAnexos } from '../anexos';
 import { IconButton, Tooltip, toast } from '../base';
 import { Markdown } from './Markdown';
@@ -16,6 +18,7 @@ const Ic = {
   positiva: <svg viewBox="0 0 24 24"><path d="M7 11v9H4v-9zM7 11l4-7c1.5 0 2.5 1.2 2.2 2.7L12.6 10H18a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 16.8 20H7" /></svg>,
   negativa: <svg viewBox="0 0 24 24"><path d="M17 13V4h3v9zM17 13l-4 7c-1.5 0-2.5-1.2-2.2-2.7l.6-3.3H6a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 7.2 4H17" /></svg>,
   editar: <svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>,
+  ouvir: <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" /><path d="M16.5 8.5a5 5 0 0 1 0 7" /></svg>,
   mais: <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>,
 };
 
@@ -51,6 +54,12 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
   const usuario = m.autor === 'usuario';
   const vis = textoVisivel(m, agora);
   const editavel = podeEditar(e, m);
+  const [ouvindo, setOuvindo] = useState(false);
+  const ouvir = () => {
+    if (ouvindo) { pararFala(); return; }
+    setOuvindo(true);
+    void ouvirTexto(m.texto).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })).finally(() => setOuvindo(false));
+  };
 
   // toque longo (celular) mostra as ações
   const toqueLongo = {
@@ -64,6 +73,7 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
       <Acao rotulo="Copiar" icone={Ic.copiar} onClick={() => copiar(m.texto)} />
       {usuario && editavel && <Acao rotulo="Editar pergunta" icone={Ic.editar} onClick={() => { setRascunho(m.texto); setEditando(true); }} />}
       {!usuario && podeRefazer(m) && <Acao rotulo="Refazer resposta" icone={Ic.refazer} onClick={() => refazerResposta(m.id)} />}
+      {!usuario && m.texto.trim() && <Acao rotulo={ouvindo ? 'Parar áudio' : 'Ouvir'} icone={Ic.ouvir} ativo={ouvindo} onClick={ouvir} />}
       {!usuario && <>
         <Acao rotulo="Boa resposta" icone={Ic.positiva} ativo={m.avaliacao === 'positiva'} onClick={() => avaliarMensagem(m.id, 'positiva')} />
         <Acao rotulo="Resposta ruim" icone={Ic.negativa} ativo={m.avaliacao === 'negativa'} onClick={() => avaliarMensagem(m.id, 'negativa')} />

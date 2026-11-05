@@ -24,12 +24,16 @@ NomeJob = Literal[
     "ajustar",
     "responder_direto",
     "retomar_conversa",
+    "despachar_equipe",
+    "executar_item_fila",
+    "executar_tarefa_canal",
     "expirar_aprovacao",
     # adaptados do Rakazo (docs/referencias/rakazo.md)
     "executar_rotina",
     "compactar_historico",
     "responder_canal",
     "reconciliar_travados",
+    "abrir_aba_de_perfil",
 ]
 
 _fila: ArqRedis | None = None

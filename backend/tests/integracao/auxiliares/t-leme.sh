@@ -1,0 +1,1 @@
+cd /c/dev/sora-e4/backend && sh tests/integracao/auxiliares/reset-leme.sh && MSYS_NO_PATHCONV=1 docker run --rm --network sora-leme -v "$(pwd -W):/work" -v leme-venv:/venv -v leme-pw:/root/.cache/ms-playwright 684df257a1fa sh /work/tests/integracao/auxiliares/rodar-leme.sh "$@" 2>&1
