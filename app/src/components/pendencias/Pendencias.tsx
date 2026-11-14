@@ -3,28 +3,19 @@
 // Mesmo cartão no chat e na ilha; só a densidade muda.
 import { useState, type FormEvent } from 'react';
 import { Button, Input } from '../base';
-import { SoraOrb } from '../mascot';
 import { decidirAprovacao, responderPergunta, type Pendencia } from '../../state/projetos';
+import { BotoesAprovacao, CabecaPedido } from './decisao';
 import './pendencias.css';
 
 type PerguntaP = Extract<Pendencia, { tipo: 'pergunta' }>;
 type AprovacaoP = Extract<Pendencia, { tipo: 'aprovacao' }>;
-
-function Cabeca({ rotulo, cor }: { rotulo: string; cor: string }) {
-  return (
-    <header className="pend-cabeca">
-      <SoraOrb size={28} color={cor} state="listening" glow={false} decorative seed={11} />
-      <span>{rotulo}</span>
-    </header>
-  );
-}
 
 function CartaoPergunta({ p, cor }: { p: PerguntaP; cor: string }) {
   const [texto, setTexto] = useState('');
   const enviarLivre = (ev: FormEvent) => { ev.preventDefault(); const v = texto.trim(); if (v && !p.enviando) void responderPergunta(p.id, v); };
   return (
     <section className="pend-card" aria-label="Pergunta da equipe" data-pendencia="pergunta">
-      <Cabeca rotulo="A equipe precisa de você" cor={cor} />
+      <CabecaPedido cor={cor} />
       <p className="pend-texto">{p.texto}</p>
       {p.opcoes.length > 0 && (
         <div className="pend-acoes" role="group" aria-label="Opções">
@@ -52,7 +43,7 @@ function CartaoDominio({ p, cor }: { p: AprovacaoP; cor: string }) {
   const perfil = `${PERFIL_ROTULO[r.perfil.tipo] ?? 'perfil'}${r.perfil.nome ? ` “${r.perfil.nome}”` : ''}`;
   return (
     <section className="pend-card" aria-label="Revisão de domínio" data-pendencia="dominio">
-      <Cabeca rotulo="Um agente quer abrir um site novo" cor={cor} />
+      <CabecaPedido cor={cor} origem="Abrir um site novo" />
       <p className="pend-texto">{p.resumo || `Abrir ${r.dominio} no ${perfil}.`}</p>
       <p className="pend-dano"><b>Domínio:</b> <code>{r.dominio}</code></p>
       <p className="pend-dano"><b>Endereço:</b> <code className="pend-url">{r.url}</code></p>
@@ -73,15 +64,11 @@ function CartaoAprovacao({ p, cor }: { p: AprovacaoP; cor: string }) {
   if (p.revisaoDominio) return <CartaoDominio p={p} cor={cor} />;
   return (
     <section className="pend-card" aria-label="Pedido de aprovação" data-pendencia="aprovacao">
-      <Cabeca rotulo="Preciso da sua aprovação" cor={cor} />
+      <CabecaPedido cor={cor} />
       <p className="pend-texto">{p.resumo}</p>
       {p.dano && <p className="pend-dano"><b>O que pode acontecer:</b> {p.dano}</p>}
       {p.quemRecebe && <p className="pend-dano"><b>Quem recebe:</b> {p.quemRecebe}</p>}
-      <div className="pend-acoes" role="group" aria-label="Decisão">
-        <Button tamanho="M" variante="primario" disabled={p.enviando} onClick={() => void decidirAprovacao(p.id, 'permitir_uma_vez')}>Aprovar</Button>
-        <Button tamanho="M" variante="secundario" disabled={p.enviando} onClick={() => void decidirAprovacao(p.id, 'sempre_permitir')}>Sempre permitir</Button>
-        <Button tamanho="M" variante="perigo" disabled={p.enviando} onClick={() => void decidirAprovacao(p.id, 'negar')}>Recusar</Button>
-      </div>
+      <BotoesAprovacao desabilitado={p.enviando} onPermitir={() => void decidirAprovacao(p.id, 'permitir_uma_vez')} onSempre={() => void decidirAprovacao(p.id, 'sempre_permitir')} onRecusar={() => void decidirAprovacao(p.id, 'negar')} />
       {p.expiraEm > 0 && <p className="pend-nota">Sem resposta até {new Date(p.expiraEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}, o pedido é recusado.</p>}
       {p.erro && <p className="pend-erro" role="alert">{p.erro}</p>}
     </section>

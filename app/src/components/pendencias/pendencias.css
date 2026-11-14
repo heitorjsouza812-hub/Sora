@@ -29,3 +29,11 @@
 .pend-bots label > span { display: grid; gap: 2px; }
 .pend-bots small { color: var(--text-2); }
 .pend-resolvida { margin: 0; padding: var(--sp-3) var(--sp-4); color: var(--success, #7EF2C4); border: 1px solid color-mix(in srgb, #7EF2C4 25%, transparent); border-radius: var(--r-12, 12px); background: var(--surface-2); }
+.pend-origem { margin-left: auto; padding: 2px 9px; color: var(--text-2); font-size: 12px; font-weight: 500; border: 1px solid var(--line); border-radius: 999px; }
+.pend-central { display: grid; gap: var(--sp-4); margin: 0; padding: 0; list-style: none; }
+.pend-central-item { display: grid; gap: var(--sp-2); }
+.pend-central-link { justify-self: start; color: var(--text-2); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 767px) { .pend-acoes > * { flex: 1 1 100%; } }
+.shell-precisa { margin-bottom: 8px; }
+.shell-precisa .shell-precisa-contador { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center; color: #0B0D12; background: #E2ECFF; border-radius: 999px; font-size: 12px; font-weight: 700; box-shadow: 0 0 12px rgba(226, 236, 255, .5); }
+.shell-precisa[data-pendente='true'] { color: var(--text-1); border-color: rgba(226, 236, 255, .3); }

@@ -10,6 +10,8 @@ vi.mock('../../../api/grupos', async (importar) => {
   return { ...original, resolverPedidoAtencao: resolver, ajustarPropostaGrupo: ajustar, aceitarPropostaGrupo: aceitar, recusarPropostaGrupo: recusar };
 });
 
+vi.mock('../../mascot', () => ({ SoraOrb: () => <span data-testid="sora-orb" /> }));
+
 import { CartaoPrecisaDeVoce } from '../CartaoPrecisaDeVoce';
 import { CartaoPropostaGrupo } from '../CartaoPropostaGrupo';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';

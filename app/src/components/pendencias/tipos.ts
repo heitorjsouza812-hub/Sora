@@ -1,4 +1,4 @@
-export type AcaoPedidoAtencao = 'enviar' | 'descartar' | 'aprovar' | 'recusar' | 'responder';
+export type AcaoPedidoAtencao = 'enviar' | 'descartar' | 'aprovar' | 'sempre_permitir' | 'recusar' | 'responder';
 
 export interface OpcaoAtencao {
   rotulo: string;
@@ -15,6 +15,8 @@ export interface PedidoAtencao {
   detalhes?: string | null;
   botId?: string | null;
   grupoId?: string | null;
+  /** Id técnico da ferramenta que pediu a aprovação (só decide se "Sempre permitir" existe). */
+  acao?: string | null;
   opcoes?: OpcaoAtencao[];
   aceitaRespostaLivre?: boolean;
   expiraEm?: string | null;

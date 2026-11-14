@@ -7,6 +7,7 @@ import { carregarGrupos, useGrupos } from '../../state/grupos';
 import { carregarPrecisaDeVoce, usePrecisaDeVoce } from '../../state/atencao';
 import { SoraOrb } from '../mascot';
 import { NovoGrupo } from '../grupos/NovoGrupo';
+import { CentralPrecisaDeVoce } from '../pendencias/CentralPrecisaDeVoce';
 import { abrirPaleta } from '../comandos';
 import { GearIcon, PlusIcon, TeamIcon } from '../ui/Icons';
 
@@ -25,6 +26,8 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
   const grupos = useGrupos();
   const atencao = usePrecisaDeVoce();
   const [novoGrupo, setNovoGrupo] = useState(false);
+  const [central, setCentral] = useState(false);
+  const pendentes = atencao.lista.length;
 
   useEffect(() => {
     void carregarGrupos().catch(() => undefined);
@@ -32,6 +35,7 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
   }, []);
 
   return <>
+    <button type="button" className="shell-search shell-precisa" data-pendente={pendentes > 0} aria-label={pendentes ? `Precisa de você, ${pendentes} ${pendentes === 1 ? 'pedido' : 'pedidos'}` : 'Precisa de você, nenhum pedido'} onClick={() => setCentral(true)}><i className="pend-sinal" aria-hidden="true" /><span>Precisa de você</span>{pendentes > 0 && <b className="shell-precisa-contador" aria-hidden="true">{pendentes}</b>}</button>
     <button type="button" className="shell-search" onClick={() => abrirPaleta()}><BuscaIcone /><span>Buscar</span><kbd>Ctrl K</kbd></button>
     <section className="shell-section" aria-labelledby="nav-bots">
       <header><NavLink id="nav-bots" to="/bots" onClick={onNavegar}>Bots</NavLink><small>{bots.length}</small></header>
@@ -57,6 +61,7 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
         })}
       </div>
     </section>
+    <CentralPrecisaDeVoce aberta={central} onFechar={() => setCentral(false)} />
     <NovoGrupo aberto={novoGrupo} onFechar={() => setNovoGrupo(false)} onCriado={id => { setNovoGrupo(false); onNavegar?.(); navigate(`/grupos/${id}`); }} />
   </>;
 }

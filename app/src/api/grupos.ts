@@ -11,6 +11,8 @@ export interface GrupoApi {
   liderId: string | null;
   precisaDeVoce: boolean;
   trabalhando: boolean;
+  /** Campo opcional do backend: o grupo ficou com menos de 2 bots e não aceita mensagens até ganhar bots. */
+  precisaDeBots?: boolean;
 }
 
 export interface MensagemGrupoApi {
@@ -30,7 +32,15 @@ export interface MensagemGrupoApi {
 export interface AnexoGrupo { id: string; nome: string }
 
 export type StatusTarefaGrupo = 'na_fila' | 'rodando' | 'aguardando_filhas' | 'parada' | 'concluida' | 'falhou' | 'cancelada';
-export interface TarefaGrupoApi { id: string; grupoId: string; donoId: string; status: StatusTarefaGrupo; revisao: number }
+export type AcaoTarefaGrupo = 'parar' | 'retomar' | 'reatribuir' | 'cancelar';
+export interface TarefaGrupoApi {
+  id: string; grupoId: string; donoId: string; status: StatusTarefaGrupo; revisao: number;
+  paiId?: string | null;
+  /** Por que a tarefa está parada (ex.: aguardando_decisao). */
+  motivo?: string | null;
+  /** Botões que o servidor libera para a tarefa agora. */
+  acoes?: AcaoTarefaGrupo[];
+}
 
 type Dados = Record<string, unknown>;
 const texto = (v: unknown) => typeof v === 'string' ? v : '';
@@ -46,6 +56,7 @@ export function grupoDaApi(d: Dados): GrupoApi {
     liderId: textoOuNulo(d.lider_id),
     precisaDeVoce: d.precisa_de_voce === true || d.estado === 'precisa_de_voce',
     trabalhando: d.trabalhando === true || d.estado === 'trabalhando',
+    ...(typeof d.precisa_de_bots === 'boolean' ? { precisaDeBots: d.precisa_de_bots } : {}),
   };
 }
 
@@ -59,8 +70,14 @@ function anexoDaApi(v: unknown, indice: number): AnexoGrupo {
   return { id, nome: texto(d.nome) || nomesDeAnexos.get(id) || `Arquivo ${indice + 1}` };
 }
 
+const ACOES_TAREFA = new Set<string>(['parar', 'retomar', 'reatribuir', 'cancelar']);
+
 export function tarefaDaApi(d: Dados): TarefaGrupoApi {
-  return { id: texto(d.tarefa_id ?? d.id), grupoId: texto(d.canal_id), donoId: texto(d.dono_id), status: texto(d.status) as StatusTarefaGrupo, revisao: numero(d.revisao) };
+  return {
+    id: texto(d.tarefa_id ?? d.id), grupoId: texto(d.canal_id), donoId: texto(d.dono_id), status: texto(d.status) as StatusTarefaGrupo, revisao: numero(d.revisao),
+    paiId: textoOuNulo(d.pai_id), motivo: textoOuNulo(d.motivo),
+    ...(Array.isArray(d.acoes) ? { acoes: d.acoes.filter((acao): acao is AcaoTarefaGrupo => typeof acao === 'string' && ACOES_TAREFA.has(acao)) } : {}),
+  };
 }
 
 export function mensagemDaApi(d: Dados): MensagemGrupoApi {
@@ -96,6 +113,14 @@ export async function renomearGrupo(id: string, nome: string): Promise<GrupoApi>
   return grupoDaApi(await api.patch<Dados>(`${RAIZ}/${id}`, { nome }));
 }
 
+/** Troca os bots do grupo (2 a 5, sem a Sora, que entra sozinha como chefe). */
+export async function definirMembrosDoGrupo(id: string, membros: string[]): Promise<GrupoApi> {
+  return grupoDaApi(await api.patch<Dados>(`${RAIZ}/${id}`, { membros }));
+}
+
+/** Arquiva o grupo (o histórico fica guardado). */
+export const arquivarGrupo = (id: string) => api.post<void>(`/v1/canais-equipe/${id}/arquivar`);
+
 export async function listarMensagensGrupo(id: string, depoisDe = 0): Promise<MensagemGrupoApi[]> {
   const dados = await api.get<Dados[]>(`/v1/canais-equipe/${id}/mensagens?depois_de_seq=${depoisDe}&limite=100`);
   return dados.map(mensagemDaApi).sort((a, b) => a.sequencia - b.sequencia);
@@ -121,6 +146,14 @@ export async function retomarTarefaGrupo(tarefaId: string): Promise<TarefaGrupoA
   return (await api.post<Dados[]>(`/v1/tarefas-canal/${tarefaId}/retomar`)).map(tarefaDaApi);
 }
 
+export async function reatribuirTarefaGrupo(tarefaId: string, novoDono: string): Promise<TarefaGrupoApi[]> {
+  return [tarefaDaApi(await api.post<Dados>(`/v1/tarefas-canal/${tarefaId}/reatribuir`, { novo_dono: novoDono }))];
+}
+
+export async function cancelarTarefaGrupo(tarefaId: string): Promise<TarefaGrupoApi[]> {
+  return (await api.post<Dados[]>(`/v1/tarefas-canal/${tarefaId}/cancelar`)).map(tarefaDaApi);
+}
+
 export async function pararBotNoGrupo(grupoId: string, botId: string): Promise<TarefaGrupoApi[]> {
   return (await api.post<Dados[]>(`${RAIZ}/${grupoId}/membros/${botId}/parar`)).map(tarefaDaApi);
 }
@@ -134,7 +167,7 @@ export function pedidoDaApi(d: Dados): PedidoAtencao {
   return {
     id: texto(d.id), tipo, titulo: texto(d.titulo), resumo: texto(d.resumo) || texto(d.pergunta),
     // `acao` é o id técnico da ferramenta (ex.: propor_instrucoes): o resumo já diz o que é.
-    detalhes: null, botId: textoOuNulo(d.agente_id), grupoId: textoOuNulo(d.grupo_id),
+    detalhes: null, botId: textoOuNulo(d.agente_id), grupoId: textoOuNulo(d.grupo_id), acao: textoOuNulo(d.acao),
     opcoes: lista(d.opcoes).map(item => {
       const opcao = item as Dados;
       return { rotulo: texto(opcao.rotulo), valor: texto(opcao.valor), tom: opcao.valor === 'negar' ? 'perigo' as const : 'principal' as const };
@@ -157,7 +190,8 @@ export function propostaDaApi(d: Dados): PropostaGrupo {
 
 export function resolverPedidoAtencao(pedido: PedidoAtencao, acao: string, resposta?: string): Promise<void> {
   if (pedido.tipo === 'pergunta') return api.post<void>(`/v1/perguntas/${pedido.id}/responder`, { valor: resposta ?? acao });
-  return api.post<void>(`/v1/aprovacoes/${pedido.id}/decidir`, { decisao: acao === 'enviar' || acao === 'aprovar' ? 'permitir' : 'negar' });
+  const decisao = acao === 'sempre_permitir' ? 'sempre_permitir' : acao === 'enviar' || acao === 'aprovar' ? 'permitir' : 'negar';
+  return api.post<void>(`/v1/aprovacoes/${pedido.id}/decidir`, { decisao });
 }
 
 export async function aceitarPropostaGrupo(id: string): Promise<GrupoApi> {

@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { listarBots, obterSora, type AgenteBotSaida } from '../api/bots';
+import type { Movimento } from '../types';
 
 export type EstadoBot = 'livre' | 'trabalhando' | 'precisa_de_voce';
 
@@ -8,6 +9,8 @@ export interface BotResumo {
   nome: string;
   cor: string;
   funcao: string;
+  /** Movimento do orb do bot (escolha que já existe; só é repassada ao SoraOrb). */
+  movimento?: Movimento;
   estado: EstadoBot;
   ferramentas: string[];
 }
@@ -31,6 +34,7 @@ function resumoDoBot(agente: AgenteBotSaida): BotResumo {
     nome: agente.nome,
     cor: agente.cor,
     funcao: agente.funcao,
+    movimento: agente.movimento,
     estado: estadoDoBot(agente),
     ferramentas: agente.ferramentas,
   };

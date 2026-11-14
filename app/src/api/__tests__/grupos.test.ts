@@ -29,7 +29,7 @@ describe('adaptador da API de grupos', () => {
 
   it('lê tarefas do grupo e o retorno do Parar', async () => {
     post.mockResolvedValueOnce([{ canal_id: 'g1', tarefa_id: 't1', dono_id: 'b1', status: 'parada', revisao: 3, acoes: ['retomar'] }]);
-    await expect(pararBotNoGrupo('g1', 'b1')).resolves.toEqual([{ id: 't1', grupoId: 'g1', donoId: 'b1', status: 'parada', revisao: 3 }]);
+    await expect(pararBotNoGrupo('g1', 'b1')).resolves.toEqual([{ id: 't1', grupoId: 'g1', donoId: 'b1', status: 'parada', revisao: 3, paiId: null, motivo: null, acoes: ['retomar'] }]);
     expect(post).toHaveBeenCalledWith('/v1/grupos/g1/membros/b1/parar');
   });
 
