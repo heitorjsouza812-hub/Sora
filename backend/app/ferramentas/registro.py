@@ -75,6 +75,12 @@ from app.computador.ferramentas import registrar as _registrar_farol  # noqa: E4
 _registrar_farol(ESQUEMAS, MODULO_DA_FERRAMENTA)
 
 
+# Ponte (etapa 6): ficha de clientes e conhecimento da empresa, só leitura.
+from app.canais_empresa.registro import registrar as _registrar_ponte  # noqa: E402
+
+_registrar_ponte(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
+
 def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     """Fases 2 e 3, adaptadas do Rakazo (``docs/referencias/rakazo.md``).
 

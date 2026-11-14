@@ -66,7 +66,14 @@ async def decidir_aprovacao(
     aprovacao.status = StatusAprovacao.NEGADA if negada else StatusAprovacao.PERMITIDA
     aprovacao.decidida_em = agora
     ferramenta = aprovacao.acao.get("ferramenta") if isinstance(aprovacao.acao, dict) else None
-    if dados.decisao == DecisaoAprovacao.SEMPRE_PERMITIR and isinstance(ferramenta, str):
+    sugestao_de_melhoria = (
+        isinstance(aprovacao.acao, dict) and aprovacao.acao.get("tipo") == "sugestao_melhoria"
+    )
+    if (
+        dados.decisao == DecisaoAprovacao.SEMPRE_PERMITIR
+        and isinstance(ferramenta, str)
+        and not sugestao_de_melhoria  # sugestão de melhoria nunca vira permissão permanente
+    ):
         condicao = aprovacao.acao.get("condicao")
         sessao.add(
             RegraPermissao(
@@ -95,6 +102,14 @@ async def decidir_aprovacao(
                 status.HTTP_409_CONFLICT,
                 "O perfil desta aprovação não está mais disponível.",
             ) from erro
+    if sugestao_de_melhoria:
+        # Ponte: Aplicar muda o bot, Descartar não; tudo na mesma transação do cartão.
+        from app.canais_empresa.sugestoes import ErroSugestao, resolver_pela_aprovacao
+
+        try:
+            await resolver_pela_aprovacao(sessao, usuario_id, aprovacao, aplicar=not negada)
+        except ErroSugestao as erro:
+            raise HTTPException(erro.status, erro.mensagem) from erro
     conversa_id = None
     if aprovacao.etapa_id is not None:
         conversa_id = await sessao.scalar(

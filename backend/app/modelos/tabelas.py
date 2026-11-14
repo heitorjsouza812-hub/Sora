@@ -788,3 +788,7 @@ class RotinaExecucao(Base):
     mensagem_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("mensagens.id", ondelete="SET NULL")
     )
+
+
+# Canais da empresa (Ponte, migração 0012): só registra as tabelas no mesmo metadata.
+from app.canais_empresa import tabelas as _tabelas_canais_empresa  # noqa: E402, F401

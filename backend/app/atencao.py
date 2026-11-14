@@ -119,9 +119,14 @@ def _texto_acao(aprovacao: Aprovacao, nome: str = "O bot") -> tuple[str, str, st
     )
     tipo = "rascunho_envio" if envio else "aprovacao"
     ferramenta = str(acao.get("ferramenta") or "ação externa")
+    if acao.get("tipo") == "sugestao_melhoria":
+        return "aprovacao", "Sugestão de melhoria", str(acao.get("resumo") or "Melhorar um bot.")
     if acao.get("tipo") == "aprovar_dominio":
         titulo = "Revisar acesso a domínio"
         resumo = f"Permitir acesso a {acao.get('dominio', 'um novo domínio')}?"
+    elif acao.get("tipo") in {"pc_programa", "pc_retomar"}:  # Vela-3 (C3): texto já pronto
+        titulo = str(acao.get("titulo") or "Usar o seu computador")[:120]
+        resumo = str(acao.get("resumo") or f"{nome} quer usar o seu computador.")[:400]
     elif tipo == "rascunho_envio":
         titulo = "Revisar envio"
         resumo = str(acao.get("resumo") or _resumo_envio(acao))
@@ -160,8 +165,16 @@ async def listar_atencao(sessao: AsyncSession, usuario_id: UUID) -> list[PedidoA
     )
     for aprovacao in aprovacoes:
         tipo, titulo, resumo = _texto_acao(aprovacao, nomes.get(aprovacao.agente_id, "O bot"))
+        sugestao = (
+            isinstance(aprovacao.acao, dict) and aprovacao.acao.get("tipo") == "sugestao_melhoria"
+        )
         opcoes = (
             [
+                OpcaoAtencao(rotulo="Aplicar", valor="permitir"),
+                OpcaoAtencao(rotulo="Descartar", valor="negar"),
+            ]
+            if sugestao
+            else [
                 OpcaoAtencao(rotulo="Enviar", valor="permitir"),
                 OpcaoAtencao(rotulo="Descartar", valor="negar"),
             ]

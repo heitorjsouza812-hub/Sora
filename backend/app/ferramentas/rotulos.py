@@ -56,6 +56,8 @@ NOME_EXIBIDO: dict[str, str] = {
     "canal_transferir": "Canal",
     "canal_resultado": "Canal",
     "computador_observar": "Computador",
+    "consultar_cliente": "Ficha do cliente",
+    "consultar_conhecimento": "Conhecimento da empresa",
     "computador_agir": "Computador",
     "computador_arquivos": "Computador",
     "computador_escrever_arquivo": "Computador",
@@ -122,6 +124,10 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "executar_comando": lambda a: f"Rodando: {_detalhe(a.get('comando'))}",
     # computador virtual do bot (docs/computador-por-bot.md); o texto digitado nunca aparece
     "computador_observar": lambda _: "Olhando a tela do computador",
+    "consultar_cliente": lambda _: "Consultando a ficha do cliente",
+    "consultar_conhecimento": lambda a: (
+        f"Consultando o conhecimento: {str(a.get('consulta', ''))[:60]}"
+    ),
     "computador_agir": lambda _: "Usando o computador",
     "computador_arquivos": lambda a: (
         f"Lendo no computador: {_detalhe(a.get('caminho'))}"

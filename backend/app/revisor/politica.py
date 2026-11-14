@@ -97,6 +97,9 @@ LIVRES: frozenset[str] = frozenset(
         "computador_escrever_arquivo",
         "computador_entregar_arquivo",  # só leva o que é do bot para a conversa do próprio dono
         "computador_desligar",
+        # canais da empresa (Ponte): só leitura, e só para bots autorizados
+        "consultar_cliente",
+        "consultar_conhecimento",
     }
 )
 
@@ -145,6 +148,8 @@ SEGURAS_SEM_SUPERVISAO: frozenset[str] = frozenset(
         "gerar_grafico",
         "conectores_buscar_ferramentas",
         "conectores_carregar_ferramenta",
+        "consultar_cliente",
+        "consultar_conhecimento",
     }
 )
 """O que uma rotina agendada pode usar quando ninguém está olhando. O resto pausa."""

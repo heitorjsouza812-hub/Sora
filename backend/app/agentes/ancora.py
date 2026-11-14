@@ -37,6 +37,8 @@ _CONVERSA = (
     "apagar_habilidade",
     "propor_instrucoes",
     "enviar_para_agente",
+    "consultar_cliente",
+    "consultar_conhecimento",
 )
 
 # Conjunto enxuto: cada esquema vai em toda chamada, e planos gratuitos limitam os tokens por
@@ -110,6 +112,14 @@ async def blocos_do_turno(contexto: ContextoAgente) -> str:
         bloco_habilidades = instrucao_de_habilidades([(h.nome, h.descricao) for h in habilidades])
         if bloco_habilidades:
             partes.append(bloco_habilidades)
+        try:
+            from app.canais_empresa.ferramentas import bloco_de_conhecimento
+
+            bloco_empresa = await bloco_de_conhecimento(sessao, contexto)
+        except Exception:  # o conhecimento da empresa nunca derruba o turno
+            bloco_empresa = ""
+        if bloco_empresa:
+            partes.append(bloco_empresa)
         colegas = (
             await sessao.execute(
                 select(Agente.id, Agente.nome, Agente.funcao).where(

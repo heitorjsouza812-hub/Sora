@@ -12,6 +12,7 @@ from app.api import (
     busca,
     cadeias,
     canais,
+    canais_empresa,
     computador,
     conectores,
     conta,
@@ -52,6 +53,8 @@ for roteador in (
     preferencias.roteador,
     uso.roteador,
     canais.roteador,
+    canais_empresa.roteador,  # Ponte: Slack e WhatsApp Business só de leitura
+    canais_empresa.roteador_webhooks,
     navegador.roteador_agente,
     navegador.roteador,  # perfis do navegador (Leme): antes da equipe
     navegador_ao_vivo.roteador,  # Farol-2 (item 18): quadros, captura e pedidos do usuário

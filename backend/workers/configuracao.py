@@ -29,6 +29,13 @@ from workers.cadeia import (
     planejar_cadeia,
     verificar_cadeia,
 )
+from workers.canais_empresa import (
+    analisar_aprendizado_empresa,
+    analisar_aprendizado_periodico,
+    apagar_mensagens_vencidas,
+    processar_canais_empresa,
+    processar_pendentes_canais_empresa,
+)
 from workers.canal import responder_canal
 from workers.computador import desligar_computador, desligar_computadores_ociosos
 from workers.conversa import responder_direto, retomar_conversa
@@ -104,11 +111,16 @@ class WorkerSettings:
         executar_tarefa_canal,
         retomar_tarefa_canal,
         desligar_computador,
+        processar_canais_empresa,
+        analisar_aprendizado_empresa,
     ]
     cron_jobs: ClassVar[list[Any]] = [
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),
         cron(disparar_rotinas, second={0, 10, 20, 30, 40, 50}, run_at_startup=True),
         cron(desligar_computadores_ociosos, second={5}, run_at_startup=False),
+        cron(processar_pendentes_canais_empresa, minute=set(range(0, 60, 5)), second={20}),
+        cron(apagar_mensagens_vencidas, minute={17}, second={0}),
+        cron(analisar_aprendizado_periodico, minute={42}, second={0}),
     ]
     on_startup = ao_iniciar
     on_shutdown = ao_desligar
