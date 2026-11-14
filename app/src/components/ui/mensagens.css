@@ -50,3 +50,11 @@
 .msg-imagem-ampliada::backdrop { background:rgba(0,0,0,.8); }
 .msg-imagem-ampliada img { display:block; max-width:85vw; max-height:80vh; object-fit:contain; }
 
+.conversa-voz { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-2); color: var(--text); font-size: var(--fs-13); }
+.conversa-voz button { min-height: 36px; padding: 0 var(--sp-4); background: var(--surface-3); color: inherit; border: 1px solid var(--white-a12); border-radius: 999px; cursor: pointer; font: inherit; }
+.conversa-voz button:disabled { opacity: .5; cursor: not-allowed; }
+.conversa-voz [role="alert"] { color: var(--text-2); }
+@media (pointer: coarse) { .conversa-voz button { min-height: 44px; } }
+/* no celular a pílula "Trabalho · Recursos" flutua acima do campo; a linha da voz a empurra para cima */
+@media (max-width: 767px) { .agent-workspace .work-pill { bottom: 146px; } }
+

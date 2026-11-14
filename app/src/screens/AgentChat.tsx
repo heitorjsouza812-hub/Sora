@@ -1,3 +1,4 @@
+import { ConversaVoz } from '../components/ui/ConversaVoz';
 import { mensagemDeErro } from '../api/cliente';
 import { toast } from '../components/base';
 // Chat de um agente (de uma equipe ou avulso): o trabalho dele ao vivo + conversa direta.
@@ -188,6 +189,7 @@ export default function AgentChat() {
           {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
           </div>
           <div className="chat-composer">
+            <ConversaVoz key={a.id} agenteId={a.id} cor={a.cor} movimento={a.tipoMovimento} />
             <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'} voz
               onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => enviarParaAgente(a.id, t, undefined, true, enviados)); seguirFim(); }}
               gerando={gerando} onParar={() => { void pararConversa(a.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
