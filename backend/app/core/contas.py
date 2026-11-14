@@ -5,6 +5,7 @@ banco para poderem ser testadas sem PostgreSQL.
 """
 
 import asyncio
+import json
 import shutil
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -56,7 +57,7 @@ from app.modelos.tabelas import (
 CABECALHO_CLIENTE = "X-Sora-Cliente"
 CLIENTE_WEB = "web"
 CLIENTE_DESKTOP = "desktop"
-JANELA_TOLERANCIA_RENOVACAO = timedelta(seconds=15)
+JANELA_TOLERANCIA_RENOVACAO = timedelta(seconds=30)
 """Tempo para recuperar uma resposta de renovação perdida sem tratar o token como roubado."""
 
 # Login: só **falhas** contam (API-04). O limite curto é por e-mail + IP, então quem não está no
@@ -137,25 +138,19 @@ def cliente_da_requisicao(cabecalho: str | None) -> str:
 def classificar_token(
     sessao: Sessao | None, token_hash: str, agora: datetime
 ) -> Literal["valido", "tolerado", "reutilizado", "invalido"]:
-    """Decide o que fazer com um token de renovação apresentado.
-
-    `tolerado`: é o token anterior e a última rotação ocorreu dentro da janela curta que cobre
-    uma resposta perdida. `reutilizado`: é o token anterior fora da janela — sinal de roubo.
-
-    Não é necessária uma coluna de rotação: quando há ``anterior_hash``, a última rotação é
-    ``expira_em - RENOVACAO_VALIDADE``, pois toda rotação redefine a validade a partir de agora.
-    """
+    """Tolera apenas o anterior dentro da janela fixa da rotação original."""
     if sessao is None or sessao.encerrada_em is not None or sessao.expira_em <= agora:
         return "invalido"
     if sessao.token_hash == token_hash:
         return "valido"
     if sessao.anterior_hash == token_hash:
-        girada_em = sessao.expira_em - seguranca.RENOVACAO_VALIDADE
-        desde_rotacao = agora - girada_em
+        if sessao.anterior_rotacionado_em is None:
+            return "reutilizado"
+        desde_rotacao = agora - sessao.anterior_rotacionado_em
         if timedelta(0) <= desde_rotacao <= JANELA_TOLERANCIA_RENOVACAO:
             return "tolerado"
         return "reutilizado"
-    return "invalido"
+    return "reutilizado" if token_hash in (sessao.historico_hashes or []) else "invalido"
 
 
 async def _limitar(redis: Redis, chave: str, limite: tuple[int, int]) -> None:
@@ -265,7 +260,9 @@ async def entrar(
 def consulta_sessao_do_token(token_hash: str, *, travar: bool = False) -> Select[tuple[Sessao]]:
     """``select`` da sessão pelo token atual ou anterior; ``travar`` = ``FOR UPDATE``."""
     consulta = select(Sessao).where(
-        (Sessao.token_hash == token_hash) | (Sessao.anterior_hash == token_hash)
+        (Sessao.token_hash == token_hash)
+        | (Sessao.anterior_hash == token_hash)
+        | Sessao.historico_hashes.contains([token_hash])
     )
     return consulta.with_for_update() if travar else consulta
 
@@ -277,15 +274,10 @@ async def _sessao_do_token(
 
 
 async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, str]:
-    """Troca o token de renovação por um novo. Devolve (novo token, acesso, cliente da sessão).
+    """Rotaciona uma vez e recupera o mesmo par por 30 s, sob FOR UPDATE.
 
-    O token anterior reapresentado até 15 segundos após a rotação cobre uma resposta perdida:
-    a mesma linha é girada novamente. Depois da janela, o reuso encerra a sessão inteira.
-
-    A linha fica travada (``FOR UPDATE``) até o fim da transação. Duas renovações simultâneas
-    com o mesmo token continuam sendo serializadas: ambas podem receber um par, mas a segunda
-    gira a única sessão novamente. Ao final, só o token da última resposta é o atual e o da
-    outra é o anterior temporariamente tolerado; nenhuma segunda sessão é criada.
+    A janela não se estende nas recuperações. Hashes de gerações antigas permitem
+    revogar a família mesmo quando o token já não é o imediatamente anterior.
     """
     if not token:
         raise ErroCredenciais("Sessão expirada. Entre de novo.")
@@ -298,12 +290,31 @@ async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, st
         await sessao.commit()  # o encerramento precisa sobreviver ao erro que sai daqui
     if veredito not in ("valido", "tolerado") or existente is None:
         raise ErroCredenciais("Sessão expirada. Entre de novo.")
+    if veredito == "tolerado":
+        if existente.par_atual_cifrado is None:
+            raise ErroCredenciais("Sessão expirada. Entre de novo.")
+        par = json.loads(
+            seguranca.decifrar_segredo(
+                existente.par_atual_cifrado,
+                usuario_id=existente.usuario_id,
+                provedor=f"sessao:{existente.id}",
+            )
+        )
+        return par[0], par[1], existente.cliente
     novo, novo_hash = seguranca.gerar_token_renovacao()
+    existente.historico_hashes = [*(existente.historico_hashes or []), existente.token_hash]
+    existente.anterior_rotacionado_em = agora
     existente.anterior_hash = existente.token_hash
     existente.token_hash = novo_hash
     existente.expira_em = agora + seguranca.RENOVACAO_VALIDADE
     await sessao.flush()
     acesso = seguranca.criar_token_acesso({"sub": str(existente.usuario_id)})
+    existente.par_atual_cifrado = seguranca.cifrar_segredo(
+        json.dumps([novo, acesso]),
+        usuario_id=existente.usuario_id,
+        provedor=f"sessao:{existente.id}",
+    )
+    await sessao.flush()
     return novo, acesso, existente.cliente
 
 

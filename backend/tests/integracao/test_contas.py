@@ -143,16 +143,17 @@ async def test_renovacao_tolera_resposta_perdida_e_reuso_tardio_encerra(
     recuperada = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
     assert recuperada.status_code == 200
     t3 = recuperada.json()["token_renovacao"]
-    assert t3 and t3 not in (t1, t2)
+    assert t3 == t2
+    assert recuperada.json() == r2.json()
 
     # Simula a última rotação fora da tolerância sem esperar 15 segundos no teste.
     async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
         sessao = await s.scalar(select(Sessao).where(Sessao.token_hash == seguranca.hash_token(t3)))
         assert sessao is not None
-        sessao.expira_em -= contas.JANELA_TOLERANCIA_RENOVACAO + timedelta(seconds=1)
+        sessao.anterior_rotacionado_em -= contas.JANELA_TOLERANCIA_RENOVACAO + timedelta(seconds=1)
         await s.commit()
 
-    reuso = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t2})
+    reuso = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
     assert reuso.status_code == 401
     # A sessão inteira caiu e continua encerrada: nem o token atual funciona mais.
     depois = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t3})
@@ -162,7 +163,7 @@ async def test_renovacao_tolera_resposta_perdida_e_reuso_tardio_encerra(
     assert encerradas is not None
 
 
-async def test_duas_renovacoes_concorrentes_usam_uma_unica_sessao(
+async def test_tres_renovacoes_concorrentes_usam_uma_unica_sessao(
     cliente: AsyncClient,
 ) -> None:
     await _cadastrar(cliente)
@@ -176,21 +177,20 @@ async def test_duas_renovacoes_concorrentes_usam_uma_unica_sessao(
     respostas = await asyncio.gather(
         cliente.post("/v1/auth/renovar", json={"token_renovacao": inicial}),
         cliente.post("/v1/auth/renovar", json={"token_renovacao": inicial}),
+        cliente.post("/v1/auth/renovar", json={"token_renovacao": inicial}),
     )
 
-    assert [resposta.status_code for resposta in respostas] == [200, 200]
+    assert [resposta.status_code for resposta in respostas] == [200, 200, 200]
     devolvidos = {resposta.json()["token_renovacao"] for resposta in respostas}
     assert None not in devolvidos
-    assert len(devolvidos) == 2
+    assert len(devolvidos) == 1
     async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
         sessoes = list((await s.scalars(select(Sessao))).all())
-    # O FOR UPDATE serializa as chamadas: a segunda gira a mesma linha. Um token devolvido fica
-    # atual e o outro fica como anterior por até 15 s; não nascem duas sessões independentes.
     assert len(sessoes) == 1
     assert sessoes[0].encerrada_em is None
-    assert {sessoes[0].token_hash, sessoes[0].anterior_hash} == {
-        seguranca.hash_token(token) for token in devolvidos
-    }
+    assert sessoes[0].token_hash == seguranca.hash_token(next(iter(devolvidos)))
+    assert sessoes[0].anterior_hash == seguranca.hash_token(inicial)
+    assert len({r.json()["token_acesso"] for r in respostas}) == 1
 
 
 async def test_sair_encerra_a_sessao(cliente: AsyncClient) -> None:
@@ -235,3 +235,23 @@ async def test_apagar_conta_confirma_senha_e_remove_tudo(cliente: AsyncClient) -
         assert await s.scalar(select(Usuario.id)) is None
         assert await s.scalar(select(Agente.id)) is None
         assert await s.scalar(select(Sessao.id)) is None
+
+
+async def test_token_duas_geracoes_atras_revoga_familia(cliente: AsyncClient) -> None:
+    await _cadastrar(cliente)
+    login = await cliente.post(
+        "/v1/auth/entrar",
+        json={"email": "ana@exemplo.com", "senha": SENHA},
+        headers={"X-Sora-Cliente": "desktop"},
+    )
+    t0 = login.json()["token_renovacao"]
+    r1 = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t0})
+    t1 = r1.json()["token_renovacao"]
+    r2 = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
+    assert r2.status_code == 200
+    assert (await cliente.post("/v1/auth/renovar", json={"token_renovacao": t0})).status_code == 401
+    assert (
+        await cliente.post(
+            "/v1/auth/renovar", json={"token_renovacao": r2.json()["token_renovacao"]}
+        )
+    ).status_code == 401

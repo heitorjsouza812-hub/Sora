@@ -421,10 +421,14 @@ class Sessao(Base):
     usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
     __table_args__ = (
         Index("ix_sessoes_anterior_hash", "anterior_hash"),
+        Index("ix_sessoes_historico_hashes", "historico_hashes", postgresql_using="gin"),
         Index("ix_sessoes_usuario_id", "usuario_id"),
     )
     token_hash: Mapped[str] = mapped_column(Text, unique=True)
     anterior_hash: Mapped[str | None] = mapped_column(Text)
+    anterior_rotacionado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    par_atual_cifrado: Mapped[bytes | None] = mapped_column(LargeBinary)
+    historico_hashes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     cliente: Mapped[str] = mapped_column(Text, default="web", server_default="web")
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     encerrada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
