@@ -11,8 +11,10 @@ coordenação é a cadeia do orquestrador.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
@@ -22,6 +24,8 @@ if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
     from app.llm.troca import EventoTroca
+
+registro = logging.getLogger(__name__)
 
 PapelAgente = Literal[
     "sora", "pesquisador", "redator", "designer", "verificador", "individual", "canal"
@@ -166,6 +170,42 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     return f"{prompt}\n\n{instrucoes}"
 
 
+PRAZO_CHECAGEM_IMAGEM_S = 3.0
+
+
+async def _com_ferramenta_de_imagem(contexto: ContextoAgente) -> ContextoAgente:
+    """Dá ``gerar_imagem`` à Sora, aos bots e ao bot de grupo quando o usuário conectou um modelo
+    com a capacidade ``imagem``. A imagem sai como anexo da próxima mensagem (``saidas_do_turno``).
+    Sem modelo de imagem a ferramenta nem aparece, então o bot não promete o que não faz."""
+    from app.llm.falso import modelo_falso_ativo
+
+    if (
+        contexto.papel not in {"sora", "individual", "canal"}
+        or contexto.sem_supervisao
+        or "gerar_imagem" in contexto.ferramentas_extras
+        or "gerar_imagem" in nomes_das_ferramentas(contexto)
+        or modelo_falso_ativo()
+    ):
+        return contexto
+
+    async def _tem() -> bool:
+        from app.core.banco import fabrica_sessoes
+        from app.seletor.repositorio import contexto_do_usuario
+        from app.seletor.seletor import tem_modelo_de_imagem
+
+        async with fabrica_sessoes()() as sessao:
+            return tem_modelo_de_imagem(await contexto_do_usuario(sessao, contexto.usuario_id))
+
+    try:
+        tem = await asyncio.wait_for(_tem(), PRAZO_CHECAGEM_IMAGEM_S)
+    except Exception:
+        registro.warning("não consegui conferir o modelo de imagem do usuário", exc_info=True)
+        return contexto
+    if not tem:
+        return contexto
+    return replace(contexto, ferramentas_extras=[*contexto.ferramentas_extras, "gerar_imagem"])
+
+
 async def _prompt_do_turno(contexto: ContextoAgente) -> str:
     """Prompt do papel + instruções próprias, memórias, pendências, habilidades e colegas."""
     from app.agentes.ancora import blocos_do_turno
@@ -186,6 +226,8 @@ async def montar_agente(
         raise ValueError("A lista de modelos do seletor está vazia.")
 
     from langchain.agents import create_agent
+
+    contexto = await _com_ferramenta_de_imagem(contexto)
 
     from app.agentes.middleware import montar_middleware
     from app.ferramentas.base import ContextoFerramenta

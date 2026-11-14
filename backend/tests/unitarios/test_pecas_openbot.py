@@ -888,7 +888,7 @@ async def test_rotina_ignora_perfil_logado_e_abre_particao_efemera_sem_cookies()
 
 def test_eventos_novos_nao_mexem_no_contrato_congelado() -> None:
     assert not TIPOS_EVENTOS_EQUIPE & TIPOS_EVENTOS_ESTADO
-    assert len(TIPOS_EVENTOS_EQUIPE) == 12
+    assert len(TIPOS_EVENTOS_EQUIPE) == 13
     assert acoes_da_tarefa("rodando") == ["parar"]
     assert acoes_da_tarefa("parada") == ["retomar", "reatribuir", "cancelar"]
     assert acoes_da_tarefa("concluida") == []

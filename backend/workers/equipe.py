@@ -274,9 +274,27 @@ async def _turno_real(
 ) -> Mudancas:
     from app.agentes import ContextoAgente, montar_e_rodar_agente
     from app.agentes.checkpointer import thread_da_tarefa_canal
+    from app.agentes.visao import preparar_entrada
+    from app.modelos.tabelas import MensagemCanalTabela
 
     async with ctx["sessoes"]() as sessao:
-        modelos = await modelos_do_papel(sessao, canal.usuario_id, "individual", dificuldade=2)
+        # Imagens e arquivos do pedido (e dos acréscimos) chegam ao bot; sem visão, ele é avisado.
+        pedidos = await sessao.scalars(
+            select(MensagemCanalTabela.anexos).where(
+                MensagemCanalTabela.canal_id == canal.id,
+                MensagemCanalTabela.id.in_([tarefa.pedido_id, *tarefa.seguimentos]),
+            )
+        )
+        anexos_do_pedido = list(dict.fromkeys(a for lista in pedidos for a in lista))
+        entrada_usuario, modelos = await preparar_entrada(
+            sessao,
+            canal.usuario_id,
+            pacote,
+            anexos_do_pedido,
+            "individual",
+            dificuldade=2,
+            usuario_avisado=False,
+        )
         extras = ferramentas_no_grupo(await sessao.get(Agente, tarefa.dono_id))
     thread = thread or thread_da_tarefa_canal(tarefa.id, tarefa.turno_seq)
     contexto = ContextoAgente(
@@ -296,7 +314,7 @@ async def _turno_real(
             contexto=contexto,
             modelos=modelos,
             checkpointer=ctx["checkpointer"],
-            entrada={"messages": [HumanMessage(pacote)]},
+            entrada={"messages": [HumanMessage(entrada_usuario.conteudo)]},
         )
     else:
         resultado = await montar_e_rodar_agente(

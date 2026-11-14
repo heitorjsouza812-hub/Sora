@@ -20,6 +20,7 @@ from app.modelos.esquemas import AgenteSaida
 from app.rascunhos_bot import RascunhoBotSaida, RotinaRascunhoBot
 
 RETENCAO_EQUIPE_SEGUNDOS = 24 * 60 * 60
+MAX_TEXTO_MEMORIA_EVENTO = 160
 
 
 class ContextoAtualizado(EventoBase):
@@ -152,6 +153,18 @@ class ReacaoEvento(EventoBase):
     ligada: bool
 
 
+class MemoriaCriadaEvento(EventoBase):
+    """O bot guardou algo na memória: o app mostra "Guardei isto" com Desfazer
+    (``DELETE /v1/memorias/{memoria_id}``)."""
+
+    evento: ClassVar[Literal["memoria.criada"]] = "memoria.criada"
+    memoria_id: UUID
+    agente_id: UUID | None = None
+    conversa_id: UUID | None = None
+    texto: str = Field(max_length=MAX_TEXTO_MEMORIA_EVENTO)
+    """Começo do que foi guardado (a memória inteira vem de ``GET /v1/memorias``)."""
+
+
 class AbaNavegadorEvento(EventoBase):
     evento: ClassVar[Literal["navegador.aba"]] = "navegador.aba"
     aba_id: UUID
@@ -176,6 +189,7 @@ EventoEquipe = (
     | GrupoPropostoEvento
     | GrupoPropostaResolvida
     | ReacaoEvento
+    | MemoriaCriadaEvento
     | AbaNavegadorEvento
 )
 

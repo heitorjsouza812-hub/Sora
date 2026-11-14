@@ -120,8 +120,11 @@ async def _um_status(sessao: AsyncSession, rotina: Rotina) -> str | None:
 
 
 @roteador.get("")
-async def listar_rotinas(usuario_id: UsuarioId, sessao: Sessao) -> list[RotinaSaida]:
-    rotinas = await servico.listar(sessao, usuario_id)
+async def listar_rotinas(
+    usuario_id: UsuarioId, sessao: Sessao, agente_id: UUID | None = None
+) -> list[RotinaSaida]:
+    """Rotinas do usuário; com ``agente_id`` (o painel do bot), só as desse bot."""
+    rotinas = await servico.listar(sessao, usuario_id, agente_id)
     estados = await _ultimos_status(sessao, [r.id for r in rotinas])
     return [_saida(r, estados.get(r.id)) for r in rotinas]
 

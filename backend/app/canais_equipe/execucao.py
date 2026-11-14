@@ -124,7 +124,13 @@ async def canal_transferir(args: CanalTransferir, contexto: ContextoFerramenta) 
 
 
 async def canal_resultado(args: CanalResultado, contexto: ContextoFerramenta) -> str:
+    from app.ferramentas.saidas_do_turno import recolher
+
     _, tarefa_id, revisao = _ids(contexto)
+    # Imagens e arquivos que o bot produziu no turno chegam com o resultado (item 10, etapa 6).
+    args = args.model_copy(
+        update={"anexos": recolher(contexto.usuario_id, contexto.agente_id, args.anexos or [])}
+    )
     async with fabrica_sessoes()() as sessao:
         if args.anexos:
             from sqlalchemy import select

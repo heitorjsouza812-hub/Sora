@@ -88,6 +88,12 @@ class ArmazemMemorias(Protocol):
 
     async def listar(self, usuario_id: UUID, agente_id: UUID | None) -> list[RegistroMemoria]: ...
 
+    async def obter(self, usuario_id: UUID, memoria_id: UUID) -> RegistroMemoria | None: ...
+
+    async def atualizar(
+        self, usuario_id: UUID, memoria_id: UUID, conteudo: str, vetor: list[float] | None = None
+    ) -> RegistroMemoria | None: ...
+
 
 def validar_conteudo(conteudo: str) -> str:
     """Normaliza espaços e recusa o que parece senha, chave ou token."""
@@ -152,6 +158,22 @@ class ArmazemMemoriasEmMemoria:
         return sorted(
             self._visiveis(usuario_id, agente_id), key=lambda r: r.criada_em, reverse=True
         )
+
+    async def obter(self, usuario_id: UUID, memoria_id: UUID) -> RegistroMemoria | None:
+        registro = self.registros.get(memoria_id)
+        if registro is None or registro.usuario_id != usuario_id or registro.apagada_em:
+            return None
+        return registro
+
+    async def atualizar(
+        self, usuario_id: UUID, memoria_id: UUID, conteudo: str, vetor: list[float] | None = None
+    ) -> RegistroMemoria | None:
+        registro = await self.obter(usuario_id, memoria_id)
+        if registro is None:
+            return None
+        registro.conteudo = conteudo
+        registro.origem, registro.travada = "explicita", True
+        return registro
 
 
 class ArmazemMemoriasSQL:
@@ -269,6 +291,50 @@ class ArmazemMemoriasSQL:
         )
         return [self._para_registro(linha) for linha in linhas]
 
+    async def obter(self, usuario_id: UUID, memoria_id: UUID) -> RegistroMemoria | None:
+        from sqlalchemy import select
+
+        from app.modelos.tabelas import Memoria
+
+        linha = await self.sessao.scalar(
+            select(Memoria).where(
+                Memoria.id == memoria_id,
+                Memoria.usuario_id == usuario_id,
+                Memoria.apagada_em.is_(None),
+            )
+        )
+        return None if linha is None else self._para_registro(linha)
+
+    async def atualizar(
+        self, usuario_id: UUID, memoria_id: UUID, conteudo: str, vetor: list[float] | None = None
+    ) -> RegistroMemoria | None:
+        """Troca o texto de uma memória do dono. Texto escrito pelo usuário vira explícito e
+        travado; o embedding antigo não vale mais (``vetor`` novo, ou nenhum)."""
+        from sqlalchemy import update
+
+        from app.modelos.enumeracoes import OrigemMemoria
+        from app.modelos.tabelas import Memoria
+
+        resultado = await self.sessao.execute(
+            update(Memoria)
+            .where(
+                Memoria.id == memoria_id,
+                Memoria.usuario_id == usuario_id,
+                Memoria.apagada_em.is_(None),
+            )
+            .values(
+                conteudo=conteudo,
+                origem=OrigemMemoria.EXPLICITA,
+                travada=True,
+                embedding=_vetor_texto(vetor) if vetor else None,
+                atualizada_em=datetime.now(UTC),
+            )
+            .returning(Memoria)
+            .execution_options(synchronize_session="fetch")
+        )
+        linha = resultado.scalar_one_or_none()
+        return None if linha is None else self._para_registro(linha)
+
 
 def _escapar_like(texto: str) -> str:
     return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -327,6 +393,24 @@ class ServicoMemoria:
 
     async def esquecer(self, usuario_id: UUID, memoria_id: UUID) -> bool:
         return await self.armazem.apagar(usuario_id, memoria_id)
+
+    async def editar(
+        self, usuario_id: UUID, memoria_id: UUID, conteudo: str
+    ) -> RegistroMemoria | None:
+        """Corrige o texto de uma memória do usuário. ``None`` se ela não existir (ou for de outro
+        usuário); ``ErroFerramenta`` se o texto não valer ou repetir outra memória do escopo."""
+        texto = validar_conteudo(conteudo)
+        atual = await self.armazem.obter(usuario_id, memoria_id)
+        if atual is None:
+            return None
+        for outra in await self.armazem.listar(usuario_id, atual.agente_id):
+            if (
+                outra.id != memoria_id
+                and outra.agente_id == atual.agente_id
+                and normalizar(outra.conteudo) == normalizar(texto)
+            ):
+                raise ErroFerramenta("Já existe uma memória com esse texto.")
+        return await self.armazem.atualizar(usuario_id, memoria_id, texto, await self._vetor(texto))
 
     @staticmethod
     def contexto(registros: Sequence[RegistroMemoria]) -> str:

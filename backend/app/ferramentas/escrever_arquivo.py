@@ -24,6 +24,7 @@ from app.ferramentas.arquivos import (
 )
 from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
 from app.ferramentas.infra import abrir_sessao, raiz_dos_arquivos
+from app.ferramentas.saidas_do_turno import registrar
 from app.modelos.tabelas import Anexo
 
 MAX_CONTEUDO = 1_000_000
@@ -77,4 +78,8 @@ async def escrever_arquivo(args: EscreverArquivo, contexto: ContextoFerramenta) 
         sessao.add(anexo)
         await sessao.flush()
         anexo_id = anexo.id
-    return f"Arquivo {args.nome} salvo. anexo_id: {anexo_id}"
+    registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
+    return (
+        f"Arquivo {args.nome} salvo. anexo_id: {anexo_id}. "
+        "Ele vai junto com a sua próxima mensagem ao usuário."
+    )
