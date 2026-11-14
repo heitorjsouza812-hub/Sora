@@ -6,6 +6,7 @@ import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
 import { pedirApagar, pedirRenomear } from '../components/gestao';
 import { MenuAgente } from '../components/builder';
+import { deixarPedidoInicial } from '../components/inicio';
 import { estadoAgente, todosAgentes, useAgora, useProjetos } from '../state/projetos';
 import '../components/projetos/projetos.css';
 
@@ -20,8 +21,9 @@ export default function Agentes() {
   const criar = (tamanho: 'P' | 'M') => (
     <Button asChild variante="primario" tamanho={tamanho} iconeEsquerda={<Mais />}><Link to="/">Criar com a Sora</Link></Button>
   );
+  const primeiroBot = () => { deixarPedidoInicial('Quero um bot que '); navigate('/'); };
   return (
-    <AppShell titulo="Bots" acoes={criar('P')}>
+    <AppShell titulo="Bots" acoes={ags.length ? criar('P') : <span />}>
       <main className="gallery-screen">
         <header className="gallery-head">
           <div><h1>Seus bots</h1><p>Bots persistentes criados em conversa com a {e.sora.nome}.</p></div>
@@ -31,13 +33,12 @@ export default function Agentes() {
             <SoraOrb size={110} color={e.sora.cor} state="idle" decorative />
             <h3>Nenhum bot ainda</h3>
             <p>Converse com a {e.sora.nome}. Ela prepara um rascunho para você ajustar antes de criar.</p>
-            <div className="pj-vazio__acao">{criar('M')}</div>
+            <div className="pj-vazio__acao"><Button variante="primario" tamanho="M" iconeEsquerda={<Mais />} onClick={primeiroBot}>Criar meu primeiro bot</Button></div>
           </div>
         )}
         <div className="gallery-grid">
           {ags.map(a => {
             const st = estadoAgente(e, a.id, agora);
-            const projeto = a.projetoId ? e.projetos.find(p => p.id === a.projetoId) : undefined;
             return (
               <article key={a.id} className="gallery-card agent-card card" style={{ '--agent': a.cor } as CSSProperties}>
                 <MenuAgente agenteId={a.id} nome={a.nome} className="gallery-menu" semEditar itens={[
@@ -52,7 +53,6 @@ export default function Agentes() {
                 </Link>
                 <strong>{a.nome}</strong>
                 <small>{a.funcao}</small>
-                <span className="gallery-tag">{projeto ? projeto.titulo : 'Avulso'}</span>
                 <span className={`gallery-status status-${st.status}`}>{st.rotulo || 'Disponível'}</span>
                 <div className="gallery-actions">
                   <Button asChild tamanho="P"><Link to={`/bots/${a.id}`}>Conversar</Link></Button>

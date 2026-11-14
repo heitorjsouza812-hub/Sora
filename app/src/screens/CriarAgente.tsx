@@ -33,7 +33,7 @@ function EditorBot({ inicial }: { inicial: RascunhoConstrutor }) {
       <section className="bld-editor" hidden={aba === 'previa'}><div className="bld-tabs"><strong>Configurar bot</strong></div><div className="bld-editor-body"><AgentConfigForm rascunho={rascunho} onChange={alterar} onExcluir={() => setConfirmar(true)} /></div></section>
       <div className="bld-preview-wrap" hidden={aba !== 'previa' && typeof window !== 'undefined' && window.innerWidth < 768}><AgentPreview agente={rascunho} /></div>
     </div>
-    <Modal open={confirmar} onClose={() => setConfirmar(false)} title={`Excluir ${rascunho.nome}?`} description="Esta ação não pode ser desfeita." size="sm" footer={<div className="bld-modal-actions"><button type="button" onClick={() => setConfirmar(false)}>Cancelar</button><button type="button" className="is-danger" onClick={excluir}>Excluir agente</button></div>}><p className="bld-modal-copy">O agente, seu histórico de conversa e suas associações serão removidos.</p></Modal>
+    <Modal open={confirmar} onClose={() => setConfirmar(false)} title={`Excluir ${rascunho.nome}?`} description="Esta ação não pode ser desfeita." size="sm" footer={<div className="bld-modal-actions"><button type="button" onClick={() => setConfirmar(false)}>Cancelar</button><button type="button" className="is-danger" onClick={excluir}>Excluir bot</button></div>}><p className="bld-modal-copy">O bot, seu histórico de conversa e suas associações serão removidos.</p></Modal>
   </main>;
 }
 

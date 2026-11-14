@@ -1,0 +1,4 @@
+.inicio-sora { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; max-width: 720px; margin: 0 auto; }
+.inicio-sugestoes { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.inicio-sugestoes button { padding: 8px 14px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 999px; background: transparent; color: #B4BBC9; font: inherit; font-size: 13px; cursor: pointer; }
+.inicio-sugestoes button:hover, .inicio-sugestoes button:focus-visible { color: #F2F5FB; border-color: rgba(255,255,255,.28); background: rgba(255,255,255,.04); }

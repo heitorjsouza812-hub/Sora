@@ -32,7 +32,7 @@ export function Onboarding() {
     <main className="sessao-tela onboarding">
       <SoraOrb size={120} state="idle" seed={0} title="Sora" />
       <h1>{primeiroNome ? `${primeiroNome}, conecte sua primeira API` : 'Conecte sua primeira API'}</h1>
-      <p className="sessao-sub">A Sora e os agentes usam os modelos de IA da sua conta. A chave fica guardada com criptografia no servidor da Sora, nunca no navegador.</p>
+      <p className="sessao-sub">A Sora e os bots usam os modelos de IA da sua conta. A chave fica guardada com criptografia no servidor da Sora, nunca no navegador.</p>
       <section className="onboarding-lista" aria-label="Provedores de IA">
         {provedores.map((p, i) => <ProviderCard key={p.id} provedor={p} inicialmenteAberto={i === 0} onConectado={() => { void recarregarSessao(); }} />)}
       </section>

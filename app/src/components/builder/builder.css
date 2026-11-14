@@ -54,3 +54,17 @@
 .bot-draft-sections details > label, .bot-draft-grid { margin: 0 var(--sp-4) var(--sp-4); }.bot-draft-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--sp-3); }.bot-draft-sections label { display: grid; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-12); }.bot-draft-sections input,.bot-draft-sections textarea { width:100%; padding: var(--sp-3); color:var(--text-1); background:var(--surface-2); border:1px solid var(--white-a10); border-radius:var(--r-10); box-sizing:border-box; font:inherit; }.bot-draft-sections textarea { resize:vertical; }.bot-draft-color input { width: 44px; min-height: 42px; padding: 4px; }
 .bot-draft-card > footer { display:flex; justify-content:flex-end; gap:var(--sp-2); margin-top:var(--sp-4); }.bot-draft-card > footer button { min-height:40px; padding:0 var(--sp-4); border-radius:var(--r-pill); }.bot-draft-error { color:var(--danger)!important; }.bot-draft-card.is-resolved { display:flex; justify-content:space-between; gap:var(--sp-3); margin-left:45px; padding:var(--sp-4); }.bot-draft-card.is-resolved span { color:var(--text-2); }
 @media(max-width:767px){.bot-draft-card{margin-left:0;padding:var(--sp-4)}.bot-draft-grid{grid-template-columns:1fr}.bot-draft-card.is-resolved{margin-left:0}}
+/* Rascunho de bot: cores, movimento, ferramentas e rotina sem termo técnico */
+.bot-draft-wide { grid-column: 1 / -1; }
+.bot-draft-label { display: block; margin-bottom: var(--sp-2); color: var(--text-2); font-size: var(--fs-12); }
+.bot-draft-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.bot-draft-swatches button { width: 28px; height: 28px; padding: 0; background: var(--choice); border: 2px solid var(--surface-3); border-radius: 50%; box-shadow: 0 0 0 1px var(--white-a15); cursor: pointer; }
+.bot-draft-swatches button.is-on { box-shadow: 0 0 0 2px var(--text-1); }
+.bot-draft-chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.bot-draft-chips button { padding: var(--sp-2) var(--sp-3); color: var(--text-2); background: var(--surface-2); border: 1px solid var(--white-a10); border-radius: var(--r-pill); font: inherit; font-size: var(--fs-12); cursor: pointer; }
+.bot-draft-chips button.is-on { color: var(--text-1); border-color: color-mix(in srgb, var(--agent), transparent 35%); background: color-mix(in srgb, var(--agent), transparent 86%); }
+.bot-draft-tools { margin: 0 var(--sp-4) var(--sp-4); }
+.bot-draft-rotina { grid-template-columns: 1fr 1fr 1fr; }
+.bot-draft-sections select { width: 100%; padding: var(--sp-3); color: var(--text-1); background: var(--surface-2); border: 1px solid var(--white-a10); border-radius: var(--r-10); box-sizing: border-box; font: inherit; }
+.bot-draft-sections input[type="time"] { color-scheme: dark; }
+@media (max-width: 560px) { .bot-draft-grid, .bot-draft-rotina { grid-template-columns: 1fr; } }

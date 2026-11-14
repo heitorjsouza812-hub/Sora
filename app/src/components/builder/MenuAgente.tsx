@@ -16,6 +16,6 @@ export interface MenuAgenteProps {
 }
 
 export function MenuAgente({ agenteId, nome, itens = [], className = '', semEditar = false }: MenuAgenteProps) {
-  const editar: ItemMenu[] = semEditar ? [] : [{ rotulo: agenteId === 'sora' ? 'Personalizar' : 'Editar agente', onClick: () => abrirEditorAgente(agenteId) }];
+  const editar: ItemMenu[] = semEditar ? [] : [{ rotulo: agenteId === 'sora' ? 'Personalizar' : 'Editar bot', onClick: () => abrirEditorAgente(agenteId) }];
   return <MenuItemAcoes alvo={{ tipo: 'agente', id: agenteId }} nome={nome} itens={[...editar, ...itens]} renomear={false} apagar={false} className={className} />;
 }

@@ -4,7 +4,7 @@ import { agentesDoProjeto, estadoAgente, estadoProjeto, pendenciasDa, projetoAti
 /** Estado da Sora (orb + rótulo + pulso) a partir do projeto ativo. */
 export function statusDaSora(e: EstadoProjetos, agora: number): { orb: OrbState; rotulo: string; pulso: number; fase: string | null } {
   const p = projetoAtivo(e);
-  if (!p) return { orb: 'idle', rotulo: 'Agente principal', pulso: 0, fase: null };
+  if (!p) return { orb: 'idle', rotulo: 'Sora', pulso: 0, fase: null };
   const ep = estadoProjeto(e, p, agora);
   const n = agentesDoProjeto(e, p, agora).length;
   if (pendenciasDa(e, p.id).length) return { orb: 'listening', rotulo: 'Aguardando você', pulso: ep.pulso, fase: ep.fase };

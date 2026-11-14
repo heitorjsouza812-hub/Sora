@@ -22,9 +22,9 @@ export function ModelDefaults({ estado }: { estado: EstadoModelos }) {
     catch (erro) { setRetorno(mensagemDeErro(erro)); }
   };
   return <section className="cfg-defaults">
-    <div><span className="cfg-eyebrow">Modelo padrão</span><h2>Quem pensa por padrão</h2><p>Cada agente ainda pode usar um modelo próprio.</p></div>
+    <div><span className="cfg-eyebrow">Modelo padrão</span><h2>Quem pensa por padrão</h2><p>Cada bot ainda pode usar um modelo próprio.</p></div>
     <label><span>Sora</span><select value={encode(estado.padraoSora)} onChange={e => definirPadraoSora(decode(e.target.value))}><option value="">Escolher automaticamente</option>{opcoes.map(x => <option key={`s-${encode(x.escolha)}`} value={encode(x.escolha)}>{x.label}</option>)}</select></label>
-    <label><span>Novos agentes</span><select value={encode(estado.padraoNovosAgentes)} onChange={e => definirPadraoNovosAgentes(decode(e.target.value))}><option value="">Escolher automaticamente</option>{opcoes.map(x => <option key={`a-${encode(x.escolha)}`} value={encode(x.escolha)}>{x.label}</option>)}</select></label>
+    <label><span>Novos bots</span><select value={encode(estado.padraoNovosAgentes)} onChange={e => definirPadraoNovosAgentes(decode(e.target.value))}><option value="">Escolher automaticamente</option>{opcoes.map(x => <option key={`a-${encode(x.escolha)}`} value={encode(x.escolha)}>{x.label}</option>)}</select></label>
     <label><span>Priorizar</span><select value={estado.prioridade} onChange={e => void mudarPrioridade(e.target.value as PrioridadeModelo)}><option value="custo">Menor custo</option><option value="velocidade">Mais velocidade</option><option value="qualidade">Mais qualidade</option></select></label>
     {!opcoes.length && <small>Conecte e ative pelo menos um modelo para definir os padrões.</small>}
     {retorno && <small role="status">{retorno}</small>}
