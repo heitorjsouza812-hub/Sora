@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { mensagemDeErro } from '../api/cliente';
 import { renomearGrupo } from '../api/grupos';
@@ -8,6 +8,7 @@ import { SoraOrb } from '../components/mascot';
 import { ZonaSoltar } from '../components/anexos';
 import { IrParaFim } from '../components/ui/IrParaFim';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
+import { useIrParaMensagem } from '../components/ui/useIrParaMensagem';
 import { CompositorGrupo } from '../components/grupos/CompositorGrupo';
 import { EditarBotsDoGrupo, MenuDoGrupo } from '../components/grupos/GerirGrupo';
 import { MembrosGrupo } from '../components/grupos/MembrosGrupo';
@@ -16,7 +17,7 @@ import { NovoGrupo } from '../components/grupos/NovoGrupo';
 import { TarefasGrupo } from '../components/grupos/TarefasGrupo';
 import { CartaoPrecisaDeVoce } from '../components/pendencias/CartaoPrecisaDeVoce';
 import { carregarBots, useBots } from '../state/bots';
-import { carregarGrupos, carregarMensagensDoGrupo, carregarTarefasDoGrupo, grupoPrecisaDeBots, receberGrupo, useGrupos } from '../state/grupos';
+import { carregarGrupos, carregarMensagensDoGrupo, carregarTarefasDoGrupo, grupoPrecisaDeBots, lerGrupos, receberGrupo, useGrupos } from '../state/grupos';
 import { carregarPrecisaDeVoce, usePrecisaDeVoce } from '../state/atencao';
 import '../components/grupos/grupos.css';
 
@@ -35,8 +36,16 @@ function DetalheGrupo({ grupoId }: { grupoId: string }) {
   const [erro, setErro] = useState('');
   const ultima = mensagens.at(-1);
   const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(mensagens.map(item => item.id), `${ultima?.id ?? ''}:${ultima?.texto.length ?? 0}`);
+  const [prontoEm, setProntoEm] = useState<string | null>(null);
+  // Grupo carrega de 100 em 100 para a frente; a busca da paleta pode apontar para uma mensagem mais adiante.
+  const carregarMais = useCallback(async () => {
+    const antes = lerGrupos().mensagens[grupoId]?.length ?? 0;
+    await carregarMensagensDoGrupo(grupoId);
+    return (lerGrupos().mensagens[grupoId]?.length ?? 0) > antes;
+  }, [grupoId]);
+  useIrParaMensagem(prontoEm === grupoId, carregarMais);
   useEffect(() => {
-    void carregarMensagensDoGrupo(grupoId).catch(falha => setErro(mensagemDeErro(falha)));
+    void carregarMensagensDoGrupo(grupoId).then(() => setProntoEm(grupoId)).catch(falha => { setProntoEm(grupoId); setErro(mensagemDeErro(falha)); });
     void carregarTarefasDoGrupo(grupoId).catch(() => undefined);
   }, [grupoId]);
   if (!grupo) return <div className="grp-vazio"><p>{estado.carregado ? 'Este grupo não foi encontrado.' : 'Carregando o grupo…'}</p>{estado.carregado && <Button tamanho="M" variante="secundario" onClick={() => navigate('/grupos')}>Voltar aos grupos</Button>}</div>;

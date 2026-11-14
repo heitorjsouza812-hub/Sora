@@ -94,7 +94,7 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
 
   if (usuario) {
     return (
-      <div className={`chat-msg is-user ${abertas ? 'is-acoes-abertas' : ''}`} {...toqueLongo}>
+      <div id={`msg-${m.id}`} data-msg-id={m.id} className={`chat-msg is-user ${abertas ? 'is-acoes-abertas' : ''}`} {...toqueLongo}>
         {editando ? (
           <form className="msg-edit" onSubmit={ev => { ev.preventDefault(); if (rascunho.trim() || m.anexos?.length) { void executar(() => editarPergunta(m.id, rascunho)); } }}>
             <label className="sr-only" htmlFor={`edit-${m.id}`}>Editar pergunta</label>
@@ -116,7 +116,7 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
   }
 
   return (
-    <div className={`chat-msg is-assistant ${abertas ? 'is-acoes-abertas' : ''}`} style={cor ? { '--agent': cor } as CSSProperties : undefined} {...toqueLongo}>
+    <div id={`msg-${m.id}`} data-msg-id={m.id} className={`chat-msg is-assistant ${abertas ? 'is-acoes-abertas' : ''}`} style={cor ? { '--agent': cor } as CSSProperties : undefined} {...toqueLongo}>
       <div className="assistant-row">
         {avatar}
         <div className="msg-corpo">

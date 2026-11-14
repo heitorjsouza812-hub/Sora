@@ -32,8 +32,9 @@ import { HistoricoConversa } from '../components/ui/HistoricoConversa';
 import { TelaCarregando } from '../components/sessao';
 import { MensagemChat } from '../components/ui/MensagemChat';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
+import { useIrParaMensagemDaConversa } from '../components/ui/useIrParaMensagem';
 import { usePrecisaDeVoce } from '../state/atencao';
-import { PainelMemoria } from '../components/memoria';
+import { AvisosMemoria, PainelMemoria } from '../components/memoria';
 import { PainelRotinas } from '../components/rotinas/PainelRotinas';
 import {
   anexarEnvio, enviarParaAgente, pendenciasDa, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararConversa, passosDoAgente, textoVisivel, useAgora, useProjetos,
@@ -165,6 +166,7 @@ export default function AgentChat() {
   const assinatura = a ? mensagensDa(e, a.id, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0;
   const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
 
+  useIrParaMensagemDaConversa(a?.conversaId);
   if (e.carregando) return <TelaCarregando />;
   if (id === 'sora') return <Navigate to="/" replace />;
   if (!a || !st) return <Navigate to="/" replace />;
@@ -189,6 +191,7 @@ export default function AgentChat() {
           {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
           </div>
           <div className="chat-composer">
+            <AvisosMemoria agenteId={a.id} />
             <ConversaVoz key={a.id} agenteId={a.id} cor={a.cor} movimento={a.tipoMovimento} />
             <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'} voz
               onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => enviarParaAgente(a.id, t, undefined, true, enviados)); seguirFim(); }}

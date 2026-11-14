@@ -37,10 +37,10 @@ export function MensagemGrupo({ mensagem, todas, soraId, onResponder }: { mensag
   const anterior = mensagem.respondeA ? todas.find(item => item.id === mensagem.respondeA) : null;
   const doUsuario = mensagem.autor === 'usuario';
   // Atividade (repasse, "Você parou a tarefa") é uma linha de registro, não uma fala.
-  if (mensagem.tipo === 'repasse') return <li className="grp-msg grp-atividade" data-autor={mensagem.autor} data-tipo="repasse" data-chave={mensagem.id}>
+  if (mensagem.tipo === 'repasse') return <li id={`msg-${mensagem.id}`} data-msg-id={mensagem.id} className="grp-msg grp-atividade" data-autor={mensagem.autor} data-tipo="repasse" data-chave={mensagem.id}>
     {(autor.bot || autor.ehSora) && <OrbDoAutor cor={autor.cor} movimento={autor.bot?.movimento} tamanho={20} semente={mensagem.sequencia} />}<span>{mensagem.texto}</span>
   </li>;
-  return <li className="grp-msg" data-autor={autor.ehSora ? 'sora' : mensagem.autor} data-tipo={mensagem.tipo} data-chave={mensagem.id}>
+  return <li id={`msg-${mensagem.id}`} data-msg-id={mensagem.id} className="grp-msg" data-autor={autor.ehSora ? 'sora' : mensagem.autor} data-tipo={mensagem.tipo} data-chave={mensagem.id}>
     {!doUsuario && <header>
       {(autor.bot || autor.ehSora) && <OrbDoAutor cor={autor.cor} movimento={autor.bot?.movimento} semente={mensagem.sequencia} />}
       <b style={{ color: autor.cor }}>{autor.nome}</b>{mensagem.tipo === 'resultado' && <span>entregou</span>}

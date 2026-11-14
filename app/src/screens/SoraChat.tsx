@@ -11,6 +11,7 @@ import { MessageComposer } from '../components/ui/MessageComposer';
 import { HistoricoConversa } from '../components/ui/HistoricoConversa';
 import { IrParaFim } from '../components/ui/IrParaFim';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
+import { useIrParaMensagemDaConversa } from '../components/ui/useIrParaMensagem';
 import { MensagemChat } from '../components/ui/MensagemChat';
 import { ZonaSoltar } from '../components/anexos';
 import { usePrecisaDeVoce } from '../state/atencao';
@@ -50,6 +51,7 @@ export default function SoraChat() {
   const assinatura = mensagens.map(mensagem => `${mensagem.id}:${textoVisivel(mensagem, agora).texto.length}`).join('|');
   const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(mensagens.map(m => m.id), assinatura + ':' + cartoes.rascunhos.length + ':' + cartoes.propostas.length + ':' + pedidosDaSora.length);
 
+  useIrParaMensagemDaConversa(projeto?.id);
   const gerando = !!projeto && gerandoNa(estado, projeto.id, agora);
   const pensando = !!projeto?.mensagensPendentes && !gerando;
 
