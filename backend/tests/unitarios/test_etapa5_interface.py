@@ -306,3 +306,25 @@ def test_modelo_falso_sora_propoe_grupo_e_bot_pergunta() -> None:
     assert pergunta.tool_calls[0]["name"] == "perguntar"
     aprovacao = _gatilho_pendente("agente_individual", [HumanMessage("Mude [aprovacao]")])
     assert aprovacao.tool_calls[0]["name"] == "propor_instrucoes"
+
+
+@pytest.mark.parametrize(
+    ("pedido", "esperado"),
+    [
+        ("  Primeiro nome  \nOutra linha", "Primeiro nome"),
+        ("", "Novo grupo"),
+        ("x" * 90, "x" * 60),
+        ("a" * 30 + " " + "b" * 35, "a" * 30),
+        ("a" * 60, "a" * 60),
+    ],
+)
+def test_nome_do_pedido(pedido: str, esperado: str) -> None:
+    from app.api.grupos import nome_do_pedido
+
+    assert nome_do_pedido(pedido) == esperado
+
+
+def test_rota_de_aprovar_versao_nao_e_registrada() -> None:
+    from app.main import criar_aplicacao
+
+    assert "/v1/conversas/{conversa_id}/aprovar" not in criar_aplicacao().openapi()["paths"]

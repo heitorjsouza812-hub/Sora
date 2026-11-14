@@ -17,6 +17,11 @@ def upgrade() -> None:
         "sessoes",
         sa.Column("historico_hashes", postgresql.JSONB(), nullable=False, server_default="[]"),
     )
+    # Preserva o anterior das sessões existentes antes da primeira rotação nova.
+    op.execute(
+        "UPDATE sessoes SET historico_hashes = jsonb_build_array(anterior_hash) "
+        "WHERE anterior_hash IS NOT NULL"
+    )
     op.create_index(
         "ix_sessoes_historico_hashes", "sessoes", ["historico_hashes"], postgresql_using="gin"
     )

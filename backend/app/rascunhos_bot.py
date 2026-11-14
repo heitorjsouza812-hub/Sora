@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agentes.aparencia import escolher_cor, escolher_nome
 from app.ferramentas.permissoes import FERRAMENTAS_POR_PAPEL
-from app.modelos.tabelas import Agente, RascunhoBot
+from app.modelos.tabelas import Agente, RascunhoBot, Usuario
 
 
 class RotinaRascunhoBot(BaseModel):
@@ -63,11 +63,23 @@ async def dados_sugeridos(
             select(Agente).where(Agente.usuario_id == usuario_id, Agente.apagado_em.is_(None))
         )
     )
+    pendentes = list(
+        await sessao.scalars(
+            select(RascunhoBot).where(
+                RascunhoBot.usuario_id == usuario_id, RascunhoBot.status == "rascunho"
+            )
+        )
+    )
+    nomes = {agente.nome for agente in agentes} | {r.dados["nome"] for r in pendentes}
+    cores = [agente.cor for agente in agentes] + [r.dados["cor"] for r in pendentes]
+    sugerido = (nome or "").strip()
+    if not sugerido or sugerido.casefold() in {n.casefold() for n in nomes}:
+        sugerido = escolher_nome(nomes)
     primeira = descricao.strip().splitlines()[0].strip().split(". ")[0].rstrip(".")
     return {
-        "nome": (nome or escolher_nome({agente.nome for agente in agentes})).strip(),
+        "nome": sugerido,
         "funcao": (funcao or primeira[:80] or "Assistente especializado").strip(),
-        "cor": escolher_cor([agente.cor for agente in agentes]),
+        "cor": escolher_cor(cores),
         "instrucoes": descricao.strip(),
         "ferramentas": list(FERRAMENTAS_POR_PAPEL["individual"]),
         "rotina": None,
@@ -83,6 +95,7 @@ async def criar_rascunho(
     nome: str | None = None,
     funcao: str | None = None,
 ) -> RascunhoBot:
+    await sessao.scalar(select(Usuario.id).where(Usuario.id == usuario_id).with_for_update())
     rascunho = RascunhoBot(
         usuario_id=usuario_id,
         conversa_id=conversa_id,

@@ -741,3 +741,97 @@ async def test_apagar_conversa_ou_bot_fecha_os_pedidos_pendentes(mundo: Mundo) -
         apagou_bot = await cliente.delete(f"/v1/agentes/{bot['id']}", headers=auth)
         assert apagou_bot.status_code == 204, apagou_bot.text
         assert (await cliente.get("/v1/atencao", headers=auth)).json() == []
+
+
+async def test_regressoes_propostas_rascunhos_e_grupo_incompleto(mundo: Mundo) -> None:  # noqa: F811
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, f"ancora2-{uuid4()}@exemplo.com")
+        pedido = (
+            "Quero lançar uma linha de produtos de verão, com campanha, textos e calendário\n"
+            "Segunda linha"
+        )
+        resposta = await cliente.post("/v1/grupos/propostas", headers=auth, json={"pedido": pedido})
+        assert resposta.status_code == 201, resposta.text
+        proposta = resposta.json()
+        assert 1 <= len(proposta["nome"]) <= 60
+        assert pedido.startswith(proposta["nome"])
+        for nome in ("   ", "x" * 61, ""):
+            invalida = await cliente.patch(
+                f"/v1/grupos/propostas/{proposta['id']}", headers=auth, json={"nome": nome}
+            )
+            assert invalida.status_code == 422
+            assert invalida.json()["detail"] == "O nome do grupo precisa ter de 1 a 60 caracteres."
+        soltos = []
+        for _ in range(2):
+            r = await cliente.post(
+                "/v1/bots/rascunhos", headers=auth, json={"descricao": "Pesquisar fontes"}
+            )
+            assert r.status_code == 201, r.text
+            soltos.append(r.json())
+        todos = proposta["bots_novos"] + soltos
+        assert len({r["nome"] for r in todos}) == 4
+        assert len({r["cor"] for r in todos}) == 4
+        # A ferramenta da Sora também pode repetir o nome sugerido pelo modelo.
+        from app.rascunhos_bot import criar_rascunho
+
+        async with mundo.fabrica() as sessao:
+            dono = await sessao.scalar(
+                select(RascunhoBot.usuario_id).where(RascunhoBot.id == UUID(soltos[0]["id"]))
+            )
+            primeiro = await criar_rascunho(sessao, dono, descricao="Pesquisa", nome="Lume")
+            segundo = await criar_rascunho(sessao, dono, descricao="Pesquisa", nome="Lume")
+            assert primeiro.dados["nome"] != segundo.dados["nome"]
+            assert primeiro.dados["cor"] != segundo.dados["cor"]
+            await sessao.commit()
+        removido = proposta["bots_novos"][1]["id"]
+        ajuste = await cliente.patch(
+            f"/v1/grupos/propostas/{proposta['id']}",
+            headers=auth,
+            json={"bots_novos": [{"id": proposta["bots_novos"][0]["id"]}, {"id": soltos[0]["id"]}]},
+        )
+        assert ajuste.status_code == 200, ajuste.text
+        pendentes = (await cliente.get("/v1/bots/rascunhos", headers=auth)).json()
+        assert removido not in {r["id"] for r in pendentes}
+        assert (
+            await cliente.post(f"/v1/bots/rascunhos/{removido}/confirmar", headers=auth, json={})
+        ).status_code == 409
+        aceita = await cliente.post(f"/v1/grupos/propostas/{proposta['id']}/aceitar", headers=auth)
+        assert aceita.status_code == 201, aceita.text
+        grupo = aceita.json()
+        assert grupo["precisa_de_bots"] is False
+        bots = [b for b in grupo["membros"] if b != grupo["lider_id"]]
+        for membros in ([], bots[:1], [str(uuid4()) for _ in range(6)]):
+            for metodo, rota in (
+                (cliente.post, "/v1/grupos"),
+                (cliente.patch, f"/v1/grupos/{grupo['id']}"),
+            ):
+                invalida = await metodo(
+                    rota, headers=auth, json={"nome": "Inválido", "membros": membros}
+                )
+                assert invalida.status_code == 422
+                assert invalida.json()["detail"] == "Escolha de 2 a 5 bots."
+        assert (await cliente.delete(f"/v1/agentes/{bots[0]}", headers=auth)).status_code == 204
+        grupos = (await cliente.get("/v1/grupos", headers=auth)).json()
+        assert grupos[0]["id"] == grupo["id"]
+        assert grupos[0]["precisa_de_bots"] is True
+        rota = f"/v1/canais-equipe/{grupo['id']}/mensagens"
+        bloqueada = await cliente.post(rota, headers=auth, json={"texto": "Continue"})
+        assert bloqueada.status_code == 409, bloqueada.text
+        assert (
+            bloqueada.json()["detail"]
+            == "Este grupo precisa de pelo menos 2 bots. Adicione bots para continuar."
+        )
+        novo = await cliente.post(
+            f"/v1/bots/rascunhos/{soltos[1]['id']}/confirmar", headers=auth, json={}
+        )
+        assert novo.status_code == 201, novo.text
+        recuperado = await cliente.patch(
+            f"/v1/grupos/{grupo['id']}",
+            headers=auth,
+            json={"membros": [bots[1], novo.json()["id"]]},
+        )
+        assert recuperado.status_code == 200, recuperado.text
+        assert recuperado.json()["precisa_de_bots"] is False
+        assert (
+            await cliente.post(rota, headers=auth, json={"texto": "Continue"})
+        ).status_code == 202

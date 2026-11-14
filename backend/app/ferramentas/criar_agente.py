@@ -43,7 +43,6 @@ async def _agendar_expiracao(aprovacao_id, expira_em) -> None:
 
 
 async def criar_agente(args: CriarAgente, contexto: ContextoFerramenta) -> str:
-    texto = f"Preparei o rascunho de {args.nome.strip()}. Confira antes de criar o bot."
     async with fabrica_sessoes()() as sessao:
         rascunho = await criar_rascunho(
             sessao,
@@ -53,6 +52,8 @@ async def criar_agente(args: CriarAgente, contexto: ContextoFerramenta) -> str:
             nome=args.nome,
             funcao=args.papel,
         )
+        nome = rascunho.dados["nome"]
+        texto = f"Preparei o rascunho de {nome}. Confira antes de criar o bot."
         mensagem = Mensagem(
             conversa_id=contexto.conversa_id,
             autor=AutorMensagem.SORA,
@@ -80,4 +81,4 @@ async def criar_agente(args: CriarAgente, contexto: ContextoFerramenta) -> str:
     await publicar_evento_equipe(
         redis_dos_eventos(), BotRascunhoEvento.de(saida), contexto.usuario_id
     )
-    return f"Rascunho de {args.nome.strip()} preparado; aguarde a confirmação do usuário."
+    return f"Rascunho de {nome} preparado; aguarde a confirmação do usuário."

@@ -11,7 +11,6 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agentes.aparencia import escolher_cor, escolher_nome
 from app.api.agentes import _saida as _saida_agente
 from app.api.agentes import _sora_persistente
 from app.api.bots import _aplicar_ajustes, _materializar_rascunho
@@ -58,14 +57,14 @@ MAX_BOTS = 5
 
 class GrupoCriacao(BaseModel):
     nome: str = Field(min_length=1, max_length=MAX_NOME_CANAL)
-    membros: list[UUID] = Field(min_length=MIN_BOTS, max_length=MAX_BOTS)
+    membros: list[UUID]
     proposito: str = Field(default="", max_length=MAX_PROPOSITO)
     instrucoes: str = Field(default="", max_length=MAX_INSTRUCOES)
 
 
 class GrupoAtualizacao(BaseModel):
     nome: str | None = Field(default=None, min_length=1, max_length=MAX_NOME_CANAL)
-    membros: list[UUID] | None = Field(default=None, min_length=MIN_BOTS, max_length=MAX_BOTS)
+    membros: list[UUID] | None = None
     proposito: str | None = Field(default=None, max_length=MAX_PROPOSITO)
     instrucoes: str | None = Field(default=None, max_length=MAX_INSTRUCOES)
 
@@ -79,6 +78,7 @@ class GrupoSaida(BaseModel):
     instrucoes: str
     arquivado: bool
     estado: EstadoInterface
+    precisa_de_bots: bool
 
 
 class PropostaGrupoCriacao(BaseModel):
@@ -86,7 +86,7 @@ class PropostaGrupoCriacao(BaseModel):
 
 
 class PropostaGrupoAtualizacao(BaseModel):
-    nome: str | None = Field(default=None, min_length=1, max_length=MAX_NOME_CANAL)
+    nome: str | None = None
     bots_reaproveitados: list[UUID] | None = Field(default=None, max_length=MAX_BOTS)
     bots_novos: list[RascunhoBotAjuste] | None = Field(default=None, max_length=MAX_BOTS)
 
@@ -105,7 +105,7 @@ async def _bots_validos(
 ) -> list[UUID]:
     membros = list(dict.fromkeys(membros))
     if not MIN_BOTS <= len(membros) <= MAX_BOTS:
-        raise HTTPException(422, f"Escolha de {MIN_BOTS} a {MAX_BOTS} bots diferentes.")
+        raise HTTPException(422, f"Escolha de {MIN_BOTS} a {MAX_BOTS} bots.")
     if sora_id in membros:
         raise HTTPException(422, "A Sora entra automaticamente como chefe do grupo.")
     encontrados = set(
@@ -136,6 +136,7 @@ def _saida(canal, estado: EstadoInterface) -> GrupoSaida:
         instrucoes=canal.instrucoes,
         arquivado=canal.arquivado,
         estado=estado,
+        precisa_de_bots=len(set(canal.membros) - {canal.lider_id}) < MIN_BOTS,
     )
 
 
@@ -249,25 +250,15 @@ async def criar_proposta(
             .limit(2)
         )
     )
-    nomes_reservados = {bot.nome for bot in bots}
-    cores_reservadas = [bot.cor for bot in bots]
     rascunhos: list[RascunhoBot] = []
     funcoes = ("Pesquisa e organização", "Produção e revisão")
     for indice in range(2 - len(bots)):
-        nome = escolher_nome(nomes_reservados)
         rascunho = await criar_rascunho(
             sessao,
             usuario_id,
             descricao=dados.pedido,
-            nome=nome,
             funcao=funcoes[len(bots) + indice],
         )
-        rascunho.dados = {
-            **rascunho.dados,
-            "cor": escolher_cor(cores_reservadas),
-        }
-        nomes_reservados.add(nome)
-        cores_reservadas.append(rascunho.dados["cor"])
         rascunhos.append(rascunho)
     proposta = PropostaGrupo(
         usuario_id=usuario_id,
@@ -296,7 +287,10 @@ async def ajustar_proposta(
     if proposta.status != "proposta":
         raise HTTPException(status.HTTP_409_CONFLICT, "Essa proposta já foi resolvida.")
     if dados.nome is not None:
-        proposta.nome = dados.nome.strip()
+        nome = dados.nome.strip()
+        if not 1 <= len(nome) <= MAX_NOME_CANAL:
+            raise HTTPException(422, "O nome do grupo precisa ter de 1 a 60 caracteres.")
+        proposta.nome = nome
     if dados.bots_reaproveitados is not None:
         ids = list(dict.fromkeys(dados.bots_reaproveitados))
         validos = set(
@@ -328,6 +322,14 @@ async def ajustar_proposta(
                 )
             _aplicar_ajustes(rascunho, ajuste)
             novos.append(saida_do_rascunho(rascunho).model_dump(mode="json"))
+        mantidos = {item["id"] for item in novos}
+        from app.rascunhos_bot import resolver
+
+        for item in proposta.bots_novos:
+            if item["id"] not in mantidos:
+                removido = await obter_rascunho_para_atualizar(sessao, usuario_id, UUID(item["id"]))
+                if removido is not None and removido.status == "rascunho":
+                    resolver(removido, "descartado")
         proposta.bots_novos = novos
     total = len(proposta.bots_reaproveitados) + len(proposta.bots_novos)
     if not MIN_BOTS <= total <= MAX_BOTS:
@@ -452,6 +454,7 @@ async def listar_grupos(
     saidas = [_saida(canal, estados[canal.id]) for canal in canais]
     for saida in saidas:
         saida.membros = [membro for membro in saida.membros if membro not in apagados]
+        saida.precisa_de_bots = len(set(saida.membros) - {saida.lider_id}) < MIN_BOTS
     return saidas
 
 
@@ -491,7 +494,9 @@ async def atualizar_grupo(
     atual = await _grupo_do_usuario(armazem, sessao, usuario_id, grupo_id)
     sora = await _sora_persistente(sessao, usuario_id)
     bots_atuais = [membro for membro in atual.membros if membro != sora.id]
-    bots = await _bots_validos(sessao, usuario_id, dados.membros or bots_atuais, sora.id)
+    bots = await _bots_validos(
+        sessao, usuario_id, dados.membros if dados.membros is not None else bots_atuais, sora.id
+    )
     try:
         await ServicoCanais(armazem).configurar(
             grupo_id,

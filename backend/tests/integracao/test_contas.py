@@ -146,7 +146,7 @@ async def test_renovacao_tolera_resposta_perdida_e_reuso_tardio_encerra(
     assert t3 == t2
     assert recuperada.json() == r2.json()
 
-    # Simula a última rotação fora da tolerância sem esperar 15 segundos no teste.
+    # Simula a última rotação fora da tolerância sem esperar a janela no teste.
     async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
         sessao = await s.scalar(select(Sessao).where(Sessao.token_hash == seguranca.hash_token(t3)))
         assert sessao is not None
