@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-export type VistaIlha = 'inicio' | 'projeto' | 'agente' | 'aprovacao';
+export type VistaIlha = 'inicio' | 'agente';
 
 export interface EstadoIlhaUi {
   aberta: boolean;

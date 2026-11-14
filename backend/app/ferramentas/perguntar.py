@@ -58,6 +58,7 @@ async def perguntar(args: Perguntar, contexto: ContextoFerramenta) -> str:
                     id=pergunta_id,
                     conversa_id=contexto.conversa_id,
                     cadeia_id=contexto.cadeia_id,
+                    grupo_id=contexto.canal_id,
                     texto=args.texto,
                     opcoes=opcoes,
                     resposta_livre=args.resposta_livre,
@@ -80,6 +81,11 @@ async def perguntar(args: Perguntar, contexto: ContextoFerramenta) -> str:
                 opcoes=[OpcaoPergunta(**o) for o in opcoes],
                 resposta_livre=args.resposta_livre,
             ),
+        )
+        from app.atencao import publicar_estado_atencao_persistido
+
+        await publicar_estado_atencao_persistido(
+            contexto.usuario_id, agente_id=contexto.agente_id, grupo_id=contexto.canal_id
         )
     resposta = interrupt({"tipo": "pergunta", "pergunta_id": str(pergunta_id)})
     return str(resposta)

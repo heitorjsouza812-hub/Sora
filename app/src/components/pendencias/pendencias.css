@@ -16,3 +16,16 @@
 @media (max-width: 767px) { .pend-acoes > * { flex: 1 1 auto; } .pend-livre { flex-direction: column; align-items: stretch; } }
 .ilha-visao > .ilha-pendencias { grid-column: 1 / -1; }
 .pend-url { word-break: break-all; font-size: 12px; }
+.pend-precisa { border-color: color-mix(in srgb, #E2ECFF 24%, transparent); }
+.pend-sinal { width: 8px; height: 8px; border-radius: 50%; background: #E2ECFF; box-shadow: 0 0 14px rgba(226, 236, 255, .7); }
+.pend-conteudo { display: grid; gap: var(--sp-2); }
+.pend-conteudo h3 { margin: 0; color: var(--text-1); font-size: var(--fs-15, 15px); }
+.pend-compacto { gap: var(--sp-2); padding: var(--sp-3); }
+.pend-compacto .pend-dano, .pend-compacto .pend-nota { display: none; }
+.pend-bots { border: 0; padding: 0; margin: 0; display: grid; gap: var(--sp-2); }
+.pend-bots legend { margin-bottom: var(--sp-2); color: var(--text-2); font-size: var(--fs-13, 13px); font-weight: 600; }
+.pend-bots label { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-12, 12px); }
+.pend-bots label > i { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+.pend-bots label > span { display: grid; gap: 2px; }
+.pend-bots small { color: var(--text-2); }
+.pend-resolvida { margin: 0; padding: var(--sp-3) var(--sp-4); color: var(--success, #7EF2C4); border: 1px solid color-mix(in srgb, #7EF2C4 25%, transparent); border-radius: var(--r-12, 12px); background: var(--surface-2); }

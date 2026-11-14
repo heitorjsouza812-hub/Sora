@@ -5,6 +5,10 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { api, ErroApi } from '../api/cliente';
 import { acompanharEventos, type EventoSse } from '../api/eventos';
 import { receberEventoEquipe } from './equipe';
+import { receberEventoGrupos } from './grupos';
+import { receberEventoBots } from './bots';
+import { receberEventoAtencao } from './atencao';
+import { receberEventoSora } from './sora';
 import { enviarAnexo } from '../api/anexos';
 import type { Anexo } from '../components/anexos';
 import type { Movimento, PassoTrabalho, Status } from '../types';
@@ -59,7 +63,7 @@ export interface RevisaoDominio { dominio: string; url: string; perfil: { tipo: 
 export type FaseProjeto = 'pensando' | 'conversa' | 'planejando' | 'coordenando' | 'pronto' | 'aprovado' | 'erro';
 
 interface ConversaApi { id: string; agente_id: string; tipo: 'chat' | 'projeto' | 'agente'; titulo: string | null; aprovada_versao: number | null; criada_em: string; atualizada_em: string }
-interface AgenteApi { id: string; tipo: 'sora' | 'individual' | 'especialista'; nome: string; funcao: string; cor: string; movimento: Movimento; status: Status | null }
+interface AgenteApi { id: string; tipo: 'sora' | 'individual' | 'especialista'; nome: string; funcao: string; cor: string; movimento: Movimento; status?: Status | null; estado?: 'livre' | 'trabalhando' | 'precisa_de_voce'; ferramentas?: string[] }
 interface MensagemApi { id: string; conversa_id: string; autor: 'usuario' | 'sora' | 'agente' | 'sistema'; agente_id?: string | null; conteudo: string; anexos: AnexoMsg[]; criada_em: string }
 interface EntregasApi { entregas: { id: string; agente_id: string | null; versao: number; tipo: EntregaGerada['tipo']; titulo: string; resumo: string; conteudo: unknown }[]; versoes: number[] }
 
@@ -85,7 +89,7 @@ export function useAgora() { const agora = useSyncExternalStore(assinarAgora, ()
 
 const verboPara = (funcao: string) => /pesquis|refer/i.test(funcao) ? 'Pesquisando' : /texto|red|copy/i.test(funcao) ? 'Escrevendo' : /design|visual|imag/i.test(funcao) ? 'Criando' : 'Trabalhando';
 function agenteDaApi(a: AgenteApi): AgenteSora {
-  return { id: a.id, projetoId: '', nome: a.nome, funcao: a.funcao, cor: a.cor, tipoMovimento: a.movimento, ferramentas: [], status: a.status ?? 'aguardando', verbo: verboPara(a.funcao), espera: 'Aguardando', instrucoes: '', avulso: a.tipo === 'individual', criadoEm: Date.now() };
+  return { id: a.id, projetoId: '', nome: a.nome, funcao: a.funcao, cor: a.cor, tipoMovimento: a.movimento, ferramentas: a.ferramentas ?? [], status: a.estado === 'trabalhando' ? 'trabalhando' : a.status ?? 'aguardando', verbo: verboPara(a.funcao), espera: a.estado === 'precisa_de_voce' ? 'Precisa de você' : 'Aguardando', instrucoes: '', avulso: a.tipo === 'individual', criadoEm: Date.now() };
 }
 function projetoDaApi(c: ConversaApi): ProjetoSora {
   const criadoEm = Date.parse(c.criada_em);
@@ -105,6 +109,10 @@ let iniciando: Promise<void> | null = null;
 
 function receber(evento: EventoSse) {
   receberEventoEquipe(evento);
+  receberEventoGrupos(evento);
+  receberEventoSora(evento);
+  receberEventoBots(evento);
+  receberEventoAtencao(evento);
   const conversaId = String(evento.dados.conversa_id ?? '');
   if (conversaId && !estado.projetos.some(p => p.id === conversaId) && !Object.values(estado.agentes).some(a => a.conversaId === conversaId)) return;
   alterar(e => aplicarEvento(e, evento));

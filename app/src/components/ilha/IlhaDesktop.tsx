@@ -4,11 +4,11 @@
 import { useEffect } from 'react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { ToastProvider } from '../base';
-import { abrirNoApp, aoAlternarIlha, informarRetanguloIlha, type Retangulo } from '../../desktop/ponte';
+import { abrirNoApp, aoAlternarIlha, aoEsconderIlha, aoMudarSessaoNoPrincipal, informarRetanguloIlha, type Retangulo } from '../../desktop/ponte';
 import { definirIlhaPrefs, lerIlhaPrefs } from './ilhaEstado';
-import { abrirIlha, alternarIlha } from './ilhaUi';
+import { abrirIlha, alternarIlha, fecharIlha } from './ilhaUi';
 import { Ilha } from './Ilha';
-import { iniciarSessao, lerSessao } from '../../state/sessao';
+import { iniciarSessao, lerSessao, useSessao } from '../../state/sessao';
 import { encerrarProjetos, iniciarProjetos } from '../../state/projetos';
 import '../ui/sora.css';
 import './ilha-desktop.css';
@@ -30,12 +30,15 @@ function Encaminhador() {
 const informar = (r: Retangulo) => { void informarRetanguloIlha(r).catch(() => {}); };
 
 export function IlhaDesktop() {
+  const sessao = useSessao();
   useEffect(() => {
     document.documentElement.classList.add('janela-ilha');
     document.title = 'Ilha da Sora';
   }, []);
 
-  // A janela nativa tem memória JS própria: renova pelo cofre e abre o SSE agregado dela.
+  // A janela nativa tem memória JS própria e NÃO vê o cofre: o token de acesso vem da janela
+  // principal (ver fazerRenovacao em api/cliente.ts e PonteNavegacao). Sem sessão lá, a ilha fica
+  // vazia (não renderiza nada) e nenhuma rota é chamada.
   useEffect(() => {
     let ativa = true;
     void iniciarSessao().then(() => {
@@ -44,16 +47,27 @@ export function IlhaDesktop() {
     return () => { ativa = false; encerrarProjetos(); };
   }, []);
 
+  // login/saída na janela principal: recomeça do zero com a sessão certa (renovações comuns do
+  // token só chegam em silêncio, sem recarregar).
+  useEffect(() => aoMudarSessaoNoPrincipal(token => {
+    const { estado } = lerSessao();
+    if ((token && estado === 'anonimo') || (!token && estado === 'logado')) window.location.reload();
+  }), []);
+
   // atalho global Ctrl+Shift+S / bandeja: liga a ilha se estiver desligada, senão abre/fecha
   useEffect(() => aoAlternarIlha(() => {
     if (!lerIlhaPrefs().visivel) { definirIlhaPrefs({ visivel: true }); abrirIlha(); }
     else alternarIlha();
   }), []);
 
+  // a janela nativa sumiu (o usuário voltou à Sora): fecha o painel para reaparecer compacta. A
+  // janela da ilha não ganha foco ao aparecer, então o "blur" sozinho não fecharia o painel.
+  useEffect(() => aoEsconderIlha(fecharIlha), []);
+
   return (
     <MemoryRouter initialEntries={[BASE]}>
       <Encaminhador />
-      <Ilha desktop onRetangulo={informar} />
+      {sessao.estado === 'logado' && <Ilha desktop onRetangulo={informar} />}
       <ToastProvider />
     </MemoryRouter>
   );

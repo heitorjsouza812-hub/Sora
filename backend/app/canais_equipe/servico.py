@@ -486,6 +486,46 @@ class ServicoCanais:
             await self._acordar_pai(tarefa, mudancas)
         return mudancas
 
+    async def pausar_para_decisao(self, tarefa_id: UUID, revisao: int) -> Mudancas:
+        """O turno parou num cartão "Precisa de você": a tarefa espera a decisão, parada."""
+        tarefa = await self._tarefa(tarefa_id)
+        mudancas = Mudancas()
+        if tarefa.revisao != revisao or tarefa.status is not StatusTarefa.RODANDO:
+            return mudancas
+        self._parar(tarefa, MotivoParada.AGUARDANDO_DECISAO)
+        await self._armazem.gravar_tarefa(tarefa)
+        mudancas.tarefas.append(tarefa)
+        canal = await self._canal(tarefa.canal_id)
+        mudancas.mensagens.append(
+            await self._atividade(
+                canal,
+                "Aguardando sua decisão para continuar.",
+                agente_id=tarefa.dono_id,
+                tarefa_id=tarefa.id,
+            )
+        )
+        return mudancas
+
+    async def retomar_decisao(self, tarefa_id: UUID, revisao: int) -> TarefaCanal | None:
+        """Volta ao turno pausado pelo cartão. ``None`` se a tarefa mudou (Parar, Retomar,
+        Cancelar, Reatribuir): aí a decisão não acorda nada."""
+        tarefa = await self._tarefa(tarefa_id)
+        if (
+            tarefa.revisao != revisao
+            or tarefa.status is not StatusTarefa.PARADA
+            or tarefa.motivo is not MotivoParada.AGUARDANDO_DECISAO
+        ):
+            return None
+        canal = await self._canal(tarefa.canal_id)
+        if canal.arquivado or tarefa.dono_id not in canal.membros:
+            return None
+        tarefa.revisao += 1
+        tarefa.motivo = None
+        tarefa.status = StatusTarefa.RODANDO
+        tarefa.atualizada_em = _agora()
+        await self._armazem.gravar_tarefa(tarefa)
+        return tarefa
+
     async def falhar(self, tarefa_id: UUID, revisao: int, erro: str) -> Mudancas:
         tarefa = await self._tarefa(tarefa_id)
         mudancas = Mudancas()
@@ -602,7 +642,13 @@ class ServicoCanais:
         return tarefa
 
     async def registrar_resultado(
-        self, tarefa_id: UUID, revisao: int, *, por_agente: UUID, texto: str
+        self,
+        tarefa_id: UUID,
+        revisao: int,
+        *,
+        por_agente: UUID,
+        texto: str,
+        anexos: Sequence[UUID] = (),
     ) -> Mudancas:
         tarefa = await self._tarefa_do_dono(tarefa_id, revisao, por_agente)
         texto = texto.strip()
@@ -629,6 +675,7 @@ class ServicoCanais:
             tipo=TipoMensagemCanal.RESULTADO,
             responde_a=tarefa.pedido_id,
             tarefa_id=tarefa.id,
+            anexos=tuple(anexos),
         )
         await self._armazem.gravar_mensagem(mensagem)
         mudancas = Mudancas(mensagens=[mensagem], tarefas=[tarefa])
@@ -707,6 +754,33 @@ class ServicoCanais:
         mudancas.mensagens.append(
             await self._atividade(canal, "Você cancelou o pedido.", tarefa_id=tarefa.raiz_id)
         )
+        return mudancas
+
+    async def remover_agente_apagado(
+        self, canal_id: UUID, usuario_id: UUID, agente_id: UUID, nome: str
+    ) -> Mudancas:
+        """O bot foi apagado: sai do canal e o trabalho dele é cancelado (ninguém mais o faria,
+        e tarefa parada de bot inexistente deixaria o grupo preso em "precisa de você")."""
+        canal = await self._do_usuario(canal_id, usuario_id)
+        mudancas = Mudancas()
+        if agente_id not in canal.membros:
+            return mudancas
+        canal.membros = [membro for membro in canal.membros if membro != agente_id]
+        if canal.lider_id == agente_id:
+            canal.lider_id = None
+        await self._armazem.salvar_canal(canal)
+        for tarefa in await self._armazem.tarefas(canal.id):
+            if tarefa.dono_id == agente_id and tarefa.status in ABERTAS | {
+                StatusTarefa.PARADA,
+                StatusTarefa.FALHOU,
+            }:
+                if tarefa.status is StatusTarefa.RODANDO:
+                    mudancas.interromper.append(tarefa.id)
+                tarefa.status = StatusTarefa.CANCELADA
+                tarefa.atualizada_em = _agora()
+                await self._armazem.gravar_tarefa(tarefa)
+                mudancas.tarefas.append(tarefa)
+        mudancas.mensagens.append(await self._atividade(canal, f"{nome} foi apagado e saiu."))
         return mudancas
 
     # ---------- leitura ----------

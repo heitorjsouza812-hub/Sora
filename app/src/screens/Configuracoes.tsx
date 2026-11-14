@@ -6,10 +6,9 @@ import { Modal } from '../components/overlay';
 import { ModelDefaults, ProviderCard } from '../components/settings';
 import { SecaoConectores, SecaoHabilidades, SecaoMemoria, SecaoNavegador, SecaoRotinas, SecaoTelegram } from '../components/settings/SecoesPecas';
 import '../components/settings/settings.css';
-import { definirIlhaPrefs, useIlha, useIlhaPrefs, type FiltroAgentes } from '../components/ilha/ilhaEstado';
+import { definirIlhaPrefs, useIlhaPrefs, type FiltroBots } from '../components/ilha/ilhaEstado';
 import { abrirIlha, fecharIlha } from '../components/ilha/ilhaUi';
 import { tocar } from '../components/ilha/som';
-import { janelaAtual } from '../desktop/ponte';
 import '../components/ilha/ilha-partes.css';
 import { desconectarTodosProvedores, PROVEDORES_MODELO, useModelos } from '../state/modelos';
 import { limparTudo } from '../state/projetos';
@@ -33,20 +32,17 @@ const SECOES: { id: Secao; rotulo: string }[] = [
 
 function ConfiguracaoIlha() {
   const prefs = useIlhaPrefs();
-  const { projetos } = useIlha();
   const alternarVisibilidade = (visivel: boolean) => {
     definirIlhaPrefs({ visivel });
     if (visivel) abrirIlha(); else fecharIlha();
   };
   return <>
-    <header className="cfg-heading"><h2>Ilha da Sora</h2><p>Acompanhe a Sora e seus agentes no topo do app, escolha o projeto mostrado e controle os avisos sonoros.</p></header>
+    <header className="cfg-heading"><h2>Ilha da Sora</h2><p>No computador, acompanhe quem está trabalhando e o que precisa de você fora do app — a ilha aparece no topo da tela quando a Sora sai de foco (minimizada ou em segundo plano) e some quando você volta a ela.</p></header>
     <div className="cfg-ilha">
-      <label className="cfg-ilha__linha"><span><strong>Mostrar ilha</strong><small>Mantém a atividade da equipe visível no topo do app.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.visivel} onChange={(e) => alternarVisibilidade(e.target.checked)} /><span aria-hidden="true" /><em>{prefs.visivel ? 'Ligada' : 'Desligada'}</em></span></label>
-      <label className="cfg-ilha__linha"><span><strong>Sons</strong><small>Avisos discretos ao abrir, concluir e deixar um projeto pronto.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.som} onChange={(e) => definirIlhaPrefs({ som: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.som ? 'Ligados' : 'Desligados'}</em></span></label>
+      <label className="cfg-ilha__linha"><span><strong>Mostrar ilha</strong><small>Liga a ilha fora do app; dentro do app e no navegador ela nunca aparece.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.visivel} onChange={(e) => alternarVisibilidade(e.target.checked)} /><span aria-hidden="true" /><em>{prefs.visivel ? 'Ligada' : 'Desligada'}</em></span></label>
+      <label className="cfg-ilha__linha"><span><strong>Sons</strong><small>Avisos discretos ao abrir, um bot concluir e um pedido novo chegar.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.som} onChange={(e) => definirIlhaPrefs({ som: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.som ? 'Ligados' : 'Desligados'}</em></span></label>
       <label className="cfg-ilha__linha"><span><strong>Recolher quando nada roda</strong><small>Deixa apenas uma faixa fina até você passar o mouse no topo.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.esconderOciosa} onChange={(e) => definirIlhaPrefs({ esconderOciosa: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.esconderOciosa ? 'Sim' : 'Não'}</em></span></label>
-      <label className="cfg-ilha__linha"><span><strong>Projeto mostrado</strong><small>No modo automático, a ilha acompanha o projeto aberto ou em execução.</small></span><select value={prefs.projetoId ?? ''} onChange={(e) => definirIlhaPrefs({ projetoId: e.target.value || null })}><option value="">Automático — projeto aberto</option>{projetos.map((projeto) => <option key={projeto.id} value={projeto.id}>{projeto.titulo}</option>)}</select></label>
-      <label className="cfg-ilha__linha"><span><strong>Filtro padrão</strong><small>Quais agentes aparecem na ilha. Dá para trocar também direto na ilha.</small></span><select value={prefs.filtro} onChange={(e) => definirIlhaPrefs({ filtro: e.target.value as FiltroAgentes })}><option value="todos">Todos</option><option value="trabalhando">Trabalhando</option><option value="concluidos">Concluídos</option></select></label>
-      {janelaAtual !== 'web' && <label className="cfg-ilha__linha"><span><strong>Mostrar também dentro do app</strong><small>No computador a ilha fica no topo da tela; ligue para vê-la também no alto desta janela.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.ilhaNoApp} onChange={(e) => definirIlhaPrefs({ ilhaNoApp: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.ilhaNoApp ? 'Sim' : 'Não'}</em></span></label>}
+      <label className="cfg-ilha__linha"><span><strong>Filtro padrão</strong><small>Quais bots aparecem na ilha. Dá para trocar também direto na ilha.</small></span><select value={prefs.filtro} onChange={(e) => definirIlhaPrefs({ filtro: e.target.value as FiltroBots })}><option value="todos">Todos</option><option value="trabalhando">Trabalhando</option><option value="precisa_de_voce">Precisa de você</option></select></label>
       <div className="cfg-ilha__acoes"><Button onClick={() => tocar('abrir')} disabled={!prefs.som}>Testar som</Button></div>
     </div>
   </>;

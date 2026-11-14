@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 from app.modelos.enumeracoes import (
     AutorMensagem,
@@ -99,6 +99,8 @@ class AgenteSaida(EsquemaBase):
     cor: str
     movimento: Movimento
     status: str | None = None
+    ferramentas: list[str] = Field(default_factory=list)
+    estado: Literal["livre", "trabalhando", "precisa_de_voce"] = "livre"
 
 
 class ConversaCriacao(EsquemaBase):
@@ -157,6 +159,11 @@ class RespostaPerguntaEntrada(EsquemaBase):
 
 class DecisaoAprovacaoEntrada(EsquemaBase):
     decisao: DecisaoAprovacao
+
+    @field_validator("decisao", mode="before")
+    @classmethod
+    def _alias_permitir(cls, valor: object) -> object:
+        return DecisaoAprovacao.PERMITIR_UMA_VEZ if valor == "permitir" else valor
 
 
 class ApagarContaEntrada(EsquemaBase):

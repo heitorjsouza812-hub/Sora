@@ -43,6 +43,7 @@ from app.modelos.tabelas import (
     Etapa,
     Mensagem,
     Pergunta,
+    RascunhoBot,
     Usuario,
 )
 
@@ -297,14 +298,12 @@ async def test_perguntar_interrompe_grava_uma_vez_e_retoma(cenario: Cenario) -> 
     assert (await _eventos(cenario)).count("pergunta") == 1
 
 
-async def test_criar_agente_pede_cartao_aprovado_cria_uma_vez(cenario: Cenario) -> None:
+async def test_criar_agente_so_prepara_rascunho_sem_criar_bot(cenario: Cenario) -> None:
     args = CriarAgente(nome="Teo", papel="Responde e-mails de clientes")
     grafo = _grafo(lambda: criar_agente(args, cenario.contexto()))
-    config = {"configurable": {"thread_id": "t2"}}
-    assert "__interrupt__" in await grafo.ainvoke({}, config=config)
-    assert "aprovacao.pedida" in await _eventos(cenario)
-    final = await grafo.ainvoke(Command(resume="permitir_uma_vez"), config=config)
-    assert "criado" in final["resultado"]
+    final = await grafo.ainvoke({}, config={"configurable": {"thread_id": "t2"}})
+    assert "__interrupt__" not in final
+    assert "Rascunho de Teo" in final["resultado"]
     async with fabrica_sessoes()() as sessao:
         individuais = (
             await sessao.scalars(
@@ -314,36 +313,46 @@ async def test_criar_agente_pede_cartao_aprovado_cria_uma_vez(cenario: Cenario) 
                 )
             )
         ).all()
-    assert [a.nome for a in individuais] == ["Teo"]
-    assert individuais[0].cor.upper() != "#E2ECFF"
-    assert (await _eventos(cenario)).count("agente.criado") == 1
-
-
-async def test_criar_agente_negado_nao_cria(cenario: Cenario) -> None:
-    args = CriarAgente(nome="Lia", papel="Faz resumos")
-    grafo = _grafo(lambda: criar_agente(args, cenario.contexto()))
-    config = {"configurable": {"thread_id": "t3"}}
-    await grafo.ainvoke({}, config=config)
-    final = await grafo.ainvoke(Command(resume="negar"), config=config)
-    assert "não aprovou" in final["resultado"]
-    async with fabrica_sessoes()() as sessao:
-        nomes = (
-            await sessao.scalars(select(Agente.nome).where(Agente.tipo == TipoAgente.INDIVIDUAL))
+        rascunhos = (
+            await sessao.scalars(
+                select(RascunhoBot).where(RascunhoBot.usuario_id == cenario.usuario_id)
+            )
         ).all()
-    assert "Lia" not in nomes
-
-
-async def test_criar_agente_respeita_limite_de_cinco(cenario: Cenario) -> None:
-    async with fabrica_sessoes()() as sessao:
-        for i in range(5):
-            sessao.add(
-                Agente(
-                    usuario_id=cenario.usuario_id,
-                    tipo=TipoAgente.INDIVIDUAL,
-                    nome=f"A{i}",
-                    papel=f"p{i}",
+        mensagens = (
+            await sessao.scalars(
+                select(Mensagem).where(
+                    Mensagem.conversa_id == cenario.conversa_id,
+                    Mensagem.autor == AutorMensagem.SORA,
                 )
             )
-        await sessao.commit()
-    with pytest.raises(ErroFerramenta, match="Limite"):
-        await criar_agente(CriarAgente(nome="Sexto", papel="x"), cenario.contexto())
+        ).all()
+    assert individuais == []
+    assert len(rascunhos) == 1 and rascunhos[0].status == "rascunho"
+    assert rascunhos[0].dados["nome"] == "Teo"
+    assert rascunhos[0].dados["cor"].upper() != "#E2ECFF"
+    assert rascunhos[0].conversa_id == cenario.conversa_id
+    assert any("rascunho de Teo" in m.conteudo for m in mensagens)
+    eventos = await _eventos(cenario)
+    assert "aprovacao.pedida" not in eventos and "agente.criado" not in eventos
+
+
+async def test_criar_agente_duas_vezes_gera_dois_rascunhos_sem_bot(cenario: Cenario) -> None:
+    await criar_agente(CriarAgente(nome="Lia", papel="Faz resumos"), cenario.contexto())
+    await criar_agente(CriarAgente(nome="Rui", papel="Agenda"), cenario.contexto())
+    async with fabrica_sessoes()() as sessao:
+        nomes = (
+            await sessao.scalars(
+                select(Agente.nome).where(
+                    Agente.usuario_id == cenario.usuario_id,
+                    Agente.tipo == TipoAgente.INDIVIDUAL,
+                )
+            )
+        ).all()
+        total = len(
+            (
+                await sessao.scalars(
+                    select(RascunhoBot).where(RascunhoBot.usuario_id == cenario.usuario_id)
+                )
+            ).all()
+        )
+    assert nomes == [] and total == 2

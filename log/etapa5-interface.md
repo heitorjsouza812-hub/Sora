@@ -13,13 +13,16 @@ A interface atual (projetos com plano, cartões de etapa e "Aprovar e publicar")
 3. **Tela Plugins escondida** até o grupo decidir.
 4. **Sem protótipo:** pode alterar direto.
 5. **Ilha da Sora só fora do app:** no desktop (Tauri) aparece só com a janela principal fora de foco ou minimizada; dentro do app e no navegador web não aparece.
+6. **Bots e grupos (Heitor, 2026-11-08):** cada usuário pode ter quantos bots quiser (sem limite); um grupo tem no máximo **5 bots** (2 a 5), além da Sora como chefe. Vale para o Novo grupo e para a proposta de grupo da Sora.
+7. **`@todos`** vai só para os bots do grupo; a Sora coordena e não recebe tarefa de `@todos`.
+8. **Depois da etapa 5:** consertar a renovação da sessão (`core/contas.py::renovar`: três F5 seguidos com respostas perdidas derrubam o login). O conserto seguro precisa de coluna com a hora da rotação original do token anterior (migração); o atalho de não sobrescrever `anterior_hash` abre brecha. Achado do Leme, análise da Âncora (`.maestri/relatorios/ancora.md`).
 
 ## Como fica
 
 - **Barra lateral:** Sora (conversa principal e chefe de equipe) no topo · **Bots** (cor, estado: trabalhando / precisa de você) · **Grupos** (com destaque em quem precisa de você) · busca **Ctrl+K** · **Configurações**. Saem Projetos, Revisão, Plugins (escondido) e o "Aprovar e publicar".
 - **Criar bot conversando:** o usuário pede à Sora; ela devolve um **cartão de rascunho** com seções (nome, função, cor, instruções, ferramentas, rotina) que o usuário ajusta e confirma. O formulário do bot continua para editar depois.
 - **Tela do bot (1:1):** conversa no centro; ao lado: trabalho (navegador, captura, passos), rotinas, memória, pendências, contexto, ferramentas. **Microfone só aqui.**
-- **Grupos:** Novo grupo → 2 a 6 bots → nome editável; a Sora entra como chefe. `@bot`, `@todos`, responder a uma mensagem; **repasses aparecem como mensagens**; no topo a lista de membros mostra quem trabalha, com **Parar**.
+- **Grupos:** Novo grupo → 2 a 5 bots → nome editável; a Sora entra como chefe. `@bot`, `@todos`, responder a uma mensagem; **repasses aparecem como mensagens**; no topo a lista de membros mostra quem trabalha, com **Parar**.
 - **Aprovação sem "publicar":** ação que mexe no mundo vira cartão **"Precisa de você"** (Enviar/Descartar ou Aprovar/Recusar). Resultado chega como **mensagem com arquivos**.
 
 ## Regras para todo o time
@@ -37,9 +40,9 @@ As de `log/etapa4-pecas.md`, mais:
 
 | Agente | Escopo exclusivo |
 |---|---|
-| **Âncora** (backend) | Sora persistente por usuário como agente (chefe de equipe) e líder padrão de todo grupo; grupos sobre `canais_equipe` (criar com 2–6 bots, renomear, membros); proposta de grupo pela Sora para pedido grande (cartão "Montar grupo" com bots reaproveitados/novos; bot novo só com "sim"); criação de bot por **rascunho** (ferramenta da Sora + rota para confirmar com ajustes); ferramentas no `AgenteSaida`; estado "precisa de você" por bot e por grupo (evento SSE); entrega como mensagem com anexos no grupo/chat; o caminho "projeto/cadeia" deixa de ser a entrada do app (código pode ficar, sem rota de publicar). `backend/app/**`, `backend/workers/**`, `backend/tests/**`, `backend/prompts/**`. |
+| **Âncora** (backend) | Sora persistente por usuário como agente (chefe de equipe) e líder padrão de todo grupo; grupos sobre `canais_equipe` (criar com 2–5 bots, renomear, membros); proposta de grupo pela Sora para pedido grande (cartão "Montar grupo" com bots reaproveitados/novos; bot novo só com "sim"); criação de bot por **rascunho** (ferramenta da Sora + rota para confirmar com ajustes); ferramentas no `AgenteSaida`; estado "precisa de você" por bot e por grupo (evento SSE); entrega como mensagem com anexos no grupo/chat; o caminho "projeto/cadeia" deixa de ser a entrada do app (código pode ficar, sem rota de publicar). `backend/app/**`, `backend/workers/**`, `backend/tests/**`, `backend/prompts/**`. |
 | **Leme** (app: casca e bots) | `App.tsx`, layout e barra lateral (Sora · Bots · Grupos · Ctrl+K · Configurações), tela da Sora, tela do bot (1:1 com painel lateral), cartão de rascunho de bot, esconder Plugins, remover Projetos/Revisão/"Aprovar e publicar"; estado compartilhado (`state/**`) com edição aditiva para o Mosaico. `app/src/App.tsx`, `app/src/components/layout/**`, `app/src/components/builder/**`, `app/src/screens/{Home,SoraChat,AgentChat,Agentes,CriarAgente,Projetos,Revisao,Plugins}.tsx`, `app/src/state/**`. |
-| **Mosaico** (app: grupos e cartões) | Tela de Grupos (a partir de `Canais.tsx`): novo grupo 2–6 bots, renomear, `@menção`/`@todos`/responder, repasses visíveis, lista de membros com estado e Parar; cartões "Precisa de você" (Enviar/Descartar, Aprovar/Recusar) usados no chat do bot, no grupo e na Ilha. `app/src/screens/Canais.tsx` (vira Grupos), `app/src/components/equipe/**`, `app/src/components/pendencias/**`, `app/src/components/grupos/**` (novo). |
+| **Mosaico** (app: grupos e cartões) | Tela de Grupos (a partir de `Canais.tsx`): novo grupo 2–5 bots, renomear, `@menção`/`@todos`/responder, repasses visíveis, lista de membros com estado e Parar; cartões "Precisa de você" (Enviar/Descartar, Aprovar/Recusar) usados no chat do bot, no grupo e na Ilha. `app/src/screens/Canais.tsx` (vira Grupos), `app/src/components/equipe/**`, `app/src/components/pendencias/**`, `app/src/components/grupos/**` (novo). |
 | **Vela** (Ilha) | Ilha só fora do app: Tauri mostra/oculta a janela da Ilha pelo foco/minimização da janela principal; dentro do app não renderiza; web não renderiza. Ilha mostra quem trabalha e o que precisa de você (cartões do Mosaico). `app/src/components/ilha/**`, `app/src-tauri/**`, `app/qa/ilha.mjs`. |
 | **Prumo** (validador) | Valida cada bloco quando o dono avisar e, no fim, a etapa inteira, mais o teste com modelo real (Groq). Nunca edita código de produção. `.maestri/relatorios/validador-etapa5.md`. |
 

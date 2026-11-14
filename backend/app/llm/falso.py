@@ -16,10 +16,12 @@ Como o modelo se comporta, por papel (nome do papel da política do seletor, §5
 - Qualquer outro papel: um texto de exemplo.
 
 Gatilhos de teste (só existem aqui, e este modelo é barrado em produção): se o pedido do
-usuário trouxer ``[pergunta]``, o primeiro especialista chama ``perguntar``; ``[aprovacao]``, ele
-chama ``criar_agente`` (cartão de aprovação); ``[orcamento]``, o worker baixa o teto de tokens
-da cadeia e a primeira chamada estoura (ver ``planejar_cadeia``). Depois da resposta pelas rotas
-reais, a etapa segue o roteiro normal e a cadeia termina.
+usuário trouxer ``[pergunta]``, o primeiro especialista chama ``perguntar``; ``[aprovacao]``, a
+triagem responde direto e a Sora (ou o bot) chama ``propor_instrucoes`` (cartão fixo de
+aprovação; na etapa 5 ``criar_agente`` virou rascunho e não pede aprovação); ``[orcamento]``,
+o worker baixa o teto de tokens da cadeia e a primeira chamada estoura (ver
+``planejar_cadeia``). Depois da resposta pelas rotas reais, a etapa segue o roteiro normal e a
+cadeia termina.
 
 As respostas se repetem em ciclo, então um laço de agente nunca fica sem resposta. Todas as
 respostas de ferramenta e de JSON são montadas com os esquemas reais (``Plano``, ``Entregar``,
@@ -124,7 +126,7 @@ def _chamada(ferramenta: str, argumentos: dict[str, Any]) -> AIMessage:
     )
 
 
-def _triagem_json(*, direto: bool) -> str:
+def _triagem_json(*, direto: bool, agente: bool = False) -> str:
     from app.sistema1.esquemas import (
         CapacidadeTriagem,
         Especialista,
@@ -134,7 +136,16 @@ def _triagem_json(*, direto: bool) -> str:
         Superficie,
     )
 
-    if direto:
+    if agente:
+        # Direto, mas pelo agente (dificuldade 2, sem resposta pronta): ele usa ferramentas.
+        saida = SaidaSistema1(
+            primeira_resposta="Claro, já te respondo.",
+            modo=ModoTriagem.DIRETO,
+            dificuldade=2,
+            idioma="pt-BR",
+            confianca=0.9,
+        )
+    elif direto:
         saida = SaidaSistema1(
             primeira_resposta="Claro, já te respondo.",
             modo=ModoTriagem.DIRETO,
@@ -163,7 +174,9 @@ def _triagem_json(*, direto: bool) -> str:
 
 
 GATILHOS = ("pergunta", "aprovacao", "orcamento")
-_GATILHO = re.compile(r"\[(pergunta|aprovacao|orcamento|memoria|pendencia|catalogo|historico)\]")
+_GATILHO = re.compile(
+    r"\[(pergunta|aprovacao|orcamento|grupo|memoria|pendencia|catalogo|historico)\]"
+)
 
 
 _GATILHO_NAVEGADOR = re.compile(r"\[navegador:(\S+?)\]")
@@ -348,11 +361,34 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
     histórico (a retomada depois da resposta do usuário traz o histórico de volta)."""
     from langchain_core.messages import HumanMessage, ToolMessage
 
-    if papel not in ("pesquisador", "redator", "designer"):
-        return None
     tarefa = "\n".join(str(m.content) for m in mensagens if isinstance(m, HumanMessage))
     feitas = {m.name for m in mensagens if isinstance(m, ToolMessage)}
     gatilhos = gatilhos_do_texto(tarefa)
+    if papel in ("sora", "agente_individual"):
+        if papel == "sora" and "grupo" in gatilhos and "propor_grupo" not in feitas:
+            from app.ferramentas.propor_grupo import ProporGrupo
+
+            pedido = _GATILHO.sub("", tarefa).strip() or "Pedido grande do usuário"
+            return _chamada("propor_grupo", ProporGrupo(pedido=pedido).model_dump(mode="json"))
+        if "pergunta" in gatilhos and "perguntar" not in feitas:
+            from app.ferramentas.perguntar import Opcao, Perguntar
+
+            pergunta = Perguntar(
+                texto="Qual formato você prefere?",
+                opcoes=[Opcao(rotulo="PDF", valor="pdf"), Opcao(rotulo="Texto", valor="texto")],
+            )
+            return _chamada("perguntar", pergunta.model_dump(mode="json"))
+        if "aprovacao" in gatilhos and "propor_instrucoes" not in feitas:
+            from app.ferramentas.propor_instrucoes import ProporInstrucoes
+
+            proposta = ProporInstrucoes(
+                instrucoes="Responder sempre em tom formal e objetivo.",
+                motivo="Teste do cartão de aprovação (modelo falso).",
+            )
+            return _chamada("propor_instrucoes", proposta.model_dump(mode="json"))
+        return None
+    if papel not in ("pesquisador", "redator", "designer"):
+        return None
     das_pecas = _gatilho_das_pecas(tarefa, feitas)
     if das_pecas is not None:
         return das_pecas
@@ -366,11 +402,6 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
             opcoes=[Opcao(rotulo="Formal", valor="formal"), Opcao(rotulo="Leve", valor="leve")],
         )
         return _chamada("perguntar", pergunta.model_dump(mode="json"))
-    if "aprovacao" in gatilhos and "criar_agente" not in feitas:
-        from app.ferramentas.criar_agente import CriarAgente
-
-        proposta = CriarAgente(nome="Organizadora", papel="Organizar pesquisas")
-        return _chamada("criar_agente", proposta.model_dump(mode="json"))
     return None
 
 
@@ -454,6 +485,9 @@ def _triagem_para(mensagens: list[BaseMessage]) -> AIMessage:
 
     pedido = _pedido_do_prompt(mensagens)
     curto = len(pedido.split()) <= 8 and pedido.endswith("?")
+    gatilhos = gatilhos_do_texto(pedido)
+    if "aprovacao" in gatilhos or "grupo" in gatilhos:
+        return _texto(_triagem_json(direto=True, agente=True))
     return _texto(_triagem_json(direto=aplicar_regras(pedido).saudacao or curto))
 
 

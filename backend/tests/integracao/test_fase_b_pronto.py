@@ -36,8 +36,6 @@ from app.ferramentas import ambiente
 from app.main import criar_aplicacao
 from app.modelos.enumeracoes import (
     AutorMensagem,
-    DecisaoAprovacao,
-    StatusAprovacao,
     StatusCadeia,
     StatusEtapa,
     TipoAgente,
@@ -384,10 +382,10 @@ async def _esperar_aprovacao(
     )
 
 
-async def test_modelo_http_do_seletor_criar_agente_pausa_e_retoma(
+async def test_modelo_http_do_seletor_criar_agente_vira_rascunho_e_confirma(
     servicos_fase_b: tuple[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """O worker usa o modelo HTTP escolhido no banco e retoma ``criar_agente`` pela API."""
+    """Modelo HTTP do banco; ``criar_agente`` só deixa rascunho até a rota confirmar."""
     url_pg, url_redis = servicos_fase_b
     chamadas: list[dict[str, Any]] = []
     api_modelo = FastAPI()
@@ -401,9 +399,9 @@ async def test_modelo_http_do_seletor_criar_agente_pausa_e_retoma(
             nome = "entregar"
             argumentos = {
                 "tipo": "texto",
-                "titulo": "Agente proposto",
-                "resumo": "1 agente criado com aprovação",
-                "conteudo": "A criação foi aprovada e concluída.",
+                "titulo": "Bot proposto",
+                "resumo": "Rascunho de 1 bot",
+                "conteudo": "O rascunho aguarda a confirmação do usuário.",
             }
         else:
             nome = "criar_agente"
@@ -592,40 +590,39 @@ async def test_modelo_http_do_seletor_criar_agente_pausa_e_retoma(
             finally:
                 await fila.aclose()
 
-            aprovacao = await _esperar_aprovacao(fabrica, etapa_id)
-            assert aprovacao.status == StatusAprovacao.PENDENTE
-            decisao = await cliente.post(
-                f"/v1/aprovacoes/{aprovacao.id}/decidir",
-                headers=auth,
-                json={"decisao": DecisaoAprovacao.PERMITIR_UMA_VEZ.value},
-            )
-            assert decisao.status_code == 204, decisao.text
-
             for _ in range(20 * 5):
                 async with fabrica() as sessao:
                     final = await sessao.get(Etapa, etapa_id)
-                    iris = await sessao.scalar(
-                        select(Agente).where(
-                            Agente.usuario_id == usuario.id,
-                            Agente.nome == "Íris",
-                        )
-                    )
-                    if final.status == StatusEtapa.CONCLUIDA and iris is not None:
+                    if final.status == StatusEtapa.CONCLUIDA:
                         break
                 await asyncio.sleep(0.2)
             else:
-                async with fabrica() as sessao:
-                    final = await sessao.get(Etapa, etapa_id)
-                    aprovacoes = list(
-                        await sessao.scalars(
-                            select(Aprovacao).where(Aprovacao.etapa_id == etapa_id)
-                        )
-                    )
                 pytest.fail(
-                    "a etapa não retomou e concluiu após a aprovação: "
-                    f"status={final.status}, erro={final.erro!r}, "
-                    f"aprovações={[a.status for a in aprovacoes]}, chamadas={len(chamadas)}"
+                    "a etapa não concluiu depois do rascunho: "
+                    f"status={final.status}, erro={final.erro!r}, chamadas={len(chamadas)}"
                 )
+
+            async with fabrica() as sessao:
+                assert not list(
+                    await sessao.scalars(select(Aprovacao).where(Aprovacao.etapa_id == etapa_id))
+                )
+                assert (
+                    await sessao.scalar(
+                        select(Agente).where(Agente.usuario_id == usuario.id, Agente.nome == "Íris")
+                    )
+                ) is None
+
+            pendentes = await cliente.get("/v1/bots/rascunhos", headers=auth)
+            assert pendentes.status_code == 200, pendentes.text
+            assert [r["nome"] for r in pendentes.json()] == ["Íris"]
+            confirmado = await cliente.post(
+                f"/v1/bots/rascunhos/{pendentes.json()[0]['id']}/confirmar",
+                headers=auth,
+                json={},
+            )
+            assert confirmado.status_code == 201, confirmado.text
+            assert confirmado.json()["nome"] == "Íris"
+            assert (await cliente.get("/v1/bots/rascunhos", headers=auth)).json() == []
 
             assert len(chamadas) >= 2
             assert {c["model"] for c in chamadas} == {"modelo-local"}

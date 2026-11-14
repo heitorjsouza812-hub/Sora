@@ -381,10 +381,24 @@ async def renomear_conversa(
 
 @roteador.delete("/{conversa_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def apagar_conversa(
-    conversa_id: UUID, usuario_id: Usuario, sessao: Sessao, manter_agentes: bool = False
+    conversa_id: UUID,
+    usuario_id: Usuario,
+    sessao: Sessao,
+    redis: RedisDep,
+    manter_agentes: bool = False,
 ) -> None:
+    from app.atencao import encerrar_pendentes, publicar_encerrados
+
+    conversa = await repositorio.obter(sessao, usuario_id, conversa_id)
+    if conversa is None:
+        raise _nao_encontrada()
+    dono = conversa.agente_id
+    # Pedidos "Precisa de você" da conversa fecham junto (as perguntas o repositório apaga).
+    afetados = await encerrar_pendentes(sessao, usuario_id, conversa_id=conversa_id)
     if not await repositorio.apagar(sessao, usuario_id, conversa_id, manter_agentes=manter_agentes):
         raise _nao_encontrada()
+    await sessao.commit()
+    await publicar_encerrados(redis, sessao, usuario_id, afetados | {(dono, None)})
 
 
 @roteador.get("/{conversa_id}/mensagens")
@@ -469,7 +483,6 @@ async def enviar_mensagem(
     return MensagemAceita(mensagem_id=mensagem.id)
 
 
-@roteador.post("/{conversa_id}/aprovar", status_code=status.HTTP_204_NO_CONTENT)
 async def aprovar_versao(
     conversa_id: UUID,
     dados: AprovacaoVersaoEntrada,

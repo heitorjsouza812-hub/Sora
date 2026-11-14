@@ -11,6 +11,7 @@ import { FilaDoAgente } from '../components/equipe/FilaDoAgente';
 import { PendenciasDoAgente } from '../components/equipe/PendenciasDoAgente';
 import { PerfilNavegadorDoAgente } from '../components/equipe/PerfilNavegadorDoAgente';
 import { CartaoPendencia } from '../components/pendencias/Pendencias';
+import { CartaoPrecisaDeVoce } from '../components/pendencias/CartaoPrecisaDeVoce';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { PluginMark } from '../components/ui/PluginMark';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -26,12 +27,32 @@ import { ActivityIcon, TeamIcon } from '../components/ui/Icons';
 import { IrParaFim } from '../components/ui/IrParaFim';
 import { MensagemChat } from '../components/ui/MensagemChat';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
+import { usePrecisaDeVoce } from '../state/atencao';
+import { listarMemorias, listarRotinas, type Memoria, type Rotina } from '../state/pecas';
 import {
   anexarEnvio, enviarParaAgente, pendenciasDa, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararGeracao, passosDoAgente, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos,
 } from '../state/projetos';
 
 type Item = { t: number; key: string; node: ReactNode };
+
+function RecursosDoBot({ agenteId }: { agenteId: string }) {
+  const [memorias, setMemorias] = useState<Memoria[]>([]);
+  const [rotinas, setRotinas] = useState<Rotina[]>([]);
+  useEffect(() => {
+    let ativo = true;
+    void Promise.all([listarMemorias(), listarRotinas()]).then(([mem, rot]) => {
+      if (!ativo) return;
+      setMemorias(mem.filter(item => item.agente_id === agenteId));
+      setRotinas(rot.filter(item => item.agente_id === agenteId));
+    }).catch(() => undefined);
+    return () => { ativo = false; };
+  }, [agenteId]);
+  return <div className="agent-resources">
+    <section><p className="eyebrow tools-label">Rotinas</p>{rotinas.length ? <ul>{rotinas.slice(0, 4).map(rotina => <li key={rotina.id}><strong>{rotina.titulo}</strong><span>{rotina.ativa ? 'Ativa' : 'Pausada'}</span></li>)}</ul> : <p className="tools-empty">Nenhuma rotina deste bot.</p>}</section>
+    <section><p className="eyebrow tools-label">Memória</p>{memorias.length ? <ul>{memorias.slice(0, 4).map(memoria => <li key={memoria.id}><span>{memoria.conteudo}</span></li>)}</ul> : <p className="tools-empty">Nenhuma memória deste bot.</p>}</section>
+  </div>;
+}
 
 function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: number }) {
   const st = estadoAgente(e, a.id, agora);
@@ -42,7 +63,6 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
     if (ps.length) return 'Usado';
     return e.pluginsConectados.includes(nome) ? 'Conectado' : 'Disponível';
   };
-  // o backend não devolve as ferramentas do agente (AgenteSaida): valem as salvas aqui + as que ele usou de verdade
   const base: readonly string[] = FERRAMENTAS_BASE;
   const ferramentas = [...new Set([...a.ferramentas, ...passos.map(p => p.ferramenta ?? '')])].filter(n => n && !base.includes(n));
   return (
@@ -66,6 +86,7 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
       <FilaDoAgente agenteId={a.id} />
       <PerfilNavegadorDoAgente agenteId={a.id} />
       <PendenciasDoAgente agenteId={a.id} />
+      <RecursosDoBot agenteId={a.id} />
       {a.instrucoes && <><p className="eyebrow tools-label">Instruções</p><p className="agent-instructions">{a.instrucoes}</p></>}
       <button type="button" className="st-btn-ghost agent-edit" onClick={() => abrirEditorAgente(a.id)}>Editar agente</button>
     </div>
@@ -76,6 +97,7 @@ export default function AgentChat() {
   const { agente: id = '' } = useParams();
   const [params] = useSearchParams();
   const e = useProjetos();
+  const atencao = usePrecisaDeVoce();
   const agora = useAgora();
   const celular = useCelular();
   const a = e.agentes[id];
@@ -127,7 +149,12 @@ export default function AgentChat() {
         </> });
       }
     });
-    pendenciasDa(e, a.conversaId).forEach(x => itens.push({ t: 1e15 + x.desde, key: `pend-${x.id}`, node: <CartaoPendencia p={x} cor={a.cor} /> }));
+    // Pergunta/aprovação desta conversa já vem como pendência (cartão com prazo e "Sempre permitir");
+    // a lista de atenção traz o mesmo id, então só entra o que não está nas pendências.
+    const pendencias = pendenciasDa(e, a.conversaId);
+    const idsPendencias = new Set(pendencias.map(x => x.id));
+    pendencias.forEach(x => itens.push({ t: 1e15 + x.desde, key: `pend-${x.id}`, node: <CartaoPendencia p={x} cor={a.cor} /> }));
+    atencao.lista.filter(pedido => pedido.botId === a.id && !idsPendencias.has(pedido.id)).forEach((pedido, indice) => itens.push({ t: 1e15 + 10_000 + indice, key: `atencao-${pedido.id}`, node: <CartaoPrecisaDeVoce pedido={pedido} /> }));
     const todas = mensagensDa(e, a.id, agora);
     // erro simulado do modelo: a resposta depois da última pergunta vira o card de erro
     const pergunta = erroModelo ? todas.filter(m => m.autor === 'usuario').pop() : undefined;
@@ -150,8 +177,8 @@ export default function AgentChat() {
   const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
 
   if (e.carregando) return null;
-  if (id === 'sora') return <Navigate to="/chat/sora" replace />;
-  if (!a || !st) return <Navigate to="/chat/sora" replace />;
+  if (id === 'sora') return <Navigate to="/" replace />;
+  if (!a || !st) return <Navigate to="/" replace />;
 
   return (
     <AppShell agenteId={a.id} menuItens={[{ rotulo: 'Ver trabalho', onClick: verTrabalho }]}>
@@ -172,7 +199,7 @@ export default function AgentChat() {
           {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
           </div>
           <div className="chat-composer">
-            <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'}
+            <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'} voz
               onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => enviarParaAgente(a.id, t, undefined, true, enviados)); seguirFim(); }}
               gerando={gerando} onParar={() => pararGeracao(a.id)} />
           </div>
@@ -186,7 +213,7 @@ export default function AgentChat() {
           abas={[
             { id: 'trabalho', rotulo: 'Trabalho', icone: <ActivityIcon />, vivo: st.status === 'trabalhando' ? a.cor : null,
               conteudo: <PainelTrabalho agenteIds={[a.id]} agenteId={a.id} semSeletor className="side-work" /> },
-            { id: 'perfil', rotulo: 'Perfil', icone: <TeamIcon />, conteudo: <Perfil e={e} a={a} agora={agora} /> },
+            { id: 'perfil', rotulo: 'Recursos', icone: <TeamIcon />, conteudo: <Perfil e={e} a={a} agora={agora} /> },
           ]}
         />
       </div>

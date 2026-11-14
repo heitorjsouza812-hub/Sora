@@ -38,7 +38,7 @@ registro = logging.getLogger(__name__)
 
 VALIDADE_DO_CARTAO = timedelta(minutes=10)
 
-CUIDAM_DO_PROPRIO_CARTAO: set[str] = {"criar_agente"}
+CUIDAM_DO_PROPRIO_CARTAO: set[str] = {"criar_agente", "propor_grupo"}
 """Ferramentas que abrem o próprio cartão. Quem criar outra com cartão próprio acrescenta aqui."""
 
 PREFIXOS_PROPRIOS = (
@@ -139,6 +139,7 @@ async def _abrir_cartao(
             usuario_id=contexto.usuario_id,
             etapa_id=contexto.etapa_id,
             agente_id=contexto.agente_id,
+            grupo_id=contexto.canal_id,
             acao=acao,
             avaliacao=avaliacao,
             status=StatusAprovacao.PENDENTE,
@@ -157,6 +158,11 @@ async def _abrir_cartao(
             expira_em=expira_em,
             agente_id=contexto.agente_id,
         ),
+    )
+    from app.atencao import publicar_estado_atencao_persistido
+
+    await publicar_estado_atencao_persistido(
+        contexto.usuario_id, agente_id=contexto.agente_id, grupo_id=contexto.canal_id
     )
     from app.ferramentas.criar_agente import _agendar_expiracao
 

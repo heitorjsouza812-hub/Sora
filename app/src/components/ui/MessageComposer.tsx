@@ -34,6 +34,8 @@ interface Props {
   onParar?: () => void;
   /** controles extras na barra do campo, depois de "Ferramentas" (ex.: Equipe / Agente independente) */
   extras?: ReactNode;
+  /** voz fica restrita ao chat 1:1 do bot na interface da etapa 5 */
+  voz?: boolean;
 }
 
 // O BorderBeam e o VoiceBeam têm um efeito que depende de `children` e grava um objeto novo a cada execução: com `children`
@@ -64,7 +66,7 @@ const avisoMic: Record<string, string> = {
 
 export function MessageComposer({
   placeholder, onSend, initialValue = '', value: controlado, onValueChange, processing = false,
-  compact = false, tools = false, accent, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras,
+  compact = false, tools = false, accent, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras, voz = false,
 }: Props) {
   const [interno, setInterno] = useState(initialValue);
   const value = controlado ?? interno;
@@ -189,14 +191,14 @@ export function MessageComposer({
             </>}
             {extras}
             <span className="composer-spacer" />
-            <button
+            {voz && <button
               type="button"
               className={`icon-button ${live ? 'is-live' : ''}`}
               aria-label={live ? 'Parar microfone' : 'Ativar microfone'}
               aria-pressed={live}
               disabled={mic.state === 'unsupported'}
               onClick={() => live ? mic.stop() : void mic.start()}
-            ><MicIcon /></button>
+            ><MicIcon /></button>}
             {podeParar
               ? <button type="button" className="send-button is-parar" aria-label="Parar resposta" title="Parar (Esc)" onClick={() => onParar?.()}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" /></svg>
@@ -211,9 +213,9 @@ export function MessageComposer({
   const conteudo = (
       <VoiceBeam
         type={mobile ? 'mobile' : undefined}
-        stream={mic.stream}
+        stream={voz ? mic.stream : null}
         motion={processing ? processingMotion : undefined}
-        active={live || processing}
+        active={(voz && live) || processing}
         theme="dark"
         strength={0.72}
         className="voice-beam-wrap"

@@ -48,6 +48,7 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "falar",
         "perguntar",
         "criar_agente",
+        "propor_grupo",
         "disparar_especialista",
         "ver_especialista",
         "mensagem_especialista",

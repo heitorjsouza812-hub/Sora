@@ -587,11 +587,15 @@ async def test_pergunta_fora_de_cadeia_retoma_a_conversa(ambiente_http: Ambiente
 async def _aprovacao_da_sora(amb: AmbienteHttp, usuario_id: UUID) -> Aprovacao:
     def roteiro(corpo: dict[str, Any], n: int) -> Any:
         if n == 1:
-            return completar_ferramenta("criar_agente", {"nome": "Íris", "papel": "Organizar"})
+            # Etapa 5: criar_agente virou rascunho; o cartão fixo vem de propor_instrucoes.
+            return completar_ferramenta(
+                "propor_instrucoes",
+                {"instrucoes": "Responder em tom formal.", "motivo": "Pedido do usuário."},
+            )
         return completar_texto("Entendi, sigo sem criar.")
 
     amb.provedor.responder = roteiro
-    conversa_id, mensagem_id = await _conversa_com_pedido(amb, usuario_id, "Crie a Íris")
+    conversa_id, mensagem_id = await _conversa_com_pedido(amb, usuario_id, "Fale formal")
     await _enfileirar(amb.url_redis, "responder_direto", str(mensagem_id))
 
     async def cartao() -> Aprovacao | None:
@@ -627,17 +631,17 @@ async def test_aprovacao_fora_de_cadeia_retoma_a_conversa(ambiente_http: Ambient
         )
         assert resposta.status_code == 204, resposta.text
 
-        async def criou() -> bool:
+        async def mudou() -> bool:
             async with amb.fabrica() as sessao:
                 return (
                     await sessao.scalar(
-                        select(Agente.id).where(
-                            Agente.usuario_id == usuario_id, Agente.nome == "Íris"
+                        select(Agente.instrucoes).where(
+                            Agente.usuario_id == usuario_id, Agente.tipo == TipoAgente.SORA
                         )
                     )
-                ) is not None
+                ) == "Responder em tom formal."
 
-        await esperar(criou, "a conversa não retomou e não criou o agente")
+        await esperar(mudou, "a conversa não retomou e não aplicou as instruções")
 
 
 async def test_aprovacao_expirada_nega_e_retoma(ambiente_http: AmbienteHttp) -> None:
@@ -671,9 +675,11 @@ async def test_aprovacao_expirada_nega_e_retoma(ambiente_http: AmbienteHttp) -> 
         async with amb.fabrica() as sessao:
             assert (
                 await sessao.scalar(
-                    select(Agente.id).where(Agente.usuario_id == usuario_id, Agente.nome == "Íris")
+                    select(Agente.instrucoes).where(
+                        Agente.usuario_id == usuario_id, Agente.tipo == TipoAgente.SORA
+                    )
                 )
-            ) is None
+            ) != "Responder em tom formal."
 
 
 # ---------------------------------------------------------------- worker morto de verdade
@@ -1569,21 +1575,60 @@ async def test_gatilho_pergunta_leva_a_cadeia_ate_o_fim(
         assert pergunta.resposta == "formal" and pergunta.respondida_em is not None
 
 
-async def test_gatilho_aprovacao_leva_a_cadeia_ate_o_fim(
+async def test_gatilho_aprovacao_abre_cartao_fixo_e_retoma_a_conversa(
     ambiente_fase_b_arq: tuple[str, async_sessionmaker],
 ) -> None:
-    _, respondidos = await _cadeia_com_gatilho(
-        ambiente_fase_b_arq, "gatilho-aprovacao@exemplo.com", "[aprovacao]"
-    )
-    assert respondidos == {"pergunta": 0, "aprovacao": 1}
-    async with ambiente_fase_b_arq[1]() as sessao:
-        usuario = await sessao.scalar(
-            select(Usuario).where(Usuario.email == "gatilho-aprovacao@exemplo.com")
+    """Etapa 5: ``[aprovacao]`` não passa mais por cadeia nem por ``criar_agente`` (rascunho);
+    a Sora abre o cartão fixo de ``propor_instrucoes`` e a decisão retoma a conversa."""
+    url, fabrica = ambiente_fase_b_arq
+    email = "gatilho-aprovacao@exemplo.com"
+    async with httpx.AsyncClient(base_url=url, timeout=30) as cliente:
+        auth = await entrar(cliente, fabrica, email)
+        criada = await cliente.post(
+            "/v1/conversas",
+            headers=auth,
+            json={"texto": "mude o seu jeito de falar [aprovacao]", "anexos": []},
         )
-        iris = await sessao.scalar(
-            select(Agente).where(Agente.usuario_id == usuario.id, Agente.nome == "Organizadora")
+        assert criada.status_code == 201, criada.text
+        conversa_id = criada.json()["id"]
+        cartao = None
+        for _ in range(240):
+            async with fabrica() as sessao:
+                usuario = await sessao.scalar(select(Usuario).where(Usuario.email == email))
+                cartao = await sessao.scalar(
+                    select(Aprovacao).where(
+                        Aprovacao.usuario_id == usuario.id,
+                        Aprovacao.status == StatusAprovacao.PENDENTE,
+                    )
+                )
+                pausou = await sessao.scalar(
+                    text("select count(*) from checkpoint_writes where channel = '__interrupt__'")
+                )
+            if cartao is not None and pausou:
+                break
+            await asyncio.sleep(0.25)
+        assert cartao is not None, "o cartão de aprovação não apareceu"
+        assert cartao.acao["ferramenta"] == "propor_instrucoes"
+        assert cartao.acao["conversa_id"] == conversa_id
+        async with fabrica() as sessao:
+            assert (
+                await sessao.scalar(select(Cadeia).where(Cadeia.conversa_id == conversa_id)) is None
+            )
+        decidiu = await cliente.post(
+            f"/v1/aprovacoes/{cartao.id}/decidir", headers=auth, json={"decisao": "permitir"}
         )
-        assert iris is not None and iris.tipo == TipoAgente.INDIVIDUAL
+        assert decidiu.status_code == 204, decidiu.text
+        for _ in range(240):
+            async with fabrica() as sessao:
+                instrucoes = await sessao.scalar(
+                    select(Agente.instrucoes).where(
+                        Agente.usuario_id == usuario.id, Agente.tipo == TipoAgente.SORA
+                    )
+                )
+            if instrucoes == "Responder sempre em tom formal e objetivo.":
+                break
+            await asyncio.sleep(0.25)
+        assert instrucoes == "Responder sempre em tom formal e objetivo."
 
 
 async def test_gatilho_orcamento_leva_a_cadeia_ate_o_fim(

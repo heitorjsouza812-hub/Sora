@@ -7,11 +7,11 @@ import { Button, IconButton, toast } from '../base';
 import { BottomSheet } from '../overlay';
 import { GestaoHost } from '../gestao';
 import { Comandos } from '../comandos';
-import { Ilha } from '../ilha';
 import { FaixaErroEventos, FaixaSemConexao } from '../erros';
 import { EditorAgenteHost, MenuAgente } from '../builder';
 import { ContaRodape, Navegacao, Sidebar } from './Sidebar';
 import { statusDaSora } from './useSoraStatus';
+import './etapa5.css';
 
 export interface AppShellProps {
   children: ReactNode;
@@ -34,7 +34,7 @@ function Compartilhar() {
 }
 
 /** "Compartilhar" só faz sentido onde há algo para mostrar: chats, projetos e revisões. */
-const compartilhavel = (caminho: string) => /^\/(projeto|chat|revisao)\//.test(caminho);
+const compartilhavel = (caminho: string) => /^\/(bots|grupos)\//.test(caminho);
 
 function Identidade({ agenteId, titulo, menuItens }: Pick<AppShellProps, 'agenteId' | 'titulo' | 'menuItens'>) {
   const e = useProjetos();
@@ -89,7 +89,6 @@ export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppSh
       <EditorAgenteHost />
       <GestaoHost />
       <Comandos />
-      <Ilha />
     </div>
   );
 }

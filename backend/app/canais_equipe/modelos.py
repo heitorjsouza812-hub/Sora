@@ -66,6 +66,8 @@ class MotivoParada(StrEnum):
     """O servidor reiniciou no meio do turno; o usuário decide se repete."""
     DONO_SAIU = "dono_saiu"
     """O responsável foi tirado do canal; a tarefa espera ser reatribuída."""
+    AGUARDANDO_DECISAO = "aguardando_decisao"
+    """O turno abriu um cartão (aprovação); a decisão do usuário retoma o mesmo turno."""
 
 
 class ErroCanal(Exception):

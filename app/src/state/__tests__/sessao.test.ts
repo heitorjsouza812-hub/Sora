@@ -5,6 +5,9 @@ vi.mock('../../desktop/ponte', () => ({
   cofreLer: vi.fn(async () => null),
   cofreGravar: vi.fn(async () => {}),
   cofreApagar: vi.fn(async () => {}),
+  janelaAtual: 'main',
+  emitirSessao: vi.fn(async () => {}),
+  pedirSessaoAoPrincipal: vi.fn(async () => null),
 }));
 
 import { _reiniciarClienteParaTestes, api } from '../../api/cliente';

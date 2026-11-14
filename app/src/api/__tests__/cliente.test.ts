@@ -7,6 +7,10 @@ vi.mock('../../desktop/ponte', () => ({
   cofreLer: vi.fn(async () => desktop.cofre),
   cofreGravar: vi.fn(async (t: string) => { desktop.cofre = t; }),
   cofreApagar: vi.fn(async () => { desktop.cofre = null; }),
+  // Sessão compartilhada com a janela da ilha: nos testes a janela é sempre a principal.
+  janelaAtual: 'main',
+  emitirSessao: vi.fn(async () => {}),
+  pedirSessaoAoPrincipal: vi.fn(async () => null),
 }));
 
 import {

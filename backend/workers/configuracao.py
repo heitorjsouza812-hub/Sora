@@ -36,6 +36,7 @@ from workers.equipe import (
     executar_item_fila,
     executar_tarefa_canal,
     recuperar_equipe_apos_queda,
+    retomar_tarefa_canal,
 )
 from workers.fila import configurar_fila
 from workers.navegador import abrir_aba_de_perfil, fechar_navegador, iniciar_navegador
@@ -100,6 +101,7 @@ class WorkerSettings:
         despachar_equipe,
         executar_item_fila,
         executar_tarefa_canal,
+        retomar_tarefa_canal,
     ]
     cron_jobs: ClassVar[list[Any]] = [
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),

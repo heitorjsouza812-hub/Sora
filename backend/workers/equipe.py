@@ -18,6 +18,13 @@ from app.canais_equipe.interrupcao import (
     pedir_interrupcao,
 )
 from app.canais_equipe.modelos import ErroCanal
+from app.canais_equipe.pausa import (
+    PausaTarefa,
+    apagar_pausa,
+    cartao_da_interrupcao,
+    gravar_pausa,
+    ler_pausa,
+)
 from app.canais_equipe.roteamento import (
     INSTRUCOES_LIDER,
     DecisaoLider,
@@ -241,11 +248,37 @@ async def _turno_falso(ctx: dict[str, Any], tarefa, revisao: int) -> Mudancas:
     return mudancas
 
 
-async def _turno_real(ctx: dict[str, Any], tarefa, canal, revisao: int, pacote: str) -> Mudancas:
+FERRAMENTAS_FORA_DO_GRUPO = frozenset({"falar", "perguntar", "entregar", "veredito"})
+"""Falam com uma conversa ou cadeia; no grupo o bot fala por ``canal_resultado``."""
+
+
+def ferramentas_no_grupo(dono: Agente | None) -> list[str]:
+    """As ferramentas do próprio bot, menos as que só existem em conversa ou cadeia."""
+    from app.ferramentas.permissoes import ferramentas_do_agente
+
+    if dono is None:
+        return []
+    efetivas = ferramentas_do_agente(dono.papel, dono.ferramentas)
+    return [nome for nome in efetivas if nome not in FERRAMENTAS_FORA_DO_GRUPO]
+
+
+async def _turno_real(
+    ctx: dict[str, Any],
+    tarefa,
+    canal,
+    revisao: int,
+    pacote: str,
+    *,
+    resposta: Any | None = None,
+    thread: str | None = None,
+) -> Mudancas:
     from app.agentes import ContextoAgente, montar_e_rodar_agente
+    from app.agentes.checkpointer import thread_da_tarefa_canal
 
     async with ctx["sessoes"]() as sessao:
         modelos = await modelos_do_papel(sessao, canal.usuario_id, "individual", dificuldade=2)
+        extras = ferramentas_no_grupo(await sessao.get(Agente, tarefa.dono_id))
+    thread = thread or thread_da_tarefa_canal(tarefa.id, tarefa.turno_seq)
     contexto = ContextoAgente(
         usuario_id=canal.usuario_id,
         agente_id=tarefa.dono_id,
@@ -254,18 +287,37 @@ async def _turno_real(ctx: dict[str, Any], tarefa, canal, revisao: int, pacote: 
         canal_id=canal.id,
         tarefa_canal_id=tarefa.id,
         revisao_canal=revisao,
+        ferramentas_extras=extras,
         valores_do_prompt={"perfil_do_agente": pacote},
+        thread_proprio=thread,
     )
-    await montar_e_rodar_agente(
-        contexto=contexto,
-        modelos=modelos,
-        checkpointer=ctx["checkpointer"],
-        entrada={"messages": [HumanMessage(pacote)]},
-    )
+    if resposta is None:
+        resultado = await montar_e_rodar_agente(
+            contexto=contexto,
+            modelos=modelos,
+            checkpointer=ctx["checkpointer"],
+            entrada={"messages": [HumanMessage(pacote)]},
+        )
+    else:
+        resultado = await montar_e_rodar_agente(
+            contexto=contexto,
+            modelos=modelos,
+            checkpointer=ctx["checkpointer"],
+            resposta=resposta,
+        )
+    cartao = cartao_da_interrupcao(resultado or {})
     async with ctx["sessoes"]() as sessao:
         armazem = ArmazemCanaisSQL(sessao)
         async with armazem.transacao_tarefa(tarefa.id):
-            mudancas = await ServicoCanais(armazem).fim_do_turno(tarefa.id, revisao)
+            servico = ServicoCanais(armazem)
+            if cartao is not None:
+                # A pausa vai antes do commit: a decisão que chegar já encontra o caminho de volta.
+                await gravar_pausa(
+                    ctx["redis_eventos"], cartao, PausaTarefa(tarefa.id, revisao, thread)
+                )
+                mudancas = await servico.pausar_para_decisao(tarefa.id, revisao)
+            else:
+                mudancas = await servico.fim_do_turno(tarefa.id, revisao)
         await sessao.commit()
     return mudancas
 
@@ -335,11 +387,16 @@ async def _executar_tarefa_viva(ctx: dict[str, Any], tarefa_id: UUID) -> None:
     redis = ctx["redis_eventos"]
     await limpar_interrupcao(redis, tarefa_id)  # um pedido antigo não mata este turno novo
     await publicar_evento_equipe(redis, _tarefa_evento(tarefa), canal.usuario_id)
+    if modelo_falso_ativo():
+        turno = _turno_falso(ctx, tarefa, revisao)
+    else:
+        turno = _turno_real(ctx, tarefa, canal, revisao, pacote)
+    await _concluir_turno(ctx, tarefa_id, canal, revisao, turno)
+
+
+async def _concluir_turno(ctx: dict[str, Any], tarefa_id: UUID, canal, revisao: int, turno) -> None:
+    redis = ctx["redis_eventos"]
     try:
-        if modelo_falso_ativo():
-            turno = _turno_falso(ctx, tarefa, revisao)
-        else:
-            turno = _turno_real(ctx, tarefa, canal, revisao, pacote)
         mudancas = await _rodar_ate_interromper(redis, tarefa_id, turno)
         if mudancas is None:
             registro.info("turno da tarefa de canal %s interrompido a pedido", tarefa_id)
@@ -383,6 +440,68 @@ async def despachar_equipe(
 
 async def executar_tarefa_canal(ctx: dict[str, Any], tarefa_id: str) -> None:
     await _executar_tarefa(ctx, UUID(tarefa_id))
+
+
+ESPERA_PAUSA_S = 0.25
+TENTATIVAS_PAUSA = 80
+"""A decisão pode chegar antes de o turno gravar a pausa no banco: espera até ~20 s."""
+
+
+async def retomar_tarefa_canal(
+    ctx: dict[str, Any], cartao_id: str, resposta: dict[str, Any]
+) -> None:
+    """Retoma o turno de grupo que pausou no cartão ``cartao_id`` com a decisão do usuário."""
+    from workers.cadeia import valor_da_retomada
+
+    redis = ctx["redis_eventos"]
+    pausa = await ler_pausa(redis, cartao_id)
+    if pausa is None:
+        return  # cartão que não veio de turno de grupo, ou decisão já consumida
+    async with batimento(redis, pausa.tarefa_id):
+        tarefa = None
+        for _ in range(TENTATIVAS_PAUSA):
+            async with ctx["sessoes"]() as sessao:
+                armazem = ArmazemCanaisSQL(sessao)
+                servico = ServicoCanais(armazem)
+                async with armazem.transacao_tarefa(pausa.tarefa_id):
+                    tarefa = await servico.retomar_decisao(pausa.tarefa_id, pausa.revisao)
+                    atual = await armazem.tarefa(pausa.tarefa_id)
+                if tarefa is not None:
+                    canal = await servico.canal(tarefa.canal_id)
+                    membros = await _membros(sessao, canal.usuario_id, canal.membros)
+                    pacote = montar_pacote(
+                        canal=canal,
+                        tarefa=tarefa,
+                        agente_id=tarefa.dono_id,
+                        membros=membros,
+                        mensagens=await armazem.mensagens(canal.id),
+                        tarefas=await armazem.tarefas(canal.id),
+                    )
+                await sessao.commit()
+            ainda_rodando = (
+                atual is not None
+                and atual.revisao == pausa.revisao
+                and atual.status.value == "rodando"
+            )
+            if tarefa is not None or not ainda_rodando:
+                break
+            await asyncio.sleep(ESPERA_PAUSA_S)
+        await apagar_pausa(redis, cartao_id)
+        if tarefa is None:
+            registro.info("decisão do cartão %s não retoma nada: a tarefa mudou", cartao_id)
+            return
+        await limpar_interrupcao(redis, tarefa.id)
+        await publicar_evento_equipe(redis, _tarefa_evento(tarefa), canal.usuario_id)
+        turno = _turno_real(
+            ctx,
+            tarefa,
+            canal,
+            tarefa.revisao,
+            pacote,
+            resposta=valor_da_retomada(resposta),
+            thread=pausa.thread,
+        )
+        await _concluir_turno(ctx, tarefa.id, canal, tarefa.revisao, turno)
 
 
 async def executar_item_fila(ctx: dict[str, Any], item_id: str, agente_id: str) -> None:

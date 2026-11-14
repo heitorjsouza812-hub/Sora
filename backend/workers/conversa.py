@@ -125,8 +125,12 @@ async def _responder_direto_sem_fila(
         papel=papel,
         dependencias=dependencias_da_etapa(ctx, usuario_id=usuario_id, conversa_id=conversa_id),
     )
-    if modelo_falso_ativo():
+    if modelo_falso_ativo() and not any(
+        gatilho in texto for gatilho in ("[aprovacao]", "[pergunta]", "[grupo]")
+    ):
         # O roteiro da Sora falsa chama ``falar`` em ciclo para servir outros fluxos do agente.
+        # Com ``[aprovacao]``, ``[pergunta]`` ou ``[grupo]`` o agente roda de verdade e abre o
+        # cartão (aprovação fixa, pergunta ou proposta de grupo).
         # Na resposta direta basta uma resposta textual, enviada pela ferramenta real.
         resposta_falsa = await criar_modelo_falso("resposta_direta").ainvoke([HumanMessage(texto)])
         await falar(

@@ -381,3 +381,7 @@
   .ilha-anel { display: none; }
   .ilha .shimmer { animation: none; color: var(--text-2); background: none; }
 }
+
+/* com cartões "Precisa de você" no topo, os cards de baixo encolhem para o painel caber na janela de 460 px */
+.ilha-visao:has(> .ilha-pendencias) > .ilha-card { min-height: 0; padding: var(--sp-3); }
+.ilha-visao:has(> .ilha-pendencias) .ilha-bonecos-lista { max-height: 128px; }

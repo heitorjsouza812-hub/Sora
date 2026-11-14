@@ -1,15 +1,13 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { ToastProvider } from './components/base';
-import Home from './screens/Home';
 import SoraChat from './screens/SoraChat';
 import AgentChat from './screens/AgentChat';
 import Agentes from './screens/Agentes';
-import Projetos from './screens/Projetos';
-import Revisao from './screens/Revisao';
 import Plugins from './screens/Plugins';
-import Canais from './screens/Canais';
+import Grupos from './screens/Grupos';
 import { PonteNavegacao } from './desktop/PonteNavegacao';
+import { PonteSessao } from './desktop/PonteSessao';
 import { GateSessao, TelaCarregando } from './components/sessao';
 import './components/ui/sora.css';
 
@@ -21,25 +19,31 @@ const OrbLab = import.meta.env.DEV ? lazy(() => import('./screens/OrbLab')) : nu
 const Mobile = import.meta.env.DEV ? lazy(() => import('./screens/Mobile')) : null;
 const Catalogo = import.meta.env.DEV ? lazy(() => import('./screens/Catalogo')) : null;
 
-// Rotas: / (Novo chat) · /projeto/:projetoId (chat da Sora / projeto) · /projetos · /agentes (galeria)
-//        /agentes/novo · /agentes/:id/editar (construtor) · /chat/:agente · /revisao/:projetoId
-//        /configuracoes · /plugins · [DEV] /celular · /lab/orb · /lab/ui (catálogo de componentes)
-// Sem login, GateSessao mostra Entrar no lugar de qualquer rota (exceto /lab/* em DEV).
+function RedirecionarBotAntigo() {
+  const { agente = '' } = useParams();
+  return <Navigate to={`/bots/${agente}`} replace />;
+}
+
+// Entrada da etapa 5: Sora, bots persistentes e grupos. As rotas antigas apenas redirecionam.
 function AppRoutes() {
   return <Suspense fallback={<TelaCarregando />}><Routes>
-    <Route path="/" element={<Home />} />
-    <Route path="/projeto/:projetoId" element={<SoraChat />} />
-    <Route path="/chat/sora" element={<SoraChat />} />
-    <Route path="/chat/:agente" element={<AgentChat />} />
-    <Route path="/projetos" element={<Projetos />} />
-    <Route path="/agentes" element={<Agentes />} />
-    <Route path="/agentes/novo" element={<CriarAgente />} />
-    <Route path="/agentes/:id/editar" element={<CriarAgente />} />
-    <Route path="/revisao/:projetoId" element={<Revisao />} />
+    <Route path="/" element={<SoraChat />} />
+    <Route path="/bots" element={<Agentes />} />
+    <Route path="/bots/:agente" element={<AgentChat />} />
+    <Route path="/bots/:id/editar" element={<CriarAgente />} />
+    <Route path="/grupos" element={<Grupos />} />
+    <Route path="/grupos/:grupoId" element={<Grupos />} />
     <Route path="/configuracoes" element={<Configuracoes />} />
-    <Route path="/canais" element={<Canais />} />
-    <Route path="/canais/:canalId" element={<Canais />} />
     <Route path="/plugins" element={<Plugins />} />
+    <Route path="/chat/sora" element={<Navigate to="/" replace />} />
+    <Route path="/chat/:agente" element={<RedirecionarBotAntigo />} />
+    <Route path="/agentes" element={<Navigate to="/bots" replace />} />
+    <Route path="/agentes/novo" element={<Navigate to="/" replace />} />
+    <Route path="/agentes/:id/editar" element={<CriarAgente />} />
+    <Route path="/canais/*" element={<Navigate to="/grupos" replace />} />
+    <Route path="/projeto/:id" element={<Navigate to="/" replace />} />
+    <Route path="/projetos" element={<Navigate to="/" replace />} />
+    <Route path="/revisao/:id" element={<Navigate to="/" replace />} />
     {Mobile && <Route path="/celular" element={<Mobile />} />}
     {OrbLab && <Route path="/lab/orb" element={<OrbLab />} />}
     {Catalogo && <Route path="/lab/ui" element={<Catalogo />} />}
@@ -48,5 +52,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <BrowserRouter><GateSessao><AppRoutes /><PonteNavegacao /></GateSessao><ToastProvider /></BrowserRouter>;
+  return <BrowserRouter><PonteSessao /><GateSessao><AppRoutes /><PonteNavegacao /></GateSessao><ToastProvider /></BrowserRouter>;
 }

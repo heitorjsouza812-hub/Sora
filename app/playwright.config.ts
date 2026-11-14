@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Porta do Vite desta etapa; o qa/entrar.mjs lê a mesma variável para login e API.
+process.env.SORA_QA_BASE ??= 'http://localhost:5383';
+
 export default defineConfig({
   testDir: './tests/visual',
   timeout: 30_000,
@@ -9,7 +12,7 @@ export default defineConfig({
     },
   },
   use: {
-    baseURL: process.env.SORA_QA_BASE ?? 'http://localhost:5173',
+    baseURL: process.env.SORA_QA_BASE,
     colorScheme: 'dark',
     reducedMotion: 'reduce',
   },

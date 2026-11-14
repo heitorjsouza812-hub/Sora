@@ -23,6 +23,7 @@ from app.ferramentas.ler_pagina import LerPagina
 from app.ferramentas.mensagem_especialista import MensagemEspecialista
 from app.ferramentas.parar_especialista import PararEspecialista
 from app.ferramentas.perguntar import Perguntar
+from app.ferramentas.propor_grupo import ProporGrupo
 from app.ferramentas.ver_especialista import VerEspecialista
 from app.ferramentas.veredito import Veredito
 
@@ -44,6 +45,7 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
     "entregar": Entregar,
     "veredito": Veredito,
     "criar_agente": CriarAgente,
+    "propor_grupo": ProporGrupo,
     "reagir": ReagirMensagem,
     **FERRAMENTAS_DO_CANAL,
 }

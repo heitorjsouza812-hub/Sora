@@ -12,6 +12,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.atencao import publicar_estado_atencao
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
 from app.eventos.streams import publicar_evento
@@ -118,7 +119,15 @@ async def decidir_aprovacao(
             conversa_id = conversa_fora_de_cadeia
     novo_status = aprovacao.status
     etapa_id = aprovacao.etapa_id
+    grupo_id = aprovacao.grupo_id
     await sessao.commit()
+    await publicar_estado_atencao(
+        redis,
+        sessao,
+        usuario_id,
+        agente_id=aprovacao.agente_id,
+        grupo_id=aprovacao.grupo_id,
+    )
     # Evento e job só depois do commit; o worker relê a decisão no banco.
     if conversa_id is not None:
         await publicar_evento(
@@ -139,5 +148,13 @@ async def decidir_aprovacao(
             "retomar_conversa",
             str(conversa_fora_de_cadeia),
             {"aprovacao_id": str(aprovacao_id), "decisao": dados.decisao.value},
+            _job_id=f"aprovacao:{aprovacao_id}",
+        )
+    elif grupo_id is not None:
+        # Cartão aberto no turno de um bot dentro do grupo: o worker retoma aquele turno.
+        await fila.enqueue_job(
+            "retomar_tarefa_canal",
+            cartao_id=str(aprovacao_id),
+            resposta={"aprovacao_id": str(aprovacao_id), "decisao": dados.decisao.value},
             _job_id=f"aprovacao:{aprovacao_id}",
         )

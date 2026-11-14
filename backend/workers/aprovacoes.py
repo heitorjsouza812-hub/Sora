@@ -55,6 +55,7 @@ async def expirar_aprovacao(ctx: dict[str, Any], aprovacao_id: str) -> None:
                     )
                 )
         etapa_id, usuario_id, id_aprovacao = aprovacao.etapa_id, aprovacao.usuario_id, aprovacao.id
+        grupo_id = aprovacao.grupo_id
         await sessao.commit()
     resposta = {"aprovacao_id": str(id_aprovacao), "decisao": DecisaoAprovacao.NEGAR.value}
     if conversa_id is not None:
@@ -76,5 +77,12 @@ async def expirar_aprovacao(ctx: dict[str, Any], aprovacao_id: str) -> None:
             "retomar_conversa",
             id_job=f"aprovacao:{id_aprovacao}",
             conversa_id=str(conversa_id),
+            resposta=resposta,
+        )
+    elif grupo_id is not None:
+        await enfileirar(
+            "retomar_tarefa_canal",
+            id_job=f"aprovacao:{id_aprovacao}",
+            cartao_id=str(id_aprovacao),
             resposta=resposta,
         )

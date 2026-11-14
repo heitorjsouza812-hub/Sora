@@ -8,7 +8,7 @@
 //   Desktop (Tauri): cabeçalho X-Sora-Cliente: desktop; o token de renovação vem no corpo e fica no
 //   cofre do sistema (cofreLer/cofreGravar/cofreApagar em desktop/ponte.ts).
 // • Erros viram ErroApi { status, mensagem } com a mensagem PT-BR do backend (`detail`).
-import { cofreApagar, cofreGravar, cofreLer, noDesktop } from '../desktop/ponte';
+import { cofreApagar, cofreGravar, cofreLer, emitirSessao, janelaAtual, noDesktop, pedirSessaoAoPrincipal } from '../desktop/ponte';
 
 export const API_BASE: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') ?? '';
 
@@ -58,6 +58,8 @@ const ouvintesEncerrada = new Set<() => void>();
 
 export function definirTokenAcesso(token: string | null): void { tokenAcesso = token; }
 export function temTokenAcesso(): boolean { return tokenAcesso !== null; }
+/** Só para a ponte com a janela da ilha (desktop): quem pede o token à principal recebe este. */
+export function lerTokenAcesso(): string | null { return tokenAcesso; }
 
 /** Chamado quando a renovação falha (sessão perdida). Devolve a função para parar de ouvir. */
 export function aoSessaoEncerrada(cb: () => void): () => void {
@@ -67,6 +69,7 @@ export function aoSessaoEncerrada(cb: () => void): () => void {
 
 function encerrarSessaoLocal(): void {
   tokenAcesso = null;
+  void emitirSessao(null).catch(() => {});
   for (const cb of [...ouvintesEncerrada]) cb();
 }
 
@@ -140,6 +143,14 @@ export async function buscarAutenticado(caminho: string, init: RequestInit = {})
 let renovacaoEmVoo: Promise<boolean> | null = null;
 
 async function fazerRenovacao(): Promise<boolean> {
+  // Janela da ilha (desktop): não vê o cofre e não pode renovar (gastaria o token de renovação da
+  // principal). Pede o token de acesso à janela principal, que renova se for preciso.
+  if (noDesktop && janelaAtual === 'ilha') {
+    const token = await pedirSessaoAoPrincipal(tokenAcesso);
+    if (!token) return false;
+    tokenAcesso = token;
+    return true;
+  }
   let corpo: string | undefined;
   if (noDesktop) {
     const salvo = await cofreLer().catch(() => null);
@@ -171,6 +182,7 @@ async function fazerRenovacao(): Promise<boolean> {
 export async function guardarTokens(t: TokensSaida): Promise<void> {
   tokenAcesso = t.token_acesso;
   if (noDesktop && t.token_renovacao) await cofreGravar(t.token_renovacao);
+  void emitirSessao(t.token_acesso).catch(() => {}); // a ilha acompanha login e renovações
 }
 
 /** Tenta renovar a sessão (abertura do app ou 401). Várias chamadas juntas dividem o mesmo pedido.
@@ -185,6 +197,7 @@ export function renovarSessao(): Promise<boolean> {
 /** Esquece a sessão localmente (token em memória e cofre do desktop). Não avisa os ouvintes. */
 export async function limparSessaoLocal(): Promise<void> {
   tokenAcesso = null;
+  void emitirSessao(null).catch(() => {});
   if (noDesktop) await cofreApagar().catch(() => {});
 }
 

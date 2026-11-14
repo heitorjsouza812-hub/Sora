@@ -8,6 +8,8 @@ FERRAMENTAS_POR_PAPEL: dict[str, list[str]] = {
     "sora": [
         "falar",
         "perguntar",
+        "criar_agente",
+        "propor_grupo",
         "disparar_especialista",
         "ver_especialista",
         "mensagem_especialista",

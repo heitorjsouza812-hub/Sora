@@ -80,6 +80,11 @@ export function aoAlternarIlha(cb: () => void): () => void {
   return ouvir<null>('ilha-alternar', cb);
 }
 
+/** Na janela da ilha: o Rust escondeu a janela (o usuário voltou à Sora). Etapa 5. */
+export function aoEsconderIlha(cb: () => void): () => void {
+  return ouvir<null>('ilha-escondida', cb);
+}
+
 /** Traz a janela principal para frente. */
 export async function mostrarApp(): Promise<void> {
   if (noDesktop) await invoke('mostrar_app');
@@ -146,3 +151,49 @@ function instalarPonteArmazenamento() {
 }
 
 instalarPonteArmazenamento();
+
+// ── Sessão compartilhada com a janela da ilha ────────────────────────────────────────────────
+// Só a janela principal enxerga o cofre do sistema (token de renovação). A ilha nunca renova por
+// conta própria (renovar em duas janelas gastaria o mesmo token de renovação e a detecção de
+// reuso derrubaria a sessão): ela PEDE o token de acesso (curto, só em memória) à principal, que
+// renova quando precisa e avisa a ilha pelos eventos abaixo.
+export interface PedidoSessao { id: string; tokenAtual: string | null }
+export interface RespostaSessao { id?: string; token: string | null }
+
+/** Na principal: a ilha pediu o token de acesso (`tokenAtual` = o que ela já tem e não serviu). */
+export function aoPedirSessao(cb: (p: PedidoSessao) => void): () => void {
+  return ouvir<PedidoSessao>('sora-sessao-pedir', cb);
+}
+
+/** Na principal: entrega (ou avisa que não há) o token de acesso. `id` responde a um pedido; sem
+ *  `id` é aviso espontâneo (login, renovação ou saída na principal). */
+export async function emitirSessao(token: string | null, id?: string): Promise<void> {
+  if (noDesktop && janelaAtual === 'main') await emit<RespostaSessao>('sora-sessao', { id, token });
+}
+
+/** Na ilha: avisos espontâneos da principal (sem `id`). */
+export function aoMudarSessaoNoPrincipal(cb: (token: string | null) => void): () => void {
+  return ouvir<RespostaSessao>('sora-sessao', r => { if (!r?.id) cb(typeof r?.token === 'string' ? r.token : null); });
+}
+
+/** Na ilha: pede o token de acesso à principal. null = principal sem sessão (ou sem resposta). */
+export async function pedirSessaoAoPrincipal(tokenAtual: string | null, esperaMs = 15000): Promise<string | null> {
+  if (!noDesktop || janelaAtual !== 'ilha') return null;
+  const id = crypto.randomUUID();
+  let resolver: (token: string | null) => void = () => {};
+  const resposta = new Promise<string | null>(r => { resolver = r; });
+  // o ouvinte precisa estar pronto ANTES de pedir, senão uma resposta rápida se perde
+  const parar = await listen<RespostaSessao>('sora-sessao', ({ payload }) => {
+    if (payload?.id === id) resolver(typeof payload.token === 'string' ? payload.token : null);
+  });
+  const tempo = window.setTimeout(() => resolver(null), esperaMs);
+  try {
+    await emit<PedidoSessao>('sora-sessao-pedir', { id, tokenAtual });
+    return await resposta;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(tempo);
+    parar();
+  }
+}

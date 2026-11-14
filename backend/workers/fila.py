@@ -27,6 +27,7 @@ NomeJob = Literal[
     "despachar_equipe",
     "executar_item_fila",
     "executar_tarefa_canal",
+    "retomar_tarefa_canal",
     "expirar_aprovacao",
     # adaptados do Rakazo (docs/referencias/rakazo.md)
     "executar_rotina",

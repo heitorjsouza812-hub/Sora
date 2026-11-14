@@ -126,11 +126,31 @@ async def canal_transferir(args: CanalTransferir, contexto: ContextoFerramenta) 
 async def canal_resultado(args: CanalResultado, contexto: ContextoFerramenta) -> str:
     _, tarefa_id, revisao = _ids(contexto)
     async with fabrica_sessoes()() as sessao:
+        if args.anexos:
+            from sqlalchemy import select
+
+            from app.modelos.tabelas import Anexo
+
+            encontrados = set(
+                (
+                    await sessao.scalars(
+                        select(Anexo.id).where(
+                            Anexo.usuario_id == contexto.usuario_id, Anexo.id.in_(args.anexos)
+                        )
+                    )
+                ).all()
+            )
+            if encontrados != set(args.anexos):
+                raise ErroFerramenta("Um dos anexos do resultado não pertence a esta conta.")
         armazem = ArmazemCanaisSQL(sessao)
         try:
             async with armazem.transacao_tarefa(tarefa_id):
                 mudancas = await ServicoCanais(armazem).registrar_resultado(
-                    tarefa_id, revisao, por_agente=contexto.agente_id, texto=args.texto
+                    tarefa_id,
+                    revisao,
+                    por_agente=contexto.agente_id,
+                    texto=args.texto,
+                    anexos=args.anexos,
                 )
             await sessao.commit()
         except Exception as erro:

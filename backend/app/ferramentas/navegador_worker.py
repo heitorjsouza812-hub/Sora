@@ -141,6 +141,7 @@ class AmbienteNavegador:
                         usuario_id=contexto.usuario_id,
                         etapa_id=contexto.etapa_id,
                         agente_id=contexto.agente_id,
+                        grupo_id=contexto.canal_id,
                         acao={
                             "tipo": "aprovar_dominio",
                             "ferramenta": ferramenta,
@@ -196,6 +197,11 @@ class AmbienteNavegador:
                 ),
                 contexto.conversa_id,
                 contexto.usuario_id,
+            )
+            from app.atencao import publicar_estado_atencao_persistido
+
+            await publicar_estado_atencao_persistido(
+                contexto.usuario_id, agente_id=contexto.agente_id, grupo_id=contexto.canal_id
             )
         from langgraph.types import interrupt
 

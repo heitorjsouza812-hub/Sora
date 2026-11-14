@@ -5,7 +5,7 @@
   "identifier": "com.sora.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5383",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; connect-src 'self' ipc: http://ipc.localhost https://api.seu-dominio.com.br",
-      "devCsp": "default-src 'self' http://localhost:5173; script-src 'self' http://localhost:5173; style-src 'self' 'unsafe-inline' http://localhost:5173; img-src 'self' data: blob: http://localhost:5173; font-src 'self' http://localhost:5173; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:5173 http://localhost:5173 http://localhost:8000"
+      "devCsp": "default-src 'self' http://localhost:5383; script-src 'self' http://localhost:5383; style-src 'self' 'unsafe-inline' http://localhost:5383; img-src 'self' data: blob: http://localhost:5383; font-src 'self' http://localhost:5383; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:5383 http://localhost:5383 http://localhost:8200"
     },
     "windows": [
       {
@@ -42,7 +42,7 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "focus": false,
-        "visible": true,
+        "visible": false,
         "center": false,
         "maximizable": false,
         "minimizable": false,

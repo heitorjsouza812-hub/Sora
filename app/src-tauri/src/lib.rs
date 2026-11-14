@@ -1,7 +1,7 @@
 use std::{
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, OnceLock},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use serde::Serialize;
@@ -26,18 +26,58 @@ struct RetanguloIlha {
     h: f64,
 }
 
+/// A etapa 5 só mostra a ilha fora do app: a janela nativa fica visível quando o usuário permite
+/// (preferência "mostrar ilha", via o comando `ilha_visivel`) **e** a janela "main" não está em
+/// foco (perdeu o foco, foi minimizada — o que sempre tira o foco no Windows antes — ou escondida
+/// na bandeja). Dentro do app e no navegador a ilha nunca chega a existir como janela separada.
+///
+/// Uma única thread (`iniciar_vigia_foco`) decide mostrar/esconder; eventos de janela e o comando
+/// `ilha_visivel` só a "cutucam". Assim não há corrida entre quem lê o foco e quem mostra a ilha.
 #[derive(Clone)]
 struct IlhaEstado {
     retangulo: Arc<Mutex<RetanguloIlha>>,
     atividade: Arc<(Mutex<bool>, Condvar)>,
+    permitida: Arc<Mutex<bool>>,
+    foco_principal: Arc<Mutex<bool>>,
+    principal_minimizada: Arc<Mutex<bool>>,
+    cutucada: Arc<(Mutex<bool>, Condvar)>,
+    /// HWND da janela "main" (Windows), guardado no setup: a vigia lê o estado real do Windows
+    /// sem depender da thread da interface.
+    hwnd_principal: Arc<OnceLock<isize>>,
+    /// HWND da janela da ilha (Windows): ver `ilha_nativa`.
+    hwnd_ilha: Arc<OnceLock<isize>>,
 }
 
 impl IlhaEstado {
-    fn novo(visivel: bool) -> Self {
+    fn novo(permitida: bool) -> Self {
         Self {
             retangulo: Arc::new(Mutex::new(RetanguloIlha::default())),
-            atividade: Arc::new((Mutex::new(visivel), Condvar::new())),
+            // a janela "main" começa em foco (é ela que abre primeiro): a ilha começa escondida.
+            atividade: Arc::new((Mutex::new(false), Condvar::new())),
+            permitida: Arc::new(Mutex::new(permitida)),
+            foco_principal: Arc::new(Mutex::new(true)),
+            principal_minimizada: Arc::new(Mutex::new(false)),
+            cutucada: Arc::new((Mutex::new(false), Condvar::new())),
+            hwnd_principal: Arc::new(OnceLock::new()),
+            hwnd_ilha: Arc::new(OnceLock::new()),
         }
+    }
+
+    /// Pede à vigia que reconcilie a ilha agora (sem esperar o próximo tique).
+    fn cutucar(&self) {
+        let (pedido, aviso) = &*self.cutucada;
+        *pedido.lock().expect("cutucada da ilha envenenada") = true;
+        aviso.notify_all();
+    }
+
+    /// Espera uma cutucada ou o tempo máximo; consome a cutucada.
+    fn esperar_cutucada(&self, maximo: Duration) {
+        let (pedido, aviso) = &*self.cutucada;
+        let guarda = pedido.lock().expect("cutucada da ilha envenenada");
+        let (mut guarda, _) = aviso
+            .wait_timeout_while(guarda, maximo, |p| !*p)
+            .expect("cutucada da ilha envenenada");
+        *guarda = false;
     }
 
     fn definir_ativa(&self, ativa: bool) {
@@ -49,6 +89,42 @@ impl IlhaEstado {
     fn ativa(&self) -> bool {
         *self.atividade.0.lock().expect("estado da ilha envenenado")
     }
+
+    fn definir_permitida(&self, permitida: bool) {
+        *self.permitida.lock().expect("permissão da ilha envenenada") = permitida;
+    }
+
+    fn definir_foco_principal(&self, foco: bool) {
+        *self.foco_principal.lock().expect("foco da ilha envenenado") = foco;
+    }
+
+    fn definir_principal_minimizada(&self, minimizada: bool) {
+        *self
+            .principal_minimizada
+            .lock()
+            .expect("estado minimizado da janela principal envenenado") = minimizada;
+    }
+
+    /// Visível só fora do app: permitida pelo usuário e a janela principal sem foco ou minimizada.
+    fn deveria_estar_visivel(&self) -> bool {
+        deveria_estar_visivel(
+            *self.permitida.lock().expect("permissão da ilha envenenada"),
+            *self.foco_principal.lock().expect("foco da ilha envenenado"),
+            *self
+                .principal_minimizada
+                .lock()
+                .expect("estado minimizado da janela principal envenenado"),
+        )
+    }
+}
+
+/// Função pura (testável sem Tauri): a ilha só aparece fora do app.
+fn deveria_estar_visivel(
+    permitida: bool,
+    foco_principal: bool,
+    principal_minimizada: bool,
+) -> bool {
+    permitida && (!foco_principal || principal_minimizada)
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -70,7 +146,88 @@ fn mostrar_principal<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-fn posicionar_ilha<R: Runtime>(app: &AppHandle<R>) {
+/// Janela da ilha no Windows, mexida direto pelo Win32 depois de criada.
+///
+/// Motivo: no tao 0.37 todo `show()`, `set_position()`, `set_ignore_cursor_events()` e
+/// `set_focusable()` passa por `set_window_flags`, que chama `ShowWindow(SW_SHOW)` (janela
+/// visível) ou `ShowWindow(SW_HIDE)` (escondida) a CADA chamada. `SW_SHOW` ATIVA a janela quando
+/// o processo da Sora tem direito ao primeiro plano — e tem logo depois de o usuário clicar em
+/// minimizar: a ilha virava a janela ativa e roubava o teclado do programa seguinte
+/// (`WS_EX_NOACTIVATE` não impede ativação por código). Aqui a ilha aparece com
+/// `SW_SHOWNOACTIVATE` e o resto não toca na visibilidade.
+#[cfg(windows)]
+mod ilha_nativa {
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{
+            GWL_EXSTYLE, GetWindowLongPtrW, HWND_TOPMOST, SW_HIDE, SW_SHOWNOACTIVATE,
+            SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+            SetWindowLongPtrW, SetWindowPos, ShowWindow, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+            WS_EX_TRANSPARENT,
+        },
+    };
+
+    fn h(hwnd: isize) -> HWND {
+        HWND(hwnd as *mut core::ffi::c_void)
+    }
+
+    // SAFETY (todas): HWND da própria janela da ilha; com HWND inválido as chamadas só falham.
+    pub fn mostrar(hwnd: isize) {
+        unsafe {
+            let _ = ShowWindow(h(hwnd), SW_SHOWNOACTIVATE);
+        }
+    }
+
+    pub fn esconder(hwnd: isize) {
+        unsafe {
+            let _ = ShowWindow(h(hwnd), SW_HIDE);
+        }
+    }
+
+    /// Posição e tamanho em pixels físicos, sempre por cima e sem ativar.
+    pub fn posicionar(hwnd: isize, x: i32, y: i32, largura: i32, altura: i32) {
+        unsafe {
+            let _ = SetWindowPos(
+                h(hwnd),
+                Some(HWND_TOPMOST),
+                x,
+                y,
+                largura,
+                altura,
+                SWP_NOACTIVATE,
+            );
+        }
+    }
+
+    /// Fora da pílula: cliques atravessam e a janela não aceita foco (os mesmos estilos que o tao
+    /// usa em `set_ignore_cursor_events(true)` + `set_focusable(false)`). Dentro: recebe cliques e
+    /// aceita foco, para dar para digitar uma resposta.
+    pub fn atravessar_cliques(hwnd: isize, atravessar: bool) {
+        let bits = (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0 | WS_EX_NOACTIVATE.0) as isize;
+        unsafe {
+            let atual = GetWindowLongPtrW(h(hwnd), GWL_EXSTYLE);
+            let novo = if atravessar {
+                atual | bits
+            } else {
+                atual & !bits
+            };
+            if novo != atual {
+                SetWindowLongPtrW(h(hwnd), GWL_EXSTYLE, novo);
+                let _ = SetWindowPos(
+                    h(hwnd),
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                );
+            }
+        }
+    }
+}
+
+fn posicionar_ilha<R: Runtime>(app: &AppHandle<R>, estado: &IlhaEstado) {
     let Some(ilha) = janela(app, "ilha") else {
         return;
     };
@@ -82,6 +239,13 @@ fn posicionar_ilha<R: Runtime>(app: &AppHandle<R>) {
     let tamanho = monitor.size();
     let largura_fisica = (ILHA_LARGURA * escala).round() as i32;
     let x = origem.x + (tamanho.width as i32 - largura_fisica) / 2;
+    #[cfg(windows)]
+    if let Some(&hwnd) = estado.hwnd_ilha.get() {
+        let altura_fisica = (ILHA_ALTURA * escala).round() as i32;
+        ilha_nativa::posicionar(hwnd, x, origem.y, largura_fisica, altura_fisica);
+        return;
+    }
+    let _ = estado;
     let _ = ilha.set_size(LogicalSize::new(ILHA_LARGURA, ILHA_ALTURA));
     let _ = ilha.set_position(PhysicalPosition::new(x, origem.y));
 }
@@ -90,13 +254,70 @@ fn definir_visibilidade<R: Runtime>(app: &AppHandle<R>, estado: &IlhaEstado, vis
     let Some(ilha) = janela(app, "ilha") else {
         return;
     };
+    #[cfg(windows)]
+    if let Some(&hwnd) = estado.hwnd_ilha.get() {
+        if visivel {
+            posicionar_ilha(app, estado);
+            ilha_nativa::mostrar(hwnd);
+            estado.definir_ativa(true);
+        } else {
+            estado.definir_ativa(false);
+            ilha_nativa::esconder(hwnd);
+            let _ = app.emit_to("ilha", "ilha-escondida", ());
+        }
+        return;
+    }
     if visivel {
-        posicionar_ilha(app);
+        posicionar_ilha(app, estado);
         let _ = ilha.show();
         estado.definir_ativa(true);
     } else {
         estado.definir_ativa(false);
         let _ = ilha.hide();
+        let _ = app.emit_to("ilha", "ilha-escondida", ());
+    }
+}
+
+/// Fora da pílula os cliques atravessam e a ilha não aceita foco; dentro, ela recebe cliques e
+/// aceita foco (para digitar uma resposta).
+fn definir_atravessar_cliques<R: Runtime>(
+    ilha: &WebviewWindow<R>,
+    estado: &IlhaEstado,
+    atravessar: bool,
+) {
+    #[cfg(windows)]
+    if let Some(&hwnd) = estado.hwnd_ilha.get() {
+        ilha_nativa::atravessar_cliques(hwnd, atravessar);
+        return;
+    }
+    let _ = estado;
+    let _ = ilha.set_ignore_cursor_events(atravessar);
+    let _ = ilha.set_focusable(!atravessar);
+}
+
+/// Quanto tempo a ilha espera, com a Sora fora de foco, antes de aparecer: evita piscar em
+/// trocas rápidas de janela (ex.: Alt+Tab passando pela Sora).
+const ATRASO_PARA_APARECER: Duration = Duration::from_millis(150);
+
+/// Decide o que fazer neste tique: esconder na hora, mostrar só depois de `ATRASO_PARA_APARECER`
+/// seguidos querendo aparecer. `querendo_desde` é o instante em que passou a querer aparecer.
+fn reconciliar<R: Runtime>(
+    app: &AppHandle<R>,
+    estado: &IlhaEstado,
+    querendo_desde: &mut Option<Instant>,
+) {
+    let deveria = estado.deveria_estar_visivel();
+    if deveria && !estado.ativa() {
+        let desde = *querendo_desde.get_or_insert_with(Instant::now);
+        if desde.elapsed() >= ATRASO_PARA_APARECER {
+            *querendo_desde = None;
+            definir_visibilidade(app, estado, true);
+        }
+    } else {
+        *querendo_desde = None;
+        if !deveria && estado.ativa() {
+            definir_visibilidade(app, estado, false);
+        }
     }
 }
 
@@ -167,13 +388,15 @@ fn janela_pode(comando: &str, label: &str) -> bool {
 fn ilha_visivel(
     visivel: bool,
     janela: WebviewWindow,
-    app: AppHandle,
     estado: State<'_, IlhaEstado>,
 ) -> Result<(), String> {
     if !janela_pode("ilha_visivel", janela.label()) {
         return Err("só a janela principal liga/desliga a ilha".into());
     }
-    definir_visibilidade(&app, &estado, visivel);
+    // "visivel" aqui é a preferência do usuário ("mostrar ilha"); a janela só aparece de
+    // verdade quando, além disso, a "main" estiver fora de foco (etapa 5: ilha só fora do app).
+    estado.definir_permitida(visivel);
+    estado.cutucar();
     Ok(())
 }
 
@@ -238,77 +461,6 @@ fn navegar(caminho: String, janela: WebviewWindow, app: AppHandle) -> Result<(),
     Ok(())
 }
 
-#[cfg(test)]
-mod testes {
-    use super::*;
-
-    #[test]
-    fn retangulo_rejeita_valores_ruins() {
-        assert!(validar_retangulo(100.0, 0.0, 600.0, 400.0).is_some());
-        assert!(validar_retangulo(f64::NAN, 0.0, 10.0, 10.0).is_none());
-        assert!(validar_retangulo(-1.0, 0.0, 10.0, 10.0).is_none());
-        let r = validar_retangulo(0.0, 0.0, 5000.0, 10.0).unwrap();
-        assert!(r.w <= ILHA_LARGURA);
-        assert!(validar_retangulo(0.0, 0.0, f64::INFINITY, 10.0).is_none());
-    }
-
-    #[test]
-    fn caminho_aceita_so_rotas_internas() {
-        assert!(caminho_interno_valido("/revisao/abc-1"));
-        assert!(!caminho_interno_valido("//evil.com"));
-        assert!(!caminho_interno_valido("https://evil.com"));
-        assert!(!caminho_interno_valido("javascript:alert(1)"));
-        assert!(!caminho_interno_valido("/a/../b"));
-        assert!(!caminho_interno_valido("/a\\b"));
-    }
-
-    #[test]
-    fn cada_comando_so_na_sua_janela() {
-        assert!(janela_pode("ilha_retangulo", "ilha"));
-        assert!(janela_pode("navegar", "ilha"));
-        assert!(janela_pode("ilha_visivel", "main"));
-        assert!(!janela_pode("ilha_retangulo", "main"));
-        assert!(!janela_pode("navegar", "main"));
-        assert!(!janela_pode("ilha_visivel", "ilha"));
-        assert!(!janela_pode("mostrar_app", "main"));
-        assert!(!janela_pode("mostrar_app", "ilha"));
-        assert!(!janela_pode("navegar", "outra"));
-    }
-
-    /// As capabilities liberam exatamente os comandos da tabela, uma por janela (APP-003).
-    #[test]
-    fn capabilities_batem_com_a_tabela() {
-        let main = include_str!("../capabilities/main.json");
-        let ilha = include_str!("../capabilities/ilha.json");
-        assert!(main.contains(r#""windows": ["main"]"#));
-        assert!(ilha.contains(r#""windows": ["ilha"]"#));
-        for (comando, janela) in COMANDOS_POR_JANELA {
-            let permissao = format!("\"allow-{}\"", comando.replace('_', "-"));
-            let (dono, outra) = if *janela == "main" {
-                (main, ilha)
-            } else {
-                (ilha, main)
-            };
-            assert!(dono.contains(&permissao), "{permissao} falta em {janela}");
-            assert!(
-                !outra.contains(&permissao),
-                "{permissao} sobrando na outra janela"
-            );
-        }
-        for cap in [main, ilha] {
-            assert!(!cap.contains("allow-mostrar-app"));
-            assert!(!cap.contains("core:default"));
-        }
-        assert!(
-            !std::path::Path::new(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/capabilities/default.json"
-            ))
-            .exists()
-        );
-    }
-}
-
 fn geometria_monitor<R: Runtime>(app: &AppHandle<R>) -> Option<(i32, i32, u32, u32, u64)> {
     let monitor = app.primary_monitor().ok().flatten()?;
     let p = monitor.position();
@@ -344,7 +496,7 @@ fn iniciar_poll_cursor(app: AppHandle, estado: IlhaEstado) {
                     let geometria = geometria_monitor(&app);
                     if geometria.is_some() && geometria != geometria_anterior {
                         geometria_anterior = geometria;
-                        posicionar_ilha(&app);
+                        posicionar_ilha(&app, &estado);
                     }
                 }
 
@@ -373,7 +525,7 @@ fn iniciar_poll_cursor(app: AppHandle, estado: IlhaEstado) {
                 let mudou_area = dentro != dentro_anterior;
                 if mudou_area {
                     dentro_anterior = dentro;
-                    let _ = ilha.set_ignore_cursor_events(!dentro);
+                    definir_atravessar_cliques(&ilha, &estado, !dentro);
                 }
                 if (x - mouse_anterior.0).abs() >= 1.0
                     || (y - mouse_anterior.1).abs() >= 1.0
@@ -383,6 +535,66 @@ fn iniciar_poll_cursor(app: AppHandle, estado: IlhaEstado) {
                     let _ = ilha.emit("ilha-mouse", MouseIlha { dentro, x, y });
                 }
             }
+        }
+    });
+}
+
+/// Estado real `(em foco, minimizada)` da janela "main". "Em foco" = visível, não minimizada e
+/// em primeiro plano. No Windows vem direto do sistema
+/// (`GetForegroundWindow`/`IsIconic`): o foco do tao segue o WM_SETFOCUS da janela de topo, mas no
+/// WebView2 o foco do teclado mora na janela filha, então ele pode dizer "sem foco" com a Sora na
+/// frente (e a ilha aparecia dentro do app depois de restaurar).
+#[cfg(windows)]
+fn estado_da_principal<R: Runtime>(
+    _app: &AppHandle<R>,
+    estado: &IlhaEstado,
+) -> Option<(bool, bool)> {
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{
+            GA_ROOTOWNER, GetAncestor, GetForegroundWindow, IsIconic, IsWindowVisible,
+        },
+    };
+    let principal = HWND(*estado.hwnd_principal.get()? as *mut core::ffi::c_void);
+    // SAFETY: só leitura de estado de janelas; HWND inválido devolve falso/nulo, sem efeito.
+    unsafe {
+        let minimizada = IsIconic(principal).as_bool();
+        let visivel = IsWindowVisible(principal).as_bool();
+        let frente = GetForegroundWindow();
+        let na_frente = !frente.is_invalid()
+            && (frente == principal || GetAncestor(frente, GA_ROOTOWNER) == principal);
+        Some((visivel && !minimizada && na_frente, minimizada))
+    }
+}
+
+#[cfg(not(windows))]
+fn estado_da_principal<R: Runtime>(
+    app: &AppHandle<R>,
+    _estado: &IlhaEstado,
+) -> Option<(bool, bool)> {
+    let main = janela(app, "main")?;
+    let minimizada = main.is_minimized().unwrap_or(false);
+    let foco = main.is_focused().unwrap_or(true) && main.is_visible().unwrap_or(true);
+    Some((foco && !minimizada, minimizada))
+}
+
+/// A única thread que mostra/esconde a ilha. Reconcilia a cada 250 ms ou logo que for cutucada
+/// (eventos de foco/tamanho/fechar da "main" e o comando `ilha_visivel`). Também cobre o app
+/// aberto em segundo plano, quando nenhum evento de foco chega.
+fn iniciar_vigia_foco(app: AppHandle, estado: IlhaEstado) {
+    thread::spawn(move || {
+        // dá tempo à janela de nascer e ganhar o foco inicial (evita piscar a ilha na abertura)
+        thread::sleep(Duration::from_millis(800));
+        let mut querendo_desde = None;
+        loop {
+            if let Some((foco, minimizada)) = estado_da_principal(&app, &estado) {
+                estado.definir_foco_principal(foco);
+                estado.definir_principal_minimizada(minimizada);
+            }
+            reconciliar(&app, &estado, &mut querendo_desde);
+            // esperando para aparecer: confere de novo logo, para não atrasar além do necessário
+            let espera = if querendo_desde.is_some() { 50 } else { 250 };
+            estado.esperar_cutucada(Duration::from_millis(espera));
         }
     });
 }
@@ -405,8 +617,9 @@ fn montar_bandeja(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, evento| match evento.id.as_ref() {
             "abrir" => mostrar_principal(app),
             "alternar-ilha" => {
-                let estado = app.state::<IlhaEstado>();
-                definir_visibilidade(app, &estado, !estado.ativa());
+                // O WebView da ilha atualiza a preferência; a janela principal a repassa pelo
+                // comando `ilha_visivel`. Nunca mostramos a janela diretamente aqui, porque isso
+                // quebraria a regra da etapa 5 quando a janela principal estiver em foco.
                 let _ = app.emit_to("ilha", "ilha-alternar", ());
             }
             "sair" => app.exit(0),
@@ -458,23 +671,159 @@ pub fn run() {
             cofre_apagar
         ])
         .setup(move |app| {
-            posicionar_ilha(app.handle());
             if let Some(ilha) = janela(app.handle(), "ilha") {
-                let _ = ilha.set_ignore_cursor_events(true);
+                #[cfg(windows)]
+                if let Ok(hwnd) = ilha.hwnd() {
+                    let _ = estado.hwnd_ilha.set(hwnd.0 as isize);
+                }
+                // cliques atravessam e a ilha não aceita foco até o mouse entrar na pílula
+                // (ver iniciar_poll_cursor): aparecer não rouba o foco de quem estava digitando.
+                definir_atravessar_cliques(&ilha, &estado, true);
+            }
+            posicionar_ilha(app.handle(), &estado);
+            if let Some(main) = janela(app.handle(), "main")
+                && let Ok(hwnd) = main.hwnd()
+            {
+                let _ = estado.hwnd_principal.set(hwnd.0 as isize);
             }
             app.global_shortcut().register("Ctrl+Shift+S")?;
             montar_bandeja(app)?;
             iniciar_poll_cursor(app.handle().clone(), estado.clone());
+            iniciar_vigia_foco(app.handle().clone(), estado.clone());
             Ok(())
         })
         .on_window_event(|janela, evento| {
-            if janela.label() == "main"
-                && let tauri::WindowEvent::CloseRequested { api, .. } = evento
-            {
-                api.prevent_close();
-                let _ = janela.hide();
+            if janela.label() != "main" {
+                return;
+            }
+            match evento {
+                // foco, minimizar/restaurar: a vigia lê o estado real e decide na hora.
+                tauri::WindowEvent::Focused(_) | tauri::WindowEvent::Resized(_) => {
+                    janela.app_handle().state::<IlhaEstado>().cutucar();
+                }
+                // fechar esconde na bandeja (não fecha de verdade): também é "fora do app".
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = janela.hide();
+                    janela.app_handle().state::<IlhaEstado>().cutucar();
+                }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())
         .expect("erro ao executar a Sora");
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn retangulo_rejeita_valores_ruins() {
+        assert!(validar_retangulo(100.0, 0.0, 600.0, 400.0).is_some());
+        assert!(validar_retangulo(f64::NAN, 0.0, 10.0, 10.0).is_none());
+        assert!(validar_retangulo(-1.0, 0.0, 10.0, 10.0).is_none());
+        let r = validar_retangulo(0.0, 0.0, 5000.0, 10.0).unwrap();
+        assert!(r.w <= ILHA_LARGURA);
+        assert!(validar_retangulo(0.0, 0.0, f64::INFINITY, 10.0).is_none());
+    }
+
+    #[test]
+    fn caminho_aceita_so_rotas_internas() {
+        assert!(caminho_interno_valido("/revisao/abc-1"));
+        assert!(!caminho_interno_valido("//evil.com"));
+        assert!(!caminho_interno_valido("https://evil.com"));
+        assert!(!caminho_interno_valido("javascript:alert(1)"));
+        assert!(!caminho_interno_valido("/a/../b"));
+        assert!(!caminho_interno_valido("/a\\b"));
+    }
+
+    #[test]
+    fn cada_comando_so_na_sua_janela() {
+        assert!(janela_pode("ilha_retangulo", "ilha"));
+        assert!(janela_pode("navegar", "ilha"));
+        assert!(janela_pode("ilha_visivel", "main"));
+        assert!(!janela_pode("ilha_retangulo", "main"));
+        assert!(!janela_pode("navegar", "main"));
+        assert!(!janela_pode("ilha_visivel", "ilha"));
+        assert!(!janela_pode("mostrar_app", "main"));
+        assert!(!janela_pode("mostrar_app", "ilha"));
+        assert!(!janela_pode("navegar", "outra"));
+    }
+
+    /// A ilha só aparece fora do app: permitida pelo usuário e a janela principal sem foco.
+    #[test]
+    fn ilha_so_aparece_fora_do_app() {
+        assert!(
+            !deveria_estar_visivel(true, true, false),
+            "main em foco: ilha some, mesmo permitida"
+        );
+        assert!(
+            deveria_estar_visivel(true, false, false),
+            "main fora de foco e permitida: ilha aparece"
+        );
+        assert!(
+            deveria_estar_visivel(true, false, true),
+            "main minimizada: ilha aparece"
+        );
+        assert!(
+            deveria_estar_visivel(true, true, true),
+            "minimizada vale mesmo que o foco ainda não tenha sido atualizado"
+        );
+        assert!(
+            !deveria_estar_visivel(false, false, true),
+            "desligada pelo usuário: nunca aparece"
+        );
+        assert!(
+            !deveria_estar_visivel(false, true, false),
+            "desligada e em foco: nunca aparece"
+        );
+    }
+
+    /// Minimizar ou escolher outro programa tira o foco da "main" antes de qualquer outra coisa
+    /// no Windows; o estado inicial (`IlhaEstado::novo`) assume a main em foco, então a ilha nasce
+    /// escondida (não pisca visível no instante entre abrir o app e ele ganhar foco).
+    #[test]
+    fn estado_inicial_comeca_com_a_main_em_foco() {
+        let estado = IlhaEstado::novo(true);
+        assert!(!estado.deveria_estar_visivel());
+        estado.definir_foco_principal(false);
+        assert!(estado.deveria_estar_visivel());
+        estado.definir_foco_principal(true);
+        estado.definir_principal_minimizada(true);
+        assert!(estado.deveria_estar_visivel());
+    }
+
+    /// As capabilities liberam exatamente os comandos da tabela, uma por janela (APP-003).
+    #[test]
+    fn capabilities_batem_com_a_tabela() {
+        let main = include_str!("../capabilities/main.json");
+        let ilha = include_str!("../capabilities/ilha.json");
+        assert!(main.contains(r#""windows": ["main"]"#));
+        assert!(ilha.contains(r#""windows": ["ilha"]"#));
+        for (comando, janela) in COMANDOS_POR_JANELA {
+            let permissao = format!("\"allow-{}\"", comando.replace('_', "-"));
+            let (dono, outra) = if *janela == "main" {
+                (main, ilha)
+            } else {
+                (ilha, main)
+            };
+            assert!(dono.contains(&permissao), "{permissao} falta em {janela}");
+            assert!(
+                !outra.contains(&permissao),
+                "{permissao} sobrando na outra janela"
+            );
+        }
+        for cap in [main, ilha] {
+            assert!(!cap.contains("allow-mostrar-app"));
+            assert!(!cap.contains("core:default"));
+        }
+        assert!(
+            !std::path::Path::new(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/capabilities/default.json"
+            ))
+            .exists()
+        );
+    }
 }
