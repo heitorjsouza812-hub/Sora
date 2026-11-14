@@ -8,6 +8,8 @@ export interface GrupoResumo {
   liderId?: string | null;
   precisaDeVoce: boolean;
   trabalhando: boolean;
+  /** Menos de 2 bots: o servidor recusa mensagens (409) até o grupo ganhar bots. */
+  precisaDeBots?: boolean;
 }
 
 interface EstadoGrupos {
@@ -135,3 +137,25 @@ export function receberEventoGrupos(evento: EventoEtapa5): void {
 }
 
 export function _reiniciarGruposParaTestes(): void { clearTimeout(relerGruposEm); releituraPendente = false; definir(inicial()); }
+
+const ABERTAS = new Set(['na_fila', 'rodando', 'aguardando_filhas', 'parada', 'falhou']);
+
+/** Botões que a tarefa mostra agora: os do servidor, ou os mesmos estados que ele aceita em cada controle. */
+export function acoesDaTarefa(tarefa: TarefaGrupoApi): NonNullable<TarefaGrupoApi['acoes']> {
+  if (tarefa.acoes) return tarefa.acoes;
+  if (tarefa.status === 'na_fila' || tarefa.status === 'rodando' || tarefa.status === 'aguardando_filhas') return ['parar'];
+  if (tarefa.status === 'parada' || tarefa.status === 'falhou') return ['retomar', 'reatribuir', 'cancelar'];
+  return [];
+}
+
+/** Tarefas do grupo que ainda pedem atenção (ativas, paradas ou que falharam), da mais antiga para a mais nova. */
+export function tarefasAbertasDoGrupo(tarefas: Record<string, TarefaGrupoApi> | undefined): TarefaGrupoApi[] {
+  return Object.values(tarefas ?? {}).filter(tarefa => ABERTAS.has(tarefa.status));
+}
+
+/** Menos de 2 bots além da Sora. Vale o campo do servidor; sem ele, conta os membros. */
+export function grupoPrecisaDeBots(grupo: Pick<GrupoResumo, 'membros' | 'liderId' | 'precisaDeBots'>): boolean {
+  if (typeof grupo.precisaDeBots === 'boolean') return grupo.precisaDeBots;
+  const lider = grupo.liderId ?? grupo.membros[0];
+  return grupo.membros.filter(id => id !== lider).length < 2;
+}
