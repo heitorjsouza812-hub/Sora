@@ -1,3 +1,5 @@
+import { mensagemDeErro } from '../api/cliente';
+import { toast } from '../components/base';
 import { useEffect, useState } from 'react';
 import { InicioSora, consumirPedidoInicial } from '../components/inicio';
 import { AppShell } from '../components/layout/AppShell';
@@ -15,7 +17,7 @@ import { usePrecisaDeVoce } from '../state/atencao';
 import { useSoraId } from '../state/bots';
 import { carregarPropostasPendentes, carregarRascunhosPendentes, useCartoesSora } from '../state/sora';
 import {
-  abrirProjeto, anexarEnvio, conversarComSora, gerandoNa, mensagensDa, pararGeracao,
+  abrirProjeto, anexarEnvio, conversarComSora, gerandoNa, mensagensDa, pararConversa,
   projetoAtivo, textoVisivel, useAgora, useProjetos,
 } from '../state/projetos';
 
@@ -78,7 +80,7 @@ export default function SoraChat() {
           <MessageComposer placeholder="Mensagem para a Sora…" compact value={rascunho} onValueChange={setRascunho}
             processing={pensando}
             onSend={(texto, anexos) => { seguirFim(); void anexarEnvio(anexos, enviados => conversarComSora(texto, undefined, enviados)); }}
-            gerando={gerando} onParar={() => projeto && pararGeracao(projeto.id)} />
+            gerando={gerando} onParar={() => { if (projeto) void pararConversa(projeto.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
         </div>
       </ZonaSoltar>
     </main>

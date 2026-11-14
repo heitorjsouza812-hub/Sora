@@ -73,7 +73,8 @@
 .wk-result-sum { display: inline-block; padding: var(--sp-1) var(--sp-2); color: var(--agent); background: color-mix(in srgb, var(--agent), transparent 88%); border-radius: var(--r-6); font-size: var(--fs-12); font-weight: 600; }
 .wk-links { display: grid; gap: var(--sp-1); margin: 8px 0 0; padding: 0; list-style: none; }
 .wk-links li { display: flex; justify-content: space-between; gap: var(--sp-2); min-width: 0; font-size: var(--fs-12); }
-.wk-links span { overflow: hidden; color: var(--focus); white-space: nowrap; text-overflow: ellipsis; }
+.wk-links span, .wk-links a { overflow: hidden; color: var(--focus); white-space: nowrap; text-overflow: ellipsis; }
+.wk-links a { text-decoration: underline; text-underline-offset: 2px; }
 .wk-links small { flex: none; color: var(--text-3); }
 .wk-thumbs { display: flex; gap: var(--sp-2); margin-top: 8px; }
 .wk-thumbs img, .wk-thumb-gen { width: 56px; height: 56px; object-fit: cover; border: 1px solid var(--line); border-radius: var(--r-6); }

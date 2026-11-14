@@ -1,3 +1,4 @@
+import { AnexosResposta } from '../ui/AnexosResposta';
 import { useState } from 'react';
 import { buscarAutenticado } from '../../api/cliente';
 import type { AnexoGrupo, MensagemGrupoApi } from '../../api/grupos';
@@ -48,7 +49,7 @@ export function MensagemGrupo({ mensagem, todas, soraId, onResponder }: { mensag
     {mensagem.texto.trim() && (doUsuario
       ? <p className="grp-corpo grp-corpo-usuario">{mensagem.texto}</p>
       : <div className="grp-corpo"><Markdown texto={mensagem.texto} /></div>)}
-    {!!mensagem.anexos.length && <div className="grp-anexos">{mensagem.anexos.map(anexo => <BotaoAnexo key={anexo.id} anexo={anexo} />)}</div>}
+    {!!mensagem.anexos.length && <AnexosResposta anexos={mensagem.anexos} />}
     <span className="grp-msg-acoes"><button type="button" onClick={() => onResponder(mensagem)}>Responder</button></span>
   </li>;
 }

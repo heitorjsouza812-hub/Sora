@@ -190,7 +190,7 @@ export default function AgentChat() {
           <div className="chat-composer">
             <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'} voz
               onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => enviarParaAgente(a.id, t, undefined, true, enviados)); seguirFim(); }}
-              gerando={gerando} onParar={() => { if (a.conversaId) void pararConversa(a.conversaId).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
+              gerando={gerando} onParar={() => { void pararConversa(a.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
           </div>
           </ZonaSoltar>
         </main>

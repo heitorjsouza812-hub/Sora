@@ -63,6 +63,7 @@ describe('conversa: envio e carga sob demanda', () => {
   expect(lerEstado().mensagens).toHaveLength(1); expect(lerEstado().mensagens[0]?.texto).toBe('Igual');
   mock.post.mockResolvedValueOnce({ mensagem_id: 'real2' }); await enviarParaAgente('bot', 'Igual');
   expect(lerEstado().mensagens).toHaveLength(2);
+  expect(mock.post).toHaveBeenLastCalledWith('/v1/conversas/c1/mensagens', expect.objectContaining({ para_agente_id: null }));
  });
  it('primeira conversa da Sora também nasce antes da rede; repetir confirmação não repete POST', async () => {
   mock.post.mockResolvedValue({ id: 'nova', tipo: 'chat', titulo: 'Oi', criada_em: '2026-11-14T12:00:00Z', atualizada_em: '2026-11-14T12:00:00Z' });

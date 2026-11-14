@@ -41,9 +41,11 @@ export interface ProjetoSora {
   ajusteAgenteId?: string; cadeiaId?: string; cadeiaStatus?: 'planejando' | 'executando' | 'verificando' | 'aguardando_usuario' | 'concluida' | 'falhou' | 'cancelada';
   roteamento?: 'direto' | 'cadeia' | 'pergunta'; erro?: string; mensagensPendentes?: boolean;
 }
+export interface FonteMensagem { n: number; titulo: string; url: string; dominio: string }
 export interface MensagemChat {
   id: string; conversaId: string; autor: 'usuario' | 'sora' | string; agenteId?: string; texto: string; criadoEm: number;
   envio?: 'enviando' | 'erro';
+  fontes?: FonteMensagem[]; estado?: 'concluida' | 'interrompida';
   gerando?: boolean; interrompidaEm?: number; avaliacao?: 'positiva' | 'negativa'; origem?: 'conversa'; variante?: number; anexos?: AnexoMsg[];
 }
 export interface AnexoMsg { id: string; nome: string; tipo: string; tamanho: number }
@@ -51,8 +53,10 @@ export interface SoraPerfil { nome: string; cor: string }
 export interface EstadoProjetos {
   versao: 2; sora: SoraPerfil; agentes: Record<string, AgenteSora>; projetos: ProjetoSora[]; projetoAtivoId: string | null;
   execucoes: Execucao[]; mensagens: MensagemChat[]; pluginsConectados: string[]; carregando: boolean; erro?: string;
-  historicos?: Record<string, { carregando: boolean; carregado: boolean; anteriores: boolean; erro?: string; cursor?: string }>;
+  historicos?: Record<string, { carregando: boolean; carregado: boolean; anteriores: boolean; erro?: string; cursor?: string; ultimo?: number }>;
   erroEventos?: string;
+  mensagensOcultas?: string[];
+  conversasOcupadas?: string[];
   pendencias?: Pendencia[];
 }
 /** Algo que a equipe espera do usuário: pergunta (inclui o orçamento estourado: Continuar/Parar) ou aprovação. */
@@ -66,7 +70,7 @@ export type FaseProjeto = 'pensando' | 'conversa' | 'planejando' | 'coordenando'
 
 interface ConversaApi { id: string; agente_id: string; tipo: 'chat' | 'projeto' | 'agente'; titulo: string | null; aprovada_versao: number | null; criada_em: string; atualizada_em: string }
 interface AgenteApi { id: string; tipo: 'sora' | 'individual' | 'especialista'; nome: string; funcao: string; cor: string; movimento: Movimento; status?: Status | null; estado?: 'livre' | 'trabalhando' | 'precisa_de_voce'; ferramentas?: string[] }
-interface MensagemApi { id: string; conversa_id: string; autor: 'usuario' | 'sora' | 'agente' | 'sistema'; agente_id?: string | null; conteudo: string; anexos: AnexoMsg[]; criada_em: string }
+interface MensagemApi { id: string; conversa_id: string; autor: 'usuario' | 'sora' | 'agente' | 'sistema'; agente_id?: string | null; conteudo: string; anexos: (AnexoMsg | string)[]; criada_em: string; estado?: 'concluida' | 'interrompida'; fontes?: FonteMensagem[]; avaliacao?: 1 | -1 | null }
 interface EntregasApi { entregas: { id: string; agente_id: string | null; versao: number; tipo: EntregaGerada['tipo']; titulo: string; resumo: string; conteudo: unknown }[]; versoes: number[] }
 
 const inicial = (): EstadoProjetos => ({ versao: 2, sora: { nome: 'Sora', cor: COR_SORA }, agentes: {}, projetos: [], projetoAtivoId: null, execucoes: [], mensagens: [], pluginsConectados: [], carregando: true });
@@ -98,9 +102,10 @@ function projetoDaApi(c: ConversaApi): ProjetoSora {
   return { id: c.id, tipo: c.tipo === 'projeto' ? 'projeto' : 'chat', titulo: c.titulo || 'Nova conversa', pedido: '', modelo: '', assunto: c.titulo || '', resposta: '', criadoEm, tarefas: [], agenteIds: [], entregas: {}, // fim = 0: só um evento ao vivo (cadeia.atualizada concluída) marca o fim; projeto carregado do servidor não é "acabou de terminar".
     marcos: { plano: criadoEm, nascimentos: [], trabalho: criadoEm, fim: 0 }, aprovadoEm: c.aprovada_versao ? Date.parse(c.atualizada_em) : undefined, aprovadaVersao: c.aprovada_versao, versao: 1 };
 }
+export function normalizarAnexos(anexos: (AnexoMsg | string)[] = []): AnexoMsg[] { return anexos.map(a => typeof a === 'string' ? { id: a, nome: 'Arquivo', tipo: '', tamanho: 0 } : a); }
 function mensagemDaApi(m: MensagemApi): MensagemChat {
   const autor = m.autor === 'agente' && m.agente_id ? m.agente_id : m.autor === 'usuario' ? 'usuario' : 'sora';
-  return { id: m.id, conversaId: m.conversa_id, autor, agenteId: m.agente_id ?? undefined, texto: m.conteudo, criadoEm: Date.parse(m.criada_em), anexos: m.anexos, gerando: false };
+  return { id: m.id, conversaId: m.conversa_id, autor, agenteId: m.agente_id ?? undefined, texto: m.conteudo, criadoEm: Date.parse(m.criada_em), anexos: normalizarAnexos(m.anexos), gerando: false, estado: m.estado, fontes: m.fontes, avaliacao: m.avaliacao === 1 ? 'positiva' : m.avaliacao === -1 ? 'negativa' : undefined };
 }
 
 let controladorGeral: AbortController | null = null;
@@ -320,7 +325,7 @@ function enviarOtimista(conversaInicial: string, texto: string, anexos: Anexo[],
             mensagens: e.mensagens.map(m => m.id === localId ? { ...m, conversaId } : m),
           }));
         } else {
-          const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${conversaId}/mensagens`, { texto, anexos: ids, para_agente_id: agenteId ?? null });
+          const aceita = await api.post<{ mensagem_id: string }>(`/v1/conversas/${conversaId}/mensagens`, { texto, anexos: ids, para_agente_id: agenteId && !estado.agentes[agenteId]?.avulso ? agenteId : null });
           if (sessao !== geracaoSessao) return;
           aceitaId = aceita.mensagem_id;
         }
@@ -357,13 +362,14 @@ export function carregarMensagens(conversaId: string, anteriores = false): Promi
   if (cargas.has(conversaId)) return cargas.get(conversaId)!;
   if (!anteriores && atual?.carregado) return Promise.resolve();
   if (anteriores && (!atual?.anteriores || !atual.cursor)) return Promise.resolve();
+  const inicioCarga = Date.now();
   const antes = anteriores ? atual?.cursor : undefined;
   alterar(e => ({ ...e, historicos: { ...e.historicos, [conversaId]: { carregado: false, anteriores: false, ...atual, carregando: true, erro: undefined } } }));
   const carga = api.get<MensagemApi[]>(`/v1/conversas/${conversaId}/mensagens?limite=50${antes ? '&antes=' + encodeURIComponent(antes) : ''}`).then(lista => {
     if (sessao !== geracaoSessao) return;
     alterar(e => ({ ...e,
-      mensagens: [...e.mensagens, ...lista.filter(m => !e.mensagens.some(x => x.id === m.id)).map(mensagemDaApi)],
-      historicos: { ...e.historicos, [conversaId]: { carregado: true, carregando: false, anteriores: lista.length === 50, cursor: [...lista].sort((a,b) => a.criada_em.localeCompare(b.criada_em))[0]?.criada_em ?? antes } },
+      mensagens: [...e.mensagens.filter(m => !lista.some(x => x.id === m.id) && (anteriores || m.conversaId !== conversaId || m.envio || m.criadoEm > inicioCarga)), ...lista.map(mensagemDaApi)].sort((a,b) => a.criadoEm - b.criadoEm),
+      historicos: { ...e.historicos, [conversaId]: { carregado: true, carregando: false, anteriores: lista.length === 50, ultimo: Math.max(atual?.ultimo ?? 0, ...lista.map(m => Date.parse(m.criada_em))), cursor: [...lista].sort((a,b) => a.criada_em.localeCompare(b.criada_em))[0]?.criada_em ?? antes } },
     }));
   }).catch(() => {
     if (sessao !== geracaoSessao) return;
@@ -430,14 +436,62 @@ export function alternarPlugin(_nome: string) { /* plugins seguem congelados */ 
 
 export interface TextoVisivel { texto: string; gerando: boolean; interrompida: boolean }
 export const duracaoStream = (_texto: string) => 0;
-export function textoVisivel(m: MensagemChat, _agora: number): TextoVisivel { return { texto: m.texto, gerando: !!m.gerando, interrompida: m.interrompidaEm !== undefined }; }
-export function gerandoNa(e: EstadoProjetos, conversaOuAgenteId: string, agora: number) { return mensagensDa(e, conversaOuAgenteId, agora).some(m => m.gerando); }
-export function pararGeracao(conversaOuAgenteId: string) { const p = estado.projetos.find(x => x.id === conversaOuAgenteId); if (p?.cadeiaId) void api.post(`/v1/cadeias/${p.cadeiaId}/cancelar`); }
-export function avaliarMensagem(id: string, valor: 'positiva' | 'negativa') { alterar(e => ({ ...e, mensagens: e.mensagens.map(m => m.id === id ? { ...m, avaliacao: m.avaliacao === valor ? undefined : valor } : m) })); }
-export const podeRefazer = (_m: MensagemChat) => false;
-export function refazerResposta(_id: string) { /* o backend não expõe refazer nesta fase */ }
-export function podeEditar(_e: EstadoProjetos, _m: MensagemChat) { return false; }
-export function editarPergunta(_id: string, _novoTexto: string) { /* edição não faz parte do contrato HTTP */ }
+export function textoVisivel(m: MensagemChat, _agora: number): TextoVisivel { return { texto: m.texto, gerando: !!m.gerando, interrompida: m.estado === 'interrompida' || m.interrompidaEm !== undefined }; }
+export function gerandoNa(e: EstadoProjetos, conversaOuAgenteId: string, agora: number) {
+  const id = e.agentes[conversaOuAgenteId]?.conversaId ?? conversaOuAgenteId;
+  const p = e.projetos.find(x => x.id === id);
+  const ultima = mensagensDa(e, conversaOuAgenteId, agora).at(-1);
+  return !!(e.conversasOcupadas?.includes(id) || p?.mensagensPendentes || ['planejando', 'executando', 'verificando'].includes(p?.cadeiaStatus ?? '') || ultima?.autor === 'usuario' && ultima.estado !== 'interrompida' && ultima.envio !== 'erro' || mensagensDa(e, conversaOuAgenteId, agora).some(m => m.gerando));
+}
+export async function pararConversa(conversaOuAgenteId: string) {
+  const sessao = geracaoSessao;
+  // Primeiro envio pode ainda estar criando a conversa. Espere sua confirmação antes de parar.
+  await enviosAgenteEmVoo.get(conversaOuAgenteId);
+  if (sessao !== geracaoSessao) return;
+  const conversaId = estado.agentes[conversaOuAgenteId]?.conversaId ?? conversasCriadas.get(conversaOuAgenteId) ?? conversaOuAgenteId;
+  await api.post<void>(`/v1/conversas/${conversaId}/parar`);
+  const lista = await api.get<MensagemApi[]>(`/v1/conversas/${conversaId}/mensagens?limite=50`);
+  if (sessao !== geracaoSessao) return;
+  alterar(e => ({ ...e,
+    projetos: e.projetos.map(p => p.id === conversaId ? { ...p, mensagensPendentes: false, cadeiaStatus: p.cadeiaId ? 'cancelada' : p.cadeiaStatus } : p),
+    mensagens: [...e.mensagens.filter(m => !lista.some(x => x.id === m.id)).map(m => m.conversaId === conversaId ? { ...m, gerando: false } : m), ...lista.map(mensagemDaApi)].sort((a,b) => a.criadoEm - b.criadoEm),
+  }));
+}
+export async function avaliarMensagem(id: string, valor: 'positiva' | 'negativa') {
+  const m = estado.mensagens.find(x => x.id === id); if (!m) return;
+  const sessao = geracaoSessao;
+  const resposta = await api.put<MensagemApi>(`/v1/conversas/${m.conversaId}/mensagens/${id}/avaliacao`, { valor: m.avaliacao === valor ? null : valor === 'positiva' ? 1 : -1 });
+  if (sessao !== geracaoSessao) return;
+  alterar(e => ({ ...e, mensagens: e.mensagens.map(x => x.id === id ? { ...x, avaliacao: mensagemDaApi(resposta).avaliacao } : x) }));
+}
+export function podeEditar(e: EstadoProjetos, m: MensagemChat) {
+  return m.autor === 'usuario' && !m.envio && !gerandoNa(e, m.conversaId, 0) && e.mensagens.filter(x => x.conversaId === m.conversaId && x.autor === 'usuario').at(-1)?.id === m.id;
+}
+export const podeRefazer = (m: MensagemChat) => m.autor !== 'usuario' && !gerandoNa(estado, m.conversaId, 0) && estado.mensagens.filter(x => x.conversaId === m.conversaId).at(-1)?.id === m.id;
+async function substituirTurno(id: string, novoTexto?: string) {
+  const m = estado.mensagens.find(x => x.id === id); if (!m || estado.conversasOcupadas?.includes(m.conversaId)) return;
+  const sessao = geracaoSessao;
+  const conversa = m.conversaId;
+  const antigas = estado.mensagens.filter(x => x.conversaId === conversa);
+  const pergunta = antigas.filter(x => x.autor === 'usuario').at(-1);
+  if (!pergunta) return;
+  const ocultas = antigas.slice(antigas.indexOf(pergunta)).map(x => x.id);
+  alterar(e => ({ ...e, conversasOcupadas: [...e.conversasOcupadas ?? [], conversa] }));
+  try {
+    const caminho = `/v1/conversas/${conversa}/mensagens/${id}`;
+    if (novoTexto === undefined) await api.post(caminho + '/refazer');
+    else await api.patch(caminho, { texto: novoTexto.trim() });
+    if (sessao !== geracaoSessao) return;
+    alterar(e => ({ ...e, mensagensOcultas: [...e.mensagensOcultas ?? [], ...ocultas], mensagens: e.mensagens.filter(x => !ocultas.includes(x.id)) }));
+    const lista = await api.get<MensagemApi[]>(`/v1/conversas/${conversa}/mensagens?limite=50`);
+    if (sessao !== geracaoSessao) return;
+    alterar(e => ({ ...e, mensagens: [...e.mensagens.filter(x => !lista.some(y => y.id === x.id)), ...lista.map(mensagemDaApi)].sort((a,b) => a.criadoEm - b.criadoEm) }));
+  } finally {
+    if (sessao === geracaoSessao) alterar(e => ({ ...e, conversasOcupadas: e.conversasOcupadas?.filter(x => x !== conversa) }));
+  }
+}
+export const refazerResposta = (id: string) => substituirTurno(id);
+export const editarPergunta = (id: string, novoTexto: string) => substituirTurno(id, novoTexto);
 const previasDaSessao = new Map<string, string>();
 export const previaDoAnexo = (id: string) => previasDaSessao.get(id);
 export async function anexarEnvio<T>(anexos: Anexo[] | undefined, enviar: (anexos: Anexo[]) => Promise<T>): Promise<T> { (anexos ?? []).forEach(a => { if (a.urlPrevia) previasDaSessao.set(a.id, a.urlPrevia); }); return enviar(anexos ?? []); }

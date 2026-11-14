@@ -1,3 +1,4 @@
+import { normalizarAnexos, type FonteMensagem, type AnexoMsg } from './projetos';
 import type { Movimento, PassoTrabalho } from '../types';
 import type { RevisaoDominio, AgenteSora, EntregaGerada, EstadoProjetos, Execucao, ProjetoSora, TarefaGerada } from './projetos';
 import type { EventoSse } from '../api/eventos';
@@ -38,7 +39,7 @@ function garantirExecucao(estado: EstadoProjetos, conversaId: string, etapaId: s
 export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): EstadoProjetos {
   const d = evento.dados as Dados;
   const conversaId = texto(d.conversa_id) || estado.projetoAtivoId || '';
-  if (!conversaId) return estado;
+  if (!conversaId || estado.mensagensOcultas?.includes(texto(d.mensagem_id))) return estado;
 
   if (evento.tipo === 'pergunta') {
     const id = texto(d.pergunta_id); if (!id || (estado.pendencias ?? []).some(p => p.id === id)) return estado;
@@ -63,7 +64,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
 
   if (evento.tipo === 'mensagem.inicio') {
     const id = texto(d.mensagem_id);
-    if (!id || estado.mensagens.some(m => m.id === id)) return estado;
+    if (!id || estado.mensagens.some(m => m.id === id) || evento.recebidoEm <= (estado.historicos?.[conversaId]?.ultimo ?? 0)) return estado;
     const autorBruto = texto(d.autor);
     const agenteId = texto(d.agente_id) || undefined;
     const autor = autorBruto === 'agente' && agenteId ? agenteId : autorBruto === 'usuario' ? 'usuario' : 'sora';
@@ -78,7 +79,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
   if (evento.tipo === 'mensagem.fim') {
     const id = texto(d.mensagem_id);
     // A resposta terminou: some o "pensando". Cobre a falha da triagem, em que o backend só publica mensagem.*.
-    const fechado = { ...estado, mensagens: estado.mensagens.map(m => m.id === id ? { ...m, gerando: false } : m) };
+    const fechado = { ...estado, mensagens: estado.mensagens.map(m => m.id === id ? { ...m, gerando: false, estado: d.estado === 'interrompida' ? 'interrompida' as const : 'concluida' as const, fontes: Array.isArray(d.fontes) && d.fontes.length ? d.fontes as FonteMensagem[] : m.fontes, anexos: Array.isArray(d.anexos) && d.anexos.length ? normalizarAnexos(d.anexos as (AnexoMsg | string)[]) : m.anexos } : m) };
     return atualizarProjeto(fechado, conversaId, p => p.mensagensPendentes ? { ...p, mensagensPendentes: false } : p);
   }
   if (evento.tipo === 'roteamento') return atualizarProjeto(estado, conversaId, p => ({ ...p, roteamento: texto(d.modo) as ProjetoSora['roteamento'], mensagensPendentes: false }));

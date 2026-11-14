@@ -1,9 +1,11 @@
+import { AnexosResposta } from './AnexosResposta';
+import { FontesMensagem } from './FontesMensagem';
 // Uma mensagem do chat (usuário, Sora ou agente) com streaming, markdown e ações:
 // copiar · refazer · 👍/👎 · editar a pergunta. As ações aparecem no hover/foco; no celular, pelo
 // botão "…" ou por toque longo.
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
-  tentarEnvioNovamente, editarPergunta, podeEditar, podeRefazer, previaDoAnexo, refazerResposta, textoVisivel, useProjetos, type MensagemChat as Msg,
+  avaliarMensagem, tentarEnvioNovamente, editarPergunta, podeEditar, podeRefazer, previaDoAnexo, refazerResposta, textoVisivel, useProjetos, type MensagemChat as Msg,
 } from '../../state/projetos';
 import { ouvirTexto, pararFala } from '../../api/voz';
 import { mensagemDeErro } from '../../api/cliente';
@@ -51,6 +53,11 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
   const [rascunho, setRascunho] = useState(m.texto);
   const [abertas, setAbertas] = useState(false);
   const toque = useRef(0);
+  const [salvando, setSalvando] = useState(false);
+  const executar = async (acao: () => Promise<void>) => {
+    if (salvando) return; setSalvando(true);
+    try { await acao(); setEditando(false); } catch (erro) { toast({ mensagem: mensagemDeErro(erro), tom: 'erro' }); } finally { setSalvando(false); }
+  };
   const usuario = m.autor === 'usuario';
   const vis = textoVisivel(m, agora);
   const editavel = podeEditar(e, m);
@@ -68,16 +75,20 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
     onTouchMove: () => window.clearTimeout(toque.current),
   };
 
-  const acoes = !vis.gerando && !editando && (
+  const acoes = !vis.gerando && !editando && !salvando && (
     <div className="msg-acoes" role="toolbar" aria-label="Ações da mensagem">
       <Acao rotulo="Copiar" icone={Ic.copiar} onClick={() => copiar(m.texto)} />
       {usuario && editavel && <Acao rotulo="Editar pergunta" icone={Ic.editar} onClick={() => { setRascunho(m.texto); setEditando(true); }} />}
-      {!usuario && podeRefazer(m) && <Acao rotulo="Refazer resposta" icone={Ic.refazer} onClick={() => refazerResposta(m.id)} />}
+      {!usuario && podeRefazer(m) && <Acao rotulo="Refazer resposta" icone={Ic.refazer} onClick={() => void executar(() => refazerResposta(m.id))} />}
+      {!usuario && e.mensagens.some(x => x.id === m.id) && <>
+        <Acao rotulo="Boa resposta" icone={Ic.positiva} ativo={m.avaliacao === 'positiva'} onClick={() => void executar(() => avaliarMensagem(m.id, 'positiva'))} />
+        <Acao rotulo="Resposta ruim" icone={Ic.negativa} ativo={m.avaliacao === 'negativa'} onClick={() => void executar(() => avaliarMensagem(m.id, 'negativa'))} />
+      </>}
       {!usuario && m.texto.trim() && <Acao rotulo={ouvindo ? 'Parar áudio' : 'Ouvir'} icone={Ic.ouvir} ativo={ouvindo} onClick={ouvir} />}
 
     </div>
   );
-  const mais = !vis.gerando && !editando && (
+  const mais = !vis.gerando && !editando && !salvando && (
     <IconButton className="msg-mais" aria-label="Mais ações" aria-expanded={abertas} tamanho="P" icone={Ic.mais} onClick={() => setAbertas(v => !v)} />
   );
 
@@ -85,17 +96,18 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
     return (
       <div className={`chat-msg is-user ${abertas ? 'is-acoes-abertas' : ''}`} {...toqueLongo}>
         {editando ? (
-          <form className="msg-edit" onSubmit={ev => { ev.preventDefault(); if (rascunho.trim() || m.anexos?.length) { editarPergunta(m.id, rascunho); setEditando(false); } }}>
+          <form className="msg-edit" onSubmit={ev => { ev.preventDefault(); if (rascunho.trim() || m.anexos?.length) { void executar(() => editarPergunta(m.id, rascunho)); } }}>
             <label className="sr-only" htmlFor={`edit-${m.id}`}>Editar pergunta</label>
             <textarea id={`edit-${m.id}`} value={rascunho} rows={3} autoFocus onChange={ev => setRascunho(ev.target.value)}
               onKeyDown={ev => { if (ev.key === 'Escape') setEditando(false); if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); ev.currentTarget.form?.requestSubmit(); } }} />
             <div className="msg-edit-acoes">
               <button type="button" className="msg-edit-cancelar" onClick={() => setEditando(false)}>Cancelar</button>
-              <button type="submit" className="msg-edit-enviar" disabled={!rascunho.trim() && !m.anexos?.length}>Enviar</button>
+              <button type="submit" className="msg-edit-enviar" disabled={salvando || !rascunho.trim()}>Enviar</button>
             </div>
           </form>
         ) : m.texto.trim() ? <div className="user-message">{m.texto}</div> : null}
         {m.anexos?.length ? <ListaAnexos className="msg-anexos" anexos={m.anexos.map(x => ({ ...x, urlPrevia: previaDoAnexo(x.id) }))} /> : null}
+        {vis.interrompida && <p className="msg-interrompida" role="status">Resposta interrompida</p>}
         {m.envio === 'enviando' && <small role="status">Enviando…</small>}
         {m.envio === 'erro' && <div role="alert">Não foi possível enviar. <button type="button" onClick={() => void tentarEnvioNovamente(m.id)}>Tentar de novo</button></div>}
         <div className="msg-barra">{acoes}{mais}</div>
@@ -109,7 +121,9 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
         {avatar}
         <div className="msg-corpo">
           {nome && <strong className="msg-nome">{nome}</strong>}
-          <Markdown texto={vis.texto} gerando={vis.gerando} />
+          <Markdown texto={vis.texto} gerando={vis.gerando} fontes={m.fontes} mensagemId={m.id} />
+          {!!m.fontes?.length && <FontesMensagem mensagemId={m.id} fontes={m.fontes} />}
+          {!!m.anexos?.length && <AnexosResposta anexos={m.anexos} />}
           {vis.interrompida && <p className="msg-interrompida" role="status">Resposta interrompida</p>}
           <div className="msg-barra">{acoes}{mais}</div>
         </div>

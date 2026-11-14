@@ -1,3 +1,5 @@
+import { idFonte, urlPublica } from './fontes';
+import type { FonteMensagem } from '../../state/projetos';
 // Markdown das respostas (Sora e agentes): listas, negrito, itálico, links, tabelas e código.
 // marked → HTML, DOMPurify sanitiza TUDO antes de ir para o DOM (nada de HTML cru sem limpar).
 // Blocos de código ganham o botão "Copiar" (delegação de clique; toast "Copiado").
@@ -8,12 +10,14 @@ import './markdown.css';
 
 export interface MarkdownProps {
   texto: string;
+  fontes?: FonteMensagem[];
+  mensagemId?: string;
   /** mostra o cursor piscando no fim (resposta ainda sendo "digitada") */
   gerando?: boolean;
   className?: string;
 }
 
-export function Markdown({ texto, gerando = false, className = '' }: MarkdownProps) {
+export function Markdown({ texto, gerando = false, className = '', fontes, mensagemId }: MarkdownProps) {
   const raiz = useRef<HTMLDivElement>(null);
   const ultimo = useRef(texto);
   const renderizado = useRef(texto);
@@ -36,6 +40,25 @@ export function Markdown({ texto, gerando = false, className = '' }: MarkdownPro
     void import('./realcarCodigo').then(({ realcarCodigo }) => { if (ativo) realcarCodigo(el); }).catch(() => undefined);
     return () => { ativo = false; };
   }, [html]);
+  useEffect(() => {
+    const el = raiz.current;
+    if (!el || !mensagemId || !fontes?.length) return;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const nos: Text[] = [];
+    while (walker.nextNode()) if (!walker.currentNode.parentElement?.closest('a, code, pre')) nos.push(walker.currentNode as Text);
+    for (const no of nos) {
+      const partes = no.textContent?.split(/(\[\d+\])/g) ?? [];
+      if (partes.length < 2) continue;
+      const frag = document.createDocumentFragment();
+      for (const parte of partes) {
+        const n = /^\[(\d+)\]$/.exec(parte)?.[1];
+        const fonte = fontes.find(f => f.n === Number(n) && urlPublica(f.url));
+        if (n && fonte) { const a = document.createElement('a'); a.href = '#' + idFonte(mensagemId, fonte.n); a.textContent = parte; a.title = fonte.titulo; frag.append(a); }
+        else frag.append(document.createTextNode(parte));
+      }
+      no.replaceWith(frag);
+    }
+  }, [html, fontes, mensagemId]);
   const copiarCodigo = (ev: MouseEvent<HTMLDivElement>) => {
     const botao = (ev.target as HTMLElement).closest('[data-copiar]');
     if (!botao) return;

@@ -47,7 +47,7 @@ export interface PassoTrabalho {
 
 export interface ResultadoPasso {
   resumo: string;                       // ex.: "4 links"
-  links?: { titulo: string; dominio: string }[];
+  links?: { titulo: string; dominio: string; /* o backend ainda não manda; com ele o título vira link */ url?: string }[];
   imagens?: string[];                   // URLs (ou vazio → miniatura gerada na cor do agente)
   itens?: string[];                     // linhas de texto (títulos, tópicos…)
   // navegador (Leme): último segmento redigido, aba e captura

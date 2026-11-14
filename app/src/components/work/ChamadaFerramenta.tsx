@@ -1,3 +1,4 @@
+import { urlPublica } from '../ui/fontes';
 import { useState } from 'react';
 import type { PassoTrabalho, ResultadoPasso } from '../../types';
 import { SoraOrb } from '../mascot';
@@ -27,7 +28,7 @@ export function ResultadoResumo({ resultado }: { resultado: ResultadoPasso; cor?
     <div className="wk-result">
       <span className="wk-result-sum">{resultado.resumo}</span>
       {resultado.links && resultado.links.length > 0 && (
-        <ul className="wk-links">{resultado.links.map(l => <li key={l.titulo}><span>{l.titulo}</span><small>{l.dominio}</small></li>)}</ul>
+        <ul className="wk-links">{resultado.links.map(l => { const href = urlPublica(l.url); return <li key={l.titulo}>{href ? <a href={href} target="_blank" rel="noopener noreferrer">{l.titulo}</a> : <span>{l.titulo}</span>}<small>{l.dominio}</small></li>; })}</ul>
       )}
       <Miniaturas resultado={resultado} />
     </div>
