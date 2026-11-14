@@ -278,6 +278,7 @@ async def _turno_real(
     from app.modelos.tabelas import MensagemCanalTabela
 
     async with ctx["sessoes"]() as sessao:
+        extras = ferramentas_no_grupo(await sessao.get(Agente, tarefa.dono_id))
         # Imagens e arquivos do pedido (e dos acréscimos) chegam ao bot; sem visão, ele é avisado.
         pedidos = await sessao.scalars(
             select(MensagemCanalTabela.anexos).where(
@@ -294,8 +295,8 @@ async def _turno_real(
             "individual",
             dificuldade=2,
             usuario_avisado=False,
+            precisa_visao=any(f.startswith("computador_") for f in extras),
         )
-        extras = ferramentas_no_grupo(await sessao.get(Agente, tarefa.dono_id))
     thread = thread or thread_da_tarefa_canal(tarefa.id, tarefa.turno_seq)
     contexto = ContextoAgente(
         usuario_id=canal.usuario_id,

@@ -232,9 +232,30 @@ def normalizar_tecla(texto: str) -> str:
 _CLASSES = (re.compile(r"[a-z]"), re.compile(r"[A-Z]"), re.compile(r"\d"), re.compile(r"[^\w\s]"))
 
 
+_SEPARADORES_DE_CODIGO = r"[#\-_/.:]"
+_FORMA_DE_CODIGO = re.compile(
+    rf"[^\W\d_]{{2,}}(?P<resto>(?:{_SEPARADORES_DE_CODIGO}[0-9A-Za-z]+)+)"
+)
+
+
+def parece_codigo_de_negocio(palavra: str) -> bool:
+    """``Pedido#123A``, ``NF-2024-001``, ``PED-1234``: um rótulo só de letras (2 ou mais), um ou
+    mais grupos ``separador + letras/dígitos`` com separador de código (``# - _ / . :``) e, no
+    resto, **metade ou mais de dígitos**. Senha de verdade quase nunca tem essa cara: usa ``@``,
+    ``!``, ``$``, mistura dígito no começo ou tem poucos dígitos (``Senha#abcd9`` não é código)."""
+    achada = _FORMA_DE_CODIGO.fullmatch(palavra)
+    if achada is None:
+        return False
+    resto = re.sub(_SEPARADORES_DE_CODIGO, "", achada["resto"])
+    return sum(1 for c in resto if c.isdigit()) * 2 >= len(resto)
+
+
 def parece_senha(texto: str) -> bool:
     """Heurística: uma "palavra" só, de 8 a 128 caracteres, com 3 das 4 classes (minúscula,
-    maiúscula, dígito, símbolo) e que não é endereço nem e-mail. Na dúvida, recusa digitar."""
+    maiúscula, dígito, símbolo), que não é endereço, e-mail nem **código de negócio** (veja
+    ``parece_codigo_de_negocio``). Os padrões da redação (chaves de API, tokens, JWT) recusam
+    sempre. Na dúvida, recusa digitar. Não é barreira: quem divide o texto em dois pedaços passa;
+    é rede de segurança contra o bot digitar sem querer um segredo que ouviu na conversa."""
     from app.core.redacao import limpar_texto_sensivel
 
     if limpar_texto_sensivel(texto) != texto:
@@ -246,6 +267,7 @@ def parece_senha(texto: str) -> bool:
         "://" in palavra
         or palavra.startswith("www.")
         or re.fullmatch(r"[^@\s]+@[^@\s]+\.\w+", palavra)
+        or parece_codigo_de_negocio(palavra)
     ):
         return False
     return sum(1 for classe in _CLASSES if classe.search(palavra)) >= 3

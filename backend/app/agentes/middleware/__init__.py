@@ -133,6 +133,16 @@ def montar_middleware(
         )
     if deps.salvar_saida is not None:
         itens.append(MiddlewareSaidaGrande(contexto.cadeia_id, salvar=deps.salvar_saida))
+    if contexto.modelo_enxerga is not None:
+        # Farol-2: o bot com computador vê a última captura (ou é avisado de que o modelo não vê).
+        from app.computador.ferramentas import obter_servico
+        from app.computador.visao import MiddlewareVisaoTela
+
+        itens.append(
+            MiddlewareVisaoTela(
+                contexto.agente_id, servico=obter_servico, tem_visao=contexto.modelo_enxerga
+            )
+        )
     from app.agentes.middleware.conversa import MiddlewareConversa
 
     if contexto.dependencias.iniciar_passo is not None:

@@ -114,6 +114,9 @@ class ContextoAgente:
     """Rotina sem ninguém olhando (Relógio): só ferramentas seguras, navegador efêmero."""
     thread_proprio: str | None = None
     """Thread do checkpointer só desta execução (rotina); senão vale a da conversa/etapa."""
+    modelo_enxerga: Callable[[Any], bool] | None = None
+    """Só para bots com ``computador_*`` (``app/computador/visao.py``): diz se o modelo de uma
+    chamada tem visão. Com ele o middleware anexa a última captura da tela à chamada."""
 
 
 def nomes_das_ferramentas(contexto: ContextoAgente) -> list[str]:
@@ -228,6 +231,9 @@ async def montar_agente(
     from langchain.agents import create_agent
 
     contexto = await _com_ferramenta_de_imagem(contexto)
+    from app.computador.visao import com_visao_do_computador
+
+    contexto = await com_visao_do_computador(contexto)
 
     from app.agentes.middleware import montar_middleware
     from app.ferramentas.base import ContextoFerramenta

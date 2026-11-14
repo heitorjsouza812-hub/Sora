@@ -242,12 +242,24 @@ async def preparar_entrada(
     dificuldade: int = 1,
     conversa_privada: bool = False,
     usuario_avisado: bool = True,
+    precisa_visao: bool = False,
 ) -> tuple[EntradaDoUsuario, list[BaseChatModel]]:
     """Carrega os anexos do dono, escolhe os modelos (com visão se houver imagem) e monta a
-    entrada do turno. Sem anexos, só escolhe os modelos de sempre."""
+    entrada do turno. Sem anexos, só escolhe os modelos de sempre.
+
+    ``precisa_visao``: o bot tem ``computador_*`` e enxerga a tela. Prefere modelos com visão,
+    sem aviso nenhum quando não há (o prompt do bot já diz que ele não vê a tela)."""
     from app.orquestrador.modelos import modelos_do_papel
 
     anexos = await anexos_do_dono(sessao, usuario_id, anexo_ids)
+    if precisa_visao and not any(a.tipo in TIPOS_IMAGEM for a in anexos):
+        modelos, _ = await modelos_com_visao(
+            sessao, usuario_id, papel, dificuldade=dificuldade, conversa_privada=conversa_privada
+        )
+        entrada = await montar_entrada(
+            texto, anexos, tem_visao=True, ler=ler_do_disco, usuario_avisado=usuario_avisado
+        )
+        return entrada, modelos
     if any(a.tipo in TIPOS_IMAGEM for a in anexos):
         modelos, tem_visao = await modelos_com_visao(
             sessao, usuario_id, papel, dificuldade=dificuldade, conversa_privada=conversa_privada

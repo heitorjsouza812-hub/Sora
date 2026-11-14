@@ -121,6 +121,7 @@ async def _responder_direto_sem_fila(
             papel,
             dificuldade=1,
             conversa_privada=conversa.privada,
+            precisa_visao=any(f.startswith("computador_") for f in agente.ferramentas or []),
         )
         usuario_id, conversa_id, agente_id = conversa.usuario_id, conversa.id, agente.id
         antes = await sessao.scalar(
