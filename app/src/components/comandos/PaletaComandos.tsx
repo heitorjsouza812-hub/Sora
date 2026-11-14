@@ -5,6 +5,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { buscarMensagens, rotaDoResultado, type ResultadoBusca } from '../../state/pecas';
 import { useBots } from '../../state/bots';
 import { useGrupos } from '../../state/grupos';
 import { SoraOrb } from '../mascot';
@@ -15,9 +16,12 @@ import './comandos.css';
 
 interface Item {
   id: string;
-  grupo: 'Ações' | 'Bots' | 'Grupos';
+  grupo: 'Ações' | 'Bots' | 'Grupos' | 'Mensagens';
+  /** Mensagens vêm do servidor já filtradas: não passam pelo filtro local. */
+  remoto?: boolean;
   rotulo: string;
   detalhe?: string;
+  conteudo?: ReactNode;
   icone: ReactNode;
   teclas?: string[];
   busca: string;
@@ -25,6 +29,18 @@ interface Item {
 }
 
 const LIMITE_SEM_BUSCA = 5;
+const quandoCurto = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+/** Trecho com os destaques do servidor ([início, fim) dentro do trecho) em negrito. */
+export function TrechoDestacado({ trecho, destaques }: { trecho: string; destaques: [number, number][] }) {
+  const partes: ReactNode[] = []; let pos = 0;
+  [...destaques].sort((a, b) => a[0] - b[0]).forEach(([i, f], n) => {
+    if (i < pos || f > trecho.length || f <= i) return;
+    if (i > pos) partes.push(trecho.slice(pos, i));
+    partes.push(<b key={n}>{trecho.slice(i, f)}</b>); pos = f;
+  });
+  if (pos < trecho.length) partes.push(trecho.slice(pos));
+  return <>{partes}</>;
+}
 const Icone = ({ d }: { d: string }) => <svg viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg>;
 const IC = {
   mais: 'M12 5v14M5 12h14',
@@ -39,6 +55,7 @@ export function PaletaComandos() {
   const navigate = useNavigate();
   const [busca, setBusca] = useState('');
   const [ativo, setAtivo] = useState(0);
+  const [achadas, setAchadas] = useState<ResultadoBusca[]>([]);
   const dialogo = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLInputElement>(null);
   const lista = useRef<HTMLDivElement>(null);
@@ -77,14 +94,29 @@ export function PaletaComandos() {
   }, [bots, estadoGrupos.lista]);
 
   const termo = normalizar(busca.trim());
+
+  // busca nas mensagens: espera ~200 ms parado e cancela a anterior
+  useEffect(() => {
+    const q = busca.trim();
+    if (q.length < 2) { setAchadas([]); return; }
+    const ctl = new AbortController();
+    const t = window.setTimeout(() => { buscarMensagens(q, 8, ctl.signal).then(r => { if (!ctl.signal.aborted) setAchadas(r); }).catch(() => { if (!ctl.signal.aborted) setAchadas([]); }); }, 200);
+    return () => { window.clearTimeout(t); ctl.abort(); };
+  }, [busca]);
+  const itensMensagens = useMemo<Item[]>(() => achadas.map(r => ({
+    id: `m-${r.mensagem_id}`, grupo: 'Mensagens', remoto: true, rotulo: r.titulo, busca: '', detalhe: `${r.autor_nome} · ${quandoCurto(r.criada_em)}`,
+    icone: <Icone d={r.tipo === 'grupo' ? IC.grupo : IC.agente} />, conteudo: <TrechoDestacado trecho={r.trecho} destaques={r.destaques} />,
+    executar: ir(rotaDoResultado(r)),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  })), [achadas]);
   const visiveis = useMemo(() => {
     if (!termo) {
       const conta: Record<string, number> = {};
       return itens.filter((i) => i.grupo === 'Ações' || (conta[i.grupo] = (conta[i.grupo] ?? 0) + 1) <= LIMITE_SEM_BUSCA);
     }
     const palavras = termo.split(/\s+/);
-    return itens.filter((i) => { const alvo = normalizar(`${i.rotulo} ${i.busca}`); return palavras.every((w) => alvo.includes(w)); });
-  }, [itens, termo]);
+    return [...itens.filter((i) => { const alvo = normalizar(`${i.rotulo} ${i.busca}`); return palavras.every((w) => alvo.includes(w)); }), ...itensMensagens];
+  }, [itens, termo, itensMensagens]);
 
   const atual = Math.min(ativo, Math.max(0, visiveis.length - 1));
   const opcaoId = (i: number) => `${base}-op-${i}`;
@@ -117,8 +149,8 @@ export function PaletaComandos() {
         <div className="cmd-busca">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
           <input ref={campo} type="text" role="combobox" aria-expanded="true" aria-controls={listaId} aria-autocomplete="list"
-            aria-activedescendant={visiveis.length ? opcaoId(atual) : undefined} aria-label="Buscar bots, grupos e ações"
-            placeholder="Buscar bots, grupos e ações…" value={busca} autoComplete="off" spellCheck={false}
+            aria-activedescendant={visiveis.length ? opcaoId(atual) : undefined} aria-label="Buscar bots, grupos, mensagens e ações"
+            placeholder="Buscar bots, grupos, mensagens e ações…" value={busca} autoComplete="off" spellCheck={false}
             onChange={(ev) => { setBusca(ev.target.value); setAtivo(0); }} onKeyDown={tecla} />
           <kbd>Esc</kbd>
         </div>
@@ -130,7 +162,7 @@ export function PaletaComandos() {
                 <div key={item.id} id={opcaoId(i)} role="option" aria-selected={i === atual} className="cmd-op"
                   onPointerMove={() => { if (i !== atual) setAtivo(i); }} onClick={item.executar}>
                   <span className="cmd-op__icone">{item.icone}</span>
-                  <span className="cmd-op__texto"><span>{item.rotulo}</span>{item.detalhe && <small>{item.detalhe}</small>}</span>
+                  <span className="cmd-op__texto"><span>{item.rotulo}</span>{item.conteudo && <span className="cmd-trecho">{item.conteudo}</span>}{item.detalhe && <small>{item.detalhe}</small>}</span>
                   {item.teclas && <span className="cmd-teclas" aria-hidden="true">{item.teclas.map((t) => <kbd key={t}>{t}</kbd>)}</span>}
                 </div>
               ))}

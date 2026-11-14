@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import { api } from '../api/cliente';
 import type { EventoSse } from '../api/eventos';
+import { receberMemoriaCriada } from './pecas';
 
 export type NivelContexto = 'ok' | 'atencao' | 'compactar' | 'cheio';
 export interface Contexto { agenteId: string; fio: string; porcentagem: number; tokens: number; janela: number; estimado: boolean; nivel: NivelContexto; compactacao: 'parada' | 'compactando' | 'falhou' }
@@ -94,7 +95,9 @@ const ouvintes = new Set<() => void>();
 const definir = (p: EstadoEquipe) => { estado = p; ouvintes.forEach(f => f()); };
 export const lerEquipe = () => estado;
 export function useEquipe() { return useSyncExternalStore(fn => { ouvintes.add(fn); return () => { ouvintes.delete(fn); }; }, lerEquipe, lerEquipe); }
-export function receberEventoEquipe(ev: Pick<EventoSse, 'tipo' | 'dados'>) { const p = aplicarEventoEquipe(estado, ev); if (p !== estado) definir(p); }
+export function receberEventoEquipe(ev: Pick<EventoSse, 'tipo' | 'dados'>) {
+  if (ev.tipo === 'memoria.criada') { receberMemoriaCriada(ev.dados as Dados); return; }
+  const p = aplicarEventoEquipe(estado, ev); if (p !== estado) definir(p); }
 export function reiniciarEquipe() { definir(equipeInicial()); }
 
 // ── API (corpo e resposta como em .maestri/contrato-etapa4.md) ──────────────────────────

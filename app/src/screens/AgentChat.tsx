@@ -1,3 +1,5 @@
+import { mensagemDeErro } from '../api/cliente';
+import { toast } from '../components/base';
 // Chat de um agente (de uma equipe ou avulso): o trabalho dele ao vivo + conversa direta.
 // À direita: abas "Trabalho" (painel de passos) e "Perfil" (orb, status, progresso, ferramentas).
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
@@ -30,31 +32,15 @@ import { TelaCarregando } from '../components/sessao';
 import { MensagemChat } from '../components/ui/MensagemChat';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
 import { usePrecisaDeVoce } from '../state/atencao';
-import { listarMemorias, listarRotinas, type Memoria, type Rotina } from '../state/pecas';
+import { PainelMemoria } from '../components/memoria';
+import { PainelRotinas } from '../components/rotinas/PainelRotinas';
 import {
-  anexarEnvio, enviarParaAgente, pendenciasDa, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararGeracao, passosDoAgente, textoVisivel, useAgora, useProjetos,
+  anexarEnvio, enviarParaAgente, pendenciasDa, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararConversa, passosDoAgente, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos,
 } from '../state/projetos';
 
 type Item = { t: number; key: string; node: ReactNode };
 
-function RecursosDoBot({ agenteId }: { agenteId: string }) {
-  const [memorias, setMemorias] = useState<Memoria[]>([]);
-  const [rotinas, setRotinas] = useState<Rotina[]>([]);
-  useEffect(() => {
-    let ativo = true;
-    void Promise.all([listarMemorias(), listarRotinas()]).then(([mem, rot]) => {
-      if (!ativo) return;
-      setMemorias(mem.filter(item => item.agente_id === agenteId));
-      setRotinas(rot.filter(item => item.agente_id === agenteId));
-    }).catch(() => undefined);
-    return () => { ativo = false; };
-  }, [agenteId]);
-  return <div className="agent-resources">
-    <section><p className="eyebrow tools-label">Rotinas</p>{rotinas.length ? <ul>{rotinas.slice(0, 4).map(rotina => <li key={rotina.id}><strong>{rotina.titulo}</strong><span>{rotina.ativa ? 'Ativa' : 'Pausada'}</span></li>)}</ul> : <p className="tools-empty">Nenhuma rotina deste bot.</p>}</section>
-    <section><p className="eyebrow tools-label">Memória</p>{memorias.length ? <ul>{memorias.slice(0, 4).map(memoria => <li key={memoria.id}><span>{memoria.conteudo}</span></li>)}</ul> : <p className="tools-empty">Nenhuma memória deste bot.</p>}</section>
-  </div>;
-}
 
 function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: number }) {
   const st = estadoAgente(e, a.id, agora);
@@ -88,7 +74,7 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
       <FilaDoAgente agenteId={a.id} />
       <PerfilNavegadorDoAgente agenteId={a.id} />
       <PendenciasDoAgente agenteId={a.id} />
-      <RecursosDoBot agenteId={a.id} />
+      <div className="agent-resources"><PainelRotinas key={`r-${a.id}`} agenteId={a.id} /><PainelMemoria key={`m-${a.id}`} agenteId={a.id} /></div>
       {a.instrucoes && <><p className="eyebrow tools-label">Instruções</p><p className="agent-instructions">{a.instrucoes}</p></>}
       <button type="button" className="st-btn-ghost agent-edit" onClick={() => abrirEditorAgente(a.id)}>Editar agente</button>
     </div>
@@ -204,7 +190,7 @@ export default function AgentChat() {
           <div className="chat-composer">
             <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'} voz
               onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => enviarParaAgente(a.id, t, undefined, true, enviados)); seguirFim(); }}
-              gerando={gerando} onParar={() => pararGeracao(a.id)} />
+              gerando={gerando} onParar={() => { if (a.conversaId) void pararConversa(a.conversaId).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
           </div>
           </ZonaSoltar>
         </main>
