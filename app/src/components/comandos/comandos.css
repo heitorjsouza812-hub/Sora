@@ -33,3 +33,5 @@
   .cmd { max-height: 86dvh; }
   .cmd-atalhos { display: none; }
 }
+.cmd-op__texto .cmd-trecho { color: var(--text-2); font-size: 13px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cmd-trecho b { color: var(--text-1); font-weight: 700; }
