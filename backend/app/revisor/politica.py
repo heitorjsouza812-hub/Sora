@@ -95,6 +95,7 @@ LIVRES: frozenset[str] = frozenset(
         "computador_observar",
         "computador_arquivos",
         "computador_escrever_arquivo",
+        "computador_entregar_arquivo",  # só leva o que é do bot para a conversa do próprio dono
         "computador_desligar",
     }
 )

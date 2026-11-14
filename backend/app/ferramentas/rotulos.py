@@ -59,6 +59,7 @@ NOME_EXIBIDO: dict[str, str] = {
     "computador_agir": "Computador",
     "computador_arquivos": "Computador",
     "computador_escrever_arquivo": "Computador",
+    "computador_entregar_arquivo": "Computador",
     "computador_desligar": "Computador",
 }
 """Nome técnico (``acao``) → nome mostrado (``ferramenta``) no evento ``passo``."""
@@ -129,6 +130,9 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     ),
     "computador_escrever_arquivo": lambda a: (
         f"Gravando no computador: {_detalhe(a.get('caminho'))}"
+    ),
+    "computador_entregar_arquivo": lambda a: (
+        f"Enviando para a conversa: {_detalhe(a.get('caminho'))}"
     ),
     "computador_desligar": lambda _: "Desligando o computador",
     "gerar_grafico": lambda a: f"Desenhando gráfico: {_detalhe(a.get('titulo') or a.get('tipo'))}",

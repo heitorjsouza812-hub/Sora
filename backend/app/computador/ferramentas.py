@@ -12,6 +12,7 @@ ociosidade é o cron ``workers.computador.desligar_computadores_ociosos``.
 from __future__ import annotations
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +27,7 @@ NOMES = (
     "computador_agir",
     "computador_arquivos",
     "computador_escrever_arquivo",
+    "computador_entregar_arquivo",
     "computador_desligar",
 )
 
@@ -64,6 +66,15 @@ class ComputadorEscreverArquivo(BaseModel):
     alvo: AlvoTexto = "virtual"
 
 
+class ComputadorEntregarArquivo(BaseModel):
+    """Leva um arquivo da sua área do computador virtual para a conversa, como anexo do usuário
+    (até 10 MB). Use para o que importa guardar: a área de arquivos é apagada quando o computador
+    desliga, o anexo não."""
+
+    caminho: str = Field(min_length=1, max_length=300)
+    alvo: AlvoTexto = "virtual"
+
+
 class ComputadorDesligar(BaseModel):
     """Desliga o seu computador virtual quando terminar (a área de arquivos é apagada)."""
 
@@ -73,10 +84,51 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
     "computador_agir": ComputadorAgir,
     "computador_arquivos": ComputadorArquivos,
     "computador_escrever_arquivo": ComputadorEscreverArquivo,
+    "computador_entregar_arquivo": ComputadorEntregarArquivo,
     "computador_desligar": ComputadorDesligar,
 }
 
 _servico: ServicoComputador | None = None
+
+
+async def guardar_anexo_do_computador(
+    contexto: ContextoFerramenta, nome: str, dados: bytes
+) -> UUID:
+    """Grava o arquivo no volume dos anexos e registra o anexo (origem ``computador``). A
+    próxima mensagem do bot o leva (``app/ferramentas/saidas_do_turno.py``)."""
+    import asyncio
+    import mimetypes
+    from uuid import uuid4
+
+    from app.ferramentas.arquivos import CaminhoInseguro, validar_nome_arquivo
+    from app.ferramentas.infra import abrir_sessao, raiz_dos_arquivos
+    from app.ferramentas.saidas_do_turno import registrar
+    from app.modelos.tabelas import Anexo
+
+    try:
+        nome = validar_nome_arquivo(nome)
+    except CaminhoInseguro:
+        nome = "arquivo-do-computador"
+    anexo_id = uuid4()
+    relativo = f"{contexto.usuario_id}/{anexo_id}"
+    destino = raiz_dos_arquivos() / relativo
+    await asyncio.to_thread(destino.parent.mkdir, parents=True, exist_ok=True)
+    await asyncio.to_thread(destino.write_bytes, dados)
+    tipo = mimetypes.guess_type(nome)[0] or "application/octet-stream"
+    async with abrir_sessao() as sessao:
+        sessao.add(
+            Anexo(
+                id=anexo_id,
+                usuario_id=contexto.usuario_id,
+                nome=nome,
+                tipo=tipo,
+                tamanho=len(dados),
+                caminho=relativo,
+                origem="computador",
+            )
+        )
+    registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
+    return anexo_id
 
 
 def configurar(servico: ServicoComputador | None) -> None:
@@ -112,6 +164,7 @@ def obter_servico() -> ServicoComputador:
             redis=redis,
             publicar=publicar,
             virtual_ativo=lambda: obter_configuracao().sandbox_ativo,
+            guardar_anexo=guardar_anexo_do_computador,
         )
     return _servico
 
@@ -132,6 +185,12 @@ async def computador_escrever_arquivo(
     args: ComputadorEscreverArquivo, contexto: ContextoFerramenta
 ) -> str:
     return await obter_servico().escrever(contexto, args.caminho, args.conteudo, Alvo(args.alvo))
+
+
+async def computador_entregar_arquivo(
+    args: ComputadorEntregarArquivo, contexto: ContextoFerramenta
+) -> str:
+    return await obter_servico().entregar(contexto, args.caminho, Alvo(args.alvo))
 
 
 async def computador_desligar(args: ComputadorDesligar, contexto: ContextoFerramenta) -> str:

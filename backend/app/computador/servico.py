@@ -53,6 +53,8 @@ VALIDADE_CAPTURA_S = 60 * 60
 VALIDADE_ESTADO_S = 24 * 60 * 60
 LARGURA_MINIATURA = 480
 MAX_LEITURA_BYTES = 20_000
+MAX_ENTREGA_BYTES = 10 * 1024 * 1024
+"""Tamanho máximo de um arquivo levado do computador para a conversa (vira anexo)."""
 ESPERA_DEPOIS_DE_AGIR_S = 0.4
 MAX_CAPTURAS_ESTAVEIS = 3
 
@@ -64,6 +66,7 @@ SENHA = (
 )
 
 Publicar = Callable[[TelaComputadorEvento, UUID], Awaitable[None]]
+GuardarAnexo = Callable[[ContextoFerramenta, str, bytes], Awaitable[UUID]]
 
 
 def miniatura(png: bytes) -> str | None:
@@ -112,6 +115,8 @@ class ServicoComputador:
     redis: Any
     publicar: Publicar
     virtual_ativo: Callable[[], bool] = lambda: True
+    guardar_anexo: GuardarAnexo | None = None
+    """Grava um arquivo do computador como anexo (``computador_entregar_arquivo``)."""
     leituras: dict[tuple[UUID, Alvo], LeituraGuardada] = field(default_factory=dict)
     _travas: dict[UUID, asyncio.Lock] = field(default_factory=dict)
 
@@ -346,6 +351,29 @@ class ServicoComputador:
             computador = await self._computador(contexto, alvo)
             await computador.escrever_arquivo(caminho, conteudo.encode())
         return f"Gravei {caminho} na sua área de arquivos ({len(conteudo.encode())} bytes)."
+
+    async def entregar(
+        self, contexto: ContextoFerramenta, caminho: str, alvo: Alvo = Alvo.VIRTUAL
+    ) -> str:
+        """Leva um arquivo da área do bot para a conversa como anexo (sobrevive ao desligar)."""
+        if self.guardar_anexo is None:
+            raise ErroFerramenta("Este servidor não guarda arquivos do computador.")
+        async with self._trava(contexto.agente_id):
+            computador = await self._computador(contexto, alvo)
+            dados = await computador.ler_arquivo(caminho, MAX_ENTREGA_BYTES)
+        if len(dados) > MAX_ENTREGA_BYTES:
+            raise ErroFerramenta(
+                f"O arquivo passa de {MAX_ENTREGA_BYTES // (1024 * 1024)} MB: divida em partes."
+            )
+        if not dados:
+            raise ErroFerramenta("O arquivo está vazio.")
+        nome = caminho.replace("\\", "/").rsplit("/", 1)[-1] or "arquivo"
+        anexo_id = await self.guardar_anexo(contexto, nome, dados)
+        return (
+            f"Arquivo {nome} guardado como anexo (anexo_id: {anexo_id}, {len(dados)} bytes). "
+            "Ele vai junto com a sua próxima mensagem ao usuário e não some quando o computador "
+            "desligar."
+        )
 
     async def desligar(self, contexto: ContextoFerramenta, alvo: Alvo = Alvo.VIRTUAL) -> str:
         provedor = self._conferir(contexto, alvo)
