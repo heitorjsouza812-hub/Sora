@@ -15,6 +15,7 @@ import json
 import re
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from app.busca.provedor import dominio
 from app.core.redacao import limpar_texto_sensivel, ocultar_argumentos_sensiveis
@@ -203,8 +204,21 @@ def parametros_sem_segredos(argumentos: dict[str, Any]) -> dict[str, Any]:
     return ocultar_argumentos_sensiveis(argumentos if isinstance(argumentos, dict) else {})
 
 
+def url_publica(url: str) -> str | None:
+    """URL http(s) segura para o app abrir: sem usuário/senha, sem fragmento, sem segredo."""
+    try:
+        partes = urlsplit(url.strip())
+    except ValueError:
+        return None
+    if partes.scheme not in ("http", "https") or not partes.hostname or len(url) > 2000:
+        return None
+    host = partes.hostname + (f":{partes.port}" if partes.port else "")
+    limpa = urlunsplit((partes.scheme, host, partes.path, partes.query, ""))
+    return limpa if limpar_texto_sensivel(limpa) == limpa else None
+
+
 def resumir_resultado(acao: str, resultado: Any) -> dict[str, Any]:
-    """Resultado resumido para o passo: ``{resumo, links[{titulo, dominio}], itens[]}``."""
+    """Resultado resumido para o passo: ``{resumo, links[{titulo, dominio, url?}], itens[]}``."""
     texto = limpar_texto_sensivel(
         resultado if isinstance(resultado, str) else _como_texto(resultado)
     )
@@ -223,6 +237,7 @@ def resumir_resultado(acao: str, resultado: Any) -> dict[str, Any]:
                     {
                         "titulo": _detalhe(item.get("titulo") or item.get("title") or item["url"]),
                         "dominio": dominio(item["url"]),
+                        **({"url": url} if (url := url_publica(item["url"])) else {}),
                     }
                 )
             else:

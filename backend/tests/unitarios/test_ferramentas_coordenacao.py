@@ -68,8 +68,29 @@ def test_resumir_resultado_links_e_itens() -> None:
     }
     resumo = resumir_resultado("buscar_web", resultado)
     assert resumo["links"] == [
-        {"titulo": "Café", "dominio": "exemplo.com.br"},
-        {"titulo": "Outro", "dominio": "blog.org"},
+        {"titulo": "Café", "dominio": "exemplo.com.br", "url": "https://www.exemplo.com.br/cafe"},
+        {"titulo": "Outro", "dominio": "blog.org", "url": "https://blog.org/x"},
     ]
     assert resumir_resultado("x", ["a", "b"])["itens"] == ["a", "b"]
     assert resumir_resultado("x", None)["resumo"] == "Concluído"
+
+
+def test_links_do_passo_levam_url_publica_segura() -> None:
+    from app.ferramentas.rotulos import resumir_resultado, url_publica
+
+    saida = resumir_resultado(
+        "buscar_web",
+        {
+            "resultados": [
+                {"url": "https://user:pw@exemplo.com/p?q=1#topo", "titulo": "Página"},
+                {"url": "javascript:alert(1)", "titulo": "Ruim"},
+            ]
+        },
+    )
+    assert saida["links"][0] == {
+        "titulo": "Página",
+        "dominio": "exemplo.com",
+        "url": "https://exemplo.com/p?q=1",
+    }
+    assert "url" not in saida["links"][1]
+    assert url_publica("https://x.com/?token=sk-abcdefghijklmnopqrstuvwxyz123456") is None
