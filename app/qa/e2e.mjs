@@ -1,6 +1,8 @@
+import { conferirConversa } from './conversa-acabamento.mjs';
+import { conferirAncora, conferirFontesEAnexos, conferirVozSemChave } from './conversa-fontes.mjs';
 // Etapa 5: casca Sora · Bots · Grupos contra API, Postgres, Redis e SSE reais.
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -103,6 +105,15 @@ try {
   await page.locator('aside.sidebar').getByText(nomes[0], { exact: true }).click();
   await page.waitForURL(new RegExp(`/bots/${bots.find(bot => bot.nome === nomes[0]).id}$`));
   await page.getByRole('button', { name: 'Ativar microfone' }).waitFor({ state: 'visible' });
+  const ambiente = await readFile(new URL('../../backend/.env', import.meta.url), 'utf8').catch(() => '');
+  if (/^SORA_MODELO_FALSO=1\s*$/m.test(ambiente)) {
+    const botQa = bots.find(bot => bot.nome === nomes[0]);
+    await conferirConversa({ page, contexto, base: BASE, auth, bot: botQa });
+    await conferirFontesEAnexos({ page, contexto, base: BASE, auth, bot: botQa, fotos: foto });
+    await conferirVozSemChave({ page, base: BASE, bot: botQa });
+    await conferirAncora({ page, contexto, base: BASE, auth, bot: botQa, fotos: foto });
+    await page.goto(`${BASE}/bots/${botQa.id}`, { waitUntil: 'domcontentloaded' });
+  }
   await page.getByRole('tab', { name: 'Trabalho' }).waitFor({ state: 'visible' });
   await page.getByRole('tab', { name: 'Recursos' }).click();
   await page.getByText('Rotinas', { exact: true }).waitFor({ state: 'visible' });
