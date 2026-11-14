@@ -1,5 +1,6 @@
 // Janela principal do app de desktop: recebe da ilha os pedidos de navegação e mantém a janela da
 // ilha visível/escondida conforme a preferência "Mostrar ilha". No navegador não faz nada.
+import { AvisosAtencao } from './AvisosAtencao';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useIlhaPrefs } from '../components/ilha/ilhaEstado';
@@ -15,7 +16,7 @@ export function PonteNavegacao() {
     if (janelaAtual === 'main') void definirIlhaVisivel(visivel).catch(() => {});
   }, [visivel]);
 
-  return null;
+  return <AvisosAtencao abrir={navigate} />;
 }
 
 export default PonteNavegacao;

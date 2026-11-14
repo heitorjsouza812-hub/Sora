@@ -8,6 +8,8 @@
     "core:event:allow-unlisten",
     "core:event:allow-emit",
     "allow-ilha-visivel",
+    "allow-notificar-atencao",
+    "allow-titulo-atencao",
     "allow-cofre-ler",
     "allow-cofre-gravar",
     "allow-cofre-apagar"

@@ -10,6 +10,7 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const ILHA_LARGURA: f64 = 800.0;
@@ -373,6 +374,8 @@ const COMANDOS_POR_JANELA: &[(&str, &str)] = &[
     ("ilha_retangulo", "ilha"),
     ("navegar", "ilha"),
     ("ilha_visivel", "main"),
+    ("notificar_atencao", "main"),
+    ("titulo_atencao", "main"),
     ("cofre_ler", "main"),
     ("cofre_gravar", "main"),
     ("cofre_apagar", "main"),
@@ -399,6 +402,23 @@ fn ilha_visivel(
     estado.cutucar();
     Ok(())
 }
+
+#[tauri::command]
+fn titulo_atencao(total: usize, janela: WebviewWindow) -> Result<(), String> {
+    if !janela_pode("titulo_atencao", janela.label()) { return Err("janela inv?lida".into()); }
+    janela.set_title(&if total == 0 { "Sora".into() } else { format!("({total}) Sora") }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn notificar_atencao(id: i32, origem: String, caminho: String, janela: WebviewWindow, app: AppHandle, estado: State<'_, IlhaEstado>, rotas: State<'_, RotasNotificacao>) -> Result<(), String> {
+    if !janela_pode("notificar_atencao", janela.label()) || !caminho_interno_valido(&caminho) { return Err("pedido inv?lido".into()); }
+    if estado_da_principal(&app, &estado).is_none_or(|(foco, minimizada)| foco && !minimizada) { return Ok(()); }
+    rotas.0.lock().map_err(|e| e.to_string())?.insert(id, caminho);
+    app.notification().builder().id(id).title("Precisa de voc?").body(origem).show().map_err(|e| e.to_string())
+}
+
+#[derive(Default)]
+struct RotasNotificacao(Mutex<std::collections::HashMap<i32, String>>);
 
 #[tauri::command]
 fn mostrar_app(app: AppHandle) {
@@ -648,6 +668,7 @@ fn montar_bandeja(app: &tauri::App) -> tauri::Result<()> {
 pub fn run() {
     let estado = IlhaEstado::novo(true);
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             mostrar_principal(app)
         }))
@@ -661,9 +682,12 @@ pub fn run() {
                 .build(),
         )
         .manage(estado.clone())
+        .manage(RotasNotificacao::default())
         .invoke_handler(tauri::generate_handler![
             ilha_retangulo,
             ilha_visivel,
+            notificar_atencao,
+            titulo_atencao,
             mostrar_app,
             navegar,
             cofre_ler,
@@ -671,6 +695,14 @@ pub fn run() {
             cofre_apagar
         ])
         .setup(move |app| {
+            let handle = app.handle().clone();
+            app.notification().on_action(move |acao| {
+                if acao.action_id() != "tap" { return; }
+                if let Some(id) = acao.notification().map(|n| n.id()) {
+                    let caminho = handle.state::<RotasNotificacao>().0.lock().ok().and_then(|mut rotas| rotas.remove(&id));
+                    if let Some(caminho) = caminho { mostrar_principal(&handle); let _ = handle.emit_to("main", "sora-navegar", caminho); }
+                }
+            })?;
             if let Some(ilha) = janela(app.handle(), "ilha") {
                 #[cfg(windows)]
                 if let Ok(hwnd) = ilha.hwnd() {

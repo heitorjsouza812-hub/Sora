@@ -5,6 +5,8 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "ilha_retangulo",
             "ilha_visivel",
+            "notificar_atencao",
+            "titulo_atencao",
             "mostrar_app",
             "navegar",
             "cofre_ler",
