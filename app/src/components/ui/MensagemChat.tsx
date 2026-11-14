@@ -3,7 +3,7 @@
 // botão "…" ou por toque longo.
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
-  avaliarMensagem, editarPergunta, podeEditar, podeRefazer, previaDoAnexo, refazerResposta, textoVisivel, useProjetos, type MensagemChat as Msg,
+  tentarEnvioNovamente, editarPergunta, podeEditar, podeRefazer, previaDoAnexo, refazerResposta, textoVisivel, useProjetos, type MensagemChat as Msg,
 } from '../../state/projetos';
 import { ouvirTexto, pararFala } from '../../api/voz';
 import { mensagemDeErro } from '../../api/cliente';
@@ -74,10 +74,7 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
       {usuario && editavel && <Acao rotulo="Editar pergunta" icone={Ic.editar} onClick={() => { setRascunho(m.texto); setEditando(true); }} />}
       {!usuario && podeRefazer(m) && <Acao rotulo="Refazer resposta" icone={Ic.refazer} onClick={() => refazerResposta(m.id)} />}
       {!usuario && m.texto.trim() && <Acao rotulo={ouvindo ? 'Parar áudio' : 'Ouvir'} icone={Ic.ouvir} ativo={ouvindo} onClick={ouvir} />}
-      {!usuario && <>
-        <Acao rotulo="Boa resposta" icone={Ic.positiva} ativo={m.avaliacao === 'positiva'} onClick={() => avaliarMensagem(m.id, 'positiva')} />
-        <Acao rotulo="Resposta ruim" icone={Ic.negativa} ativo={m.avaliacao === 'negativa'} onClick={() => avaliarMensagem(m.id, 'negativa')} />
-      </>}
+
     </div>
   );
   const mais = !vis.gerando && !editando && (
@@ -99,6 +96,8 @@ export function MensagemChat({ m, agora, avatar, nome, cor }: MensagemChatProps)
           </form>
         ) : m.texto.trim() ? <div className="user-message">{m.texto}</div> : null}
         {m.anexos?.length ? <ListaAnexos className="msg-anexos" anexos={m.anexos.map(x => ({ ...x, urlPrevia: previaDoAnexo(x.id) }))} /> : null}
+        {m.envio === 'enviando' && <small role="status">Enviando…</small>}
+        {m.envio === 'erro' && <div role="alert">Não foi possível enviar. <button type="button" onClick={() => void tentarEnvioNovamente(m.id)}>Tentar de novo</button></div>}
         <div className="msg-barra">{acoes}{mais}</div>
       </div>
     );

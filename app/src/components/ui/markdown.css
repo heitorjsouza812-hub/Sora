@@ -27,3 +27,13 @@
 @keyframes md-cursor { 50% { opacity: 0; } }
 @media (max-width: 767px) { .md-copy { height: 44px; } .md table { display: block; overflow-x: auto; } }
 @media (prefers-reduced-motion: reduce) { .md.is-gerando *::after { animation: none; } }
+
+/* O contêiner da tabela segura a largura, inclusive com palavras sem espaços. */
+.md-table { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.md-table table { width: max-content; min-width: 100%; }
+.md-table th, .md-table td { max-width: 32rem; }
+.md .hljs-keyword, .md .hljs-selector-tag { color: #c792ea; }
+.md .hljs-string, .md .hljs-attr { color: #c3e88d; }
+.md .hljs-number, .md .hljs-literal { color: #f78c6c; }
+.md .hljs-title, .md .hljs-built_in { color: #82aaff; }
+.md .hljs-comment { color: #9aa5b8; }

@@ -724,3 +724,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
   .hero-composer .composer-actions { gap: 6px; }
   .hero-composer .tool-button { min-width: 0; padding-inline: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* Streaming acompanha o fim sem animação; o botão Ir para o fim escolhe a transição. */
+.conversation-scroll { scroll-behavior: auto; min-width: 0; }
+.conversation-area, .conversation, .chat-item { min-width: 0; max-width: 100%; }

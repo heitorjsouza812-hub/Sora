@@ -25,6 +25,8 @@ import { PainelLateral } from '../components/layout/PainelLateral';
 import { usePainelLateral } from '../components/layout/usePainelLateral';
 import { ActivityIcon, TeamIcon } from '../components/ui/Icons';
 import { IrParaFim } from '../components/ui/IrParaFim';
+import { HistoricoConversa } from '../components/ui/HistoricoConversa';
+import { TelaCarregando } from '../components/sessao';
 import { MensagemChat } from '../components/ui/MensagemChat';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
 import { usePrecisaDeVoce } from '../state/atencao';
@@ -176,7 +178,7 @@ export default function AgentChat() {
   const assinatura = a ? mensagensDa(e, a.id, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0;
   const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
 
-  if (e.carregando) return null;
+  if (e.carregando) return <TelaCarregando />;
   if (id === 'sora') return <Navigate to="/" replace />;
   if (!a || !st) return <Navigate to="/" replace />;
 
@@ -187,6 +189,7 @@ export default function AgentChat() {
           <ZonaSoltar className="conversation-drop">
           <div className="conversation-area">
           <div className="conversation-scroll agent-scroll" ref={rolagemRef} onScroll={aoRolar} aria-live="polite" aria-relevant="additions">
+            <HistoricoConversa conversaId={a.conversaId} />
             {!itens.length && (
               <div className="agent-empty">
                 <SoraOrb size={112} color={a.cor} movimento={a.tipoMovimento} state="idle" seed={61} title={a.nome} />

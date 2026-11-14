@@ -1,0 +1,1 @@
+declare const language: unknown; export default language;

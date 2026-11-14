@@ -161,12 +161,13 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
  */
 export function registrarEnvioDoUsuario(
   estado: EstadoProjetos,
-  m: { id: string; conversaId: string; agenteId?: string; texto: string; enviadoEm: number; anexos?: EstadoProjetos['mensagens'][number]['anexos'] },
+  m: { id: string; localId?: string; conversaId: string; agenteId?: string; texto: string; enviadoEm: number; anexos?: EstadoProjetos['mensagens'][number]['anexos'] },
 ): EstadoProjetos {
+  // Remove só a bolha deste POST; nunca deduplica pelo texto (perguntas iguais são válidas).
+  if (m.localId) estado = { ...estado, mensagens: estado.mensagens.filter(x => x.id !== m.localId) };
   const existente = estado.mensagens.find(x => x.id === m.id);
   if (existente) {
-    return existente.criadoEm <= m.enviadoEm ? estado
-      : { ...estado, mensagens: estado.mensagens.map(x => x.id === m.id ? { ...x, criadoEm: m.enviadoEm } : x) };
+    return { ...estado, mensagens: estado.mensagens.map(x => x.id === m.id ? { ...x, texto: m.texto, anexos: m.anexos ?? x.anexos, gerando: false, criadoEm: Math.min(x.criadoEm, m.enviadoEm) } : x) };
   }
   return { ...estado, mensagens: [...estado.mensagens, { id: m.id, conversaId: m.conversaId, agenteId: m.agenteId, autor: 'usuario', texto: m.texto, criadoEm: m.enviadoEm, anexos: m.anexos ?? [], gerando: false }] };
 }
