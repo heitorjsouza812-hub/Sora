@@ -13,7 +13,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from sqlalchemy import func, select
 
 from app.eventos.streams import publicar_evento
@@ -21,7 +21,7 @@ from app.eventos.tipos import SugestoesEvento
 from app.filas import FilaAgente, OrigemItem
 from app.filas.sql import ArmazemFilaSQL
 from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
-from app.modelos.enumeracoes import TipoAgente
+from app.modelos.enumeracoes import AutorMensagem, TipoAgente
 from app.modelos.tabelas import Agente, Conversa, Mensagem
 
 registro = logging.getLogger(__name__)
@@ -67,7 +67,12 @@ async def rodar_turno_do_item(ctx: dict[str, Any], item: Any) -> None:
         await _responder_direto_sem_fila(ctx, chave.split(":", 1)[1])
     else:
         await _responder_direto_sem_fila(
-            ctx, None, agente_id=item.agente_id, usuario_id=item.usuario_id, texto=item.texto
+            ctx,
+            None,
+            agente_id=item.agente_id,
+            usuario_id=item.usuario_id,
+            texto=item.texto,
+            anexos=item.anexos,
         )
 
 
@@ -78,20 +83,21 @@ async def _responder_direto_sem_fila(
     agente_id: UUID | None = None,
     usuario_id: UUID | None = None,
     texto: str | None = None,
+    anexos: Any = (),
 ) -> None:
     """Roda a Sora (ou o agente individual) e manda o texto pelos eventos
     ``mensagem.*``, terminando com ``sugestoes``. Quem põe na fila: a API."""
     from app.agentes import ContextoAgente
     from app.agentes.ancora import aplicar_habilidade_forcada
+    from app.agentes.visao import preparar_entrada
     from app.ferramentas.base import ContextoFerramenta
     from app.ferramentas.falar import Falar, falar
-    from app.orquestrador.modelos import modelos_do_papel
     from workers.cadeia import dependencias_da_etapa
 
     async with ctx["sessoes"]() as sessao:
         if mensagem_id is not None:
             mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
-            if mensagem is None:
+            if mensagem is None or mensagem.estado == "interrompida":
                 return
             conversa = await sessao.get(Conversa, mensagem.conversa_id)
             texto = mensagem.conteudo
@@ -106,9 +112,12 @@ async def _responder_direto_sem_fila(
         if conversa is None or agente is None or texto is None:
             return
         papel = "sora" if agente.tipo == TipoAgente.SORA else "individual"
-        modelos = await modelos_do_papel(
+        # Anexos do usuário chegam ao modelo: lista de arquivos e, com modelo de visão, as imagens.
+        entrada_usuario, modelos = await preparar_entrada(
             sessao,
             conversa.usuario_id,
+            texto,
+            mensagem.anexos if mensagem_id is not None else anexos,
             papel,
             dificuldade=1,
             conversa_privada=conversa.privada,
@@ -117,12 +126,25 @@ async def _responder_direto_sem_fila(
         antes = await sessao.scalar(
             select(func.count()).select_from(Mensagem).where(Mensagem.conversa_id == conversa_id)
         )
+        historico = list(
+            (
+                await sessao.scalars(
+                    select(Mensagem)
+                    .where(Mensagem.conversa_id == conversa_id, Mensagem.visivel.is_(True))
+                    .order_by(Mensagem.criada_em, Mensagem.id)
+                )
+            ).all()
+        )
+        if mensagem_id is not None:
+            posicao = next((i for i, m in enumerate(historico) if str(m.id) == mensagem_id), 0)
+            historico = historico[:posicao]
 
     contexto = ContextoAgente(
         usuario_id=usuario_id,
         agente_id=agente_id,
         conversa_id=conversa_id,
         papel=papel,
+        thread_proprio=f"conversa:{conversa_id}:pedido:{mensagem_id}" if mensagem_id else None,
         dependencias=dependencias_da_etapa(ctx, usuario_id=usuario_id, conversa_id=conversa_id),
     )
     if modelo_falso_ativo() and not any(
@@ -141,12 +163,30 @@ async def _responder_direto_sem_fila(
             ctx["redis_eventos"], SugestoesEvento(itens=[]), conversa_id, usuario_id
         )
         return
+    texto_final = await aplicar_habilidade_forcada(usuario_id, texto)
+    if texto_final != texto:
+        entrada_usuario = entrada_usuario.com_texto(texto, texto_final)
+    for aviso in entrada_usuario.avisos:
+        # Ex.: modelo sem visão. O aviso é uma mensagem do bot; conta como fala antes do turno.
+        await falar(
+            Falar(texto=aviso),
+            ContextoFerramenta(usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id),
+        )
+        antes = (antes or 0) + 1
     await _rodar_e_falar(
         ctx,
         contexto,
         modelos,
         antes=antes,
-        entrada={"messages": [HumanMessage(await aplicar_habilidade_forcada(usuario_id, texto))]},
+        entrada={
+            "messages": [
+                HumanMessage(m.conteudo)
+                if m.autor == AutorMensagem.USUARIO
+                else AIMessage(m.conteudo)
+                for m in historico
+            ]
+            + [HumanMessage(entrada_usuario.conteudo)]
+        },
     )
 
 
@@ -195,6 +235,10 @@ async def _rodar_e_falar(
             resposta=resposta,
         )
     except Exception as erro:
+        from app.agentes.middleware.cancelamento import CadeiaCancelada
+
+        if isinstance(erro, CadeiaCancelada):
+            return
         from app.llm.limite import MENSAGEM_LIMITE, limite_do_provedor
 
         registro.exception("o agente da conversa %s falhou", contexto.conversa_id)
@@ -235,7 +279,20 @@ async def _rodar_e_falar(
         texto = _texto_da_resposta(resultado)
         if (antes is None or depois == antes) and texto:
             # O modelo respondeu em texto puro: o worker fala por ele.
-            await falar(Falar(texto=texto), ferramenta)
+            from app.agentes.middleware.conversa import coletar_fontes, fontes_do_turno
+
+            fontes = []
+            for m in resultado.get("messages", []):
+                if isinstance(m, ToolMessage) and (
+                    m.name in {"buscar_web", "ler_pagina"}
+                    or (m.name or "").startswith("navegador_")
+                ):
+                    coletar_fontes(str(m.content).split("Fontes para citação:")[0], fontes)
+            token = fontes_do_turno.set(fontes)
+            try:
+                await falar(Falar(texto=texto), ferramenta)
+            finally:
+                fontes_do_turno.reset(token)
     await publicar_evento(
         ctx["redis_eventos"], SugestoesEvento(itens=[]), contexto.conversa_id, contexto.usuario_id
     )
@@ -261,11 +318,22 @@ async def retomar_conversa(ctx: dict[str, Any], conversa_id: str, resposta: Any)
             sessao, conversa.usuario_id, papel, dificuldade=1, conversa_privada=conversa.privada
         )
         usuario_id, agente_id = conversa.usuario_id, agente.id
+        pedido_id = await sessao.scalar(
+            select(Mensagem.id)
+            .where(
+                Mensagem.conversa_id == conversa.id,
+                Mensagem.autor == AutorMensagem.USUARIO,
+                Mensagem.visivel.is_(True),
+            )
+            .order_by(Mensagem.criada_em.desc(), Mensagem.id.desc())
+            .limit(1)
+        )
     contexto = ContextoAgente(
         usuario_id=usuario_id,
         agente_id=agente_id,
         conversa_id=UUID(conversa_id),
         papel=papel,
+        thread_proprio=f"conversa:{conversa_id}:pedido:{pedido_id}",
         dependencias=dependencias_da_etapa(
             ctx, usuario_id=usuario_id, conversa_id=UUID(conversa_id)
         ),

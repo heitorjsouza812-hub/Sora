@@ -45,6 +45,8 @@ class MensagemFim(EventoBase):
     evento: ClassVar[Literal["mensagem.fim"]] = "mensagem.fim"
     mensagem_id: UUID
     anexos: list[UUID] = Field(default_factory=list)
+    estado: Literal["concluida", "interrompida"] = "concluida"
+    fontes: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RoteamentoEvento(EventoBase):

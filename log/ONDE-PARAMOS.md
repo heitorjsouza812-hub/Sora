@@ -1,5 +1,10 @@
 # Onde paramos
 
+## Etapa 6 — Âncora-3 (2026-11-14)
+
+- Backend: interrupção de conversa, fontes persistidas, edição/refação da última pergunta/resposta e avaliação. Migração `0011` aplicada no PostgreSQL da etapa 5 (46432). Contrato: `.maestri/contrato-etapa5.md`, seção Âncora-3. Relatório: `.maestri/relatorios/ancora3.md`.
+- Próximo passo: ligar os controles no app e validar com modelo real; esta rodada usa worker/API reais com modelo controlado nos testes de interrupção. Demais frentes da etapa 6 continuam com seus donos.
+
 ## Etapa 4 — peças ligadas ao worker (concluída em 2026-11-04)
 
 - O worker real usa navegador por árvore com perfis e revisão de domínio, fila persistente, canais de equipe e correio, contexto e compactação, memória, pendências, revisor, habilidades, rotinas, conectores MCP, Telegram, sandbox e voz. O app mostra canais, fila, contexto, memória, rotinas, habilidades, conectores, Telegram, pendências, voz, perfis do navegador, cartão de domínio e rastro da aba. Plano: `log/etapa4-pecas.md`. Diário: `log/2026-11-02.md`.

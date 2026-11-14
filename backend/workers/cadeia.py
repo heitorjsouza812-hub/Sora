@@ -1084,12 +1084,29 @@ async def entregar_resultado(ctx: dict[str, Any], cadeia_id: str) -> None:
         cadeia = await sessao.get(Cadeia, _uuid(cadeia_id), with_for_update=True)
         if cadeia is None or cadeia.status != StatusCadeia.VERIFICANDO:
             return
+        from app.agentes.middleware.conversa import coletar_fontes
+
+        fontes: list[dict] = []
+        passos = (
+            await sessao.scalars(
+                select(Passo)
+                .join(Etapa, Etapa.id == Passo.etapa_id)
+                .where(Etapa.cadeia_id == cadeia.id)
+                .order_by(Passo.iniciado_em, Passo.id)
+            )
+        ).all()
+        for passo in passos:
+            if passo.ferramenta in {"buscar_web", "ler_pagina"} or (
+                passo.ferramenta or ""
+            ).startswith("navegador_"):
+                coletar_fontes(str(passo.resultado or ""), fontes)
         mensagem = Mensagem(
             conversa_id=cadeia.conversa_id,
             autor=AutorMensagem.SORA,
             conteudo="Pronto! A equipe concluiu o trabalho. Revise as entregas antes de publicar.",
             anexos=[],
             visivel=True,
+            fontes=fontes,
         )
         sessao.add(mensagem)
         cadeia.status = StatusCadeia.CONCLUIDA
@@ -1102,7 +1119,7 @@ async def entregar_resultado(ctx: dict[str, Any], cadeia_id: str) -> None:
         await _publicar(
             ctx, cadeia, MensagemDelta(mensagem_id=mensagem.id, texto=mensagem.conteudo)
         )
-        await _publicar(ctx, cadeia, MensagemFim(mensagem_id=mensagem.id, anexos=[]))
+        await _publicar(ctx, cadeia, MensagemFim(mensagem_id=mensagem.id, anexos=[], fontes=fontes))
         await _publicar(
             ctx,
             cadeia,

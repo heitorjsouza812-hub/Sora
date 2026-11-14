@@ -156,6 +156,11 @@ class Mensagem(Base):
     responde_a: Mapped[UUID | None] = mapped_column(ForeignKey("mensagens.id"))
     criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # 0004: salto da corrente de mensagens entre agentes (app/orquestrador/saltos.py)
+    estado: Mapped[str] = mapped_column(Text, default="concluida", server_default="concluida")
+    fontes: Mapped[list[Any]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
+    avaliacao: Mapped[int | None] = mapped_column(Integer)
     salto: Mapped[int] = mapped_column(default=0, server_default="0")
 
 

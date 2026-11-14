@@ -391,7 +391,7 @@ async def test_modelo_http_do_seletor_criar_agente_vira_rascunho_e_confirma(
     api_modelo = FastAPI()
 
     @api_modelo.post("/v1/chat/completions")
-    async def completar(requisicao: Request) -> dict[str, Any]:
+    async def completar(requisicao: Request) -> Any:
         corpo = await requisicao.json()
         chamadas.append(corpo)
         retomou = len(chamadas) > 1
@@ -406,6 +406,42 @@ async def test_modelo_http_do_seletor_criar_agente_vira_rascunho_e_confirma(
         else:
             nome = "criar_agente"
             argumentos = {"nome": "Íris", "papel": "Organizar pesquisas"}
+        if corpo.get("stream"):
+            from starlette.responses import StreamingResponse
+
+            async def fluxo():
+                chunk = {
+                    "id": f"local-{len(chamadas)}",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": "modelo-local",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": f"call-{len(chamadas)}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": nome,
+                                            "arguments": json.dumps(argumentos, ensure_ascii=False),
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+                yield "data: " + json.dumps(chunk) + "\n\n"
+                chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+                yield "data: " + json.dumps(chunk) + "\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(fluxo(), media_type="text/event-stream")
         return {
             "id": f"local-{len(chamadas)}",
             "object": "chat.completion",

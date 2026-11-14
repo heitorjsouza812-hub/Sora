@@ -133,12 +133,23 @@ class MensagemAceita(EsquemaBase):
     mensagem_id: UUID
 
 
+class AvaliacaoEntrada(EsquemaBase):
+    valor: Literal[1, -1] | None
+
+
+class MensagemEdicao(EsquemaBase):
+    texto: str = Field(min_length=1, max_length=TEXTO_MAX)
+
+
 class MensagemSaida(EsquemaBase):
     id: UUID
     conversa_id: UUID
     autor: AutorMensagem
     agente_id: UUID | None = None
     conteudo: str
+    estado: str = "concluida"
+    fontes: list[dict[str, Any]] = Field(default_factory=list)
+    avaliacao: int | None = None
     anexos: list[Any] = Field(default_factory=list)
     responde_a: UUID | None = None
     criada_em: datetime

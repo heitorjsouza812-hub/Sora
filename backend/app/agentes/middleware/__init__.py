@@ -112,7 +112,9 @@ def montar_middleware(
             )
         )
     )
-    if contexto.etapa_id is None and contexto.thread_proprio is None:
+    if contexto.etapa_id is None and (
+        contexto.thread_proprio is None or ":pedido:" in contexto.thread_proprio
+    ):
         itens.append(
             MiddlewareContexto(
                 PortaContexto(
@@ -131,4 +133,8 @@ def montar_middleware(
         )
     if deps.salvar_saida is not None:
         itens.append(MiddlewareSaidaGrande(contexto.cadeia_id, salvar=deps.salvar_saida))
+    from app.agentes.middleware.conversa import MiddlewareConversa
+
+    if contexto.dependencias.iniciar_passo is not None:
+        itens.insert(0, MiddlewareConversa(contexto))
     return itens
