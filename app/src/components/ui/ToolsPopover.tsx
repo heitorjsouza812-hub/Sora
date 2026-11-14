@@ -1,9 +1,9 @@
 import type { RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { PLUGIN_ICONS } from '../../data/pluginIcons';
-import { PluginMark } from '../ui/PluginMark';
+import { PluginMark } from './PluginMark';
 import { Popover } from '../overlay/Popover';
-import './review.css';
+import './toolsPopover.css';
 
 export interface ToolsPopoverProps {
   open: boolean;

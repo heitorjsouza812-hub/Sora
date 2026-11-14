@@ -3,7 +3,7 @@ import { BorderBeam } from 'border-beam';
 import { useGravacaoVoz } from './useGravacaoVoz';
 import { VoiceBeam, useMicrophone, type VoiceBeamMotion } from 'voice-glow';
 import { useProjetos } from '../../state/projetos';
-import { ToolsPopover } from '../review/ToolsPopover';
+import { ToolsPopover } from './ToolsPopover';
 import { EVENTO_ANEXAR, ListaAnexos, MAX_ANEXOS, useAnexos, type Anexo } from '../anexos';
 import '../anexos/anexos.css';
 import { useConexao } from '../erros';

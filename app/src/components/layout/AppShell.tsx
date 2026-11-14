@@ -1,9 +1,8 @@
 // Moldura do app: barra lateral + cabeçalho (identidade + ações). A navegação é pela barra lateral.
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
 import { estadoAgente, useAgora, useProjetos } from '../../state/projetos';
 import { SoraOrb } from '../mascot';
-import { Button, IconButton, toast } from '../base';
+import { IconButton } from '../base';
 import { BottomSheet } from '../overlay';
 import { GestaoHost } from '../gestao';
 import { Comandos } from '../comandos';
@@ -23,18 +22,6 @@ export interface AppShellProps {
   /** itens extras do menu "…" da identidade */
   menuItens?: { rotulo: string; onClick: () => void }[];
 }
-
-function Compartilhar() {
-  return (
-    <Button variante="secundario" tamanho="P" className="share-button" onClick={() => {
-      void navigator.clipboard?.writeText(window.location.href).catch(() => {});
-      toast({ mensagem: 'Link copiado', tom: 'sucesso' });
-    }}>Compartilhar</Button>
-  );
-}
-
-/** "Compartilhar" só faz sentido onde há algo para mostrar: chats, projetos e revisões. */
-const compartilhavel = (caminho: string) => /^\/(bots|grupos)\//.test(caminho);
 
 function Identidade({ agenteId, titulo, menuItens }: Pick<AppShellProps, 'agenteId' | 'titulo' | 'menuItens'>) {
   const e = useProjetos();
@@ -64,8 +51,6 @@ function Identidade({ agenteId, titulo, menuItens }: Pick<AppShellProps, 'agente
 
 export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppShellProps) {
   const [menu, setMenu] = useState(false);
-  const { pathname } = useLocation();
-  const share = compartilhavel(pathname);
   return (
     <div className="app-shell">
       <Sidebar />
@@ -74,7 +59,7 @@ export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppSh
           <IconButton className="mobile-menu-button" variante="secundario" aria-label="Abrir menu" aria-expanded={menu} onClick={() => setMenu(true)}
             icone={<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>} />
           <Identidade agenteId={agenteId} titulo={titulo} menuItens={menuItens} />
-          {(acoes || share) && <div className="topbar-actions">{acoes}{share && <Compartilhar />}</div>}
+          {acoes && <div className="topbar-actions">{acoes}</div>}
         </header>
         <FaixaSemConexao />
         <FaixaErroEventos />

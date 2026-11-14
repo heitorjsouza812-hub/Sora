@@ -1,11 +1,10 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { ToastProvider } from './components/base';
-import SoraChat from './screens/SoraChat';
-import AgentChat from './screens/AgentChat';
-import Agentes from './screens/Agentes';
-import Plugins from './screens/Plugins';
-import Grupos from './screens/Grupos';
+const SoraChat = lazy(() => import('./screens/SoraChat'));
+const AgentChat = lazy(() => import('./screens/AgentChat'));
+const Agentes = lazy(() => import('./screens/Agentes'));
+const Grupos = lazy(() => import('./screens/Grupos'));
 import { PonteNavegacao } from './desktop/PonteNavegacao';
 import { PonteSessao } from './desktop/PonteSessao';
 import { GateSessao, TelaCarregando } from './components/sessao';
@@ -34,7 +33,7 @@ function AppRoutes() {
     <Route path="/grupos" element={<Grupos />} />
     <Route path="/grupos/:grupoId" element={<Grupos />} />
     <Route path="/configuracoes" element={<Configuracoes />} />
-    <Route path="/plugins" element={<Plugins />} />
+    <Route path="/plugins" element={<Navigate to="/" replace />} />
     <Route path="/chat/sora" element={<Navigate to="/" replace />} />
     <Route path="/chat/:agente" element={<RedirecionarBotAntigo />} />
     <Route path="/agentes" element={<Navigate to="/bots" replace />} />
