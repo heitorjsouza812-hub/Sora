@@ -23,6 +23,7 @@ from app.api import (
     habilidades,
     modelos,
     navegador,
+    navegador_ao_vivo,
     pecas,
     perguntas,
     preferencias,
@@ -53,6 +54,7 @@ for roteador in (
     canais.roteador,
     navegador.roteador_agente,
     navegador.roteador,  # perfis do navegador (Leme): antes da equipe
+    navegador_ao_vivo.roteador,  # Farol-2 (item 18): quadros, captura e pedidos do usuário
     pecas.roteador,  # antes da equipe: as rotas de contexto são da Âncora
     equipe.roteador,
     grupos.roteador,

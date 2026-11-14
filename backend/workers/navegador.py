@@ -11,6 +11,7 @@ from uuid import UUID
 from app.eventos.equipe import AbaNavegadorEvento, publicar_evento_equipe
 from app.ferramentas.navegador_worker import AmbienteNavegador, configurar
 from app.navegador.abas import GerenteAbas
+from app.navegador.ao_vivo import NavegadorAoVivo
 from app.navegador.arvore import ServicoArvore
 from app.navegador.perfis import EscolhaPerfil, TipoPerfil, particao
 from app.navegador.persistente import MotorPlaywright
@@ -45,8 +46,26 @@ async def iniciar_navegador(ctx: dict[str, Any]) -> AmbienteNavegador:
     )
     ctx["navegador"] = ambiente
     ctx["navegador_salvador"] = asyncio.create_task(_manter_navegador(ambiente))
+    ctx["navegador_ao_vivo"] = _iniciar_ao_vivo(ambiente)
     configurar(ambiente)
     return ambiente
+
+
+def _iniciar_ao_vivo(ambiente: AmbienteNavegador) -> NavegadorAoVivo:
+    """Quadros da aba para quem assiste e pedidos do usuário na aba assumida (item 18)."""
+
+    async def publicar(evento: Any, usuario_id: UUID) -> str | None:
+        return await publicar_evento_equipe(ambiente.redis, evento, usuario_id)
+
+    ao_vivo = NavegadorAoVivo(
+        gerente=ambiente.gerente,
+        motor=ambiente.motor,
+        redis=ambiente.redis,
+        publicar=publicar,
+        salvar_aba=ambiente.repositorio.salvar_aba,
+    )
+    ao_vivo.iniciar()
+    return ao_vivo
 
 
 async def _manter_navegador(ambiente: AmbienteNavegador) -> None:
@@ -113,6 +132,9 @@ async def _abrir_para_o_usuario(
 
 async def fechar_navegador(ctx: dict[str, Any]) -> None:
     configurar(None)
+    ao_vivo = ctx.pop("navegador_ao_vivo", None)
+    if ao_vivo is not None:
+        await ao_vivo.parar()
     salvador = ctx.pop("navegador_salvador", None)
     if salvador is not None:
         salvador.cancel()

@@ -199,6 +199,13 @@ class GerenteAbas:
         aba = self.exigir(aba_id, agente_id, sem_supervisao=sem_supervisao)
         await self._remover(aba)
 
+    def todas(self) -> list[Aba]:
+        """Todas as abas deste worker (a tela ao vivo e a fila de pedidos do usuário olham)."""
+        return list(self._abas.values())
+
+    def obter(self, aba_id: UUID) -> Aba | None:
+        return self._abas.get(aba_id)
+
     def do_agente(self, agente_id: UUID, *, so_efemeras: bool = False) -> list[Aba]:
         return sorted(
             (
