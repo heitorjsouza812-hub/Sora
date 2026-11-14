@@ -109,8 +109,10 @@ class Agente(Base):
     # 0005: fila (app/filas) e navegador persistente (app/navegador/perfis.py)
     fila_pausada: Mapped[bool] = mapped_column(default=False, server_default="false")
     limite_tarefas: Mapped[int] = mapped_column(default=2, server_default="2")
+    # Farol (C1): bot novo nasce com o navegador só dele; os existentes mantêm a escolha. O
+    # padrão do banco não muda (sem migração): toda criação de agente passa pelo ORM.
     perfil_navegador: Mapped[str] = mapped_column(
-        Text, default="compartilhado", server_default="compartilhado"
+        Text, default="agente", server_default="compartilhado"
     )
     perfil_navegador_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("perfis_navegador.id", use_alter=True, name="agentes_perfil_navegador_id_fkey")

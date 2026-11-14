@@ -199,7 +199,15 @@ async def cadastrar(
         await sessao.flush()
     except IntegrityError as erro:  # dois cadastros simultâneos com o mesmo e-mail
         raise ErroEmailEmUso() from erro
-    sessao.add(Agente(usuario_id=usuario.id, tipo=TipoAgente.SORA, nome="Sora", cor="#E2ECFF"))
+    sessao.add(
+        Agente(
+            usuario_id=usuario.id,
+            tipo=TipoAgente.SORA,
+            nome="Sora",
+            cor="#E2ECFF",
+            perfil_navegador="compartilhado",  # a Sora usa o login da conta; bots, o próprio
+        )
+    )
     await sessao.flush()
 
 

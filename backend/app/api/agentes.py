@@ -16,6 +16,7 @@ from app.agentes.aparencia import (
     escolher_nome,
     movimento_do_individual,
 )
+from app.computador.ferramentas import NOMES as FERRAMENTAS_DO_COMPUTADOR
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
 from app.estado_interface import EstadoInterface, estados_dos_agentes, estados_dos_grupos
@@ -37,7 +38,9 @@ UsuarioId = Annotated[UUID, Depends(usuario_atual)]
 RedisDep = Annotated[Redis, Depends(obter_redis)]
 
 FUNCAO_MAX = 80
-FERRAMENTAS_CONHECIDAS = frozenset(n for lista in FERRAMENTAS_POR_PAPEL.values() for n in lista)
+FERRAMENTAS_CONHECIDAS = frozenset(n for lista in FERRAMENTAS_POR_PAPEL.values() for n in lista) | {
+    *FERRAMENTAS_DO_COMPUTADOR  # Farol (C2): o bot liga o computador virtual por ferramenta extra
+}
 
 
 def _saida(
@@ -57,6 +60,9 @@ def _saida(
             "sora" if agente.tipo == TipoAgente.SORA else agente.papel, agente.ferramentas
         ),
         estado=estado,
+        perfil_navegador=(
+            "perfil" if agente.perfil_navegador == "nomeado" else agente.perfil_navegador
+        ),
     )
 
 
@@ -88,6 +94,7 @@ async def _sora_persistente(sessao: AsyncSession, usuario_id: UUID) -> Agente:
             nome="Sora",
             funcao="Coordena seus bots e grupos",
             papel="sora",
+            perfil_navegador="compartilhado",  # a Sora usa o login da conta; bots, o próprio
             cor=COR_SORA,
             ferramentas=list(FERRAMENTAS_POR_PAPEL["sora"]),
         )

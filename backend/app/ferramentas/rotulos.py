@@ -54,6 +54,11 @@ NOME_EXIBIDO: dict[str, str] = {
     "canal_delegar": "Canal",
     "canal_transferir": "Canal",
     "canal_resultado": "Canal",
+    "computador_observar": "Computador",
+    "computador_agir": "Computador",
+    "computador_arquivos": "Computador",
+    "computador_escrever_arquivo": "Computador",
+    "computador_desligar": "Computador",
 }
 """Nome técnico (``acao``) → nome mostrado (``ferramenta``) no evento ``passo``."""
 
@@ -113,6 +118,18 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "apagar_habilidade": lambda a: f"Apagando a habilidade: {_detalhe(a.get('nome'))}",
     "adicionar_servidor_mcp": lambda a: f"Conectando servidor MCP: {_detalhe(a.get('nome'))}",
     "executar_comando": lambda a: f"Rodando: {_detalhe(a.get('comando'))}",
+    # computador virtual do bot (docs/computador-por-bot.md); o texto digitado nunca aparece
+    "computador_observar": lambda _: "Olhando a tela do computador",
+    "computador_agir": lambda _: "Usando o computador",
+    "computador_arquivos": lambda a: (
+        f"Lendo no computador: {_detalhe(a.get('caminho'))}"
+        if a.get("operacao") == "ler"
+        else "Olhando os arquivos do computador"
+    ),
+    "computador_escrever_arquivo": lambda a: (
+        f"Gravando no computador: {_detalhe(a.get('caminho'))}"
+    ),
+    "computador_desligar": lambda _: "Desligando o computador",
     "gerar_grafico": lambda a: f"Desenhando gráfico: {_detalhe(a.get('titulo') or a.get('tipo'))}",
     "navegador_abrir": lambda a: f"Abrindo: {_site(a.get('url'))}",
     "navegador_ler": lambda _: "Lendo a página",

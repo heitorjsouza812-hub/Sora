@@ -69,6 +69,11 @@ from app.ferramentas.navegador_registro import registrar as _registrar_leme  # n
 
 _registrar_leme(ESQUEMAS, MODULO_DA_FERRAMENTA)
 
+# Farol (etapa 6, C2): computador virtual por bot (``docs/computador-por-bot.md``).
+from app.computador.ferramentas import registrar as _registrar_farol  # noqa: E402
+
+_registrar_farol(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
 
 def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     """Fases 2 e 3, adaptadas do Rakazo (``docs/referencias/rakazo.md``).

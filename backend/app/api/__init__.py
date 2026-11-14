@@ -12,6 +12,7 @@ from app.api import (
     busca,
     cadeias,
     canais,
+    computador,
     conectores,
     conta,
     conversas,
@@ -60,6 +61,7 @@ for roteador in (
     conectores.roteador,
     habilidades.roteador,
     voz.roteador,
+    computador.roteador,  # Farol (C2): computador virtual do bot
 ):
     roteador_v1.include_router(roteador)
 

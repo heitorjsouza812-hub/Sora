@@ -286,7 +286,7 @@ roteador_agente = APIRouter(tags=["navegador"])
 
 
 class EscolhaPerfilEntrada(BaseModel):
-    tipo: Literal["efemero", "compartilhado", "perfil"]
+    tipo: Literal["efemero", "compartilhado", "agente", "perfil"]
     perfil_id: UUID | None = None
 
 
@@ -297,7 +297,12 @@ class EscolhaPerfilSaida(BaseModel):
     perfil_nome: str | None = None
 
 
-_TIPO_NO_BANCO = {"efemero": "efemero", "compartilhado": "compartilhado", "perfil": "nomeado"}
+_TIPO_NO_BANCO = {
+    "efemero": "efemero",
+    "compartilhado": "compartilhado",
+    "agente": "agente",
+    "perfil": "nomeado",
+}
 
 
 async def _agente_da_conta(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID) -> Agente:

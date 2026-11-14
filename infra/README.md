@@ -15,3 +15,17 @@ docker compose run --rm --no-deps --user 0 --cap-add CHOWN api \
   chown -R 10001:10001 /srv/sora/arquivos
 ```
 
+
+## Computador virtual por bot
+
+`infra/computador/` é a imagem do computador de cada bot (Xvfb, Openbox, Chromium, xdotool).
+O worker cria um contêiner `sora-pc-<agente>` por bot no host do sandbox, numa rede interna só
+dele com saída pelo `sora-pc-proxy` (imagem de `infra/proxy-egresso`). Construa as duas imagens
+nesse host antes de ligar `SANDBOX_PROVEDOR=docker`:
+
+```bash
+docker build -t sora-computador:1 infra/computador
+docker build -t sora-proxy-egresso:1 infra/proxy-egresso
+```
+
+Arquitetura, limites e regras: `docs/computador-por-bot.md`.

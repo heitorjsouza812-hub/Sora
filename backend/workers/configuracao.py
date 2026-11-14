@@ -30,6 +30,7 @@ from workers.cadeia import (
     verificar_cadeia,
 )
 from workers.canal import responder_canal
+from workers.computador import desligar_computador, desligar_computadores_ociosos
 from workers.conversa import responder_direto, retomar_conversa
 from workers.equipe import (
     despachar_equipe,
@@ -102,10 +103,12 @@ class WorkerSettings:
         executar_item_fila,
         executar_tarefa_canal,
         retomar_tarefa_canal,
+        desligar_computador,
     ]
     cron_jobs: ClassVar[list[Any]] = [
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),
         cron(disparar_rotinas, second={0, 10, 20, 30, 40, 50}, run_at_startup=True),
+        cron(desligar_computadores_ociosos, second={5}, run_at_startup=False),
     ]
     on_startup = ao_iniciar
     on_shutdown = ao_desligar

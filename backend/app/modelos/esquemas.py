@@ -101,6 +101,8 @@ class AgenteSaida(EsquemaBase):
     status: str | None = None
     ferramentas: list[str] = Field(default_factory=list)
     estado: Literal["livre", "trabalhando", "precisa_de_voce"] = "livre"
+    perfil_navegador: Literal["efemero", "compartilhado", "agente", "perfil"] | None = None
+    """Navegador que o bot usa (Farol, C1): ``agente`` = só dele (padrão de bot novo)."""
 
 
 class ConversaCriacao(EsquemaBase):
