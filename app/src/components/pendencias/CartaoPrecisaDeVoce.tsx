@@ -19,7 +19,7 @@ export function CartaoPrecisaDeVoce({ pedido, compacto = false, semGrupo = false
   const textoOrigem = origem.nome ? <>{origem.nome}{origem.grupo && !semGrupo ? ` · grupo ${origem.grupo}` : ''}</> : undefined;
 
   return (
-    <section className={`pend-card pend-precisa${compacto ? ' pend-compacto' : ''}`} aria-label="Precisa de você" data-pendencia={pedido.tipo}>
+    <section className={`pend-card pend-precisa${compacto ? ' pend-compacto' : ''}`} aria-label="Precisa de você" data-pendencia={pedido.tipo} data-pedido-id={pedido.id} tabIndex={-1}>
       <CabecaPedido cor={origem.cor} movimento={origem.movimento} origem={textoOrigem} />
       <div className="pend-conteudo">
         <h3>{pedido.titulo}</h3>

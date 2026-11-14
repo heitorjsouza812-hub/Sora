@@ -18,7 +18,8 @@ export function AvisosAtencao({ abrir }: { abrir: (caminho: string) => void }) {
       if (vistos.current.has(pedido.id)) continue;
       vistos.current.add(pedido.id);
       const origem = pedido.grupoId ? grupos.lista.find(g => g.id === pedido.grupoId)?.nome ?? 'Grupo' : bots.find(b => b.id === pedido.botId)?.nome ?? 'Sora';
-      const caminho = pedido.grupoId ? `/grupos/${encodeURIComponent(pedido.grupoId)}` : pedido.botId ? `/bots/${encodeURIComponent(pedido.botId)}` : '/';
+      const base = pedido.grupoId ? `/grupos/${encodeURIComponent(pedido.grupoId)}` : pedido.botId ? `/bots/${encodeURIComponent(pedido.botId)}` : '/';
+      const caminho = `${base}#pedido-${encodeURIComponent(pedido.id)}`;
       notificarAtencao(++sequencia.current, origem, caminho, abrir);
     }
   }, [lista, carregado, erro, bots, grupos.lista, abrir]);

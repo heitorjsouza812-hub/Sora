@@ -15,5 +15,5 @@ it('ignora pedidos iniciais e não repete pedido novo', () => {
   tela.rerender(<AvisosAtencao abrir={abrir} />);
   tela.rerender(<AvisosAtencao abrir={abrir} />);
   expect(dados.notificar).toHaveBeenCalledTimes(1);
-  expect(dados.notificar).toHaveBeenCalledWith(1, 'Bot', '/bots/b1', abrir);
+  expect(dados.notificar).toHaveBeenCalledWith(1, 'Bot', '/bots/b1#pedido-novo', abrir);
 });
