@@ -41,7 +41,7 @@ export interface ProjetoSora {
   ajusteAgenteId?: string; cadeiaId?: string; cadeiaStatus?: 'planejando' | 'executando' | 'verificando' | 'aguardando_usuario' | 'concluida' | 'falhou' | 'cancelada';
   roteamento?: 'direto' | 'cadeia' | 'pergunta'; erro?: string; mensagensPendentes?: boolean;
   /** resposta direta: a triagem já confirmou o pedido e a resposta do agente ainda não começou (instante do roteamento) */
-  aguardaRespostaDesde?: number; confirmacaoVista?: boolean;
+  aguardaRespostaDesde?: number;
 }
 export interface FonteMensagem { n: number; titulo: string; url: string; dominio: string }
 export interface MensagemChat {

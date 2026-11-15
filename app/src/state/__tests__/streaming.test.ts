@@ -119,19 +119,31 @@ describe('lote por quadro (receber)', () => {
   });
 });
 
-describe('resposta direta: entre a confirmação da triagem e a resposta do agente', () => {
-  it('segue "pensando" depois da confirmação e para quando a resposta do agente começa', () => {
+describe('resposta direta: a resposta é a única mensagem (sem confirmação)', () => {
+  it('roteamento direto, uma mensagem e fim: encerra o turno sem esperar segunda mensagem', () => {
     let e = aplicarEvento(estado(), ev('roteamento', { modo: 'direto' }));
-    e = aplicarEvento(e, ev('mensagem.inicio', { mensagem_id: 'ack', autor: 'sora', agente_id: soraId }));
-    e = aplicarEvento(e, ev('mensagem.delta', { mensagem_id: 'ack', texto: 'Entendi, você quer saber a capital.' }));
-    e = aplicarEvento(e, ev('mensagem.fim', { mensagem_id: 'ack' }));
-    expect(e.mensagens.some(m => m.gerando)).toBe(false);
     expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(true);
     e = aplicarEvento(e, ev('mensagem.inicio', { mensagem_id: 'resp', autor: 'sora', agente_id: soraId }));
+    expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(true);
+    e = aplicarEvento(e, ev('mensagem.delta', { mensagem_id: 'resp', texto: 'A capital da França é Paris.' }));
     e = aplicarEvento(e, ev('mensagem.fim', { mensagem_id: 'resp' }));
+    expect(e.mensagens.at(-1)).toMatchObject({ texto: 'A capital da França é Paris.', gerando: false });
+    expect(e.projetos[0].aguardaRespostaDesde).toBeUndefined();
     expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(false);
   });
 
+  it('cadeia: a confirmação não encerra o turno; o trabalho segue até a cadeia terminar', () => {
+    let e = aplicarEvento(estado(), ev('roteamento', { modo: 'cadeia' }));
+    e = aplicarEvento(e, ev('mensagem.inicio', { mensagem_id: 'ack', autor: 'sora', agente_id: soraId }));
+    e = aplicarEvento(e, ev('mensagem.fim', { mensagem_id: 'ack' }));
+    e = aplicarEvento(e, ev('cadeia.criada', { cadeia_id: 'c1', versao: 1, etapas: [] }));
+    expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(true);
+    e = aplicarEvento(e, ev('cadeia.atualizada', { cadeia_id: 'c1', status: 'concluida' }));
+    expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(false);
+  });
+});
+
+describe('resposta direta: espera pela resposta', () => {
   it('sem resposta do agente, a espera acaba sozinha e o histórico já carregado não a reabre', () => {
     let e = aplicarEvento(estado(), ev('roteamento', { modo: 'direto' }));
     expect(gerandoNa(e, conversaId, AGORA + 10 * 60_000)).toBe(false);

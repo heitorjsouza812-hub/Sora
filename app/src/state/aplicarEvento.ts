@@ -87,8 +87,8 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     const autor = autorBruto === 'agente' && agenteId ? agenteId : autorBruto === 'usuario' ? 'usuario' : 'sora';
     // A mensagem oficial substitui a prévia (mesma conversa): sem bolha duplicada.
     const comMensagem = { ...estado, mensagens: [...estado.mensagens.filter(SEM_PREVIA(conversaId)), { id, conversaId, autor, agenteId, texto: '', criadoEm: evento.recebidoEm, gerando: true }] };
-    // Resposta direta: a 1ª mensagem depois do roteamento é a confirmação da triagem; a 2ª já é a do agente.
-    return autor === 'usuario' ? comMensagem : atualizarProjeto(comMensagem, conversaId, p => !p.aguardaRespostaDesde ? p : p.confirmacaoVista ? { ...p, aguardaRespostaDesde: undefined } : { ...p, confirmacaoVista: true });
+    // Resposta direta: o backend publica só a resposta (sem confirmação); a mensagem já mantém o "gerando" até o `fim`.
+    return autor === 'usuario' ? comMensagem : atualizarProjeto(comMensagem, conversaId, p => p.aguardaRespostaDesde ? { ...p, aguardaRespostaDesde: undefined } : p);
   }
   if (evento.tipo === 'mensagem.delta') {
     const id = texto(d.mensagem_id);
@@ -103,8 +103,8 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     return atualizarProjeto(fechado, conversaId, p => p.mensagensPendentes ? { ...p, mensagensPendentes: false } : p);
   }
   if (evento.tipo === 'roteamento') return atualizarProjeto(estado, conversaId, p => ({ ...p, roteamento: texto(d.modo) as ProjetoSora['roteamento'], mensagensPendentes: false,
-    // resposta direta: a triagem publica uma confirmação e só depois o agente responde; entre as duas a conversa segue "pensando"
-    aguardaRespostaDesde: d.modo === 'direto' && evento.recebidoEm > (estado.historicos?.[conversaId]?.ultimo ?? 0) ? evento.recebidoEm : undefined, confirmacaoVista: false }));
+    // resposta direta: entre o roteamento e a 1ª mensagem a conversa segue "pensando"; a mensagem assume depois
+    aguardaRespostaDesde: d.modo === 'direto' && evento.recebidoEm > (estado.historicos?.[conversaId]?.ultimo ?? 0) ? evento.recebidoEm : undefined }));
 
   if (evento.tipo === 'agente.criado') {
     const id = texto(d.agente_id); if (!id) return estado;
