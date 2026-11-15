@@ -53,7 +53,9 @@ try {
   await page.getByRole('tab', { name: 'Trabalho' }).click().catch(() => undefined);
   const nav = page.getByRole('region', { name: 'Navegador ao vivo' });
   await nav.waitFor({ state: 'visible', timeout: 20_000 });
-  await page.getByRole('region', { name: 'Computador do bot' }).waitFor({ state: 'visible' });
+  // Navegador e computador são abas (uma tela por vez): a aba "Computador" precisa existir.
+  const abas = page.getByRole('tablist', { name: 'Telas do bot' });
+  await abas.getByRole('tab', { name: 'Computador' }).waitFor({ state: 'visible' });
   await page.waitForTimeout(800);
   assert.ok(chamadas.some(c => c.acao === 'assistir'), 'manda assistir ao abrir');
   await page.screenshot({ path: foto('telas-1440-vendo') });
@@ -75,7 +77,9 @@ try {
   await page.keyboard.press('Escape');
   await nav.getByRole('button', { name: 'Devolver ao bot' }).click();
   await nav.getByText('Devolvido. O bot retoma na próxima ação dele.').waitFor();
+  await abas.getByRole('tab', { name: 'Computador' }).click();
   const pc = page.getByRole('region', { name: 'Computador do bot' });
+  await pc.waitFor({ state: 'visible' });
   await pc.getByRole('button', { name: 'Desligar computador' }).click();
   await page.getByRole('dialog').waitFor();
   await page.screenshot({ path: foto('telas-1440-desligar') });
@@ -83,6 +87,8 @@ try {
   await page.getByRole('dialog').getByRole('button', { name: 'Desligar', exact: true }).click();
   await page.waitForTimeout(500);
   assert.ok(chamadas.some(c => c.acao === 'desligar'), 'desliga ao confirmar');
+  await abas.getByRole('tab', { name: 'Navegador' }).click();
+  await nav.waitFor({ state: 'visible' });
   const antes = chamadas.filter(c => c.acao === 'assistir').length;
   await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
   await page.waitForTimeout(9000);

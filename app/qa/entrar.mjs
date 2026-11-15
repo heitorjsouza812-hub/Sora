@@ -56,6 +56,8 @@ export async function entrarNoContexto(contexto, { pularOnboarding = true, email
     const dica = r.status >= 500 || r.status === 404 ? ' O backend está rodando na porta 8000?' : '';
     throw new Error(`Login de QA falhou (${r.status}): ${JSON.stringify(r.corpo)}.${dica}`);
   }
+  // O cookie de renovação veio da API, fora do app: marca o navegador como "já teve sessão" para o app renovar.
+  await contexto.addInitScript(() => { try { localStorage.setItem('sora.sessao.marca.v1', '1'); } catch { /* */ } });
   // Os fluxos de QA não conectam provedor: o onboarding fica "para depois" (o aviso aparece na Home).
   if (pularOnboarding) {
     await contexto.addInitScript(() => { try { sessionStorage.setItem('sora.onboarding-pulado.v1', '1'); } catch { /* */ } });

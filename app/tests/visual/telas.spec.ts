@@ -36,6 +36,9 @@ test.beforeEach(async ({ page }) => {
   const headers = { Authorization: `Bearer ${sessao.token_acesso}` };
   const grupos = await (await page.context().request.get(`${base}/v1/grupos`, { headers })).json() as { id: string }[];
   for (const grupo of grupos) await page.context().request.post(`${base}/v1/canais-equipe/${grupo.id}/arquivar`, { headers, failOnStatusCode: false });
+  // Perfis do navegador sobram de outras sessões de QA: a baseline parte sempre da lista vazia.
+  const perfis = await page.context().request.get(`${base}/v1/navegador/perfis`, { headers, failOnStatusCode: false });
+  if (perfis.status() === 200) for (const perfil of await perfis.json() as { perfil_id: string }[]) await page.context().request.delete(`${base}/v1/navegador/perfis/${perfil.perfil_id}`, { headers, failOnStatusCode: false });
   await limparEstado(page);
 });
 

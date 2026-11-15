@@ -1,6 +1,6 @@
 // Item 57 · auditoria de contraste (WCAG 2.1 AA) de todos os textos visíveis.
 // Uso: node qa/contraste.mjs [rotas…] [--todos] [--json]
-//  - percorre as rotas em 1440 e 390 px (dev server em http://localhost:5383);
+//  - percorre as rotas em 1440 e 390 px (dev server em SORA_QA_BASE, padrão http://localhost:5383; conta em SORA_QA_EMAIL);
 //  - para cada nó de texto visível mede a cor efetiva (opacidade dos ancestrais incluída) contra o
 //    fundo composto (camadas rgba até um fundo opaco) e compara com 4,5:1 (ou 3:1 em texto grande);
 //  - texto sobre imagem/gradiente/canvas fica como "não medido";
@@ -12,7 +12,7 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const BASE_URL = 'http://localhost:5383';
+const BASE_URL = process.env.SORA_QA_BASE;
 const qaDir = dirname(fileURLToPath(import.meta.url));
 const ROTAS = ['/', '/bots', '/bots/@bot', '/bots/@bot#recursos', '/grupos', '/grupos/@grupo', '/configuracoes', '/configuracoes?secao=memoria', '/configuracoes?secao=navegador', '/configuracoes?secao=telegram', '/clientes'];
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
@@ -23,7 +23,7 @@ const todos = args.includes('--todos');
 const rotas = args.filter(a => a.startsWith('/'));
 
 async function semear(ctx, page) {
-  const sessao = await entrarNoContexto(ctx, { email: 'qa-design@sora.local' });
+  const sessao = await entrarNoContexto(ctx, { email: process.env.SORA_QA_EMAIL ?? 'qa-design@sora.local' });
   const h = { Authorization: `Bearer ${sessao.token_acesso}` };
   const agentes = await (await ctx.request.get(`${BASE_URL}/v1/agentes`, { headers: h })).json();
   const grupos = await (await ctx.request.get(`${BASE_URL}/v1/grupos`, { headers: h })).json();
