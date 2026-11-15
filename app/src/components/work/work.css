@@ -169,3 +169,9 @@
 @media (prefers-reduced-motion: reduce) { .agent-workspace { transition: none; } .wk-step.wk-executando .wk-node::after { animation: none; } }
 
 .wk-ferramenta-id { font: 12px/18px var(--font-mono); color: var(--text-2); }
+
+/* Etapa 6 §6.4: o painel vai de ponta a ponta (topo, rodapé e borda direita); o cabeçalho fica só sobre a conversa. */
+@media (min-width: 1200px) {
+  .agent-workspace .side-panel:not(.is-hidden) { position: fixed; z-index: 5; top: 0; right: 0; bottom: 0; width: var(--painel-w); }
+  .app-stage:has(.agent-workspace:not(.panel-collapsed)) > .topbar { margin-right: var(--painel-w); }
+}

@@ -106,8 +106,8 @@ await passo('07-rascunho', async () => {
     if (i === 0) { await d.waitForTimeout(600); await foto(d, '07c-bot-criado'); }
   }
 });
-const bots = ((await api('get', '/v1/agentes')).corpo ?? []).filter(a => nomes.includes(a.nome));
-const bot = bots.find(b => b.nome === nomes[0]);
+const bots = ((await api('get', '/v1/agentes')).corpo ?? []).filter(a => a.tipo !== 'sora' && nomes.some(n => a.nome === n || (a.funcao ?? '').startsWith(n)));
+const bot = bots.find(b => b.nome === nomes[0] || (b.funcao ?? '').startsWith(nomes[0]));
 console.log('bots:', bots.map(b => `${b.nome}=${b.id}`).join(' '));
 
 // ---------- conversa com a Sora ----------
@@ -200,7 +200,7 @@ await passo('06-grupo', async () => {
   await d.getByRole('button', { name: 'Criar grupo' }).first().click(); await d.waitForTimeout(700);
   const modal = d.getByRole('dialog');
   await modal.getByLabel('Nome do grupo').fill('Grupo de planejamento');
-  for (const nome of nomes) await modal.getByText(nome, { exact: true }).click();
+  for (const b of bots.slice(0, 2)) await modal.getByText(b.nome, { exact: true }).first().click();
   await d.waitForTimeout(400); await foto(d, '06-novo-grupo');
   await ir(m, '/grupos', 1500); await m.getByRole('button', { name: /Novo grupo|Criar grupo/ }).first().click(); await m.waitForTimeout(800); await foto(m, '06-novo-grupo'); await m.keyboard.press('Escape');
   await modal.getByRole('button', { name: 'Criar grupo', exact: true }).click();
