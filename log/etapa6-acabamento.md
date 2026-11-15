@@ -70,3 +70,9 @@ As de `log/etapa5-interface.md` (portas 8200/5383, bancos `sora-e5-*`, PT-BR, se
 - Cada agente só edita os caminhos do seu escopo. Arquivo de outro dono: só **consumir** (importar); se precisar de mudança, edição mínima e aditiva registrada em `.maestri/contrato-etapa5.md`.
 - Antes de commitar no app: `npm run build`, `npx oxlint`, `npm test`. Commit só dos seus caminhos (`git commit -- caminhos`), em PT-BR. Sem push.
 - Relatório em `.maestri/relatorios/<nome>.md` ao terminar.
+
+## Teste com modelo real (decisão do Heitor, 2026-11-15)
+
+- O app e o worker do ambiente de testes passam a rodar com **modelo real (Groq)**, não com `SORA_MODELO_FALSO`. A chave do Heitor está em `backend/.env` como `SORA_QA_GROQ_CHAVE` (arquivo ignorado pelo git; **nunca** copiar para commit, log, relatório ou contrato). O QA cadastra a chave na conta de teste pela rota `/v1/provedores` lendo a variável.
+- Limite grátis da Groq: ao bater 429, esperar e continuar (o backend já respeita o limite por minuto; scripts de QA com espera e nova tentativa).
+- O modelo falso continua só nas suítes automáticas (unitários e integração com testcontainers), que não podem gastar o limite nem depender de rede.
