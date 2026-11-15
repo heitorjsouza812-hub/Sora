@@ -269,7 +269,7 @@ async def _rodar_e_falar(
 
         if isinstance(erro, CadeiaCancelada):
             return
-        from app.llm.limite import MENSAGEM_LIMITE, limite_do_provedor
+        from app.llm.limite import mensagem_de_limite
 
         registro.exception("o agente da conversa %s falhou", contexto.conversa_id)
         if await _ja_falou_neste_turno(ctx, contexto.conversa_id, antes):
@@ -286,9 +286,7 @@ async def _rodar_e_falar(
             texto = (
                 MENSAGEM_LIMITE_DE_PASSOS
                 if estourou_limite_de_passos(erro)
-                else MENSAGEM_LIMITE
-                if limite_do_provedor(erro)
-                else MENSAGEM_FALHA
+                else mensagem_de_limite(erro) or MENSAGEM_FALHA
             )
             await falar(Falar(texto=texto), ferramenta)
         await _cartao_de_seguranca(ferramenta, pedido_de_equipe, cartoes_antes)

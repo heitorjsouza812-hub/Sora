@@ -494,15 +494,20 @@ async def test_erro_do_provedor_na_triagem_nao_perde_o_texto(ambiente_http: Ambi
     """B3: provedor com 500/401/429/lixo -> 201, mensagem guardada e aviso em PT-BR (não 500)."""
     amb = ambiente_http
     respostas: list[Any] = [
-        (500, {"error": {"message": "sk-VAZOU-123 quebrou"}}),
-        (401, {"error": {"message": "chave inválida"}}),
-        (429, {"error": {"message": "limite"}}),
-        (200, {"lixo": "isto não é uma completação"}),
+        (500, {"error": {"message": "sk-VAZOU-123 quebrou"}}, "fora do ar"),
+        (401, {"error": {"message": "chave inválida"}}, "recusou a chave"),
+        (429, {"error": {"message": "limite"}}, "limite por minuto"),
+        (
+            429,
+            {"error": {"message": "Limit reached on tokens per day (TPD). Try again in 3m2s."}},
+            "cota diária",
+        ),
+        (200, {"lixo": "isto não é uma completação"}, "fora do ar"),  # o litellm vê um 5xx
     ]
     async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
         auth, _ = await usuario_com_modelo_http(amb, cliente, "triagem-erro@exemplo.com")
-        for i, resposta_do_provedor in enumerate(respostas):
-            amb.provedor.responder = lambda corpo, n, r=resposta_do_provedor: r
+        for i, (status_http, corpo_do_provedor, esperado) in enumerate(respostas):
+            amb.provedor.responder = lambda corpo, n, r=(status_http, corpo_do_provedor): r
             texto = f"crie uma campanha para a cafeteria {i}"
             resposta = await cliente.post(
                 "/v1/conversas", headers=auth, json={"texto": texto, "anexos": []}
@@ -512,8 +517,66 @@ async def test_erro_do_provedor_na_triagem_nao_perde_o_texto(ambiente_http: Ambi
             mensagens = await cliente.get(f"/v1/conversas/{conversa_id}/mensagens", headers=auth)
             conteudos = [m["conteudo"] for m in mensagens.json()]
             assert texto in conteudos
-            assert any("Não consegui falar com o seu modelo" in c for c in conteudos), conteudos
+            assert any(esperado in c for c in conteudos), (i, conteudos)
+            if esperado != "limite por minuto":
+                assert not any("por minuto" in c for c in conteudos), (i, conteudos)
             assert "sk-VAZOU-123" not in resposta.text + mensagens.text
+
+
+COTA_DO_DIA = (
+    429,
+    {"error": {"message": "Rate limit on tokens per day (TPD). Please try again in 9m10s."}},
+)
+
+
+async def test_cota_do_dia_na_conversa_nao_vira_limite_por_minuto(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    """A3 (Prumo-4): no worker da conversa, a cota diária diz "cota diária", não "por minuto"."""
+    amb = ambiente_http
+    amb.provedor.responder = lambda corpo, n: COTA_DO_DIA
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        _, usuario_id = await usuario_com_modelo_http(amb, cliente, "cota-conversa@exemplo.com")
+        conversa_id, mensagem_id = await _conversa_com_pedido(amb, usuario_id, "Oi")
+        await _enfileirar(amb.url_redis, "responder_direto", str(mensagem_id))
+
+        async def avisou() -> list[str]:
+            async with amb.fabrica() as sessao:
+                textos = (
+                    await sessao.scalars(
+                        select(Mensagem.conteudo).where(
+                            Mensagem.conversa_id == conversa_id, Mensagem.autor == "sora"
+                        )
+                    )
+                ).all()
+            return [t for t in textos if "cota diária" in t]
+
+        achados = await esperar(avisou, "a conversa não explicou que a cota do dia acabou")
+        assert "por minuto" not in achados[0]
+        assert "551 segundos" in achados[0]
+
+
+async def test_cota_do_dia_na_etapa_da_cadeia_diz_cota_diaria(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    amb = ambiente_http
+    amb.provedor.responder = lambda corpo, n: COTA_DO_DIA
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, usuario_id = await usuario_com_modelo_http(amb, cliente, "cota-etapa@exemplo.com")
+        conversa_id, _, etapa_id = await _cadeia_e_etapa(
+            amb.fabrica, usuario_id, StatusCadeia.EXECUTANDO
+        )
+        await _enfileirar(amb.url_redis, "executar_etapa", str(etapa_id))
+        await ler_sse(
+            cliente,
+            str(conversa_id),
+            auth,
+            ate=lambda n, d: n == "cadeia.atualizada" and d["status"] == "falhou",
+        )
+    async with amb.fabrica() as sessao:
+        etapa = await sessao.get(Etapa, etapa_id)
+        assert etapa.status == StatusEtapa.FALHOU
+        assert "cota diária" in etapa.erro and "por minuto" not in etapa.erro
 
 
 async def test_planejador_com_erro_vira_falhou_com_evento(ambiente_http: AmbienteHttp) -> None:

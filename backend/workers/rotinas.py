@@ -38,10 +38,6 @@ MENSAGEM_LIMITE_DE_PASSOS_ROTINA = (
     "A rotina usou o máximo de passos permitido sem terminar. "
     "Simplifique o pedido da rotina e rode de novo."
 )
-MENSAGEM_LIMITE_DO_PROVEDOR_ROTINA = (
-    "O provedor recusou: limite por minuto do plano. Tente de novo em alguns instantes "
-    "ou use um modelo com limite maior."
-)
 MENSAGEM_FALHA = "A rotina não terminou: o modelo de IA não respondeu. Confira em Configurações."
 
 
@@ -216,14 +212,14 @@ async def executar_rotina(
                 )
     except Exception as falha:
         from app.agentes.middleware.limites import estourou_limite_de_passos
-        from app.llm.limite import limite_do_provedor
+        from app.llm.limite import mensagem_de_limite
 
         registro.exception("a rotina %s falhou", rid)
         status = "falhou"
         if estourou_limite_de_passos(falha):
             erro = MENSAGEM_LIMITE_DE_PASSOS_ROTINA
-        elif limite_do_provedor(falha):
-            erro = MENSAGEM_LIMITE_DO_PROVEDOR_ROTINA
+        elif (limite := mensagem_de_limite(falha)) is not None:
+            erro = limite
         else:
             erro = MENSAGEM_FALHA
     async with ctx["sessoes"]() as sessao:

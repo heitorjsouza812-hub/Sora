@@ -154,6 +154,16 @@ MENSAGEM_FALHA_DO_PROVEDOR = (
 )
 
 
+def _texto_da_falha_da_triagem(erro: BaseException) -> str:
+    """Limite, cota, chave recusada e provedor fora do ar têm cada um o seu texto."""
+    from app.llm.limite import mensagem_da_falha_do_provedor
+
+    especifica = mensagem_da_falha_do_provedor(erro, "")
+    if not especifica:
+        return MENSAGEM_FALHA_DO_PROVEDOR
+    return f"{especifica} Sua mensagem foi guardada; envie o pedido de novo depois."
+
+
 async def _publicar_primeira_resposta(
     redis: Redis,
     sessao: AsyncSession,
@@ -271,7 +281,7 @@ async def _encaminhar(
             sessao,
             usuario_id=usuario_id,
             conversa_id=conversa.id,
-            texto=MENSAGEM_FALHA_DO_PROVEDOR,
+            texto=_texto_da_falha_da_triagem(erro),
             agente_id=agente.id,
         )
         return

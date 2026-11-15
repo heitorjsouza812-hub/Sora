@@ -24,7 +24,6 @@ from app.agentes.aparencia import aparencia_do_especialista
 from app.eventos.streams import publicar_evento
 from app.eventos.tipos import (
     AgenteCriado,
-    AprovacaoPedida,
     CadeiaAtualizada,
     CadeiaCriada,
     EntregaEvento,
@@ -53,15 +52,6 @@ from workers.fila import enfileirar
 from workers.travados import batimento
 
 registro = logging.getLogger(__name__)
-
-
-class AprovacaoDaCadeia(AprovacaoPedida):
-    """``aprovacao.pedida`` da cadeia: leva a conversa (e o bot/grupo, quando há) para o app
-    mostrar o cartão no chat, não só na central "Precisa de você"."""
-
-    conversa_id: UUID
-    bot_id: UUID | None = None
-    grupo_id: UUID | None = None
 
 
 def _uuid(valor: str) -> UUID:
@@ -722,13 +712,13 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
                 MENSAGEM_LIMITE_DE_PASSOS,
                 estourou_limite_de_passos,
             )
-            from app.llm.limite import MENSAGEM_LIMITE, limite_do_provedor
+            from app.llm.limite import mensagem_de_limite
 
             etapa.status = StatusEtapa.FALHOU
             if estourou_limite_de_passos(erro):
                 etapa.erro = MENSAGEM_LIMITE_DE_PASSOS
             else:
-                etapa.erro = MENSAGEM_LIMITE if limite_do_provedor(erro) else ERRO_SEGURO_DA_ETAPA
+                etapa.erro = mensagem_de_limite(erro) or ERRO_SEGURO_DA_ETAPA
             await sessao.commit()
             await _publicar(ctx, cadeia, _evento_etapa(etapa, 100))
             await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
@@ -737,31 +727,8 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
         if interrupcoes:
             valor = getattr(interrupcoes[0], "value", interrupcoes[0])
             etapa.status = _estado_da_pausa(valor)
-            if isinstance(valor, dict) and valor.get("aprovacao_id"):
-                from app.modelos.tabelas import Aprovacao
-
-                cartao = await sessao.get(Aprovacao, _uuid(str(valor["aprovacao_id"])))
-                if cartao is not None:
-                    await _publicar(
-                        ctx,
-                        cadeia,
-                        AprovacaoDaCadeia(
-                            aprovacao_id=cartao.id,
-                            conversa_id=cadeia.conversa_id,
-                            agente_id=cartao.agente_id,
-                            bot_id=cartao.agente_id,
-                            grupo_id=cartao.grupo_id,
-                            resumo=cartao.avaliacao.get(
-                                "resumo", "A Sora precisa da sua aprovação."
-                            ),
-                            dano=cartao.avaliacao.get("dano", "A ação aguarda sua revisão."),
-                            quem_recebe=cartao.acao.get("dominio"),
-                            tipo=cartao.acao.get("tipo"),
-                            dominio=cartao.acao.get("dominio"),
-                            url=cartao.acao.get("url"),
-                            expira_em=cartao.expira_em,
-                        ),
-                    )
+            # O cartão de aprovação já saiu da ferramenta (revisor ou navegador), com conversa,
+            # bot e grupo: publicar de novo aqui o duplicaria para a Ilha e as notificações.
             if isinstance(valor, dict) and valor.get("pergunta_id"):
                 # Liga a pergunta a esta etapa: com etapas em paralelo, a API acorda a certa.
                 etapa.saida = {"pergunta_id": str(valor["pergunta_id"])}
