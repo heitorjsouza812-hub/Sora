@@ -160,7 +160,7 @@ export default function AgentChat() {
     const ultimaRespostaId = [...todas].reverse().find(m => m.autor !== 'usuario')?.id;
     (pergunta ? todas.filter(m => m.autor === 'usuario' || m.criadoEm <= pergunta.criadoEm) : todas).forEach(m => itens.push({
       t: m.criadoEm, key: m.id,
-      node: m.autor === 'usuario' ? <MensagemChat m={m} agora={agora} />
+      node: m.autor === 'usuario' ? <MensagemChat m={m} agora={agora} respostaDe={{ nome: a.nome, cor: a.cor, avatar: <SoraOrb size={24} color={a.cor} movimento={a.tipoMovimento} state="idle" glow={false} decorative seed={5} /> }} />
         : m.autor === 'sora'
           ? <MensagemChat m={m} agora={agora} ultima={m.id === ultimaRespostaId} nome={e.sora.nome} avatar={<SoraOrb size={24} color={e.sora.cor} state="coordinating" glow={false} decorative seed={72} />} />
           : <MensagemChat m={m} agora={agora} ultima={m.id === ultimaRespostaId} nome={a.nome} cor={a.cor}

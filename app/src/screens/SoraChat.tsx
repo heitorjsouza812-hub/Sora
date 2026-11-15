@@ -111,7 +111,7 @@ export default function SoraChat() {
             <HistoricoConversa conversaId={projeto?.id} />
             {estado.carregando && <p role="status" className="sr-only">Carregando conversa…</p>}
             {mensagens.map(mensagem => <div className="chat-item" data-chave={mensagem.id} key={mensagem.id}>
-              <MensagemChat m={mensagem} agora={agora} ultima={mensagem.id === ultimaRespostaId} nome={mensagem.autor === 'usuario' ? undefined : 'Sora'} avatar={mensagem.autor === 'usuario' ? undefined : <SoraOrb size={24} color="#E2ECFF" state={textoVisivel(mensagem, agora).gerando ? 'thinking' : 'idle'} glow={false} decorative seed={31} />} />
+              <MensagemChat m={mensagem} agora={agora} ultima={mensagem.id === ultimaRespostaId} respostaDe={{ nome: 'Sora', avatar: <SoraOrb size={24} color="#E2ECFF" state="idle" glow={false} decorative seed={31} /> }} nome={mensagem.autor === 'usuario' ? undefined : 'Sora'} avatar={mensagem.autor === 'usuario' ? undefined : <SoraOrb size={24} color="#E2ECFF" state={textoVisivel(mensagem, agora).gerando ? 'thinking' : 'idle'} glow={false} decorative seed={31} />} />
             </div>)}
             {pensando && <div className="pensando-linha"><SoraThinking size={28} color="#E2ECFF" label="Sora está pensando…" /></div>}
             {cartoes.rascunhos.map(rascunho => <CartaoRascunhoBot key={rascunho.id} rascunho={rascunho} />)}

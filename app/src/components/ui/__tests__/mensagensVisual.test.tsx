@@ -48,6 +48,17 @@ describe('mensagens (etapa 6)', () => {
     expect(screen.getAllByRole('button', { name: 'Refazer resposta' })).toHaveLength(1); // a barra não repete o botão
   });
 
+  it('pergunta interrompida antes de qualquer resposta: o aviso vira bloco de resposta, com cabeçalho do autor, fora da bolha', () => {
+    const interrompida = { ...pergunta, estado: 'interrompida' as const };
+    preparar(interrompida);
+    const { container } = render(<MensagemChat m={interrompida} agora={0} respostaDe={{ nome: 'Sora', avatar: <span data-testid="orb" /> }} />);
+    expect(container.querySelector('.chat-msg.is-user .msg-interrompida')).toBeNull();
+    const bloco = container.querySelector('.chat-msg.is-assistant.is-sem-resposta') as HTMLElement;
+    expect(bloco.querySelector('.msg-cabeca')).toHaveTextContent('Sora');
+    expect(within(bloco).getByText('Resposta interrompida', { exact: true })).toBeInTheDocument();
+    expect(bloco.querySelector('.msg-interrompida')).toHaveAttribute('role', 'status');
+  });
+
   it('parou antes do 1º caractere: o aviso ocupa o lugar da resposta, com o cabeçalho do autor', () => {
     const vazia = { ...resposta, texto: 'Resposta interrompida.', estado: 'interrompida' as const };
     preparar(pergunta, vazia);

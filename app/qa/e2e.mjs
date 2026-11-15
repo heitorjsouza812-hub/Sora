@@ -139,7 +139,7 @@ try {
   const linhaGrupo = page.locator('aside.sidebar').getByRole('link', { name: new RegExp(nomeGrupo) });
   await linhaGrupo.waitFor({ state: 'visible', timeout: 10_000 });
   const tituloGrupo = await linhaGrupo.getAttribute('title');
-  if (!/Sora + 2 bots$/.test(tituloGrupo ?? '')) throw new Error(`linha do grupo sem "Sora + 2 bots": ${tituloGrupo}`);
+  if (!/Sora \+ 2 bots$/.test(tituloGrupo ?? '')) throw new Error(`linha do grupo sem "Sora + 2 bots": ${tituloGrupo}`);
   await foto('04-grupo');
 
   const urlGrupo = page.url();

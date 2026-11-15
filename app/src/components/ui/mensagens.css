@@ -27,6 +27,7 @@
 /* aviso de resposta interrompida: pertence à resposta, em cinza (parar foi escolha do usuário, não erro) */
 .msg-interrompida { display: flex; align-items: center; gap: var(--sp-2); margin: 10px 0 0; color: var(--text-2); font: 400 var(--fs-13)/18px var(--font); }
 .msg-interrompida i { flex: none; width: 8px; height: 8px; background: var(--text-3); border-radius: 2px; }
+.chat-msg + .chat-msg.is-sem-resposta { margin-top: var(--sp-7); }
 .msg-refazer { margin-left: var(--sp-1); padding: 0; color: var(--text-1); background: none; border: 0; font: 500 var(--fs-13)/18px var(--font); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .msg-refazer:disabled { color: var(--text-3); cursor: default; }
 

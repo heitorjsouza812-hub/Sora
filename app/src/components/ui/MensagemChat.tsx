@@ -57,9 +57,11 @@ export interface MensagemChatProps {
   rotulo?: string;
   /** última resposta da conversa: as ações ficam sempre visíveis */
   ultima?: boolean;
+  /** quem responde a esta pergunta (nome, avatar, cor): usado quando a pergunta foi interrompida antes de a resposta começar, para o aviso ocupar o lugar da resposta */
+  respostaDe?: { nome?: string; avatar?: ReactNode; cor?: string };
 }
 
-export function MensagemChat({ m, agora, avatar, nome, cor, rotulo, ultima = false }: MensagemChatProps) {
+export function MensagemChat({ m, agora, avatar, nome, cor, rotulo, ultima = false, respostaDe }: MensagemChatProps) {
   const e = useProjetos();
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState(m.texto);
@@ -119,7 +121,7 @@ export function MensagemChat({ m, agora, avatar, nome, cor, rotulo, ultima = fal
   );
 
   if (usuario) {
-    return (
+    return (<>
       <div id={`msg-${m.id}`} data-msg-id={m.id} className={`chat-msg is-user${nova ? ' is-nova' : ''} ${abertas ? 'is-acoes-abertas' : ''}${ultima ? ' is-ultima' : ''}`} {...toqueLongo}>
         {editando ? (
           <form className="msg-edit" onSubmit={ev => { ev.preventDefault(); if (rascunho.trim() || m.anexos?.length) { void executar(() => editarPergunta(m.id, rascunho)); } }}>
@@ -136,7 +138,12 @@ export function MensagemChat({ m, agora, avatar, nome, cor, rotulo, ultima = fal
         {m.envio === 'enviando' && <small role="status">Enviando…</small>}
         {m.envio === 'erro' && <div role="alert">Não foi possível enviar. <button type="button" onClick={() => void tentarEnvioNovamente(m.id)}>Tentar de novo</button></div>}
       </div>
-    );
+      {/* parou antes do 1º caractere: o aviso é da resposta (com o cabeçalho do autor), nunca da pergunta */}
+      {vis.interrompida && respostaDe && <div className="chat-msg is-assistant is-sem-resposta" style={respostaDe.cor ? { '--agent': respostaDe.cor } as CSSProperties : undefined}>
+        {(respostaDe.avatar || respostaDe.nome) && <div className="msg-cabeca">{respostaDe.avatar}{respostaDe.nome && <strong className="msg-nome">{respostaDe.nome}</strong>}</div>}
+        <div className="msg-corpo"><p className="msg-interrompida" role="status"><i aria-hidden="true" /><span>Resposta interrompida</span>{editavel && <button type="button" className="msg-refazer" disabled={salvando} onClick={() => void executar(() => editarPergunta(m.id, m.texto))}>Refazer resposta</button>}</p></div>
+      </div>}
+    </>);
   }
 
   return (
@@ -150,7 +157,7 @@ export function MensagemChat({ m, agora, avatar, nome, cor, rotulo, ultima = fal
         {!soAviso && <Markdown texto={vis.texto} gerando={vis.gerando} fontes={m.fontes} mensagemId={m.id} />}
         {!!m.fontes?.length && <FontesMensagem mensagemId={m.id} fontes={m.fontes} />}
         {!!m.anexos?.length && <AnexosResposta anexos={m.anexos} />}
-        {vis.interrompida && <p className="msg-interrompida" role="status"><i aria-hidden="true" />Resposta interrompida{podeRefazer(m) && <button type="button" className="msg-refazer" disabled={salvando} onClick={() => void executar(() => refazerResposta(m.id))}>Refazer resposta</button>}</p>}
+        {vis.interrompida && <p className="msg-interrompida" role="status"><i aria-hidden="true" /><span>Resposta interrompida</span>{podeRefazer(m) && <button type="button" className="msg-refazer" disabled={salvando} onClick={() => void executar(() => refazerResposta(m.id))}>Refazer resposta</button>}</p>}
         <div className="msg-barra">{acoes}{mais}</div>
       </div>
     </div>
