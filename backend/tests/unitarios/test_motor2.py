@@ -184,3 +184,33 @@ async def test_ouvir_com_erro_do_provedor_nao_vira_502(monkeypatch):
         await api_voz.falar_texto(api_voz.Fala(texto="Olá"), uuid4(), None)
     assert erro.value.status_code != 502
     assert "termos" in erro.value.detail
+
+
+async def test_chamada_de_ferramenta_malformada_e_repetida_uma_vez_e_depois_sobe():
+    import pytest
+
+    from app.agentes.middleware.limite_provedor import MiddlewareLimiteDoProvedor
+
+    class Pedido:
+        messages: list = []  # noqa: RUF012
+
+        def override(self, **_):
+            return self
+
+    chamadas = []
+
+    async def so_falha_na_primeira(_pedido):
+        chamadas.append(1)
+        if len(chamadas) == 1:
+            raise ValueError("invalid literal for int(): 'tool_use_failed'")
+        return "ok"
+
+    middleware = MiddlewareLimiteDoProvedor()
+    assert await middleware.awrap_model_call(Pedido(), so_falha_na_primeira) == "ok"
+    assert len(chamadas) == 2
+
+    async def sempre_falha(_pedido):
+        raise ValueError("Tool call validation failed: which was not in request.tools")
+
+    with pytest.raises(ValueError):
+        await middleware.awrap_model_call(Pedido(), sempre_falha)

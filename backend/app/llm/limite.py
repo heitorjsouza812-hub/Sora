@@ -180,6 +180,24 @@ def enxugar(mensagens: list[Any], nivel: int) -> list[Any]:
     return saida
 
 
+TENTATIVAS_CHAMADA_MALFORMADA = 2
+
+
+def chamada_de_ferramenta_malformada(erro: BaseException) -> bool:
+    """O provedor recusou a chamada de ferramenta que o modelo montou (nome inventado,
+    argumentos fora do esquema). É falha do modelo, não do usuário: repetir costuma resolver."""
+    texto = _texto(erro)
+    return any(
+        marca in texto
+        for marca in (
+            "tool_use_failed",
+            "tool call validation failed",
+            "failed to call a function",
+            "which was not in request.tools",
+        )
+    )
+
+
 def cota_diaria(erro: BaseException) -> bool:
     return any(
         marca in _texto(erro)

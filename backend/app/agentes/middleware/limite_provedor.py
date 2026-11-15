@@ -16,8 +16,10 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResp
 from langgraph.errors import GraphBubbleUp
 
 from app.llm.limite import (
+    TENTATIVAS_CHAMADA_MALFORMADA,
     TENTATIVAS_NO_LIMITE,
     ErroLimiteDoProvedor,
+    chamada_de_ferramenta_malformada,
     cota_diaria,
     enxugar,
     erro_cota_diaria,
@@ -34,8 +36,15 @@ Dormir = Callable[[float], Awaitable[None]]
 
 class MiddlewareLimiteDoProvedor(AgentMiddleware):
     def __init__(
-        self, *, ao_esperar: AoEsperar | None = None, dormir: Dormir | None = None
+        self,
+        *,
+        ao_esperar: AoEsperar | None = None,
+        dormir: Dormir | None = None,
+        tratar_limite: bool = True,
     ) -> None:
+        # No grupo o worker cuida da espera do 429 (com aviso no canal): aqui só repete a
+        # chamada de ferramenta malformada.
+        self._tratar_limite = tratar_limite
         self._ao_esperar = ao_esperar
         self._dormir = dormir or asyncio.sleep
 
@@ -47,6 +56,7 @@ class MiddlewareLimiteDoProvedor(AgentMiddleware):
         # Resultados antigos do navegador já entram resumidos: a árvore velha não serve mais.
         pedido = request.override(messages=enxugar(list(request.messages), 1))
         espera_feita = 0
+        malformadas = 0
         nivel = 1
         while True:
             try:
@@ -54,7 +64,18 @@ class MiddlewareLimiteDoProvedor(AgentMiddleware):
             except GraphBubbleUp:
                 raise
             except Exception as erro:
-                if classificar_erro(erro) is not MotivoTroca.LIMITE_DE_TAXA:
+                if (
+                    chamada_de_ferramenta_malformada(erro)
+                    and malformadas < TENTATIVAS_CHAMADA_MALFORMADA
+                ):
+                    malformadas += 1
+                    registro.warning(
+                        "o modelo montou uma chamada de ferramenta inválida; repetindo"
+                    )
+                    continue
+                if not self._tratar_limite or classificar_erro(erro) is not (
+                    MotivoTroca.LIMITE_DE_TAXA
+                ):
                     raise
                 if pedido_grande_demais(erro):
                     if nivel >= 2:
