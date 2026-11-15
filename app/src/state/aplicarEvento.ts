@@ -158,6 +158,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
       resultado: d.resultado && typeof d.resultado === 'object' ? d.resultado as PassoTrabalho['resultado'] : undefined,
       status: texto(d.status) as PassoTrabalho['status'], inicio: evento.recebidoEm, fim: d.status === 'executando' ? undefined : evento.recebidoEm,
       paraAgenteId: texto(d.para_agente_id) || undefined,
+      origem: d.origem === 'usuario' ? 'usuario' : d.origem === 'sora' ? 'sora' : undefined,
     };
     return { ...proximo, execucoes: proximo.execucoes.map(x => x.id === etapaId ? { ...x, agenteId: agenteId || x.agenteId, roteiro: x.roteiro.some(p => p.id === passoId) ? x.roteiro.map(p => p.id === passoId ? { ...p, ...passo, inicio: p.inicio } : p) : [...x.roteiro, passo] } : x) };
   }
