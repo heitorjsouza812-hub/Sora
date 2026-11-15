@@ -320,6 +320,21 @@ async def triar(
             escalou = True
             saida, _ = validar_saida_com_conserto(texto)
 
+    # O classificador não cria especialistas ocultos para pedidos de bots/grupos.
+    if not contexto.em_conversa_com_agente and re.search(
+        r"\b(bot|bots|grupo|grupos|criar_agente|propor_grupo)\b", pedido, re.IGNORECASE
+    ):
+        saida = saida.model_copy(
+            update={
+                "modo": ModoTriagem.DIRETO,
+                "resposta_direta": None,
+                "especialistas": [],
+                "agente_sugerido": None,
+                "capacidades": list(
+                    dict.fromkeys([*saida.capacidades, CapacidadeTriagem.FERRAMENTAS])
+                ),
+            }
+        )
     saida = _pos_processar(saida, regras, contexto, politica)
     return ResultadoTriagem(
         saida=saida,

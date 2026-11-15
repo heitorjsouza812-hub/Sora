@@ -361,3 +361,27 @@ def test_risco_nulo_nao_vira_nenhum() -> None:
     """Na dúvida, risco: o conserto local nunca inventa 'nenhum'."""
     with pytest.raises(SaidaInvalida):
         validar_saida(json.dumps({**VALIDO, "risco": None}))
+
+
+@pytest.mark.parametrize(
+    "pedido",
+    [
+        "Crie um bot chamado Resumo que resume textos.",
+        "Quero criar um bot de atendimento.",
+        "Crie um bot para mim.",
+        "Preciso de uma equipe de bots para lançar minha cafeteria.",
+        "Monte um grupo com bots.",
+        "Use a sua ferramenta criar_agente para criar um bot.",
+        "Peça ao bot Redator que revise este texto.",
+        "Envie este pedido ao grupo Marketing.",
+    ],
+)
+async def test_pedidos_de_bots_e_grupos_nao_criam_especialistas_ocultos(pedido):
+    fabrica, _ = fabrica_de({"groq/a": [json.dumps(VALIDO)]})
+    resultado = await triar(
+        pedido, ContextoTriagem(), seletor(candidato("groq/a")), CONFIG, fabrica_de_chat=fabrica
+    )
+    assert resultado.saida.modo is ModoTriagem.DIRETO
+    assert resultado.saida.especialistas == []
+    assert resultado.saida.resposta_direta is None
+    assert "ferramentas" in resultado.saida.capacidades
