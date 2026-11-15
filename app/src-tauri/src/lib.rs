@@ -13,6 +13,9 @@ use tauri::{
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+/// C3: controle do PC do usuário por um bot (ponte local; ver `pc/mod.rs`).
+mod pc;
+
 const ILHA_LARGURA: f64 = 800.0;
 const ILHA_ALTURA: f64 = 460.0;
 const MARGEM: f64 = 8.0;
@@ -379,6 +382,12 @@ const COMANDOS_POR_JANELA: &[(&str, &str)] = &[
     ("cofre_ler", "main"),
     ("cofre_gravar", "main"),
     ("cofre_apagar", "main"),
+    ("pc_conta", "main"),
+    ("pc_autorizar", "main"),
+    ("pc_estado", "main"),
+    ("pc_executar", "main"),
+    ("pc_parar", "main"),
+    ("pc_sair", "main"),
 ];
 
 fn janela_pode(comando: &str, label: &str) -> bool {
@@ -674,8 +683,13 @@ pub fn run() {
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _atalho, evento| {
-                    if evento.state() == ShortcutState::Pressed {
+                .with_handler(|app, atalho, evento| {
+                    if evento.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    if pc::e_atalho_parar(atalho) {
+                        pc::parar_local();
+                    } else {
                         let _ = app.emit_to("ilha", "ilha-alternar", ());
                     }
                 })
@@ -692,7 +706,13 @@ pub fn run() {
             navegar,
             cofre_ler,
             cofre_gravar,
-            cofre_apagar
+            cofre_apagar,
+            pc::pc_conta,
+            pc::pc_autorizar,
+            pc::pc_estado,
+            pc::pc_executar,
+            pc::pc_parar,
+            pc::pc_sair
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -719,6 +739,7 @@ pub fn run() {
                 let _ = estado.hwnd_principal.set(hwnd.0 as isize);
             }
             app.global_shortcut().register("Ctrl+Shift+S")?;
+            pc::iniciar(app.handle());
             montar_bandeja(app)?;
             iniciar_poll_cursor(app.handle().clone(), estado.clone());
             iniciar_vigia_foco(app.handle().clone(), estado.clone());

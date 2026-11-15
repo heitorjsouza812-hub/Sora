@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pc-parar"
+description = "Enables the pc_parar command without any pre-configured scope."
+commands.allow = ["pc_parar"]
+
+[[permission]]
+identifier = "deny-pc-parar"
+description = "Denies the pc_parar command without any pre-configured scope."
+commands.deny = ["pc_parar"]

@@ -12,6 +12,12 @@ fn main() {
             "cofre_ler",
             "cofre_gravar",
             "cofre_apagar",
+            "pc_conta",
+            "pc_autorizar",
+            "pc_estado",
+            "pc_executar",
+            "pc_parar",
+            "pc_sair",
         ]),
     ))
     .expect("falha ao gerar o manifesto do app Tauri");

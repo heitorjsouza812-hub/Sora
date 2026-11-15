@@ -197,3 +197,61 @@ export async function pedirSessaoAoPrincipal(tokenAtual: string | null, esperaMs
     parar();
   }
 }
+
+// ── C3: controle do PC do usuário por um bot (Vela-3, docs/computador-por-bot.md) ─────────────
+// Só a janela principal do desktop executa. O laço que busca os comandos no servidor está em
+// computadorPc.ts; aqui só a ponte com o Rust (src-tauri/src/pc/). No navegador e na ilha, nada.
+export interface AgentePc { id: string; nome: string; cor: string }
+export interface EstadoPcLocal {
+  conta: string | null;
+  autorizados: string[];
+  controlando: AgentePc | null;
+  pausado: boolean;
+  windows: boolean;
+  atalho_parar: string;
+}
+export interface ComandoPc { id: string; agente: AgentePc; operacao: string; dados: Record<string, unknown>; prazo_ms: number; prazo_em_ms?: number }
+export interface ErroPc { codigo: string; mensagem?: string; programa?: string; titulo?: string; por?: string }
+export interface RespostaPc { ok: boolean; resultado?: unknown; erro?: ErroPc }
+
+const pcNaPrincipal = () => noDesktop && janelaAtual === 'main';
+
+/** Conta logada neste PC: o Rust só aceita bots ligados para ela. */
+export async function pcConta(usuarioId: string): Promise<EstadoPcLocal | null> {
+  return pcNaPrincipal() ? invoke<EstadoPcLocal>('pc_conta', { usuarioId }) : null;
+}
+
+/** Liga/desliga um bot neste PC (fica guardado no app de desktop, por conta). */
+export async function pcAutorizar(agenteId: string, ligado: boolean): Promise<EstadoPcLocal | null> {
+  return pcNaPrincipal() ? invoke<EstadoPcLocal>('pc_autorizar', { agenteId, ligado }) : null;
+}
+
+export async function pcEstado(): Promise<EstadoPcLocal | null> {
+  return pcNaPrincipal() ? invoke<EstadoPcLocal>('pc_estado') : null;
+}
+
+/** Executa no PC um comando do servidor; o Rust confere tudo de novo antes. */
+export async function pcExecutar(comando: ComandoPc): Promise<RespostaPc> {
+  if (!pcNaPrincipal()) return { ok: false, erro: { codigo: 'so_windows' } };
+  return invoke<RespostaPc>('pc_executar', { comando });
+}
+
+/** Parar agora (mesmo efeito do botão da borda). */
+export async function pcParar(): Promise<void> {
+  if (pcNaPrincipal()) await invoke('pc_parar');
+}
+
+/** Saiu da conta: nenhum bot controla mais nada. */
+export async function pcSair(): Promise<void> {
+  if (pcNaPrincipal()) await invoke('pc_sair');
+}
+
+/** O usuário clicou em Parar na borda (ou no atalho): avisar o servidor. */
+export function aoPcParar(cb: (agenteId: string) => void): () => void {
+  return pcNaPrincipal() ? ouvir<{ agente_id?: string }>('pc-parar', p => { if (typeof p?.agente_id === 'string') cb(p.agente_id); }) : () => {};
+}
+
+/** Mudou quem controla, a pausa ou os bots ligados. */
+export function aoPcEstado(cb: (estado: EstadoPcLocal) => void): () => void {
+  return pcNaPrincipal() ? ouvir<EstadoPcLocal>('pc-estado', cb) : () => {};
+}

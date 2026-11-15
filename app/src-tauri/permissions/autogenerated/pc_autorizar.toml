@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pc-autorizar"
+description = "Enables the pc_autorizar command without any pre-configured scope."
+commands.allow = ["pc_autorizar"]
+
+[[permission]]
+identifier = "deny-pc-autorizar"
+description = "Denies the pc_autorizar command without any pre-configured scope."
+commands.deny = ["pc_autorizar"]

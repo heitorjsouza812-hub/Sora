@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useIlhaPrefs } from '../components/ilha/ilhaEstado';
 import { navegarAtePedido } from './focarPedido';
+import { PontePc } from './PontePc';
 import { aoNavegar, definirIlhaVisivel, janelaAtual } from './ponte';
 
 export function PonteNavegacao() {
@@ -17,7 +18,7 @@ export function PonteNavegacao() {
     if (janelaAtual === 'main') void definirIlhaVisivel(visivel).catch(() => {});
   }, [visivel]);
 
-  return <AvisosAtencao abrir={caminho => navegarAtePedido(navigate, caminho)} />;
+  return <><AvisosAtencao abrir={caminho => navegarAtePedido(navigate, caminho)} /><PontePc /></>;
 }
 
 export default PonteNavegacao;

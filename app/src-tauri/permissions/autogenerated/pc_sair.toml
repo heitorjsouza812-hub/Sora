@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pc-sair"
+description = "Enables the pc_sair command without any pre-configured scope."
+commands.allow = ["pc_sair"]
+
+[[permission]]
+identifier = "deny-pc-sair"
+description = "Denies the pc_sair command without any pre-configured scope."
+commands.deny = ["pc_sair"]

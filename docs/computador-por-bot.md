@@ -8,7 +8,7 @@ Pedido do Heitor em 2026-11-14 (`log/etapa6-acabamento.md`, "Computador e navega
 |---|---|---|
 | C1 navegador próprio por bot | pronto | `app/modelos/tabelas.py` (padrão `agente`), `app/api/agentes.py` (`perfil_navegador` na saída), `app/api/navegador.py` (PUT aceita `agente`) |
 | C2 computador virtual por bot | pronto | `app/computador/{interface,virtual,servico,ferramentas,eventos}.py`, `app/api/computador.py`, `workers/computador.py`, `infra/computador/` |
-| C3 PC do usuário | só a interface e um stub que recusa | `app/computador/pc_usuario.py` |
+| C3 PC do usuário | implementado; validação interativa pendente | `app/computador/pc_usuario*.py`, `app/api/computador_pc.py`, ponte Tauri `src/pc/` |
 | Visão da tela, navegador ao vivo, entregar arquivo (Farol-2) | pronto | `app/computador/visao.py`, `app/navegador/ao_vivo.py`, `app/api/navegador_ao_vivo.py` |
 
 ## C1: navegador próprio por bot
@@ -28,7 +28,7 @@ O navegador persistente já tinha três perfis por agente (`app/navegador/perfis
 worker (ferramentas computador_*)
   └─ ServicoComputador  (observar → agir → conferir, refs, regras, tela ao vivo)
        ├─ alvo "virtual"    → GerenteComputadoresDocker → docker exec no contêiner do bot
-       └─ alvo "pc_usuario" → ProvedorPcUsuario (C3: hoje recusa)
+       └─ alvo "pc_usuario" → ProvedorPcUsuario → canal autenticado → ponte Tauri no Windows
 
 host Docker (o do sandbox; em produção, separado)
   ├─ sora-pc-<agente>   contêiner do bot  ── rede sora-pc-<agente> (--internal, só dele)
@@ -191,16 +191,17 @@ Os quatro `POST` de ação exigem a aba **assumida** (`POST /v1/navegador/abas/{
 
 Mostrar a `miniatura` do último `computador.tela` do bot, com `janela_ativa`, `acao` e "a tela não mudou" quando `mudou === false`; clicar abre a captura cheia pela rota. "Desligar computador" chama a rota de desligar. Os passos das ferramentas aparecem como "Computador" (`rotulos.py`).
 
-## C3: controle do PC do usuário (para quem fizer depois)
+## C3: controle do PC do usuário (Vela-3 / Vela-4, 2026-11-14)
 
-O C3 entra como **outro alvo da mesma interface** (`Alvo.PC_USUARIO`), sem ferramentas novas: o bot chama `computador_observar`/`computador_agir` com `alvo: "pc_usuario"`. Hoje `ProvedorPcUsuario` recusa tudo.
+O C3 implementa **outro alvo da mesma interface** (`Alvo.PC_USUARIO`), sem ferramentas novas: o bot chama `computador_observar`/`computador_agir` com `alvo: "pc_usuario"`. Implementado e validado por testes automatizados; a validação interativa no desktop ainda está pendente.
 
 ### Onde roda
 
 - A execução mora numa **ponte local no Tauri** (Rust), nunca no servidor: o servidor nem tem acesso ao PC. O worker pede uma ação; o app de desktop conectado a executa e devolve a observação.
-- Transporte sugerido: a ponte abre uma conexão autenticada com a API (WebSocket com o token do desktop) e recebe pedidos `{pedido_id, agente_id, operacao, acao}`; responde `{pedido_id, observacao | erro}`. No worker, `ProvedorPcUsuario.obter` passa a devolver um `Computador` que publica o pedido (Redis) e espera a resposta com prazo. Sem app conectado: "Abra o app de desktop da Sora para eu usar o seu computador."
-- **Observar**: captura da tela (Windows Graphics Capture) + **árvore de UI Automation** da janela em foco em `Observacao.arvore` (papel, nome, valor, estados, retângulo, ref `@cN:eM`), no mesmo formato de refs do navegador por árvore. Campos com `IsPassword` saem sem valor.
-- **Agir**: preferir padrões da UI Automation (Invoke, Value, Toggle, Scroll…) por ref; `SendInput` só quando não houver padrão.
+- Transporte implementado: `POST /v1/computador-pc/sessao`, `PUT/DELETE /sessao/{id}`, `GET /comandos?sessao_id=…&espera=20`, `POST /comandos/{id}/resultado`, `POST /parar`, `POST /pausar` e `GET /estado`. Todas exigem login; mutações e long-poll exigem `X-Sora-Cliente: desktop`. O cabeçalho identifica o cliente, não é uma credencial: a autorização final ocorre no Rust, na janela principal, com conta e bot habilitados localmente.
+- Canal Redis em `pc_usuario_canal.py`: sessão expira em 60 s sem polling, comandos têm id, prazo absoluto `prazo_em_ms` e resposta única. O Rust também recusa repetição, comando vencido e interrompe a ação ao vencer o prazo. Outra sessão substitui a anterior; indisponibilidade da API solta o controle local.
+- **Observar**: captura GDI da tela principal (máximo 1280 px) + **árvore de UI Automation** da janela em foco em `Observacao.arvore` (papel, nome, valor, estados e centro). Campos com `IsPassword` saem sem valor. A imagem passa pelo middleware de visão do Farol-2, sem acumular telas no histórico.
+- **Agir**: `SendInput` com conferência de programa, foco e UI Automation antes da entrada; falha ao consultar campo de senha recusa a ação. Padrões Invoke/Value por ref ainda não estão implementados. Arquivos locais e abertura direta por comando são recusados; programas podem ser abertos pelo menu Iniciar, com aprovação do programa correspondente.
 
 ### Regras obrigatórias
 
@@ -212,6 +213,16 @@ O C3 entra como **outro alvo da mesma interface** (`Alvo.PC_USUARIO`), sem ferra
 6. **Nunca digita senha**: a ponte recusa `digitar` em elemento com `IsPassword` ou em janelas de credencial do Windows (UAC, `CredentialUIBroker.exe`), além da recusa que o serviço já faz.
 7. **Nunca controla o servidor**: a ponte só fala com a API como cliente.
 8. Nada de gravação contínua: só a captura do momento, com o mesmo evento `computador.tela` (`alvo: "pc_usuario"`).
+
+### Limites e verificação
+
+- **Revisão Vela-7 (2026-11-15):** o rastro do PC usa somente o executável em `janela_ativa`, sem títulos de documentos (inclusive textos curtos). A primeira movimentação física já pausa; falha ao ler `IsPassword` também oculta o valor na árvore. Backend commitado separadamente; evidências e limite do teste ao vivo em `.maestri/relatorios/vela7.md`.
+
+- Autorizações de bot ficam em `computador-pc.json`, por conta e PC. A primeira ação por executável usa o sistema existente de aprovações e atenção; “Permitir uma vez” vale para o trabalho (até 30 min sem uso), “Sempre permitir” fica por bot/programa. Parar bloqueia nova aquisição por 120 s; sem comandos a vez vence em 90 s.
+- Borda nativa transparente com passagem de cliques e botão Parar; atalho `Ctrl+Shift+F12`. Entrada física pausa sem carência e a ponte abre cartão mesmo entre comandos. O bot retoma na próxima chamada após aprovação.
+- Bloqueados: credenciais/UAC, configurações e segurança do Windows, gerenciadores de senha, terminais e a própria Sora. Rotina sem supervisão é recusada pelo serviço existente. O rastro registra quantidade de caracteres, nunca o texto digitado.
+- Testes: `test_pc_usuario.py`, integração HTTP com Postgres/Redis em `test_computador_pc.py`, testes da ponte React e testes Rust `pc::`. A integração simula o cliente desktop: não comprova ganchos físicos, borda nativa ou IsPassword em aplicativo real.
+- Ainda sem teste interativo: abrir/digitar/conferir no Bloco de Notas via bot, mover mouse físico para pausar, recusar um campo real de senha, múltiplos monitores/DPI e falha na instalação de ganchos. Captura e coordenadas limitam-se ao monitor principal.
 
 ## Pendências
 
