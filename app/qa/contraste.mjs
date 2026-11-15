@@ -1,18 +1,20 @@
 // Item 57 · auditoria de contraste (WCAG 2.1 AA) de todos os textos visíveis.
 // Uso: node qa/contraste.mjs [rotas…] [--todos] [--json]
-//  - percorre as rotas em 1440 e 390 px (dev server em http://localhost:5173);
+//  - percorre as rotas em 1440 e 390 px (dev server em http://localhost:5383);
 //  - para cada nó de texto visível mede a cor efetiva (opacidade dos ancestrais incluída) contra o
 //    fundo composto (camadas rgba até um fundo opaco) e compara com 4,5:1 (ou 3:1 em texto grande);
 //  - texto sobre imagem/gradiente/canvas fica como "não medido";
 //  - escreve qa/contraste.md e sai com código 1 se algo falhar.
 import { chromium } from '@playwright/test';
+process.env.SORA_QA_BASE ??= 'http://localhost:5383';
+const { entrarNoContexto } = await import('./entrar.mjs');
 import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const BASE_URL = 'http://localhost:5173';
+const BASE_URL = 'http://localhost:5383';
 const qaDir = dirname(fileURLToPath(import.meta.url));
-const ROTAS = ['/', '/projetos', '/agentes', '/agentes/novo', '/projeto/@projeto', '/chat/@1', '/chat/@2', '/revisao/@projeto', '/configuracoes', '/configuracoes#provedor', '/configuracoes#conta', '/configuracoes#modal', '/agentes/novo#configurar', '/projeto/@projeto#menu', '/plugins', '/celular'];
+const ROTAS = ['/', '/bots', '/bots/@bot', '/bots/@bot#recursos', '/grupos', '/grupos/@grupo', '/configuracoes', '/configuracoes?secao=memoria', '/configuracoes?secao=navegador', '/configuracoes?secao=telegram', '/clientes'];
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
 const PEDIDO = 'Crie uma campanha para lançar minha cafeteria: pesquise referências, prepare as peças e monte um calendário de posts.';
 
@@ -20,15 +22,17 @@ const args = process.argv.slice(2);
 const todos = args.includes('--todos');
 const rotas = args.filter(a => a.startsWith('/'));
 
-async function semear(page) {
+async function semear(ctx, page) {
+  const sessao = await entrarNoContexto(ctx, { email: 'qa-design@sora.local' });
+  const h = { Authorization: `Bearer ${sessao.token_acesso}` };
+  const agentes = await (await ctx.request.get(`${BASE_URL}/v1/agentes`, { headers: h })).json();
+  const grupos = await (await ctx.request.get(`${BASE_URL}/v1/grupos`, { headers: h })).json();
   await page.goto(BASE_URL + '/', { waitUntil: 'domcontentloaded' });
-  await page.evaluate(() => { localStorage.clear(); sessionStorage.setItem('sora.chegou', '1'); });
-  await page.goto(BASE_URL + '/', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => Boolean(window.__sora), null, { timeout: 10_000 });
-  return page.evaluate((m) => { const p = window.__sora.criarProjeto(m, Date.now() - 120_000); return { id: p.id, agentes: p.agenteIds }; }, PEDIDO);
+  await page.evaluate(() => { sessionStorage.setItem('sora.chegou', '1'); });
+  return { bot: agentes.find(a => a.tipo === 'individual')?.id ?? 'x', grupo: grupos[0]?.id ?? 'x' };
 }
 
-const resolver = (rota, s) => rota.replace('@projeto', s.id).replace(/@(\d+)/g, (_, n) => s.agentes[Number(n) - 1] ?? 'sora');
+const resolver = (rota, s) => rota.replace('@bot', s.bot).replace('@grupo', s.grupo);
 
 // roda no navegador: mede cada texto visível
 function medirNaPagina() {
@@ -104,6 +108,7 @@ function medirNaPagina() {
 }
 
 async function prepararEstado(page, rota) {
+  if (rota.endsWith('#recursos')) await page.getByRole('tab', { name: 'Recursos' }).click().catch(() => {});
   if (rota.endsWith('#provedor')) await page.getByRole('button', { name: /OpenAI/i }).first().click().catch(() => {});
   if (rota.endsWith('#conta') || rota.endsWith('#modal')) await page.getByRole('tab', { name: 'Conta' }).click().catch(() => {});
   if (rota.endsWith('#modal')) await page.getByRole('button', { name: 'Apagar todos os dados' }).click().catch(() => {});
@@ -118,7 +123,7 @@ try {
   for (const vp of VIEWPORTS) {
     const ctx = await browser.newContext({ viewport: vp, colorScheme: 'dark', reducedMotion: 'reduce' });
     const page = await ctx.newPage();
-    const seed = await semear(page);
+    const seed = await semear(ctx, page);
     for (const rota of rotas.length ? rotas : ROTAS) {
       await page.goto(BASE_URL + resolver(rota.replace(/#.*/, ''), seed), { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(1500);
