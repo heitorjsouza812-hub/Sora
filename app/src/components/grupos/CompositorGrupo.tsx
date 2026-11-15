@@ -6,6 +6,7 @@ import type { BotResumo } from '../../state/bots';
 import { carregarGrupos, enviarMensagemAoGrupo } from '../../state/grupos';
 import type { Anexo } from '../anexos';
 import { MessageComposer } from '../ui/MessageComposer';
+import { OrbDoAutor } from './MensagemGrupo';
 import { completarMencao, opcoesDeMencao, type OpcaoMencao } from './mencoes';
 import './grupos.css';
 
@@ -63,12 +64,22 @@ export function CompositorGrupo({ grupoId, botsDoGrupo, resposta, onCancelarResp
     }
   };
 
-  return <div className="grp-envio" ref={envolucro} onKeyDownCapture={teclas}>
+  const abrirMencao = () => {
+    setTexto(atual => /(?:^|s)@[^s]*$/.test(atual) ? atual : `${atual}${atual && !/s$/.test(atual) ? ' ' : ''}@`);
+    setFechadoEm(null); setIndice(0);
+    envolucro.current?.querySelector('textarea')?.focus();
+  };
+
+  return <div className="chat-composer grp-envio" ref={envolucro} onKeyDownCapture={teclas}>
     {resposta && <div className="grp-respondendo"><span>Respondendo a {resposta.texto.slice(0, 90)}</span><button type="button" className="grp-icone" onClick={onCancelarResposta}>Cancelar</button></div>}
     {!!opcoes.length && <div className="grp-mencoes" role="listbox" aria-label="Mencionar">
-      {opcoes.map((opcao, posicao) => <button type="button" role="option" aria-selected={posicao === ativo} data-ativo={posicao === ativo} key={opcao.id} onMouseDown={evento => evento.preventDefault()} onClick={() => mencionar(opcao)} style={opcao.cor ? { borderColor: `${opcao.cor}66` } : undefined}>@{opcao.nome}</button>)}
+      {opcoes.map((opcao, posicao) => <button type="button" role="option" aria-selected={posicao === ativo} data-ativo={posicao === ativo} key={opcao.id} onMouseDown={evento => evento.preventDefault()} onClick={() => mencionar(opcao)}>
+        {opcao.id === 'todos' ? <i className="grp-menc-todos" aria-hidden="true" /> : <OrbDoAutor cor={opcao.cor} tamanho={24} semente={opcao.nome.length} />}
+        <span>@{opcao.nome}</span>
+      </button>)}
     </div>}
-    <MessageComposer placeholder="Mensagem para o grupo… (@ para chamar um bot)" compact value={texto} onValueChange={valor => { setTexto(valor); setFechadoEm(null); setIndice(0); }} onSend={(conteudo, anexos) => void enviar(conteudo, anexos)} />
+    <MessageComposer placeholder="Mensagem para o grupo…" compact value={texto} onValueChange={valor => { setTexto(valor); setFechadoEm(null); setIndice(0); }} onSend={(conteudo, anexos) => void enviar(conteudo, anexos)}
+      acoesDireita={<button type="button" className="icon-button grp-arroba" aria-label="Mencionar um bot" title="Mencionar um bot (@)" onClick={abrirMencao}>@</button>} />
     {erro && <p className="grp-erro" role="alert">{erro}</p>}
   </div>;
 }

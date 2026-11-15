@@ -63,8 +63,9 @@ describe('grupos sem bots', () => {
   it('com 1 bot o modal explica e leva a criar outro', async () => {
     listarBots.mockResolvedValue([BOTS[0]]); api.listarGrupos.mockResolvedValue([]);
     abrir('/grupos');
-    fireEvent.click(await screen.findByRole('button', { name: 'Novo grupo' }));
-    expect(screen.getByText(/Você tem só 1 bot/)).toBeTruthy();
+    await screen.findByText('Nenhum grupo ainda');
+    fireEvent.click(screen.getByRole('button', { name: 'Novo grupo' }));
+    expect(await screen.findByText(/Você tem só 1 bot/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Criar um bot' }));
     expect(await screen.findByText('Conversa com a Sora')).toBeTruthy();
   });
@@ -138,18 +139,22 @@ describe('gerir o grupo', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Tarefas do grupo' })).toBeNull());
   });
 
-  it('cada membro mostra o último passo conhecido', async () => {
+  it('quem trabalha ganha a faixa com o último passo e o Parar à mão', async () => {
+    api.listarTarefasGrupo.mockResolvedValue([tarefa({ status: 'rodando', acoes: ['parar'] })]);
     const e = lerEstado();
     _definirEstadoParaTestes({ ...e, execucoes: [{ id: 'x1', agenteId: 'b1', inicio: 1, roteiro: [{ id: 'p1', agenteId: 'b1', tipo: 'ferramenta', texto: 'Pesquisando concorrentes', status: 'executando', inicio: 1 }] } as never] });
     abrir();
-    expect(await screen.findByText('Último passo: Pesquisando concorrentes')).toBeTruthy();
+    expect(await screen.findByText('trabalhando · Pesquisando concorrentes')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Parar Atlas' })).toBeTruthy();
   });
 
-  it('celular: a conversa abre sozinha (lista escondida por CSS) e voltar leva à lista', async () => {
-    const { container } = abrir();
+  it('o grupo mostra só a conversa (sem segunda lista) e /grupos lista e abre', async () => {
+    const { container, unmount } = abrir();
     await screen.findByRole('region', { name: 'Grupo Lançamento' });
-    expect(container.querySelector('.grp-pagina')?.getAttribute('data-aberto')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Voltar aos grupos' }));
-    await waitFor(() => expect(container.querySelector('.grp-pagina')?.getAttribute('data-aberto')).toBe('false'));
+    expect(container.querySelector('.grp-lista')).toBeNull();
+    unmount();
+    abrir('/grupos');
+    fireEvent.click(await screen.findByRole('button', { name: /Lançamento/ }));
+    expect(await screen.findByRole('region', { name: 'Grupo Lançamento' })).toBeTruthy();
   });
 });

@@ -40,14 +40,14 @@ beforeEach(() => {
 describe('mensagens do grupo', () => {
   it('bot e Sora respondem com markdown (tabela e código) e o orb na cor de quem fala', () => {
     const tabela = '| Canal | Alcance |\n| --- | --- |\n| Instagram | 12 mil |\n\n```ts\nconst total = 3;\n```';
-    const { container } = render(<ul>
+    const { container } = render(<div>
       <MensagemGrupo mensagem={mensagem({ id: 'm1', botId: 'b2', texto: tabela })} todas={[]} soraId={SORA} onResponder={() => undefined} />
       <MensagemGrupo mensagem={mensagem({ id: 'm2', autor: 'agente' as 'bot', botId: SORA, texto: '**Pronto**' })} todas={[]} soraId={SORA} onResponder={() => undefined} />
-    </ul>);
+    </div>);
     expect(container.querySelector('table')).not.toBeNull();
     expect(screen.getByText('Instagram')).toBeTruthy();
     expect(container.querySelector('.md-code code')?.textContent).toContain('const total = 3;');
-    expect(container.querySelector('strong')?.textContent).toBe('Pronto');
+    expect(container.querySelector('.md strong')?.textContent).toBe('Pronto');
     const orbs = screen.getAllByTestId('orb');
     expect(orbs.map(orb => orb.getAttribute('data-cor'))).toEqual(['#AC80FF', '#E2ECFF']);
     expect(orbs[0].getAttribute('data-movimento')).toBe('espiral');
@@ -56,7 +56,7 @@ describe('mensagens do grupo', () => {
   });
 
   it('a fala do usuário continua texto puro, sem orb', () => {
-    render(<ul><MensagemGrupo mensagem={mensagem({ autor: 'usuario', texto: '**não** é markdown' })} todas={[]} soraId={SORA} onResponder={() => undefined} /></ul>);
+    render(<div><MensagemGrupo mensagem={mensagem({ autor: 'usuario', texto: '**não** é markdown' })} todas={[]} soraId={SORA} onResponder={() => undefined} /></div>);
     expect(screen.getByText('**não** é markdown')).toBeTruthy();
     expect(screen.queryByTestId('orb')).toBeNull();
   });

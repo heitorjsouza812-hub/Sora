@@ -1,8 +1,9 @@
 import { AnexosResposta } from '../ui/AnexosResposta';
-import { useState } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { buscarAutenticado } from '../../api/cliente';
 import type { AnexoGrupo, MensagemGrupoApi } from '../../api/grupos';
 import { SoraOrb } from '../mascot';
+import { IconButton, Tooltip, toast } from '../base';
 import { Markdown } from '../ui/Markdown';
 import { COR_SORA, useAutorDaMensagem } from './useAutorDaMensagem';
 import './grupos.css';
@@ -32,24 +33,54 @@ export function OrbDoAutor({ cor, movimento, tamanho = 26, trabalhando = false, 
   return <SoraOrb size={tamanho} color={cor ?? COR_SORA} movimento={movimento} state={trabalhando ? 'working' : 'idle'} glow={false} decorative seed={semente} />;
 }
 
-export function MensagemGrupo({ mensagem, todas, soraId, onResponder }: { mensagem: MensagemGrupoApi; todas: MensagemGrupoApi[]; soraId: string | undefined; onResponder: (mensagem: MensagemGrupoApi) => void }) {
+const Icone = {
+  copiar: <svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>,
+  responder: <svg viewBox="0 0 24 24"><path d="M10 7 4 12l6 5" /><path d="M4 12h9a7 7 0 0 1 7 7" /></svg>,
+  mais: <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>,
+};
+
+function Acao({ rotulo, icone, onClick }: { rotulo: string; icone: ReactNode; onClick: () => void }) {
+  return <Tooltip conteudo={rotulo}><IconButton aria-label={rotulo} icone={icone} tamanho="P" className="msg-acao" onClick={onClick} /></Tooltip>;
+}
+
+const copiar = (texto: string) => {
+  void navigator.clipboard?.writeText(texto).then(() => toast({ mensagem: 'Copiado', tom: 'sucesso' }), () => toast({ mensagem: 'Não foi possível copiar', tom: 'erro' }));
+};
+
+/** Mensagem do grupo com o mesmo desenho do chat 1:1: bolha escura à direita para o usuário, resposta sem caixa;
+ *  Copiar e Responder são ações de hover (no celular, pelo "…" ou sempre na última). */
+export function MensagemGrupo({ mensagem, todas, soraId, onResponder, ultima = false }: { mensagem: MensagemGrupoApi; todas: MensagemGrupoApi[]; soraId: string | undefined; onResponder: (mensagem: MensagemGrupoApi) => void; ultima?: boolean }) {
   const autor = useAutorDaMensagem(mensagem, soraId);
+  const [abertas, setAbertas] = useState(false);
   const anterior = mensagem.respondeA ? todas.find(item => item.id === mensagem.respondeA) : null;
   const doUsuario = mensagem.autor === 'usuario';
   // Atividade (repasse, "Você parou a tarefa") é uma linha de registro, não uma fala.
-  if (mensagem.tipo === 'repasse') return <li id={`msg-${mensagem.id}`} data-msg-id={mensagem.id} className="grp-msg grp-atividade" data-autor={mensagem.autor} data-tipo="repasse" data-chave={mensagem.id}>
+  if (mensagem.tipo === 'repasse') return <div id={`msg-${mensagem.id}`} data-msg-id={mensagem.id} className="chat-item grp-msg grp-atividade" data-autor={mensagem.autor} data-tipo="repasse" data-chave={mensagem.id}>
     {(autor.bot || autor.ehSora) && <OrbDoAutor cor={autor.cor} movimento={autor.bot?.movimento} tamanho={20} semente={mensagem.sequencia} />}<span>{mensagem.texto}</span>
-  </li>;
-  return <li id={`msg-${mensagem.id}`} data-msg-id={mensagem.id} className="grp-msg" data-autor={autor.ehSora ? 'sora' : mensagem.autor} data-tipo={mensagem.tipo} data-chave={mensagem.id}>
-    {!doUsuario && <header>
-      {(autor.bot || autor.ehSora) && <OrbDoAutor cor={autor.cor} movimento={autor.bot?.movimento} semente={mensagem.sequencia} />}
-      <b style={{ color: autor.cor }}>{autor.nome}</b>{mensagem.tipo === 'resultado' && <span>entregou</span>}
-    </header>}
-    {anterior && <span className="grp-resposta">Em resposta a {anterior.texto.slice(0, 80)}</span>}
-    {mensagem.texto.trim() && (doUsuario
-      ? <p className="grp-corpo grp-corpo-usuario">{mensagem.texto}</p>
-      : <div className="grp-corpo"><Markdown texto={mensagem.texto} /></div>)}
+  </div>;
+  const citacao = anterior && <p className="grp-resposta">Em resposta a {anterior.texto.slice(0, 80)}</p>;
+  const acoes = <div className="msg-acoes" role="toolbar" aria-label="Ações da mensagem">
+    {mensagem.texto.trim() && <Acao rotulo="Copiar" icone={Icone.copiar} onClick={() => copiar(mensagem.texto)} />}
+    <Acao rotulo="Responder" icone={Icone.responder} onClick={() => onResponder(mensagem)} />
+  </div>;
+  const mais = <IconButton className="msg-mais" aria-label="Mais ações" aria-expanded={abertas} tamanho="P" icone={Icone.mais} onClick={() => setAbertas(v => !v)} />;
+  const classe = `chat-msg chat-item grp-msg ${doUsuario ? 'is-user' : 'is-assistant'}${abertas ? ' is-acoes-abertas' : ''}${ultima ? ' is-ultima' : ''}`;
+  const atributos = { id: `msg-${mensagem.id}`, 'data-msg-id': mensagem.id, 'data-autor': autor.ehSora ? 'sora' : mensagem.autor, 'data-tipo': mensagem.tipo, 'data-chave': mensagem.id };
+  if (doUsuario) return <div className={classe} {...atributos}>
+    {citacao}
+    <div className="user-linha">{acoes}{mais}{mensagem.texto.trim() ? <p className="user-message">{mensagem.texto}</p> : null}</div>
     {!!mensagem.anexos.length && <AnexosResposta anexos={mensagem.anexos} />}
-    <span className="grp-msg-acoes"><button type="button" onClick={() => onResponder(mensagem)}>Responder</button></span>
-  </li>;
+  </div>;
+  return <div className={classe} style={autor.cor ? { '--agent': autor.cor } as CSSProperties : undefined} {...atributos}>
+    <div className="msg-cabeca">
+      {(autor.bot || autor.ehSora) && <OrbDoAutor cor={autor.cor} movimento={autor.bot?.movimento} tamanho={24} semente={mensagem.sequencia} />}
+      <strong className="msg-nome">{autor.nome}</strong>{mensagem.tipo === 'resultado' && <span className="msg-rotulo">entregou</span>}
+    </div>
+    <div className="msg-corpo">
+      {citacao}
+      {mensagem.texto.trim() && <Markdown texto={mensagem.texto} />}
+      {!!mensagem.anexos.length && <AnexosResposta anexos={mensagem.anexos} />}
+      <div className="msg-barra">{acoes}{mais}</div>
+    </div>
+  </div>;
 }
