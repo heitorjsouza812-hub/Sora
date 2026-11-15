@@ -308,14 +308,17 @@ async def _encaminhar(
         conversa.id,
         usuario_id,
     )
-    await _publicar_primeira_resposta(
-        redis,
-        sessao,
-        usuario_id=usuario_id,
-        conversa_id=conversa.id,
-        texto=resultado.saida.primeira_resposta,
-        agente_id=agente.id,
-    )
+    if resultado.saida.modo == ModoTriagem.CADEIA:
+        # Só a cadeia precisa do aviso de que o trabalho começou; no modo direto a própria
+        # resposta chega logo em seguida, e o aviso viraria uma segunda bolha (Vitral-9).
+        await _publicar_primeira_resposta(
+            redis,
+            sessao,
+            usuario_id=usuario_id,
+            conversa_id=conversa.id,
+            texto=resultado.saida.primeira_resposta,
+            agente_id=agente.id,
+        )
 
     if resultado.saida.modo == ModoTriagem.CADEIA:
         versao = (
