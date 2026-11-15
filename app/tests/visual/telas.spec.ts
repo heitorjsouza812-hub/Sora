@@ -60,6 +60,8 @@ for (const [rota, titulo, nome] of [
   test(`tela ${rota}`, async ({ page }) => {
     await page.goto(rota);
     await expect(page.getByText(titulo, { exact: false }).first()).toBeVisible();
+    // A foto só sai com a lista pronta: "Carregando provedores e modelos…" sobreposto deixava a captura intermitente.
+    await expect(page.getByText(/^Carregando/)).toHaveCount(0);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await captura(page, `${nome}.png`);
   });
