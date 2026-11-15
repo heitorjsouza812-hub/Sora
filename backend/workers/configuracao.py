@@ -49,6 +49,7 @@ from workers.equipe import (
 from workers.fila import configurar_fila
 from workers.navegador import abrir_aba_de_perfil, fechar_navegador, iniciar_navegador
 from workers.rotinas import disparar_rotinas, executar_rotina
+from workers.sessoes import limpar_pares_de_renovacao
 from workers.travados import reconciliar_travados
 
 
@@ -118,6 +119,7 @@ class WorkerSettings:
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),
         cron(disparar_rotinas, second={0, 10, 20, 30, 40, 50}, run_at_startup=True),
         cron(desligar_computadores_ociosos, second={5}, run_at_startup=False),
+        cron(limpar_pares_de_renovacao, second={45}, run_at_startup=False),
         cron(processar_pendentes_canais_empresa, minute=set(range(0, 60, 5)), second={20}),
         cron(apagar_mensagens_vencidas, minute={17}, second={0}),
         cron(analisar_aprendizado_periodico, minute={42}, second={0}),

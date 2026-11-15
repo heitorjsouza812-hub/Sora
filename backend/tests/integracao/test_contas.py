@@ -255,3 +255,70 @@ async def test_token_duas_geracoes_atras_revoga_familia(cliente: AsyncClient) ->
             "/v1/auth/renovar", json={"token_renovacao": r2.json()["token_renovacao"]}
         )
     ).status_code == 401
+
+
+async def test_par_cifrado_some_quando_a_janela_fecha_e_historico_tem_teto(
+    cliente: AsyncClient,
+) -> None:
+    """Cerca M4: o token vivo não fica guardado no banco depois dos 30 s; o histórico é limitado."""
+    await _cadastrar(cliente)
+    login = await cliente.post(
+        "/v1/auth/entrar",
+        json={"email": "ana@exemplo.com", "senha": SENHA},
+        headers={"X-Sora-Cliente": "desktop"},
+    )
+    t1 = login.json()["token_renovacao"]
+    r2 = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
+    t2 = r2.json()["token_renovacao"]
+    fabrica = cliente.app_state.fabrica  # type: ignore[attr-defined]
+
+    async def sessao_atual(token: str) -> Sessao:
+        async with fabrica() as s:
+            achada = await s.scalar(
+                select(Sessao).where(Sessao.token_hash == seguranca.hash_token(token))
+            )
+            assert achada is not None
+            return achada
+
+    # Dentro da janela o par existe (recuperação de resposta perdida) e a rotina não o toca.
+    assert (await sessao_atual(t2)).par_atual_cifrado is not None
+    async with fabrica() as s:
+        assert await contas.limpar_pares_vencidos(s) == 0
+    assert (await sessao_atual(t2)).par_atual_cifrado is not None
+
+    # Janela fechada: a rotina apaga o par cifrado.
+    async with fabrica() as s:
+        await s.execute(
+            text("update sessoes set anterior_rotacionado_em = now() - interval '31 seconds'")
+        )
+        await s.commit()
+    async with fabrica() as s:
+        assert await contas.limpar_pares_vencidos(s) == 1
+    assert (await sessao_atual(t2)).par_atual_cifrado is None
+    # O token atual continua renovando normalmente (gera par novo, com janela nova).
+    r3 = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t2})
+    assert r3.status_code == 200
+    t3 = r3.json()["token_renovacao"]
+    assert (await sessao_atual(t3)).par_atual_cifrado is not None
+
+    # Histórico com teto: depois de muitas rotações guarda só as últimas.
+    atual = t3
+    for _ in range(contas.MAX_HISTORICO_HASHES + 5):
+        async with fabrica() as s:
+            await s.execute(
+                text("update sessoes set anterior_rotacionado_em = now() - interval '31 seconds'")
+            )
+            await s.commit()
+        r = await cliente.post("/v1/auth/renovar", json={"token_renovacao": atual})
+        assert r.status_code == 200
+        atual = r.json()["token_renovacao"]
+    sessao = await sessao_atual(atual)
+    assert len(sessao.historico_hashes) == contas.MAX_HISTORICO_HASHES
+    assert seguranca.hash_token(t1) not in sessao.historico_hashes  # gerações velhas esquecidas
+    assert sessao.historico_hashes[-1] == sessao.anterior_hash
+
+    # Sair apaga o par também.
+    async with fabrica() as s:
+        await contas.sair(s, atual)
+        await s.commit()
+    assert (await sessao_atual(atual)).par_atual_cifrado is None

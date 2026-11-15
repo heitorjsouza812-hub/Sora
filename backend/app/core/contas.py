@@ -58,6 +58,9 @@ CABECALHO_CLIENTE = "X-Sora-Cliente"
 CLIENTE_WEB = "web"
 CLIENTE_DESKTOP = "desktop"
 JANELA_TOLERANCIA_RENOVACAO = timedelta(seconds=30)
+MAX_HISTORICO_HASHES = 20
+"""Gerações antigas de token lembradas por sessão (para detectar reuso). Mais velhas que isso são
+esquecidas: o token antigo continua recusado (``invalido``), só deixa de revogar a família."""
 """Tempo para recuperar uma resposta de renovação perdida sem tratar o token como roubado."""
 
 # Login: só **falhas** contam (API-04). O limite curto é por e-mail + IP, então quem não está no
@@ -281,11 +284,38 @@ async def _sessao_do_token(
     return await sessao.scalar(consulta_sessao_do_token(token_hash, travar=travar))
 
 
+def par_vencido(sessao: Sessao, agora: datetime) -> bool:
+    """O par guardado só serve à recuperação de resposta perdida, dentro da janela de 30 s."""
+    rotacionado = sessao.anterior_rotacionado_em
+    return rotacionado is None or agora - rotacionado > JANELA_TOLERANCIA_RENOVACAO
+
+
+async def limpar_pares_vencidos(sessao: AsyncSession, agora: datetime | None = None) -> int:
+    """Zera ``par_atual_cifrado`` das sessões cuja janela de 30 s já fechou (Cerca M4).
+
+    Sem isso o banco guardaria, para sempre, o token de renovação vivo (cifrado com a chave do
+    próprio servidor). Roda como rotina do worker; a renovação e a saída também limpam na hora.
+    """
+    agora = agora or datetime.now(UTC)
+    resultado = await sessao.execute(
+        update(Sessao)
+        .where(
+            Sessao.par_atual_cifrado.is_not(None),
+            (Sessao.anterior_rotacionado_em.is_(None))
+            | (Sessao.anterior_rotacionado_em < agora - JANELA_TOLERANCIA_RENOVACAO),
+        )
+        .values(par_atual_cifrado=None)
+    )
+    await sessao.commit()
+    return resultado.rowcount or 0
+
+
 async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, str]:
     """Rotaciona uma vez e recupera o mesmo par por 30 s, sob FOR UPDATE.
 
-    A janela não se estende nas recuperações. Hashes de gerações antigas permitem
-    revogar a família mesmo quando o token já não é o imediatamente anterior.
+    A janela não se estende nas recuperações. Hashes de gerações antigas (as últimas
+    ``MAX_HISTORICO_HASHES``) permitem revogar a família mesmo quando o token já não é o
+    imediatamente anterior. O par cifrado some assim que a janela fecha.
     """
     if not token:
         raise ErroCredenciais("Sessão expirada. Entre de novo.")
@@ -293,8 +323,12 @@ async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, st
     existente = await _sessao_do_token(sessao, token_hash, travar=True)
     agora = datetime.now(UTC)
     veredito = classificar_token(existente, token_hash, agora)
+    if existente is not None and existente.par_atual_cifrado is not None:
+        if veredito != "tolerado" and par_vencido(existente, agora):
+            existente.par_atual_cifrado = None  # janela fechada: nada de token vivo guardado
     if veredito == "reutilizado" and existente is not None:
         existente.encerrada_em = agora
+        existente.par_atual_cifrado = None
         await sessao.commit()  # o encerramento precisa sobreviver ao erro que sai daqui
     if veredito not in ("valido", "tolerado") or existente is None:
         raise ErroCredenciais("Sessão expirada. Entre de novo.")
@@ -310,7 +344,9 @@ async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, st
         )
         return par[0], par[1], existente.cliente
     novo, novo_hash = seguranca.gerar_token_renovacao()
-    existente.historico_hashes = [*(existente.historico_hashes or []), existente.token_hash]
+    existente.historico_hashes = [*(existente.historico_hashes or []), existente.token_hash][
+        -MAX_HISTORICO_HASHES:
+    ]
     existente.anterior_rotacionado_em = agora
     existente.anterior_hash = existente.token_hash
     existente.token_hash = novo_hash
@@ -333,6 +369,7 @@ async def sair(sessao: AsyncSession, token: str | None) -> None:
     existente = await _sessao_do_token(sessao, seguranca.hash_token(token))
     if existente is not None and existente.encerrada_em is None:
         existente.encerrada_em = datetime.now(UTC)
+        existente.par_atual_cifrado = None
         await sessao.flush()
 
 

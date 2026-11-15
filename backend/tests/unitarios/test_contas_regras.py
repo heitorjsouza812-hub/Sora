@@ -202,3 +202,61 @@ async def test_reuso_antigo_encerra_e_persiste_familia(monkeypatch) -> None:
         await contas.renovar(banco, "duas-geracoes")
     assert registro.encerrada_em is not None
     banco.commit.assert_awaited_once()
+
+
+async def test_historico_de_hashes_tem_teto_e_mantem_as_geracoes_mais_novas(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    token, token_hash = seguranca.gerar_token_renovacao()
+    antigos = [f"g{i}" for i in range(contas.MAX_HISTORICO_HASHES)]
+    registro = _sessao(
+        id=uuid4(),
+        token_hash=token_hash,
+        historico_hashes=antigos,
+        expira_em=datetime.now(UTC) + timedelta(days=30),
+    )
+    monkeypatch.setattr(contas, "_sessao_do_token", AsyncMock(return_value=registro))
+    await contas.renovar(AsyncMock(), token)
+    assert len(registro.historico_hashes) == contas.MAX_HISTORICO_HASHES
+    assert registro.historico_hashes[-1] == token_hash
+    assert "g0" not in registro.historico_hashes and "g1" in registro.historico_hashes
+
+
+async def test_renovar_fora_da_janela_nao_devolve_o_par_e_o_apaga(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    token, token_hash = seguranca.gerar_token_renovacao()
+    agora = datetime.now(UTC)
+    registro = _sessao(
+        id=uuid4(),
+        token_hash="outro-atual",
+        anterior_hash=token_hash,
+        anterior_rotacionado_em=agora - contas.JANELA_TOLERANCIA_RENOVACAO - timedelta(seconds=1),
+        historico_hashes=[],
+        par_atual_cifrado=b"segredo",
+        expira_em=agora + timedelta(days=30),
+    )
+    banco = AsyncMock()
+    monkeypatch.setattr(contas, "_sessao_do_token", AsyncMock(return_value=registro))
+    with pytest.raises(contas.ErroCredenciais):
+        await contas.renovar(banco, token)
+    assert registro.par_atual_cifrado is None and registro.encerrada_em is not None
+
+
+async def test_sair_apaga_o_par_cifrado(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    registro = _sessao(id=uuid4(), par_atual_cifrado=b"segredo")
+    monkeypatch.setattr(contas, "_sessao_do_token", AsyncMock(return_value=registro))
+    await contas.sair(AsyncMock(), "qualquer")
+    assert registro.par_atual_cifrado is None and registro.encerrada_em is not None
+
+
+def test_par_vencido_so_depois_da_janela() -> None:
+    dentro = _sessao(anterior_rotacionado_em=AGORA - contas.JANELA_TOLERANCIA_RENOVACAO)
+    fora = _sessao(
+        anterior_rotacionado_em=AGORA - contas.JANELA_TOLERANCIA_RENOVACAO - timedelta(seconds=1)
+    )
+    assert not contas.par_vencido(dentro, AGORA)
+    assert contas.par_vencido(fora, AGORA)
+    assert contas.par_vencido(_sessao(anterior_rotacionado_em=None), AGORA)
