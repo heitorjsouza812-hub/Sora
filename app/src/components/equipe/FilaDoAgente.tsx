@@ -14,7 +14,7 @@ export function FilaDoAgente({ agenteId }: { agenteId: string }) {
   const agir = async (f: () => Promise<void>) => { setErro(''); try { await f(); } catch (e) { setErro(mensagemDeErro(e)); } };
   if (!fila || (!fila.itens.length && !fila.pausada)) return null;
   return (
-    <section className="eq-fila" aria-label="Fila do agente">
+    <section className="eq-fila" aria-label="Fila do bot">
       <div className="progress-title"><span>Fila</span><b>{fila.itens.length}</b></div>
       {fila.pausada && <p className="eq-nota" role="status">Fila pausada.</p>}
       <ul>

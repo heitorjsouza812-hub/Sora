@@ -19,10 +19,10 @@ function ControleAba({ aba }: { aba: AbaNavegador }) {
   const agir = async () => { setOcupado(true); setErro(''); try { await (aba.assumida ? devolverAba(aba.id) : assumirAba(aba.id)); } catch (e) { setErro(mensagemDeErro(e)); } finally { setOcupado(false); } };
   return (
     <div className="wk-nav-aba" data-aba={aba.id}>
-      {aba.pedidoDeAjuda && <p className="wk-nav-ajuda" role="status">O agente pediu ajuda: {aba.pedidoDeAjuda}</p>}
+      {aba.pedidoDeAjuda && <p className="wk-nav-ajuda" role="status">O bot pediu ajuda: {aba.pedidoDeAjuda}</p>}
       <span className="wk-nav-aba-url" title={aba.url}>{aba.titulo || aba.url}</span>
       <Button tamanho="M" variante={aba.assumida ? 'primario' : 'secundario'} disabled={ocupado} onClick={() => void agir()}>{aba.assumida ? 'Devolver a aba' : 'Assumir aba'}</Button>
-      {aba.assumida && <small>Os agentes não mexem nesta aba até você devolver.</small>}
+      {aba.assumida && <small>Os bots não mexem nesta aba até você devolver.</small>}
       {erro && <small className="wk-nav-erro" role="alert">{erro}</small>}
     </div>
   );

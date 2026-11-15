@@ -59,12 +59,12 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
   const escolher = (id: string) => { setEscolhido(id); onAgenteChange?.(id); };
 
   return (
-    <section className={`wk-panel ${className}`} style={agente ? { '--agent': agente.cor } as CSSProperties : undefined} aria-label="Trabalho dos agentes">
+    <section className={`wk-panel ${className}`} style={agente ? { '--agent': agente.cor } as CSSProperties : undefined} aria-label="Trabalho dos bots">
       {!semSeletor && visiveis.length > 1 && <SeletorAgente agentes={visiveis.map(id => e.agentes[id])} estados={ests} atual={atual} onEscolher={escolher} />}
       {!agente ? (
         <div className="wk-empty">
           <SoraOrb size={72} color={e.sora.cor} state="idle" title={e.sora.nome} />
-          <p>Quando um agente começar a trabalhar, os passos aparecem aqui ao vivo.</p>
+          <p>Quando um bot começar a trabalhar, os passos aparecem aqui ao vivo.</p>
         </div>
       ) : (
         <>

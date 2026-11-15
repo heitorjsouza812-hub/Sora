@@ -34,7 +34,7 @@ export interface PainelLateralProps {
 
 const Seta = ({ para }: { para: 'dir' | 'esq' }) => <svg viewBox="0 0 24 24"><path d={para === 'dir' ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'} /></svg>;
 
-export function PainelLateral({ abas, aba, onAba, recolhido, onRecolher, folhaAberta, onFolha, resumo, rotulo = 'Painel do projeto', peloCabecalho = false }: PainelLateralProps) {
+export function PainelLateral({ abas, aba, onAba, recolhido, onRecolher, folhaAberta, onFolha, resumo, rotulo = 'Painel da conversa', peloCabecalho = false }: PainelLateralProps) {
   const celular = useMedia(peloCabecalho ? '(max-width: 1199px)' : '(max-width: 767px)');
   const base = useId();
   const atual = abas.find((a) => a.id === aba) ?? abas[0];

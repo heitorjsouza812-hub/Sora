@@ -21,7 +21,7 @@ export function Onboarding() {
   const provedores = IDS_ONBOARDING.flatMap(id => PROVEDORES_MODELO.filter(p => p.id === id));
   const primeiroNome = usuario?.nome.trim().split(/\s+/)[0];
 
-  const pular = () => { pularOnboarding(); navigate('/configuracoes'); };
+  const pular = () => { pularOnboarding(); navigate('/'); };
   const trocarConta = async () => {
     setSaindo(true);
     await sair();
@@ -37,7 +37,7 @@ export function Onboarding() {
         {provedores.map((p, i) => <ProviderCard key={p.id} provedor={p} inicialmenteAberto={i === 0} onConectado={() => { void recarregarSessao(); }} />)}
       </section>
       <div className="onboarding-acoes">
-        <Button variante="fantasma" onClick={pular}>Fazer isso depois em Configurações</Button>
+        <Button variante="fantasma" onClick={pular}>Fazer isso depois</Button>
         <Button variante="fantasma" carregando={saindo} onClick={() => { void trocarConta(); }}>Sair</Button>
       </div>
     </main>

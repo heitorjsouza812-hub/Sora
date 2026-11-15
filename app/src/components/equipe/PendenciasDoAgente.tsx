@@ -69,7 +69,7 @@ export function PendenciasDoAgente({ agenteId }: { agenteId: string }) {
   const grupo = (s: StatusPendencia) => (itens ?? []).filter(p => p.status === s);
   const abertas = grupo('aberta').length + grupo('estacionada').length;
   return (
-    <section className="eq-pendencias" aria-label="Pendências do agente">
+    <section className="eq-pendencias" aria-label="Pendências do bot">
       <div className="progress-title"><span>Pendências</span><b>{abertas}</b></div>
       <form className="eq-pend-novo" onSubmit={ev => void criar(ev)} aria-label="Criar pendência">
         <Input rotulo="Nova pendência" value={titulo} onChange={e => setTitulo(e.target.value)} maxLength={200} placeholder="O que ficou para depois?" />
