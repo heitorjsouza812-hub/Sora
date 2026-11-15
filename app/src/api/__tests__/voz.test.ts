@@ -19,10 +19,21 @@ describe('voz', () => {
     expect((init.body as FormData).get('idioma')).toBe('pt');
   });
 
-  it('404 (sem provedor de voz) vira o aviso em PT-BR; 413, 422 e 502 também', async () => {
-    for (const [status, trecho] of [[404, MSG_SEM_VOZ], [413, 'grande demais'], [422, 'Não ouvi nada'], [502, 'provedor de voz']] as const) {
-      buscarAutenticado.mockRejectedValueOnce(new ErroApi(status, 'texto do servidor'));
+  it('sem texto do servidor, 404, 413, 422 e 502 viram avisos próprios em PT-BR', async () => {
+    for (const [status, trecho] of [[404, MSG_SEM_VOZ], [413, 'grande demais'], [422, 'Não ouvi nada'], [502, 'provedor de voz'], [424, 'recusou']] as const) {
+      buscarAutenticado.mockRejectedValueOnce(new ErroApi(status, 'Algo deu errado'));
       await expect(transcreverAudio(new Blob(['x']))).rejects.toMatchObject({ status, mensagem: expect.stringContaining(trecho) });
+    }
+  });
+
+  it('404, 424 e 502 mostram o motivo que o backend manda no detail', async () => {
+    for (const [status, detalhe] of [
+      [424, 'O administrador do Groq precisa aceitar os termos do modelo de voz no console do provedor.'],
+      [404, 'O provedor conectado não tem modelo de fala.'],
+      [502, 'A voz respondeu 400 ao falar.'],
+    ] as const) {
+      buscarAutenticado.mockRejectedValueOnce(new ErroApi(status, detalhe, { detalhe }));
+      await expect(sintetizarFala('Olá')).rejects.toMatchObject({ status, mensagem: detalhe });
     }
   });
 
@@ -30,7 +41,7 @@ describe('voz', () => {
     buscarAutenticado.mockResolvedValueOnce({ blob: async () => new Blob(['mp3'], { type: 'audio/mpeg' }) });
     expect((await sintetizarFala('Olá')).type).toBe('audio/mpeg');
     expect(buscarAutenticado.mock.calls[0][1].body).toBe(JSON.stringify({ texto: 'Olá' }));
-    buscarAutenticado.mockRejectedValueOnce(new ErroApi(404, 'x'));
+    buscarAutenticado.mockRejectedValueOnce(new ErroApi(404, 'Not Found'));
     await expect(sintetizarFala('Olá')).rejects.toMatchObject({ mensagem: MSG_SEM_VOZ });
   });
 });

@@ -97,7 +97,7 @@ export function ConversaVoz({ agenteId, cor, movimento, faixa }: { agenteId: str
       // Mesmo requisito da rota de voz; nenhuma chave chega ao navegador.
       const provedores = await api.get<{ tipo: string; chave_final: string | null }[]>('/v1/provedores', { signal: ac.signal });
       if (!ativo(ac)) return;
-      if (!provedores.some(p => ['openai', 'compativel_openai'].includes(p.tipo) && p.chave_final)) throw new AvisoVoz(MSG_SEM_VOZ);
+      if (!provedores.some(p => ['openai', 'compativel_openai', 'groq'].includes(p.tipo) && p.chave_final)) throw new AvisoVoz(MSG_SEM_VOZ);
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw new AvisoVoz('Seu navegador não oferece suporte ao microfone.');
       await ouvir(ac);
     } catch (falha) { falhou(falha, ac); }
