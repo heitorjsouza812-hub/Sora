@@ -29,6 +29,7 @@ from app.eventos.tipos import AprovacaoPedida
 from app.ferramentas.ambiente import emitir
 from app.ferramentas.base import ContextoFerramenta
 from app.ferramentas.infra import abrir_sessao
+from app.ferramentas.propor_instrucoes import proposta_do_cartao
 from app.modelos.enumeracoes import AutorMensagem, DecisaoAprovacao, StatusAprovacao
 from app.modelos.tabelas import Aprovacao, Mensagem
 from app.revisor.esquemas import AcaoProposta, DecisaoRevisor
@@ -198,6 +199,7 @@ async def _abrir_cartao(
             conversa_id=contexto.conversa_id,
             bot_id=contexto.agente_id,
             grupo_id=contexto.canal_id,
+            proposta=proposta_do_cartao(acao),
         ),
     )
     from app.atencao import publicar_estado_atencao_persistido

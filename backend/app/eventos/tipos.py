@@ -117,6 +117,8 @@ class PassoEvento(EventoBase):
     resultado: dict[str, Any] | None = None
     status: StatusPasso
     para_agente_id: UUID | None = None
+    origem: Literal["usuario"] | None = None
+    """``usuario`` no passo ``prompt`` da conversa direta: o pedido veio do usuário, não da Sora."""
 
 
 class EntregaEvento(EventoBase):
@@ -166,6 +168,8 @@ class AprovacaoPedida(EventoBase):
     conversa_id: UUID | None = None
     bot_id: UUID | None = None
     grupo_id: UUID | None = None
+    proposta: dict[str, str] | None = None
+    """Só no cartão de ``propor_instrucoes``: ``instrucoes`` novas, ``diferenca`` e ``motivo``."""
 
     @model_serializer(mode="wrap")
     def _sem_extras_vazios(self, proximo: Any) -> dict[str, Any]:
@@ -182,6 +186,7 @@ class AprovacaoPedida(EventoBase):
             "conversa_id",
             "bot_id",
             "grupo_id",
+            "proposta",
         ):
             if dados.get(campo) is None:
                 dados.pop(campo, None)

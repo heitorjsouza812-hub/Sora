@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ferramentas.propor_instrucoes import proposta_do_cartao
 from app.modelos.enumeracoes import StatusAprovacao
 from app.modelos.tabelas import Agente, Aprovacao, Conversa, Pergunta
 from app.revisor.decisoes import aceita_sempre, e_envio
@@ -32,7 +33,17 @@ class PedidoAtencao(BaseModel):
     opcoes: list[OpcaoAtencao] = Field(default_factory=list)
     acao: str | None = None
     anexos: list[UUID] = Field(default_factory=list)
+    proposta: dict[str, str] | None = None
+    """Só no cartão de ``propor_instrucoes``: ``instrucoes`` novas, ``diferenca`` e ``motivo``."""
     criado_em: datetime
+
+    @model_serializer(mode="wrap")
+    def _sem_proposta_vazia(self, proximo: Any) -> dict[str, Any]:
+        """``proposta`` só existe no cartão de ``propor_instrucoes``; nos outros o campo some."""
+        dados = proximo(self)
+        if dados.get("proposta") is None:
+            dados.pop("proposta", None)
+        return dados
 
 
 _META_FERRAMENTAS = frozenset(
@@ -177,6 +188,7 @@ async def listar_atencao(sessao: AsyncSession, usuario_id: UUID) -> list[PedidoA
                 titulo=titulo,
                 resumo=resumo,
                 acao=str((aprovacao.acao or {}).get("ferramenta") or tipo),
+                proposta=proposta_do_cartao(aprovacao.acao),
                 opcoes=opcoes,
                 criado_em=aprovacao.criado_em,
             )

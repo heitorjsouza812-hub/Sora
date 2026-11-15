@@ -63,8 +63,21 @@ async def modelos_do_papel(
         m.provedor.id: await config_do_provedor(sessao, usuario_id, m.provedor.id)
         for m in resultado.modelos
     }
-    return criar_modelos_na_ordem(
+    chats = criar_modelos_na_ordem(
         [(m.modelo, configs[m.provedor.id]) for m in resultado.modelos],
         papel=nome,
         streaming=streaming,
     )
+    from app.agentes.middleware.custo import marcar_custo
+
+    for chat, candidato in zip(chats, resultado.modelos, strict=True):
+        marcar_custo(
+            chat,
+            modelo=candidato.modelo,
+            provedor_id=candidato.provedor.id,
+            nivel=str(candidato.nivel),
+            papel=nome,
+            preco_entrada=candidato.preco_entrada,
+            preco_saida=candidato.preco_saida,
+        )
+    return chats

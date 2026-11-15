@@ -90,6 +90,8 @@ class DependenciasAgente:
     finalizar_passo: Callable[[Any, Any | None, BaseException | None], Awaitable[None]] | None = (
         None
     )
+    anunciar_prompt: Callable[[UUID, UUID, str], Awaitable[None]] | None = None
+    """Conversa direta: publica o passo ``prompt`` (o pedido recebido) no painel Trabalho."""
     salvar_saida: Callable[[UUID | None, str], Awaitable[str]] | None = None
     ler_mensagens_pendentes: Callable[[UUID], Awaitable[list[str]]] | None = None
 

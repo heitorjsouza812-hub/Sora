@@ -46,6 +46,19 @@ def montar_middleware(
             tratar_limite=contexto.canal_id is None,
         )
     )
+    from app.agentes.middleware.custo import MiddlewareCustoDasChamadas
+    from app.llm.custo import gravar_chamada_do_agente
+
+    async def _gravar_custo(custo: object) -> None:
+        await gravar_chamada_do_agente(
+            contexto.usuario_id,
+            custo,  # type: ignore[arg-type]
+            cadeia_id=contexto.cadeia_id,
+            etapa_id=contexto.etapa_id,
+        )
+
+    # Por dentro da troca de modelo: a linha é do modelo que de fato respondeu.
+    itens.append(MiddlewareCustoDasChamadas(_gravar_custo))
     from app.agentes.middleware.limites import limites_do_agente
 
     chamadas_modelo, chamadas_ferramenta = limites_do_agente(contexto)
@@ -96,6 +109,27 @@ def montar_middleware(
                 contexto.agente_id,
                 iniciar=deps.iniciar_passo,
                 finalizar=deps.finalizar_passo,
+            )
+        )
+    elif (
+        contexto.etapa_id is None
+        and contexto.papel in {"sora", "individual"}
+        and not contexto.sem_supervisao
+        and deps.iniciar_passo is not None
+        and deps.finalizar_passo is not None
+    ):
+        # Conversa direta (bot 1:1, Sora, grupo): sem etapa de verdade, o painel Trabalho recebe os
+        # mesmos eventos ``passo`` sob um id sintético estável por turno (não vai para o banco).
+        from app.agentes.middleware.passos import PASSOS_DA_CONVERSA_IGNORADOS, id_do_turno
+
+        itens.append(
+            MiddlewarePassos(
+                id_do_turno(contexto),
+                contexto.agente_id,
+                iniciar=deps.iniciar_passo,
+                finalizar=deps.finalizar_passo,
+                anunciar_prompt=deps.anunciar_prompt,
+                ignorar=PASSOS_DA_CONVERSA_IGNORADOS,
             )
         )
     # Âncora (etapa 4): aprovação por ferramenta e medidor/compactação do contexto.

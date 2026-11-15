@@ -177,3 +177,18 @@ async def gasto_do_mes_por_provedor(
     )
     linhas = (await sessao.execute(consulta)).all()
     return {provedor_id: Decimal(total) for provedor_id, total in linhas}
+
+
+async def gravar_chamada_do_agente(
+    usuario_id: UUID,
+    custo: CustoChamada,
+    *,
+    cadeia_id: UUID | None = None,
+    etapa_id: UUID | None = None,
+) -> None:
+    """Grava a chamada de um agente numa sessão própria: o worker roda fora da requisição."""
+    from app.core.banco import fabrica_sessoes
+
+    async with fabrica_sessoes()() as sessao:
+        await gravar_chamada(sessao, usuario_id, custo, cadeia_id=cadeia_id, etapa_id=etapa_id)
+        await sessao.commit()
