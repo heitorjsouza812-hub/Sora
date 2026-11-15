@@ -61,8 +61,21 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def incluir_objeto(objeto, nome, tipo, refletido, comparado):
+    # Estas quatro tabelas pertencem às migrações do checkpointer LangGraph.
+    return not (
+        tipo == "table"
+        and refletido
+        and comparado is None
+        and nome
+        in {"checkpoints", "checkpoint_blobs", "checkpoint_writes", "checkpoint_migrations"}
+    )
+
+
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, include_object=incluir_objeto
+    )
 
     with context.begin_transaction():
         context.run_migrations()
