@@ -120,6 +120,14 @@ class PassoEvento(EventoBase):
     origem: Literal["usuario"] | None = None
     """``usuario`` no passo ``prompt`` da conversa direta: o pedido veio do usuário, não da Sora."""
 
+    @model_serializer(mode="wrap")
+    def _sem_origem_vazia(self, proximo: Any) -> dict[str, Any]:
+        """O contrato do passo não muda: ``origem`` só vai quando existe."""
+        dados = proximo(self)
+        if dados.get("origem") is None:
+            dados.pop("origem", None)
+        return dados
+
 
 class EntregaEvento(EventoBase):
     evento: ClassVar[Literal["entrega"]] = "entrega"
