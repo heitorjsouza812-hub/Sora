@@ -145,6 +145,8 @@ async def _responder_direto_sem_fila(
         agente_id=agente_id,
         conversa_id=conversa_id,
         papel=papel,
+        ferramentas_do_bot=list(agente.ferramentas or []),
+        ferramentas_extras=list(agente.ferramentas or []),
         thread_proprio=f"conversa:{conversa_id}:pedido:{mensagem_id}" if mensagem_id else None,
         dependencias=dependencias_da_etapa(ctx, usuario_id=usuario_id, conversa_id=conversa_id),
     )
@@ -345,6 +347,8 @@ async def retomar_conversa(ctx: dict[str, Any], conversa_id: str, resposta: Any)
         agente_id=agente_id,
         conversa_id=UUID(conversa_id),
         papel=papel,
+        ferramentas_do_bot=list(agente.ferramentas or []),
+        ferramentas_extras=list(agente.ferramentas or []),
         thread_proprio=f"conversa:{conversa_id}:pedido:{pedido_id}",
         dependencias=dependencias_da_etapa(
             ctx, usuario_id=usuario_id, conversa_id=UUID(conversa_id)

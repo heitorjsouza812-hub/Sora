@@ -114,6 +114,9 @@ class ContextoAgente:
     """Rotina sem ninguém olhando (Relógio): só ferramentas seguras, navegador efêmero."""
     thread_proprio: str | None = None
     """Thread do checkpointer só desta execução (rotina); senão vale a da conversa/etapa."""
+    ferramentas_do_bot: list[str] | None = None
+    """``agentes.ferramentas`` do bot de conversa 1:1: só elas (e o essencial) vão direto no
+    pedido ao modelo; o resto fica no catálogo (``ferramentas_do_turno.py``)."""
     modelo_enxerga: Callable[[Any], bool] | None = None
     """Só para bots com ``computador_*`` (``app/computador/visao.py``): diz se o modelo de uma
     chamada tem visão. Com ele o middleware anexa a última captura da tela à chamada."""
@@ -166,10 +169,15 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     else:
         trecho = carregar_prompt(f"especialista_{contexto.papel}")
         prompt = preencher(carregar_prompt("especialista_comum"), trecho_do_papel=trecho, **valores)
-    nomes = nomes_das_ferramentas(contexto)
+    from app.agentes.ferramentas_do_turno import nomes_diretos, nomes_escondidos
+
+    todos = nomes_das_ferramentas(contexto)
+    nomes = nomes_diretos(todos, contexto)
     instrucoes = montar_instrucoes(nomes)
     if any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes):
         instrucoes += "\n\n" + carregar_prompt("navegador_arvore")
+    elif any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes_escondidos(todos, contexto)):
+        instrucoes += "\n\nNavegador no catalogo conectores: carregue o esquema antes de usar."
     return f"{prompt}\n\n{instrucoes}"
 
 
@@ -258,17 +266,25 @@ async def montar_agente(
             sem_supervisao=contexto.sem_supervisao,
         ),
     )
-    from app.agentes.ancora import catalogo_dos_conectores, navegador_preguicoso
+    from app.agentes.ancora import (
+        catalogo_dos_conectores,
+        catalogo_enxuto,
+        navegador_preguicoso,
+    )
+    from app.agentes.ferramentas_do_turno import PAPEIS_ENXUTOS, nomes_diretos
     from app.conectores.carregar import ferramentas_dos_conectores
 
-    ferramentas = navegador_preguicoso(ferramentas, contexto)
-
-    ferramentas += catalogo_dos_conectores(
-        await ferramentas_dos_conectores(
-            contexto.usuario_id, sem_supervisao=contexto.sem_supervisao
-        ),
-        contexto,
+    conectores = await ferramentas_dos_conectores(
+        contexto.usuario_id, sem_supervisao=contexto.sem_supervisao
     )
+    if contexto.papel in PAPEIS_ENXUTOS:
+        diretas = set(nomes_diretos([f.name for f in ferramentas], contexto))
+        escondidas = [f for f in ferramentas if f.name not in diretas]
+        ferramentas = [f for f in ferramentas if f.name in diretas]
+        ferramentas += catalogo_enxuto(escondidas, conectores, contexto)
+    else:
+        ferramentas = navegador_preguicoso(ferramentas, contexto)
+        ferramentas += catalogo_dos_conectores(conectores, contexto)
     return create_agent(
         model=modelos[0],
         tools=ferramentas,
