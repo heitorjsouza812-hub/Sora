@@ -5,6 +5,7 @@ import { useState, type CSSProperties, type FormEvent } from 'react';
 import { Button, Input } from '../base';
 import { decidirAprovacao, responderPergunta, type Pendencia } from '../../state/projetos';
 import { BotoesAprovacao, CabecaPedido } from './decisao';
+import { usePrecisaDeVoce } from '../../state/atencao';
 import './pendencias.css';
 
 type PerguntaP = Extract<Pendencia, { tipo: 'pergunta' }>;
@@ -51,7 +52,7 @@ function CartaoDominio({ p, cor }: { p: AprovacaoP; cor: string }) {
       {p.dano && <p className="pend-dano"><b>O que pode acontecer:</b> {p.dano}</p>}
       <div className="pend-acoes" role="group" aria-label="Decisão">
         {r.opcoes.map(o => (
-          <Button key={o.valor} tamanho="M" variante={o.valor === 'negar' ? 'perigo' : 'primario'} disabled={p.enviando} onClick={() => void decidirAprovacao(p.id, o.valor)}>{o.rotulo}</Button>
+          <Button key={o.valor} tamanho="M" variante={o.valor === 'negar' ? 'perigo' : 'primario'} disabled={p.enviando} onClick={() => void decidirAprovacao(p.id, o.valor === 'negar' ? 'negar' : 'permitir_uma_vez')}>{o.rotulo}</Button>
         ))}
       </div>
       {p.expiraEm > 0 && <p className="pend-nota">Sem resposta até {new Date(p.expiraEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}, o pedido é recusado.</p>}
@@ -61,6 +62,8 @@ function CartaoDominio({ p, cor }: { p: AprovacaoP; cor: string }) {
 }
 
 function CartaoAprovacao({ p, cor }: { p: AprovacaoP; cor: string }) {
+  const { lista } = usePrecisaDeVoce();
+  const aceitaSempre = lista.find(pedido => pedido.id === p.id)?.opcoes?.some(o => o.valor === 'sempre_permitir');
   if (p.revisaoDominio) return <CartaoDominio p={p} cor={cor} />;
   return (
     <section className="pend-card" style={{ "--cor": cor } as CSSProperties} aria-label="Pedido de aprovação" data-pendencia="aprovacao">
@@ -68,7 +71,7 @@ function CartaoAprovacao({ p, cor }: { p: AprovacaoP; cor: string }) {
       <p className="pend-texto">{p.resumo}</p>
       {p.dano && <p className="pend-dano"><b>O que pode acontecer:</b> {p.dano}</p>}
       {p.quemRecebe && <p className="pend-dano"><b>Quem recebe:</b> {p.quemRecebe}</p>}
-      <BotoesAprovacao desabilitado={p.enviando} onPermitir={() => void decidirAprovacao(p.id, 'permitir_uma_vez')} onSempre={() => void decidirAprovacao(p.id, 'sempre_permitir')} onRecusar={() => void decidirAprovacao(p.id, 'negar')} />
+      <BotoesAprovacao desabilitado={p.enviando} onPermitir={() => void decidirAprovacao(p.id, 'permitir_uma_vez')} onSempre={aceitaSempre ? () => void decidirAprovacao(p.id, 'sempre_permitir') : undefined} onRecusar={() => void decidirAprovacao(p.id, 'negar')} />
       {p.expiraEm > 0 && <p className="pend-nota">Sem resposta até {new Date(p.expiraEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}, o pedido é recusado.</p>}
       {p.erro && <p className="pend-erro" role="alert">{p.erro}</p>}
     </section>

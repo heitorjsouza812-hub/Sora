@@ -20,6 +20,7 @@ vi.mock('../../api/cliente', async (importar) => ({
   buscarAutenticado: f.buscar,
 }));
 vi.mock('../ponte', () => ({
+  cofreLer: vi.fn(async () => 'credencial-desktop'),
   noDesktop: true,
   janelaAtual: 'main',
   pcConta: f.conta,
@@ -80,7 +81,7 @@ describe('ponte do controle do PC', () => {
 
     const parar = iniciarPontePc();
     await waitFor(() => expect(lerPontePc().substituida).toBe(true));
-    expect(f.api.post).toHaveBeenCalledWith('/v1/computador-pc/sessao', { dispositivo: expect.any(String), autorizados: [] }, expect.anything());
+    expect(f.api.post).toHaveBeenCalledWith('/v1/computador-pc/sessao', { dispositivo: expect.any(String), autorizados: [], token_renovacao: 'credencial-desktop' }, expect.anything());
     expect(f.conta).toHaveBeenCalledWith('u1');
     expect(f.api.put).toHaveBeenCalledWith('/v1/computador-pc/sessao/s1', { autorizados: ['b1'] }, expect.anything());
     expect(f.buscar.mock.calls[0][0]).toBe('/v1/computador-pc/comandos?sessao_id=s1&espera=20');
@@ -96,7 +97,7 @@ describe('ponte do controle do PC', () => {
       ? { sessao_id: 's2', usuario_id: 'u1', autorizados: [], validade_s: 60 }
       : undefined);
     f.api.delete.mockResolvedValue(undefined);
-    f.conta.mockResolvedValue({ ...LOCAL, autorizados: [] });
+    f.conta.mockResolvedValue({ ...LOCAL, autorizados: [], token_renovacao: 'credencial-desktop' });
     f.buscar.mockImplementation((_c: string, init: RequestInit) => new Promise((_, rejeitar) => {
       init.signal?.addEventListener('abort', () => rejeitar(new DOMException('abortado', 'AbortError')));
     }));
@@ -112,7 +113,7 @@ describe('ponte do controle do PC', () => {
 
   it('ligar um bot grava no Rust e atualiza a sessão no servidor', async () => {
     f.api.post.mockResolvedValue({ sessao_id: 's3', usuario_id: 'u1', autorizados: [], validade_s: 60 });
-    f.conta.mockResolvedValue({ ...LOCAL, autorizados: [] });
+    f.conta.mockResolvedValue({ ...LOCAL, autorizados: [], token_renovacao: 'credencial-desktop' });
     f.buscar.mockImplementation(() => new Promise(() => {}));
     const parar = iniciarPontePc();
     await waitFor(() => expect(lerPontePc().sessaoId).toBe('s3'));
@@ -127,7 +128,7 @@ describe('ponte do controle do PC', () => {
 describe('Configurações → Computador no app de desktop', () => {
   it('lista os bots desligados por padrão, avisa quem não tem a ferramenta e mostra o Parar', async () => {
     f.api.post.mockResolvedValue({ sessao_id: 's4', usuario_id: 'u1', autorizados: [], validade_s: 60 });
-    f.conta.mockResolvedValue({ ...LOCAL, autorizados: [] });
+    f.conta.mockResolvedValue({ ...LOCAL, autorizados: [], token_renovacao: 'credencial-desktop' });
     f.buscar.mockImplementation(() => new Promise(() => {}));
     f.autorizar.mockResolvedValue({ ...LOCAL, autorizados: ['b1'] });
     const parar = iniciarPontePc();

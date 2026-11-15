@@ -16,7 +16,7 @@ import { CentralPrecisaDeVoce } from '../CentralPrecisaDeVoce';
 
 const bot = (id: string, nome: string, cor: string) => ({ id, tipo: 'individual', nome, funcao: 'Função', cor, movimento: 'gira', ferramentas: [], estado: 'livre' });
 const PEDIDOS = [
-  { id: 'p1', tipo: 'aprovacao', agente_id: 'b1', grupo_id: 'g1', titulo: 'Aprovar ação', resumo: 'Atlas quer enviar uma mensagem.', acao: 'gmail_enviar', opcoes: [] },
+  { id: 'p1', tipo: 'aprovacao', agente_id: 'b1', grupo_id: 'g1', titulo: 'Aprovar ação', resumo: 'Atlas quer enviar uma mensagem.', acao: 'mcp__notion__criar_pagina', opcoes: [{ rotulo: 'Permitir uma vez', valor: 'permitir' }, { rotulo: 'Sempre permitir', valor: 'sempre_permitir' }, { rotulo: 'Recusar', valor: 'negar' }] },
   { id: 'p2', tipo: 'aprovacao', agente_id: 'b2', grupo_id: null, titulo: 'Revisar acesso a domínio', resumo: 'Permitir acesso a banco.com?', acao: 'aprovacao', opcoes: [] },
   { id: 'p3', tipo: 'pergunta', agente_id: 'sora', grupo_id: null, titulo: '', resumo: '', pergunta: 'Qual público?', opcoes: [] },
 ];

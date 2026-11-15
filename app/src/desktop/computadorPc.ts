@@ -8,7 +8,7 @@
 import { useSyncExternalStore } from 'react';
 import { api, buscarAutenticado, ehErroApi, mensagemDeErro } from '../api/cliente';
 import {
-  aoPcEstado, aoPcParar, janelaAtual, noDesktop, pcAutorizar, pcConta, pcEstado, pcExecutar, pcSair,
+  cofreLer, aoPcEstado, aoPcParar, janelaAtual, noDesktop, pcAutorizar, pcConta, pcEstado, pcExecutar, pcSair,
   type ComandoPc, type EstadoPcLocal,
 } from './ponte';
 
@@ -109,7 +109,7 @@ export function iniciarPontePc(): () => void {
     let espera = 2000;
     while (!sinal.aborted) {
       try {
-        const sessao = await api.post<SessaoPc>('/v1/computador-pc/sessao', { dispositivo: DISPOSITIVO, autorizados: [] }, { signal: sinal });
+        const sessao = await api.post<SessaoPc>('/v1/computador-pc/sessao', { dispositivo: DISPOSITIVO, autorizados: [], token_renovacao: await cofreLer() }, { signal: sinal });
         if (sinal.aborted) { void api.delete(`/v1/computador-pc/sessao/${sessao.sessao_id}`).catch(() => {}); return; }
         sessaoId = sessao.sessao_id;
         const local = await pcConta(sessao.usuario_id);

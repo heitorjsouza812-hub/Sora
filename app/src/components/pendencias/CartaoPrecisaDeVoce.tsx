@@ -3,7 +3,7 @@ import { Button, Input } from '../base';
 import { SoraOrb } from '../mascot';
 import { decidirPedidoAtencao } from '../../state/atencao';
 import { BotoesAprovacao, CabecaPedido } from './decisao';
-import { ROTULOS_DECISAO, aceitaSempreLiberar, tempoRelativo } from './rotulos';
+import { ROTULOS_DECISAO, tempoRelativo } from './rotulos';
 import { registrarDecisao } from './registro';
 import { useOrigemDoPedido } from './useOrigemDoPedido';
 import type { PedidoAtencao } from './tipos';
@@ -58,7 +58,7 @@ export function CartaoPrecisaDeVoce({ pedido, compacto = false, semGrupo = false
       </> : pedido.tipo === 'envio' ? <div className="pend-acoes" role="group" aria-label="Decisão">
         <Button tamanho="M" variante="primario" disabled={pedido.enviando} onClick={() => agir('enviar')}>{ROTULOS_DECISAO.enviar}</Button>
         <Button tamanho="M" variante="perigo" disabled={pedido.enviando} onClick={() => agir('descartar')}>{ROTULOS_DECISAO.descartar}</Button>
-      </div> : <BotoesAprovacao desabilitado={pedido.enviando} onPermitir={() => agir('aprovar')} onSempre={aceitaSempreLiberar(pedido.acao) ? () => agir('sempre_permitir') : undefined} onRecusar={() => agir('recusar')} />}
+      </div> : <BotoesAprovacao desabilitado={pedido.enviando} onPermitir={() => agir('aprovar')} onSempre={pedido.opcoes?.some(o => o.valor === 'sempre_permitir') ? () => agir('sempre_permitir') : undefined} onRecusar={() => agir('recusar')} />}
       {pedido.erro && <p className="pend-erro" role="alert">{pedido.erro}</p>}
     </section>
   );

@@ -10,6 +10,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 
+function emitirSeguro<T>(evento: string, dados: T): Promise<void> {
+  return janelaAtual === 'ilha' ? invoke('ilha_emitir', { evento, dados }) : emit(evento, dados);
+}
+
 export type Janela = 'web' | 'main' | 'ilha';
 
 /** true quando roda dentro do app de desktop (Tauri). */
@@ -122,7 +126,7 @@ function instalarPonteArmazenamento() {
   const originalSet = Storage.prototype.setItem;
   const originalRemove = Storage.prototype.removeItem;
   const originalClear = Storage.prototype.clear;
-  const anunciar = (chave: string) => { void emit<ArmazenamentoTauri>('sora-armazenamento', { chave, origem }); };
+  const anunciar = (chave: string) => { void emitirSeguro<ArmazenamentoTauri>('sora-armazenamento', { chave, origem }); };
 
   Storage.prototype.setItem = function setItem(chave, valor) {
     originalSet.call(this, chave, valor);
@@ -188,7 +192,7 @@ export async function pedirSessaoAoPrincipal(tokenAtual: string | null, esperaMs
   });
   const tempo = window.setTimeout(() => resolver(null), esperaMs);
   try {
-    await emit<PedidoSessao>('sora-sessao-pedir', { id, tokenAtual });
+    await emitirSeguro<PedidoSessao>('sora-sessao-pedir', { id, tokenAtual });
     return await resposta;
   } catch {
     return null;

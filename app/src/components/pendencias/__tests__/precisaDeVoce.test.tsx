@@ -36,6 +36,7 @@ describe('cartões Precisa de você', () => {
     const pedido: PedidoAtencao = { id: 'p2', tipo: 'aprovacao', titulo: 'Abrir site', resumo: 'Ação externa' };
     receberPedidoAtencao(pedido); resolver.mockResolvedValue(undefined);
     render(<CartaoPrecisaDeVoce pedido={pedido} compacto />);
+    expect(screen.queryByRole('button', { name: 'Sempre permitir' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Recusar' }));
     expect(resolver).toHaveBeenCalledWith(pedido, 'recusar', undefined);
   });

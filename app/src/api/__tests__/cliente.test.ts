@@ -95,7 +95,7 @@ describe('api', () => {
 describe('mensagens de erro', () => {
   it('servidor fora (502/503/504) tem mensagem própria; erro local não culpa o servidor', async () => {
     respostas.push(() => json(503, undefined));
-    const e = await api.get('/v1/eu').catch(x => x);
+    const e = (await api.get('/v1/eu').catch((x: unknown) => x)) as { status: number; mensagem: string };
     expect(e).toMatchObject({ status: 503 });
     expect(e.mensagem).toMatch(/fora do ar/);
     expect(mensagemDeErro(new Error('cofre_gravar falhou'))).toMatch(/neste computador/);
