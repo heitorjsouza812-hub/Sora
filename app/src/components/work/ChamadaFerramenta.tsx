@@ -1,10 +1,8 @@
 import { urlPublica } from '../ui/fontes';
 import { useState } from 'react';
 import type { PassoTrabalho, ResultadoPasso } from '../../types';
-import { SoraOrb } from '../mascot';
 import { AvisoPluginDesconectado, useErroSimulado } from '../erros';
 import { ImagensEntrega } from '../ui/ImagensEntrega';
-import { PluginMark } from '../ui/PluginMark';
 import type { Movimento } from '../../types';
 import { duracao, ehPassoNavegador, pluginInfo } from './util';
 import { RastroNavegador } from './RastroNavegador';
@@ -36,7 +34,7 @@ export function ResultadoResumo({ resultado }: { resultado: ResultadoPasso; cor?
 }
 
 /** Uma chamada de ferramenta: ícone do plugin, ação, parâmetros (expansíveis), estado e resultado. */
-export function ChamadaFerramenta({ passo, cor, movimento, agora }: { passo: PassoTrabalho; cor: string; movimento: Movimento; agora: number }) {
+export function ChamadaFerramenta({ passo, cor, agora }: { passo: PassoTrabalho; cor: string; movimento: Movimento; agora: number }) {
   const [aberto, setAberto] = useState(false);
   const p = pluginInfo(passo.ferramenta);
   const executando = passo.status === 'executando';
@@ -44,14 +42,13 @@ export function ChamadaFerramenta({ passo, cor, movimento, agora }: { passo: Pas
   const pluginCaiu = useErroSimulado() === 'plugin' && executando && !!passo.ferramenta;
   return (
     <div className={`wk-tool wk-${passo.status}`}>
-      <button type="button" className="wk-tool-head" onClick={() => setAberto(v => !v)} aria-expanded={aberto}>
-        <PluginMark nome={passo.ferramenta ?? '?'} cor={p?.hex ?? cor} path={p?.path ?? null} size={22} />
+      <button type="button" className="wk-tool-head" onClick={() => setAberto(v => !v)} aria-expanded={aberto} aria-label={`Ver detalhes: ${passo.acao}`}>
         <span className="wk-tool-main">
-          <code>{passo.acao}</code>
-          <small>{passo.texto}</small>
+          <code className={executando ? 'shimmer' : ''}>{passo.acao}</code>
+          <small><span className="wk-ferramenta-id">{passo.ferramenta}</span> {passo.texto}</small>
         </span>
         <span className="wk-tool-state">
-          {executando && <><SoraOrb size={20} color={cor} movimento={movimento} state="working" glow={false} title="Executando" /><span className="shimmer">{duracao(Math.max(0, agora - passo.inicio))}</span></>}
+          {executando && <span>{duracao(Math.max(0, agora - passo.inicio))}</span>}
           {passo.status === 'concluido' && <><b className="wk-ok">✓</b>{passo.fim ? duracao(passo.fim - passo.inicio) : ''}</>}
           {passo.status === 'erro' && <b className="wk-err">Erro</b>}
         </span>

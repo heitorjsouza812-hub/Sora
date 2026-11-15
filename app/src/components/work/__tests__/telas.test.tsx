@@ -68,6 +68,19 @@ describe('navegador ao vivo', () => {
     expect(chamadas('assistir')).toHaveLength(0);
   });
 
+  it('alterna as telas por teclado sem empilhar computador sob navegador', async () => {
+    quadro();
+    render(<TelasDoBot agenteId="a1" usaComputador />);
+    expect(screen.getByAltText(ALT)).toBeTruthy();
+    expect(screen.queryByText(/Ele liga sozinho/)).toBeNull();
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Navegador' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Computador' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByAltText(ALT)).toBeNull();
+    expect(await screen.findByText(/Ele liga sozinho/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Navegador' }));
+    expect(screen.getByAltText(ALT)).toBeTruthy();
+  });
+
   it('mostra imagem, URL e tempo; chama "assistir" ao abrir e a cada 8 s; para com a página oculta e ao fechar o painel', () => {
     vi.useFakeTimers();
     receberEventoEquipe({ tipo: 'navegador.aba', dados: aba() }); quadro();

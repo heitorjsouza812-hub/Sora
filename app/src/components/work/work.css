@@ -60,14 +60,14 @@
 .wk-tool.wk-erro { border-color: var(--danger-line); }
 .wk-tool-head { width: 100%; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-3) var(--sp-1); color: inherit; text-align: left; background: none; border: 0; }
 .wk-tool-main { display: grid; gap: var(--sp-1); min-width: 0; }
-.wk-tool-main code { overflow: hidden; color: var(--text); font: 600 12.5px/1.3 ui-monospace, "SF Mono", Consolas, monospace; white-space: nowrap; text-overflow: ellipsis; }
+.wk-tool-main code { overflow: hidden; color: var(--text); font: 600 12px/1.5 ui-monospace, "SF Mono", Consolas, monospace; white-space: nowrap; text-overflow: ellipsis; }
 .wk-tool-main small { color: var(--text-2); font-size: var(--fs-12); }
 .wk-tool-state { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; color: var(--text-3); font-size: var(--fs-12); white-space: nowrap; }
 .wk-ok { color: var(--ok); }
 .wk-err { color: var(--danger); }
 .wk-chevron { color: var(--text-3); font-size: var(--fs-12); }
-.wk-params { overflow: hidden; padding: 0 var(--sp-3) var(--sp-3) var(--sp-11); color: var(--text-3); font: 11px/1.4 ui-monospace, Consolas, monospace; white-space: nowrap; text-overflow: ellipsis; }
-.wk-params-full { margin: 0 12px 10px; padding: var(--sp-3) var(--sp-3); white-space: pre-wrap; word-break: break-word; color: var(--text-2); background: var(--surface-1); border-radius: var(--r-6); font: 11.5px/1.5 ui-monospace, Consolas, monospace; }
+.wk-params { overflow: hidden; padding: 0 var(--sp-3) var(--sp-3) var(--sp-11); color: var(--text-3); font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: nowrap; text-overflow: ellipsis; }
+.wk-params-full { margin: 0 12px 10px; padding: var(--sp-3) var(--sp-3); white-space: pre-wrap; word-break: break-word; color: var(--text-2); background: var(--surface-1); border-radius: var(--r-6); font: 12px/1.5 ui-monospace, Consolas, monospace; }
 .wk-result { padding: 0 var(--sp-3) var(--sp-3) var(--sp-11); }
 .wk-tool .wk-result { padding-top: var(--sp-2); border-top: 1px solid var(--white-a04); }
 .wk-result-sum { display: inline-block; padding: var(--sp-1) var(--sp-2); color: var(--agent); background: color-mix(in srgb, var(--agent), transparent 88%); border-radius: var(--r-6); font-size: var(--fs-12); font-weight: 600; }
@@ -125,3 +125,47 @@
 .wk-nav-aba { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 10px; }
 .wk-nav-ajuda { margin: 0; font-size: 13px; color: var(--text-1, #F2F5FB); }
 .wk-nav-erro { color: #ff9b9b; }
+
+/* Etapa 6 §6.4: painel contínuo, uma identidade e uma tela de cada vez. */
+.agent-workspace { grid-template-columns: minmax(0, 1fr) var(--painel-w); gap: 0; padding: 0; transition: grid-template-columns 320ms var(--ease); }
+.agent-workspace.panel-collapsed { grid-template-columns: minmax(0, 1fr) 0; }
+.agent-workspace .side-panel { margin: 0; padding: 0; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: var(--surface-side); box-shadow: none; }
+.agent-workspace .side-panel.is-hidden { visibility: hidden; border: 0; }
+.side-head { min-height: var(--top-h); padding: 0 var(--sp-2) 0 var(--sp-4); border-bottom: 1px solid var(--line); }
+.side-tabs { padding: 0; gap: var(--sp-5); background: none; border-radius: 0; }
+.side-tabs button { flex: none; height: var(--top-h); padding: 0; border-radius: 0; font-size: var(--fs-14); border-bottom: 2px solid transparent; }
+.side-tabs button.is-on { background: none; border-bottom-color: var(--text-1); }
+.side-body { margin: 0; padding: var(--sp-4) var(--sp-5) var(--sp-6); }
+.wk-empty-inline { padding: 0; text-align: left; justify-items: start; place-content: start; }
+.wk-empty-inline p { max-width: none; }
+.wk-timeline { padding-left: 28px; }
+.wk-timeline::before { left: 9px; }
+.wk-step .wk-node { left: -28px; top: 8px; width: 20px; height: 20px; display: grid; place-items: center; font: normal 14px/20px var(--font); border: 0; background: var(--surface-side); color: var(--text-3); box-shadow: none; }
+.wk-step.wk-concluido .wk-node { color: var(--ok); background: var(--surface-side); }
+.wk-step.wk-erro .wk-node { color: var(--danger); }
+.wk-step.wk-executando .wk-node::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--agent); animation: wk-blink 1.4s infinite; }
+.wk-tool { background: none; border: 0; border-radius: 0; }
+.wk-tool-head { padding: var(--sp-2) 0; gap: var(--sp-2); }
+.wk-tool-head > .plugin-mark { display: none; }
+.wk-tool-main code { font: 500 14px/20px var(--font); white-space: normal; }
+.wk-tool-main small { font-size: 13px; line-height: 18px; }
+.wk-tool.wk-executando .wk-tool-main code { color: var(--text-1); }
+.wk-params { padding: 0 0 var(--sp-2); font: 12px/18px var(--font-mono); }
+.wk-params-full { margin: 0 0 var(--sp-2); font: 12px/18px var(--font-mono); background: var(--surface-2); border-radius: var(--r-10); }
+.wk-tool .wk-result { padding: var(--sp-2) 0; border: 0; }
+.wk-result-sum { padding: 0; background: none; color: var(--text-2); font-size: 13px; font-weight: 400; }
+.agent-profile { text-align: left; }
+.agent-profile .tools-label { margin: var(--sp-6) 0 var(--sp-3); }
+.agent-profile .tools-label:first-child { margin-top: 0; }
+.agent-profile .tools-list > div { min-height: 40px; background: none; border: 0; padding: 0; }
+.agent-profile .tools-list svg { width: 18px; height: 18px; color: var(--text-2); fill: none; stroke: currentColor; }
+.agent-profile .tools-list strong { font-size: 14px; font-weight: 400; }
+.agent-profile .tools-list span { font-size: 12px; }
+.agent-profile .progress-title { margin-top: var(--sp-6); font-size: 12px; font-weight: 600; }
+.agent-profile .agent-pendencias[data-criando="false"] .eq-pend-novo { display: none; }
+.agent-profile select { max-width: 100%; min-height: 40px; padding: 8px; color: var(--text-1); background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--r-10); }
+@media (max-width: 1199px) { .agent-workspace, .agent-workspace.panel-collapsed { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 767px) { .agent-workspace { display: block; } }
+@media (prefers-reduced-motion: reduce) { .agent-workspace { transition: none; } .wk-step.wk-executando .wk-node::after { animation: none; } }
+
+.wk-ferramenta-id { font: 12px/18px var(--font-mono); color: var(--text-2); }

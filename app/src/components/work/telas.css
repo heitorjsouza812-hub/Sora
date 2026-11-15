@@ -25,3 +25,17 @@
 .wk-tela-modal button, .wk-tela-digitacao input { min-height: 44px; min-width: 44px; }
 .wk-tela-digitacao { display: grid; gap: 4px; font-size: 12px; }
 .wk-tela-digitacao input { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+
+.wk-telas { gap: var(--sp-2); }
+.wk-telas-abas { display: flex; gap: var(--sp-4); border-bottom: 1px solid var(--line); }
+.wk-telas-abas button { min-height: 40px; padding: 0; color: var(--text-2); background: none; border: 0; border-bottom: 2px solid transparent; font: 600 13px/18px var(--font); }
+.wk-telas-abas button[aria-selected="true"] { color: var(--text-1); border-bottom-color: var(--text-1); }
+.wk-tela { padding: 0; border: 0; background: none; border-radius: 0; }
+.wk-tela.is-controle { padding: var(--sp-2); border: 1px solid var(--agent); border-radius: var(--r-12); box-shadow: none; }
+.wk-tela-vazio { border: 0; padding: var(--sp-3) 0; text-align: left; }
+.wk-panel > .wk-telas { max-height: none; overflow: visible; }
+.wk-panel:has(> .wk-telas) { overflow-y: auto; }
+.wk-panel:has(> .wk-telas) > .wk-scroll { flex: none; overflow: visible; }
+.wk-tela-img { max-height: 240px; object-fit: contain; }
+.wk-tela-acoes > * { min-height: 32px; }
+@media (max-width: 767px) { .wk-telas-abas button, .wk-tela-acoes > * { min-height: 44px; } }

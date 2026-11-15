@@ -68,7 +68,7 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
         </div>
       ) : (
         <>
-          <header className="wk-head">
+          {!semSeletor && <header className="wk-head">
             <SoraOrb size={40} color={agente.cor} movimento={agente.tipoMovimento} glow={false} title={agente.nome}
               state={est?.status === 'trabalhando' ? 'working' : est?.status === 'concluido' ? 'done' : 'idle'} />
             <span>
@@ -76,8 +76,8 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
               <small className={est?.status === 'trabalhando' ? 'wk-live' : ''}>{est?.status === 'trabalhando' ? `${agente.verbo}…` : est?.rotulo || agente.funcao}</small>
             </span>
             {est && est.status !== 'aguardando' && <b className="wk-pct">{est.progresso}%</b>}
-          </header>
-          {est && est.status !== 'aguardando' && <ProgressBar value={est.progresso} color={agente.cor} />}
+          </header>}
+          {est?.status === 'trabalhando' && <ProgressBar value={est.progresso} color={agente.cor} />}
           <TelasDoBot agenteId={agente.id} cor={agente.cor} usaComputador={agente.ferramentas.some(f => f.startsWith('computador_'))} />
           <div className="wk-scroll" ref={scroll}
             onScroll={ev => { const el = ev.currentTarget; colado.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; }}>
@@ -90,7 +90,6 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
             {prompt && <BlocoPrompt passo={prompt} nomeSora={e.sora.nome} corSora={e.sora.cor} />}
             {!execAtual && (
               <div className="wk-empty wk-empty-inline">
-                <SoraOrb size={56} color={agente.cor} movimento={agente.tipoMovimento} state="idle" glow={false} title={agente.nome} />
                 <p>{est?.rotulo && est.rotulo !== 'Disponível' ? `${est.rotulo}.` : `${agente.nome} está disponível.`} Os passos aparecem aqui quando o trabalho começar.</p>
               </div>
             )}

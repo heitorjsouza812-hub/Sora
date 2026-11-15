@@ -4,7 +4,7 @@
 import { useEffect, useId, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { IconButton, Tooltip } from '../base';
 import { BottomSheet } from '../overlay';
-import { useCelular } from '../ui/useMedia';
+import { useMedia } from '../ui/useMedia';
 
 export interface AbaPainel {
   id: string;
@@ -29,12 +29,13 @@ export interface PainelLateralProps {
   /** resumo curto na pílula do celular (ex.: "Atlas · Pesquisando…") */
   resumo?: string;
   rotulo?: string;
+  peloCabecalho?: boolean;
 }
 
 const Seta = ({ para }: { para: 'dir' | 'esq' }) => <svg viewBox="0 0 24 24"><path d={para === 'dir' ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'} /></svg>;
 
-export function PainelLateral({ abas, aba, onAba, recolhido, onRecolher, folhaAberta, onFolha, resumo, rotulo = 'Painel do projeto' }: PainelLateralProps) {
-  const celular = useCelular();
+export function PainelLateral({ abas, aba, onAba, recolhido, onRecolher, folhaAberta, onFolha, resumo, rotulo = 'Painel do projeto', peloCabecalho = false }: PainelLateralProps) {
+  const celular = useMedia(peloCabecalho ? '(max-width: 1199px)' : '(max-width: 767px)');
   const base = useId();
   const atual = abas.find((a) => a.id === aba) ?? abas[0];
 
@@ -78,11 +79,11 @@ export function PainelLateral({ abas, aba, onAba, recolhido, onRecolher, folhaAb
   if (celular) {
     const vivo = abas.find((a) => a.vivo)?.vivo;
     return <>
-      <button type="button" className="work-pill" onClick={() => onFolha(true)} aria-haspopup="dialog"
+      {!peloCabecalho && <button type="button" className="work-pill" onClick={() => onFolha(true)} aria-haspopup="dialog"
         style={vivo ? { '--agent': vivo } as CSSProperties : undefined}>
         <i className={`wk-pulse ${vivo ? 'is-live' : ''}`} aria-hidden="true" />
         <strong>{abas.map((a) => a.rotulo).join(' · ')}</strong>{resumo && <span>{resumo}</span>}
-      </button>
+      </button>}
       <BottomSheet open={folhaAberta} onClose={() => onFolha(false)} title={rotulo} className="side-sheet">
         {listaAbas}{conteudo}
       </BottomSheet>
@@ -90,6 +91,7 @@ export function PainelLateral({ abas, aba, onAba, recolhido, onRecolher, folhaAb
   }
 
   if (recolhido) {
+    if (peloCabecalho) return <aside className="side-panel is-hidden" aria-hidden="true" />;
     return (
       <aside className="side-panel is-collapsed" aria-label={rotulo}>
         <Tooltip conteudo="Mostrar painel (Ctrl+.)" lado="baixo">
@@ -111,7 +113,7 @@ export function PainelLateral({ abas, aba, onAba, recolhido, onRecolher, folhaAb
       <div className="side-head">
         {listaAbas}
         <Tooltip conteudo="Recolher painel (Ctrl+.)" lado="baixo">
-          <IconButton aria-label="Recolher painel" aria-expanded icone={<Seta para="dir" />} tamanho="P" onClick={() => onRecolher(true)} />
+          <IconButton aria-label="Recolher painel" aria-expanded icone={<svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>} tamanho="P" onClick={() => onRecolher(true)} />
         </Tooltip>
       </div>
       {conteudo}

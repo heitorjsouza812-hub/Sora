@@ -16,11 +16,11 @@ import { PerfilNavegadorDoAgente } from '../components/equipe/PerfilNavegadorDoA
 import { CartaoPendencia } from '../components/pendencias/Pendencias';
 import { CartaoPrecisaDeVoce } from '../components/pendencias/CartaoPrecisaDeVoce';
 import { MessageComposer } from '../components/ui/MessageComposer';
-import { PluginMark } from '../components/ui/PluginMark';
+import { IconButton, Button } from '../components/base';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { ShimmerText } from '../components/ui/ShimmerText';
-import { useCelular } from '../components/ui/useMedia';
-import { PainelTrabalho, pluginInfo } from '../components/work';
+import { useCelular, useMedia } from '../components/ui/useMedia';
+import { PainelTrabalho } from '../components/work';
 import { FERRAMENTAS_BASE, rotuloFerramenta } from '../data/ferramentas';
 import { ZonaSoltar } from '../components/anexos';
 import { CardErroModelo, definirErroSimulado, useErroSimulado } from '../components/erros';
@@ -45,6 +45,7 @@ type Item = { t: number; key: string; node: ReactNode };
 
 
 function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: number }) {
+  const [novaPendencia, setNovaPendencia] = useState(false);
   const st = estadoAgente(e, a.id, agora);
   const passos = passosDoAgente(e, a.id, agora).filter(p => p.tipo === 'ferramenta');
   const estadoFerramenta = (nome: string) => {
@@ -57,28 +58,27 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
   const ferramentas = [...new Set([...a.ferramentas, ...passos.map(p => p.ferramenta ?? '')])].filter(n => n && !base.includes(n));
   return (
     <div className="agent-profile">
-      <div className="agent-orb"><SoraOrb size={180} color={a.cor} movimento={a.tipoMovimento} title={a.nome}
-        state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : 'idle'} pulseKey={st.status === 'concluido' ? 1 : 0} /></div>
-      <h1>{a.nome}</h1><p>{a.funcao}</p>
-      <span className="agent-pill" role="status"><i aria-hidden="true" />{st.status === 'trabalhando' ? `${a.verbo}…` : st.rotulo || 'Disponível'}</span>
-      <div className="progress-title"><span>Progresso</span><b>{st.progresso}%</b></div>
-      <ProgressBar value={st.progresso} color={a.cor} label={a.nome} status={st.rotulo} />
+      <p className="eyebrow tools-label">Função</p><p>{a.funcao}</p>
+      <Button variante="fantasma" tamanho="P" onClick={() => abrirEditorAgente(a.id)}>Editar bot</Button>
+      {st.status === 'trabalhando' && <><div className="progress-title"><span>Progresso</span><b>{st.progresso}%</b></div>
+      <ProgressBar value={st.progresso} color={a.cor} label={a.nome} status={st.rotulo} /></>}
       <p className="eyebrow tools-label">Ferramentas</p>
       <div className="tools-list">
         {ferramentas.map(nome => {
-          const p = pluginInfo(nome);
           const s = estadoFerramenta(nome);
-          return <div key={nome}><PluginMark nome={rotuloFerramenta(nome)} cor={p?.hex ?? a.cor} path={p?.path ?? null} size={25} /><strong>{rotuloFerramenta(nome)}</strong><span className={s === 'Em uso' ? 'agent-color' : ''}>{s}</span></div>;
+          return <div key={nome}><ActivityIcon /><strong>{rotuloFerramenta(nome)}</strong><span className={s === 'Em uso' ? 'agent-color' : ''}>{s}</span></div>;
         })}
         {!ferramentas.length && <p className="tools-empty">Nenhuma ferramenta usada ainda.</p>}
       </div>
       <MedidorContexto agenteId={a.id} />
       <FilaDoAgente agenteId={a.id} />
       <PerfilNavegadorDoAgente agenteId={a.id} />
-      <PendenciasDoAgente agenteId={a.id} />
+      <div className="agent-pendencias" data-criando={novaPendencia}>
+        <Button variante="fantasma" tamanho="P" aria-expanded={novaPendencia} onClick={() => setNovaPendencia(!novaPendencia)}>{novaPendencia ? 'Fechar formulário' : '+ Nova pendência'}</Button>
+        <PendenciasDoAgente agenteId={a.id} />
+      </div>
       <div className="agent-resources"><PainelRotinas key={`r-${a.id}`} agenteId={a.id} /><PainelMemoria key={`m-${a.id}`} agenteId={a.id} /></div>
       {a.instrucoes && <><p className="eyebrow tools-label">Instruções</p><p className="agent-instructions">{a.instrucoes}</p></>}
-      <button type="button" className="st-btn-ghost agent-edit" onClick={() => abrirEditorAgente(a.id)}>Editar agente</button>
     </div>
   );
 }
@@ -90,6 +90,7 @@ export default function AgentChat() {
   const atencao = usePrecisaDeVoce();
   const agora = useAgora();
   const celular = useCelular();
+  const painelEmFolha = useMedia('(max-width: 1199px)');
   const a = e.agentes[id];
   const st = a ? estadoAgente(e, a.id, agora) : null;
   const painel = usePainelLateral('sora.painel.agente', 'trabalho');
@@ -178,7 +179,7 @@ export default function AgentChat() {
   if (!a || !st) return <Navigate to="/" replace />;
 
   return (
-    <AppShell agenteId={a.id} menuItens={[{ rotulo: 'Ver trabalho', onClick: verTrabalho }]}>
+    <AppShell agenteId={a.id} menuItens={[{ rotulo: 'Ver trabalho', onClick: verTrabalho }]} acoes={<IconButton aria-label="Painel Trabalho" aria-pressed={painelEmFolha ? folha : !painel.recolhido} icone={<ActivityIcon />} onClick={() => painelEmFolha ? setFolha(!folha) : painel.setRecolhido(!painel.recolhido)} />}>
       <div className={`workspace-grid agent-workspace ${painel.recolhido ? 'panel-collapsed' : ''}`} style={{ '--agent': a.cor } as CSSProperties}>
         <main className="conversation" aria-label={`Conversa com ${a.nome}`}>
           <ZonaSoltar className="conversation-drop">
@@ -207,6 +208,7 @@ export default function AgentChat() {
           </ZonaSoltar>
         </main>
         <PainelLateral
+          peloCabecalho
           rotulo={`Painel de ${a.nome}`}
           aba={abaAtual} onAba={painel.setAba} recolhido={painel.recolhido} onRecolher={painel.setRecolhido}
           folhaAberta={folha} onFolha={setFolha}

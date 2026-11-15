@@ -12,7 +12,7 @@ function ler(chave: string, padrao: Preferencias): Preferencias {
 
 /** Aba aberta + recolhido, lembrados entre visitas. */
 export function usePainelLateral(chave: string, abaPadrao: string) {
-  const [pref, setPref] = useState<Preferencias>(() => ler(chave, { aba: abaPadrao, recolhido: false }));
+  const [pref, setPref] = useState<Preferencias>(() => ler(chave, { aba: abaPadrao, recolhido: window.innerWidth < 1280 }));
   useEffect(() => { try { localStorage.setItem(chave, JSON.stringify(pref)); } catch { /* sem armazenamento: só nesta visita */ } }, [chave, pref]);
   const setAba = useCallback((aba: string) => setPref((p) => ({ ...p, aba })), []);
   const setRecolhido = useCallback((recolhido: boolean) => setPref((p) => ({ ...p, recolhido })), []);

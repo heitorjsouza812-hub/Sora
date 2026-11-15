@@ -1,6 +1,6 @@
 // Telas ao vivo do bot no painel Trabalho (Vitral-6): navegador (com "Assumir a aba") e computador próprio.
 // Simples de reestilizar: classes `.wk-tela*` (telas.css), sem cor fixa além da do bot (`--agent`).
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { ehErroApi, mensagemDeErro } from '../../api/cliente';
 import * as telas from '../../api/telas';
 import { assumirAba, carregarAbas, devolverAba, useEquipe } from '../../state/equipe';
@@ -239,6 +239,25 @@ function TelaComputador({ agenteId, usa }: { agenteId: string; usa: boolean }) {
 
 /** Navegador e computador do bot. Some quando o bot não usa nenhum dos dois. */
 export function TelasDoBot({ agenteId, usaComputador, cor }: { agenteId: string; usaComputador: boolean; cor?: string }) {
+  const equipe = useEquipe();
+  const quadros = useTelas();
+  const id = useId();
+  const [escolha, setEscolha] = useState('navegador');
+  const navegador = !!quadros.navegador[agenteId] || Object.values(equipe.abas).some(a => a.agenteId === agenteId);
+  const computador = usaComputador || !!quadros.computador[agenteId];
+  const opcoes = [navegador && 'navegador', computador && 'computador'].filter(Boolean) as string[];
+  const atual = opcoes.includes(escolha) ? escolha : opcoes[0];
   useEffect(() => { void carregarAbas(agenteId).catch(() => undefined); }, [agenteId]);
-  return <div className="wk-telas" key={agenteId}><TelaNavegador agenteId={agenteId} cor={cor} /><TelaComputador agenteId={agenteId} usa={usaComputador} /></div>;
+  if (!atual) return null;
+  return <div className="wk-telas" key={agenteId}>
+    <div className="wk-telas-abas" role="tablist" aria-label="Telas do bot" onKeyDown={e => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault();
+      const proxima = e.key === 'Home' ? opcoes[0] : e.key === 'End' ? opcoes[opcoes.length - 1] : opcoes[(opcoes.indexOf(atual) + 1) % opcoes.length];
+      setEscolha(proxima); document.getElementById(`${id}-${proxima}`)?.focus();
+    }}>{opcoes.map(opcao => <button key={opcao} id={`${id}-${opcao}`} type="button" role="tab" aria-selected={atual === opcao} aria-controls={`${id}-tela`} tabIndex={atual === opcao ? 0 : -1} onClick={() => setEscolha(opcao)}>{opcao === 'navegador' ? 'Navegador' : 'Computador'}</button>)}</div>
+    <div role="tabpanel" id={`${id}-tela`} aria-labelledby={`${id}-${atual}`}>
+      {atual === 'navegador' ? <TelaNavegador agenteId={agenteId} cor={cor} /> : <TelaComputador agenteId={agenteId} usa={usaComputador} />}
+    </div>
+  </div>;
 }
