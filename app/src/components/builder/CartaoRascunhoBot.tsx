@@ -83,10 +83,10 @@ export function CartaoRascunhoBot({ rascunho }: CartaoRascunhoBotProps) {
 
   const decisao = resolvido ?? (rascunho.resolucao ? (rascunho.resolucao.status === 'confirmado' ? 'criado' : 'descartado') : null);
   const idDoBot = botId || rascunho.resolucao?.agenteId || '';
-  if (decisao) return <article className="bot-draft-card is-resolved" role="status"><strong>{decisao === 'criado' ? 'Bot criado' : 'Rascunho descartado'}</strong><span>{ajustes.nome}</span>{decisao === 'criado' && idDoBot && <Link className="st-btn-ghost" to={`/bots/${idDoBot}`}>Abrir conversa com {ajustes.nome}</Link>}</article>;
+  if (decisao) return <article className="bot-draft-card is-resolved" style={{ '--agent': corAtual } as CSSProperties} role="status">{decisao === 'criado' && <i aria-hidden="true">✓</i>}<strong>{decisao === 'criado' ? 'Bot criado' : 'Rascunho descartado'}</strong><span>{ajustes.nome}</span>{decisao === 'criado' && idDoBot && <Link className="st-btn-ghost" to={`/bots/${idDoBot}`} aria-label={`Abrir conversa com ${ajustes.nome}`}>Abrir conversa</Link>}</article>;
 
   return <article className="bot-draft-card" style={{ '--agent': corAtual } as CSSProperties} aria-label={`Rascunho do bot ${ajustes.nome}`}>
-    <header><SoraOrb size={46} color={corAtual} movimento={movimento ?? 'gira'} glow={false} decorative seed={19} /><div><span>Rascunho de bot</span><strong>{ajustes.nome || 'Novo bot'}</strong></div></header>
+    <header><SoraOrb size={40} color={corAtual} movimento={movimento ?? 'gira'} state={salvando ? 'thinking' : 'idle'} glow={false} decorative seed={19} /><div><span>Rascunho de bot</span><strong>{ajustes.nome || 'Novo bot'}</strong></div></header>
     <p>Confira as seções abaixo. O bot só nasce quando você confirmar.</p>
     <div className="bot-draft-sections">
       <details open><summary>Identidade <span>{ajustes.funcao}</span></summary><div className="bot-draft-grid">

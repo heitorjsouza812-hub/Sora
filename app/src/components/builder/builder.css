@@ -68,3 +68,36 @@
 .bot-draft-sections select { width: 100%; padding: var(--sp-3); color: var(--text-1); background: var(--surface-2); border: 1px solid var(--white-a10); border-radius: var(--r-10); box-sizing: border-box; font: inherit; }
 .bot-draft-sections input[type="time"] { color-scheme: dark; }
 @media (max-width: 560px) { .bot-draft-grid, .bot-draft-rotina { grid-template-columns: 1fr; } }
+
+/* Etapa 6: rascunho alinhado à coluna da conversa. */
+.bot-draft-card { width: min(100%, 560px); margin: 16px 0; padding: 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; box-shadow: none; animation: draft-entrada 240ms var(--ease, ease); }
+.bot-draft-card > header strong { font-size: 20px; line-height: 28px; font-weight: 600; overflow-wrap: anywhere; }
+.bot-draft-card > header span { color: var(--text-3); }
+.bot-draft-sections { gap: 0; }
+.bot-draft-sections details { background: transparent; border: 0; border-bottom: 1px solid var(--line-soft, var(--line)); border-radius: 0; }
+.bot-draft-sections summary { min-height: 48px; box-sizing: border-box; padding: 8px 0; font-size: 14px; font-weight: 600; }
+.bot-draft-sections summary span { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--text-2); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 55%; }
+.bot-draft-sections summary::after { content: '›'; margin-left: 0; transition: transform 200ms var(--ease, ease); }
+.bot-draft-sections details[open] summary::after { content: '›'; transform: rotate(90deg); }
+.bot-draft-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.bot-draft-sections details > label, .bot-draft-grid { margin: 0 0 16px; }
+.bot-draft-sections input, .bot-draft-sections select { height: 40px; padding: 8px 12px; }
+.bot-draft-sections input, .bot-draft-sections select, .bot-draft-sections textarea { background: var(--surface-1); border-color: var(--line); }
+.bot-draft-card :is(button, input, select, textarea, summary, a):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.bot-draft-swatches { gap: 8px; }
+.bot-draft-swatches button { width: 28px; height: 28px; border: 0; }
+.bot-draft-swatches button.is-on { outline: 2px solid var(--text-1); outline-offset: 2px; box-shadow: none; }
+.bot-draft-chips button { min-height: 32px; font-size: 13px; }
+.bot-draft-chips button.is-on { background: var(--ativo, var(--white-a09)); color: var(--text-1); border-color: var(--line-strong); }
+.bot-draft-card > footer button { font: 600 14px/20px var(--font-ui, inherit); cursor: pointer; border: 0; }
+.bot-draft-card > footer .st-btn-primary { background: var(--action); color: var(--text-inverse); }
+.bot-draft-card > footer .st-btn-ghost { background: transparent; color: var(--text-2); }
+.bot-draft-card > footer button:disabled { background: var(--white-a14, rgba(255,255,255,.14)); color: #B6BDCB; opacity: 1; cursor: default; }
+.bot-draft-card.is-resolved { margin-left: 0; align-items: center; justify-content: flex-start; flex-wrap: wrap; font-size: 13px; }
+.bot-draft-card.is-resolved i { color: var(--ok); font-style: normal; }
+.bot-draft-card.is-resolved span { color: var(--agent); }
+.bot-draft-card.is-resolved a { margin-left: auto; color: var(--text-1); }
+@keyframes draft-entrada { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+@supports (interpolate-size: allow-keywords) { .bot-draft-sections details { interpolate-size: allow-keywords; } .bot-draft-sections details::details-content { height: 0; overflow: hidden; transition: height 200ms var(--ease, ease), content-visibility 200ms allow-discrete; } .bot-draft-sections details[open]::details-content { height: auto; } }
+@media (max-width: 720px) { .bot-draft-grid { grid-template-columns: minmax(0,1fr); } .bot-draft-swatches button { width: 44px; height: 44px; } .bot-draft-chips button, .bot-draft-card > footer button { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .bot-draft-card { animation: none; } .bot-draft-sections details::details-content, .bot-draft-sections summary::after { transition: none; } }
