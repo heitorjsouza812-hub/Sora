@@ -42,15 +42,15 @@ test.beforeEach(async ({ page }) => {
 // Etapa 5: Sora · Bots · Grupos · Configurações. Rotas antigas (projetos, revisão, canais) só redirecionam
 // e são conferidas no qa/e2e.mjs.
 for (const [rota, titulo, nome] of [
-  ['/', 'Converse com a Sora', 'sora'],
-  ['/bots', 'Seus bots', 'bots'],
-  ['/grupos', 'Escolha um grupo ou crie um novo', 'grupos'],
+  ['/', 'Em que posso te ajudar hoje?', 'sora'],
+  ['/bots', 'Nenhum bot ainda', 'bots'],
+  ['/grupos', 'Grupos reúnem seus bots', 'grupos'],
   ['/configuracoes', 'Configurações', 'configuracoes'],
   ['/configuracoes?secao=memoria', 'Nada guardado ainda.', 'configuracoes-secao-memoria'],
   ['/configuracoes?secao=rotinas', 'Nenhuma rotina ainda.', 'configuracoes-secao-rotinas'],
   ['/configuracoes?secao=habilidades', 'Nenhuma habilidade ainda.', 'configuracoes-secao-habilidades'],
   ['/configuracoes?secao=conectores', 'Nenhum conector ainda.', 'configuracoes-secao-conectores'],
-  ['/configuracoes?secao=navegador', 'Nenhum perfil com login salvo ainda', 'configuracoes-secao-navegador'],
+  ['/configuracoes?secao=navegador', 'Perfis com login salvo', 'configuracoes-secao-navegador'],
   ['/configuracoes?secao=telegram', 'não está ligado', 'configuracoes-secao-telegram'],
   ['/lab/ui', 'Componentes base', 'lab-ui'],
 ] as const) {
