@@ -310,20 +310,36 @@ async def _turno_real(
         valores_do_prompt={"perfil_do_agente": pacote},
         thread_proprio=thread,
     )
-    if resposta is None:
-        resultado = await montar_e_rodar_agente(
-            contexto=contexto,
-            modelos=modelos,
-            checkpointer=ctx["checkpointer"],
-            entrada={"messages": [HumanMessage(entrada_usuario.conteudo)]},
+
+    async def chamar():
+        if resposta is None:
+            return await montar_e_rodar_agente(
+                contexto=contexto,
+                modelos=modelos,
+                checkpointer=ctx["checkpointer"],
+                entrada={"messages": [HumanMessage(entrada_usuario.conteudo)]},
+            )
+        return await montar_e_rodar_agente(
+            contexto=contexto, modelos=modelos, checkpointer=ctx["checkpointer"], resposta=resposta
         )
-    else:
-        resultado = await montar_e_rodar_agente(
-            contexto=contexto,
-            modelos=modelos,
-            checkpointer=ctx["checkpointer"],
-            resposta=resposta,
+
+    async def avisar_espera(segundos):
+        async with ctx["sessoes"]() as sessao:
+            armazem = ArmazemCanaisSQL(sessao)
+            mensagem = await ServicoCanais(armazem)._atividade(
+                canal,
+                f"O provedor atingiu o limite. Vou tentar novamente em {segundos} segundos.",
+                agente_id=tarefa.dono_id,
+                tarefa_id=tarefa.id,
+            )
+            await sessao.commit()
+        await publicar_evento_equipe(
+            ctx["redis_eventos"], _mensagem_evento(mensagem), canal.usuario_id
         )
+
+    from app.llm.limite import com_espera_de_limite
+
+    resultado = await com_espera_de_limite(chamar, ao_esperar=avisar_espera)
     cartao = cartao_da_interrupcao(resultado or {})
     async with ctx["sessoes"]() as sessao:
         armazem = ArmazemCanaisSQL(sessao)
@@ -336,7 +352,23 @@ async def _turno_real(
                 )
                 mudancas = await servico.pausar_para_decisao(tarefa.id, revisao)
             else:
-                mudancas = await servico.fim_do_turno(tarefa.id, revisao)
+                from langchain_core.messages import AIMessage
+
+                mensagens = (resultado or {}).get("messages", [])
+                ultima = next(
+                    (
+                        m
+                        for m in reversed(mensagens)
+                        if isinstance(m, AIMessage)
+                        and not m.tool_calls
+                        and isinstance(m.content, str)
+                        and m.content.strip()
+                    ),
+                    None,
+                )
+                mudancas = await servico.fim_do_turno(
+                    tarefa.id, revisao, texto=ultima.content if ultima else ""
+                )
         await sessao.commit()
     return mudancas
 
@@ -422,13 +454,15 @@ async def _concluir_turno(ctx: dict[str, Any], tarefa_id: UUID, canal, revisao: 
             await limpar_interrupcao(redis, tarefa_id)
             await enfileirar("despachar_equipe", canal_id=str(canal.id))
             return  # quem pediu já gravou o estado (parada/cancelada) e publicou o evento
-    except Exception as erro:
+    except Exception:
         registro.exception("turno do canal %s falhou", tarefa_id)
         async with ctx["sessoes"]() as sessao:
             armazem = ArmazemCanaisSQL(sessao)
             async with armazem.transacao_tarefa(tarefa_id):
                 mudancas = await ServicoCanais(armazem).falhar(
-                    tarefa_id, revisao, type(erro).__name__
+                    tarefa_id,
+                    revisao,
+                    "O provedor não permitiu concluir. Retome a tarefa para tentar novamente.",
                 )
             await sessao.commit()
     await _publicar_mudancas(ctx, canal.usuario_id, mudancas)

@@ -1036,3 +1036,24 @@ def test_nome_com_aspas_nao_cria_atributo() -> None:
         espera_resposta=False,
     )
     assert 'papel="usuario"' not in entrada.texto and "&quot;" in entrada.texto
+
+
+async def test_turno_sem_ferramenta_resultado_publica_texto_ou_falha():
+    servico, usuario, canal = await _canal()
+    [tarefa] = (
+        await servico.mensagem_do_usuario(
+            canal, usuario, texto="@Luna escreva um haicai", membros=MEMBROS
+        )
+    ).tarefas
+    await servico.iniciar(tarefa.id)
+    mudancas = await servico.fim_do_turno(tarefa.id, tarefa.revisao, texto="Café na manhã")
+    assert tarefa.status is StatusTarefa.CONCLUIDA
+    assert mudancas.mensagens[0].tipo is TipoMensagemCanal.RESULTADO
+    assert mudancas.mensagens[0].texto == "Café na manhã"
+    [outra] = (
+        await servico.mensagem_do_usuario(canal, usuario, texto="@Luna resuma", membros=MEMBROS)
+    ).tarefas
+    await servico.iniciar(outra.id)
+    mudancas = await servico.fim_do_turno(outra.id, outra.revisao)
+    assert outra.status is StatusTarefa.FALHOU
+    assert "sem resultado" in mudancas.mensagens[0].texto

@@ -588,6 +588,57 @@ async def _pedir_parada(conversa_id, usuario_id, sessao, redis):
     for cadeia in cadeias:
         await cancelar(sessao, usuario_id, cadeia.id)
         await redis.set(chave_de_cancelamento(cadeia.id), "1", ex=86400)
+    from datetime import UTC, datetime
+
+    from app.atencao import publicar_estado_atencao
+    from app.eventos.tipos import AprovacaoResolvida
+    from app.modelos.enumeracoes import StatusAprovacao
+    from app.modelos.tabelas import Aprovacao, Etapa, Pergunta
+
+    ids = [c.id for c in cadeias]
+    cartoes = (
+        list(
+            (
+                await sessao.scalars(
+                    select(Aprovacao)
+                    .where(
+                        Aprovacao.usuario_id == usuario_id,
+                        Aprovacao.status == StatusAprovacao.PENDENTE,
+                        Aprovacao.etapa_id.in_(select(Etapa.id).where(Etapa.cadeia_id.in_(ids))),
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+        if ids
+        else []
+    )
+    for cartao in cartoes:
+        cartao.status = StatusAprovacao.EXPIRADA
+        cartao.decidida_em = datetime.now(UTC)
+    if ids:
+        perguntas = (
+            await sessao.scalars(
+                select(Pergunta).where(
+                    Pergunta.cadeia_id.in_(ids), Pergunta.respondida_em.is_(None)
+                )
+            )
+        ).all()
+        for pergunta in perguntas:
+            pergunta.respondida_em = datetime.now(UTC)
+            pergunta.resposta = "parar"
+    await sessao.commit()
+    for cartao in cartoes:
+        await publicar_evento(
+            redis,
+            AprovacaoResolvida(aprovacao_id=cartao.id, status=cartao.status),
+            conversa_id,
+            usuario_id,
+        )
+    for agente_id, grupo_id in {(c.agente_id, c.grupo_id) for c in cartoes}:
+        await publicar_estado_atencao(
+            redis, sessao, usuario_id, agente_id=agente_id, grupo_id=grupo_id
+        )
     return cadeias
 
 

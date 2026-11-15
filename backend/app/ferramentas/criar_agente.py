@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.banco import fabrica_sessoes
 from app.eventos.equipe import BotRascunhoEvento, publicar_evento_equipe
@@ -22,6 +22,8 @@ from app.rascunhos_bot import criar_rascunho, saida_do_rascunho
 
 class CriarAgente(BaseModel):
     """Prepara um rascunho editável de bot para o usuário confirmar."""
+
+    model_config = ConfigDict(extra="forbid")
 
     nome: str = Field(min_length=1, max_length=40)
     papel: str = Field(min_length=1, max_length=2_000)

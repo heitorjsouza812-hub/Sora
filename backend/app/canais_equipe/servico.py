@@ -458,7 +458,7 @@ class ServicoCanais:
         await self._armazem.gravar_mensagem(mensagem)
         return mensagem
 
-    async def fim_do_turno(self, tarefa_id: UUID, revisao: int) -> Mudancas:
+    async def fim_do_turno(self, tarefa_id: UUID, revisao: int, texto: str = "") -> Mudancas:
         """O turno acabou sem ``canal_resultado``: espera as filhas ou dá a tarefa por feita."""
         tarefa = await self._tarefa(tarefa_id)
         mudancas = Mudancas()
@@ -476,7 +476,16 @@ class ServicoCanais:
             # então ganha mais um turno em vez de a tarefa fechar sem ele.
             tarefa.status = StatusTarefa.NA_FILA
         else:
-            tarefa.status = StatusTarefa.CONCLUIDA
+            resultado = texto.strip() or "\n\n".join(t.resultado for t in filhas if t.resultado)
+            if resultado:
+                return await self.registrar_resultado(
+                    tarefa.id, revisao, por_agente=tarefa.dono_id, texto=resultado
+                )
+            return await self.falhar(
+                tarefa.id,
+                revisao,
+                "O bot terminou sem resultado. Retome a tarefa para tentar novamente.",
+            )
         if tarefa.status is StatusTarefa.CONCLUIDA:
             await self._marcar_fim_na_mae(tarefa)
         tarefa.atualizada_em = _agora()
@@ -537,6 +546,15 @@ class ServicoCanais:
         tarefa.atualizada_em = _agora()
         await self._armazem.gravar_tarefa(tarefa)
         mudancas.tarefas.append(tarefa)
+        canal = await self._canal(tarefa.canal_id)
+        mudancas.mensagens.append(
+            await self._atividade(
+                canal,
+                "Não consegui concluir esta tarefa. " + tarefa.erro,
+                agente_id=tarefa.dono_id,
+                tarefa_id=tarefa.id,
+            )
+        )
         # O dono da tarefa-mãe precisa saber da falha (o pacote mostra "Delegada a …: falhou");
         # sem isso a mãe ficaria em aguardando_filhas para sempre.
         await self._acordar_pai(tarefa, mudancas)

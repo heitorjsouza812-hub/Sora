@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -129,6 +130,21 @@ async def _obter_plano(ctx: dict[str, Any], sessao: Any, cadeia: Cadeia) -> Plan
     raise RuntimeError(f"o planejador nao devolveu um plano valido: {ultimo}")
 
 
+async def _mensagem_final(ctx, sessao, cadeia, texto):
+    mensagem = Mensagem(
+        conversa_id=cadeia.conversa_id,
+        autor=AutorMensagem.SORA,
+        conteudo=texto,
+        anexos=[],
+        visivel=True,
+    )
+    sessao.add(mensagem)
+    await sessao.commit()
+    await _publicar(ctx, cadeia, MensagemInicio(mensagem_id=mensagem.id, autor=AutorMensagem.SORA))
+    await _publicar(ctx, cadeia, MensagemDelta(mensagem_id=mensagem.id, texto=texto))
+    await _publicar(ctx, cadeia, MensagemFim(mensagem_id=mensagem.id))
+
+
 async def _falhar_cadeia(ctx: dict[str, Any], sessao: Any, cadeia: Cadeia) -> None:
     """Cadeia ``falhou`` + evento: o usuário nunca fica olhando uma cadeia presa."""
     cadeia_id = cadeia.id
@@ -136,8 +152,15 @@ async def _falhar_cadeia(ctx: dict[str, Any], sessao: Any, cadeia: Cadeia) -> No
     cadeia = await sessao.get(Cadeia, cadeia_id, with_for_update=True)
     if cadeia is None:
         return
+    if cadeia.status in {StatusCadeia.CANCELADA, StatusCadeia.CONCLUIDA, StatusCadeia.FALHOU}:
+        return
     cadeia.status = StatusCadeia.FALHOU
-    await sessao.commit()
+    await _mensagem_final(
+        ctx,
+        sessao,
+        cadeia,
+        "Não consegui concluir o trabalho. A execução foi encerrada; você pode tentar novamente.",
+    )
     await _publicar(
         ctx,
         cadeia,
@@ -308,17 +331,14 @@ async def avancar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
             ids = []
         elif decisao.acao in {"falhar", "limite"}:
             cadeia.status = StatusCadeia.FALHOU
-            await sessao.commit()
-            await _publicar(
+            erro = next((e.erro for e in etapas if e.erro), None)
+            await _mensagem_final(
                 ctx,
+                sessao,
                 cadeia,
-                CadeiaAtualizada(
-                    cadeia_id=cadeia.id,
-                    status=cadeia.status,
-                    tokens_usados=cadeia.tokens_usados,
-                    custo_usd=_custo(cadeia),
-                ),
+                erro or "A execução atingiu um limite. Peça novamente.",
             )
+            await _publicar(ctx, cadeia, _evento_cadeia(cadeia))
             return
         else:
             return
@@ -707,10 +727,41 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
         if interrupcoes:
             valor = getattr(interrupcoes[0], "value", interrupcoes[0])
             etapa.status = _estado_da_pausa(valor)
+            if isinstance(valor, dict) and valor.get("aprovacao_id"):
+                from app.eventos.tipos import AprovacaoPedida
+                from app.modelos.tabelas import Aprovacao
+
+                class AprovacaoDaCadeia(AprovacaoPedida):
+                    conversa_id: UUID
+                    bot_id: UUID | None = None
+                    grupo_id: UUID | None = None
+
+                cartao = await sessao.get(Aprovacao, _uuid(str(valor["aprovacao_id"])))
+                if cartao is not None:
+                    await _publicar(
+                        ctx,
+                        cadeia,
+                        AprovacaoDaCadeia(
+                            aprovacao_id=cartao.id,
+                            conversa_id=cadeia.conversa_id,
+                            agente_id=cartao.agente_id,
+                            bot_id=cartao.agente_id,
+                            grupo_id=cartao.grupo_id,
+                            resumo=cartao.avaliacao.get(
+                                "resumo", "A Sora precisa da sua aprovação."
+                            ),
+                            dano=cartao.avaliacao.get("dano", "A ação aguarda sua revisão."),
+                            quem_recebe=cartao.acao.get("dominio"),
+                            tipo=cartao.acao.get("tipo"),
+                            dominio=cartao.acao.get("dominio"),
+                            url=cartao.acao.get("url"),
+                            expira_em=cartao.expira_em,
+                        ),
+                    )
             if isinstance(valor, dict) and valor.get("pergunta_id"):
                 # Liga a pergunta a esta etapa: com etapas em paralelo, a API acorda a certa.
                 etapa.saida = {"pergunta_id": str(valor["pergunta_id"])}
-            if etapa.status == StatusEtapa.AGUARDANDO_USUARIO:
+            if etapa.status in {StatusEtapa.AGUARDANDO_USUARIO, StatusEtapa.AGUARDANDO_APROVACAO}:
                 cadeia.status = StatusCadeia.AGUARDANDO_USUARIO
             await sessao.commit()
             await _publicar(ctx, cadeia, _evento_etapa(etapa, 50))
@@ -959,8 +1010,9 @@ async def _concluir_verificacao_com_falha(
     verificador.status = StatusEtapa.FALHOU
     registro.warning("verificador da cadeia %s falhou: %s", cadeia_id, erro[:300])
     verificador.erro = ERRO_SEGURO_DO_VERIFICADOR
-    if cadeia.status not in {StatusCadeia.CANCELADA, StatusCadeia.CONCLUIDA}:
+    if cadeia.status not in {StatusCadeia.CANCELADA, StatusCadeia.CONCLUIDA, StatusCadeia.FALHOU}:
         cadeia.status = StatusCadeia.FALHOU
+        await _mensagem_final(ctx, sessao, cadeia, ERRO_SEGURO_DO_VERIFICADOR)
     await sessao.commit()
     await _publicar(ctx, cadeia, _evento_etapa(verificador, 100))
     await _publicar(ctx, cadeia, _evento_cadeia(cadeia))
@@ -1059,6 +1111,12 @@ async def verificar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
         novas: list[EtapaPlanoEvento] = []
         if decisao.falhar:
             cadeia.status = StatusCadeia.FALHOU
+            await _mensagem_final(
+                ctx,
+                sessao,
+                cadeia,
+                "O resultado não passou na revisão. Peça um ajuste para tentar novamente.",
+            )
         elif not decisao.concluir:
             novas = await _refazer_etapas_reprovadas(sessao, cadeia)
             cadeia.status = StatusCadeia.EXECUTANDO
@@ -1100,11 +1158,50 @@ async def entregar_resultado(ctx: dict[str, Any], cadeia_id: str) -> None:
                 passo.ferramenta or ""
             ).startswith("navegador_"):
                 coletar_fontes(str(passo.resultado or ""), fontes)
+        entregas = list(
+            (
+                await sessao.scalars(
+                    select(Entrega)
+                    .where(Entrega.cadeia_id == cadeia.id)
+                    .order_by(Entrega.criada_em)
+                )
+            ).all()
+        )
+        texto = (
+            "\n\n".join(
+                f"### {e.titulo}\n{e.resumo}\n{_conteudo_para_o_prompt(e.conteudo)}"
+                for e in entregas
+            )
+            or "A execução terminou sem produzir uma entrega. Peça novamente para tentar concluir."
+        )
+        from app.modelos.tabelas import Anexo
+
+        referencias = " ".join(json.dumps(e.conteudo, ensure_ascii=False) for e in entregas)
+        referencias += " " + " ".join(json.dumps(p.resultado, ensure_ascii=False) for p in passos)
+        ids = [
+            UUID(x)
+            for x in dict.fromkeys(
+                re.findall(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", referencias)
+            )
+        ]
+        anexos = (
+            list(
+                (
+                    await sessao.scalars(
+                        select(Anexo.id).where(
+                            Anexo.usuario_id == cadeia.usuario_id, Anexo.id.in_(ids)
+                        )
+                    )
+                ).all()
+            )
+            if ids
+            else []
+        )
         mensagem = Mensagem(
             conversa_id=cadeia.conversa_id,
             autor=AutorMensagem.SORA,
-            conteudo="Pronto! A equipe concluiu o trabalho. Confira as entregas e peça ajustes.",
-            anexos=[],
+            conteudo=texto,
+            anexos=[str(a) for a in anexos],
             visivel=True,
             fontes=fontes,
         )
@@ -1119,7 +1216,9 @@ async def entregar_resultado(ctx: dict[str, Any], cadeia_id: str) -> None:
         await _publicar(
             ctx, cadeia, MensagemDelta(mensagem_id=mensagem.id, texto=mensagem.conteudo)
         )
-        await _publicar(ctx, cadeia, MensagemFim(mensagem_id=mensagem.id, anexos=[], fontes=fontes))
+        await _publicar(
+            ctx, cadeia, MensagemFim(mensagem_id=mensagem.id, anexos=anexos, fontes=fontes)
+        )
         await _publicar(
             ctx,
             cadeia,

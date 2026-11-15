@@ -365,6 +365,25 @@ async def test_bloco_5_proposta_aceita_e_recusada_e_sem_publicar(mundo: Mundo) -
         ]
         assert len(bots) == 2
 
+        from app.ferramentas.base import ContextoFerramenta
+        from app.ferramentas.propor_grupo import ProporGrupo, propor_grupo
+
+        sora = (await cliente.get("/v1/agentes/sora", headers=auth)).json()
+        async with mundo.fabrica() as sessao:
+            uid = await sessao.scalar(select(Usuario.id).where(Usuario.email == email))
+        resultado = await propor_grupo(
+            ProporGrupo(pedido="Resuma a campanha em uma frase.", grupo_existente=grupo["nome"]),
+            ContextoFerramenta(
+                usuario_id=uid, agente_id=UUID(sora["id"]), conversa_id=UUID(grupo["id"])
+            ),
+        )
+        assert "grupo existente" in resultado
+        mensagens = (
+            await cliente.get(f"/v1/canais-equipe/{grupo['id']}/mensagens", headers=auth)
+        ).json()
+        assert any(m["texto"] == "Resuma a campanha em uma frase." for m in mensagens)
+        assert len((await cliente.get("/v1/grupos", headers=auth)).json()) == 1
+
         segunda = (
             await cliente.post(
                 "/v1/grupos/propostas",
@@ -462,7 +481,9 @@ async def test_cartao_no_turno_de_grupo_pausa_e_a_decisao_retoma_o_mesmo_turno(
             }
         )
         if resposta is not None or contexto.agente_id != alvo.get("id"):
-            return {"messages": []}
+            from langchain_core.messages import AIMessage
+
+            return {"messages": [AIMessage(content="Relatório concluído.")]}
         # Como o revisor faz: o cartão é gravado antes da interrupção.
         async with mundo.fabrica() as sessao:
             cartao = Aprovacao(
