@@ -36,6 +36,8 @@ interface Props {
   extras?: ReactNode;
   /** voz fica restrita ao chat 1:1 do bot na interface da etapa 5 */
   voz?: boolean;
+  /** muda de valor → o foco vai para o campo (com o cursor no fim) */
+  focoSinal?: number;
 }
 
 // O BorderBeam e o VoiceBeam têm um efeito que depende de `children` e grava um objeto novo a cada execução: com `children`
@@ -66,8 +68,14 @@ const avisoMic: Record<string, string> = {
 
 export function MessageComposer({
   placeholder, onSend, initialValue = '', value: controlado, onValueChange, processing = false,
-  compact = false, tools = false, accent, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras, voz = false,
+  compact = false, tools = false, accent, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras, voz = false, focoSinal,
 }: Props) {
+  const campoRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!focoSinal) return;
+    const quadro = requestAnimationFrame(() => { const c = campoRef.current; if (c) { c.focus(); c.setSelectionRange(c.value.length, c.value.length); } });
+    return () => cancelAnimationFrame(quadro);
+  }, [focoSinal]);
   const [interno, setInterno] = useState(initialValue);
   const value = controlado ?? interno;
   const setValue = (v: string) => { if (controlado === undefined) setInterno(v); onValueChange?.(v); };
@@ -157,6 +165,7 @@ export function MessageComposer({
         <form className={`composer ${compact ? 'composer-compact' : ''}`} onSubmit={submit} style={accent ? { borderColor: `${accent}45` } : undefined}>
           <ListaAnexos anexos={anexos} onRemover={remover} />
           <textarea
+            ref={campoRef}
             value={value}
             rows={compact ? 1 : 2}
             aria-label={placeholder}

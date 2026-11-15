@@ -1,7 +1,8 @@
 import { mensagemDeErro } from '../api/cliente';
 import { toast } from '../components/base';
 import { useEffect, useState } from 'react';
-import { InicioSora, consumirPedidoInicial } from '../components/inicio';
+import { useLocation } from 'react-router-dom';
+import { InicioSora, aoDeixarPedidoInicial, consumirPedidoInicial } from '../components/inicio';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb, SoraThinking } from '../components/mascot';
 import { CartaoRascunhoBot } from '../components/builder';
@@ -25,11 +26,14 @@ import {
 export default function SoraChat() {
   const estado = useProjetos();
   const [rascunho, setRascunho] = useState('');
+  const focoSinal = (useLocation().state as { focarCampo?: number } | null)?.focarCampo;
   useEffect(() => {
     const pedido = consumirPedidoInicial();
     // A galeria deixa o pedido em uma caixa externa ao React; consumir no efeito é seguro no StrictMode.
     // oxlint-disable-next-line react/set-state-in-effect
     if (pedido !== null) setRascunho(pedido);
+    // tela já aberta: "Novo bot" do menu Criar novo deixa o pedido e avisa
+    return aoDeixarPedidoInicial(() => { const novo = consumirPedidoInicial(); if (novo !== null) setRascunho(novo); });
   }, []);
   const agora = useAgora();
   const cartoes = useCartoesSora();
@@ -79,7 +83,7 @@ export default function SoraChat() {
           {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
         </div>
         <div className="chat-composer">
-          <MessageComposer placeholder="Mensagem para a Sora…" compact value={rascunho} onValueChange={setRascunho}
+          <MessageComposer placeholder="Mensagem para a Sora…" compact focoSinal={focoSinal} value={rascunho} onValueChange={setRascunho}
             processing={pensando}
             onSend={(texto, anexos) => { seguirFim(); void anexarEnvio(anexos, enviados => conversarComSora(texto, undefined, enviados)); }}
             gerando={gerando} onParar={() => { if (projeto) void pararConversa(projeto.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />

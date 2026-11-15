@@ -123,6 +123,12 @@ Tudo deriva de §4.1 e de `app/src/styles/tokens.css`. Cores de agente e do masc
 
 Antes: `antes-01-sora-vazia-1440.png`, `antes-09b-barra-lateral-com-pedido-1440.png`. Depois: qualquer foto `depois-0*-1440.png`.
 
+> **Mudanças do dono do produto (2026-11-14), valem acima do texto abaixo:**
+> 1. **"Precisa de você" sai da barra lateral.** No lugar entra **"Criar novo"** (ícone "+", mesma linha de menu de 40 px, sem borda), que abre um menu (`Popover`, `role="menu"`; setas, Enter e Esc) com três opções: **Nova conversa com a Sora** (vai para `/` e foca o campo), **Novo bot** (vai para `/` com o campo preenchido "Quero um bot que ", via `deixarPedidoInicial`) e **Novo grupo** (abre o Novo grupo, o mesmo do "+" de GRUPOS). A central "Precisa de você" continua existindo e fica acessível pelo indicador na linha de cada bot e grupo com pedido e pelo comando **"Precisa de você (N)"** da paleta Ctrl+K. O título "(N) Sora" da aba e o aviso do sistema não mudam.
+> 2. **A marca no topo mostra só o mascote e o nome "Sora".** Sem subtítulo ("Chefe de equipe" saiu) e sem outro texto. O estado só aparece quando a Sora está trabalhando ou precisa de você: um **ponto de 8 px ao lado do nome** (pulsando quando trabalha; sólido e claro quando espera por você), com `title` e texto para leitor de tela dentro de `role="status"`. Parada, não aparece nada. "Chefe de equipe" continua só onde explica o papel dela num grupo (membros do grupo, Novo grupo).
+> 3. No celular, o menu ☰ tem a mesma marca e o mesmo item "Criar novo".
+> 4. O e-mail sai do rodapé; "Livre" não aparece em bot nem em grupo (decisões do §11).
+
 Problemas confirmados:
 - "Precisa de você" e "Buscar" usam a mesma classe (`shell-search`): caixa de 235×38 com borda e texto de 16 px. Os dois parecem campos de texto; com pedido pendente a borda fica mais clara e a impressão piora.
 - "Buscar" é o elemento mais forte da barra numa conta que ainda não tem o que buscar.
@@ -133,8 +139,8 @@ Depois (de cima para baixo, padding 8 px):
 
 | Peça | Medida | Estados |
 |---|---|---|
-| **Sora** (link para `/`) | linha de 48 px, raio 10; orb 28; "Sora" 15/600; segunda linha 12 px `--text-2` | A segunda linha é o **estado ao vivo** (`role="status"`): "Chefe de equipe" quando ociosa, senão "Coordenando 2 bots", "Aguardando você" etc. Selecionada: fundo `--ativo`. |
-| **Precisa de você** | linha de 40 px, **sem borda e sem fundo**; ícone 18; texto 14 | Zero pedidos: `--text-2`, peso 400. Com pedidos: `--text-1`, peso 600, contador à direita (pílula 20 px, fundo `--action`, número 12/700 `--text-inverse`). Hover: fundo `--hover`. |
+| **Sora** (link para `/`) | linha de 48 px, raio 10; orb 28; "Sora" 15/600; **sem segunda linha** | Parada: só orb e nome. Trabalhando ou aguardando você: ponto de 8 px ao lado do nome (`role="status"` com o texto "Coordenando 2 bots", "Aguardando você" etc. para leitor de tela). Selecionada: fundo `--ativo`. |
+| **Criar novo** (no lugar de "Precisa de você") | linha de 40 px, **sem borda e sem fundo**; ícone "+" 18; texto 14 `--text-2` | Hover e menu aberto: `--text-1` e fundo `--hover`. Abre o menu de três opções (nota acima). |
 | **Buscar** | mesma linha de 40 px; ícone 18; "Ctrl K" à direita em 12 px `--text-3`, sem caixinha | Hover: `--text-1` e fundo `--hover`. |
 | Rótulo **BOTS** / **GRUPOS** | 32 px, 16 px acima; 12/600 caixa alta `--text-3`; contador ou "+" (28×28) à direita | |
 | Linha de **bot** | 40 px, raio 10; orb 24; nome 14/400 `--text-1`, uma linha com reticências | À direita: nada quando livre; ponto de 8 px na cor do bot pulsando (1,4 s) quando trabalha, com `title` e texto para leitor de tela; contador branco quando precisa de você. O orb também passa a `working`. Selecionada: `--ativo`. |

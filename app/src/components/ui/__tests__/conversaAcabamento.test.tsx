@@ -7,7 +7,7 @@ vi.mock('voice-glow', () => ({ VoiceBeam: ({ children }: { children: ReactNode }
 const mock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('../../../api/cliente', async original => ({ ...await original<typeof import('../../../api/cliente')>(), api: { ...mock, patch: vi.fn(), delete: vi.fn() } }));
 vi.mock('../../../api/eventos', () => ({ acompanharEventos: vi.fn(() => new Promise<void>(() => {})) }));
-vi.mock('../../layout/Sidebar', () => ({ Sidebar: () => null, ContaRodape: () => null, Navegacao: () => null }));
+vi.mock('../../layout/Sidebar', () => ({ Sidebar: () => null, ContaRodape: () => null, MarcaSora: () => null, Navegacao: () => null }));
 vi.mock('../../builder', () => ({ EditorAgenteHost: () => null, MenuAgente: () => null }));
 vi.mock('../../gestao', () => ({ GestaoHost: () => null }));
 vi.mock('../../comandos', () => ({ Comandos: () => null }));

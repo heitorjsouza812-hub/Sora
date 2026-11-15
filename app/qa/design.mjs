@@ -8,6 +8,7 @@ process.env.SORA_QA_BASE = BASE;
 const { chromium } = await import(`${APP}node_modules/@playwright/test/index.mjs`);
 const { entrarNoContexto } = await import(`${APP}qa/entrar.mjs`);
 const SHOTS = 'C:/dev/sora-e5/app/qa/shots/design';
+const PREFIXO = process.env.SORA_DESIGN_PREFIXO ?? 'antes';
 await mkdir(SHOTS, { recursive: true });
 
 const so = process.argv[2] ? process.argv[2].split(',') : null;
@@ -34,12 +35,17 @@ const m = await cel.newPage();
 const erros = [];
 for (const [nome, p] of [['1440', d], ['390', m]]) p.on('pageerror', e => erros.push(`${nome}: ${e.message}`));
 
-const foto = (p, nome) => p.screenshot({ path: `${SHOTS}/antes-${nome}-${p === d ? '1440' : '390'}.png` });
+const foto = (p, nome) => p.screenshot({ path: `${SHOTS}/${PREFIXO}-${nome}-${p === d ? '1440' : '390'}.png` });
 const passo = async (nome, fn) => {
   if (so && !so.some(s => nome.startsWith(s))) return;
   try { await fn(); console.log('ok   ', nome); } catch (e) { console.log('FALHA', nome, '-', String(e.message).split('\n')[0]); }
 };
 const ir = async (p, caminho, espera = 1200) => { await p.goto(`${BASE}${caminho}`, { waitUntil: 'domcontentloaded' }); await p.waitForTimeout(espera); };
+// A central "Precisa de você" saiu da barra lateral: abre pelo comando da paleta (Ctrl+K).
+const abrirCentral = async p => {
+  if (p === m) { await p.getByRole('button', { name: 'Abrir menu' }).click(); await p.waitForTimeout(400); await p.getByRole('button', { name: /Buscar/ }).click(); } else await p.keyboard.press('Control+k');
+  await p.waitForTimeout(500); await p.keyboard.type('Precisa de você'); await p.waitForTimeout(300); await p.keyboard.press('Enter'); await p.waitForTimeout(700);
+};
 const enviar = async (p, texto, espera = 7000) => {
   const campo = p.getByRole('textbox').last();
   await campo.fill(texto);
@@ -73,7 +79,7 @@ await passo('10-paleta', async () => {
   await m.getByRole('button', { name: /Buscar/ }).click(); await m.waitForTimeout(700); await foto(m, '10-paleta'); await m.keyboard.press('Escape');
 });
 await passo('09a-central-vazia', async () => {
-  await ir(d, '/'); await d.getByRole('button', { name: /Precisa de você/ }).first().click(); await d.waitForTimeout(700); await foto(d, '09a-central-vazia'); await d.keyboard.press('Escape');
+  await ir(d, '/'); await abrirCentral(d); await foto(d, '09a-central-vazia'); await d.keyboard.press('Escape');
 });
 await passo('12a-bots-vazio', async () => { for (const p of [d, m]) { await ir(p, '/bots'); await foto(p, '12a-bots-vazio'); } });
 await passo('05a-grupos-vazio', async () => { for (const p of [d, m]) { await ir(p, '/grupos'); await foto(p, '05a-grupos-vazio'); } });
@@ -90,7 +96,7 @@ await passo('07-rascunho', async () => {
     await cartao.getByLabel('Nome').fill(nome);
     if (i === 0) {
       await d.waitForTimeout(500); await foto(d, '07-rascunho-bot');
-      await cartao.scrollIntoViewIfNeeded(); await d.screenshot({ path: `${SHOTS}/antes-07b-rascunho-bot-inteiro-1440.png`, fullPage: true });
+      await cartao.scrollIntoViewIfNeeded(); await d.screenshot({ path: `${SHOTS}/${PREFIXO}-07b-rascunho-bot-inteiro-1440.png`, fullPage: true });
       await m.reload({ waitUntil: 'domcontentloaded' }); await m.waitForTimeout(2500); await foto(m, '07-rascunho-bot');
       await m.locator('.conversation-scroll').evaluate(el => { el.scrollTop = el.scrollHeight; }).catch(() => undefined);
       await m.waitForTimeout(400); await foto(m, '07b-rascunho-bot-fim');
@@ -151,7 +157,7 @@ await passo('03-bot', async () => {
     await p.waitForTimeout(300);
     if (await ultima.getByRole('button', { name: 'Mais ações' }).isVisible().catch(() => false)) await ultima.getByRole('button', { name: 'Mais ações' }).click(); else await ultima.hover();
     await p.waitForTimeout(500); await foto(p, '03d-bot-fontes-imagem-menu');
-    await p.screenshot({ path: `${SHOTS}/antes-03e-bot-pagina-inteira-${p === d ? '1440' : '390'}.png`, fullPage: true });
+    await p.screenshot({ path: `${SHOTS}/${PREFIXO}-03e-bot-pagina-inteira-${p === d ? '1440' : '390'}.png`, fullPage: true });
     await p.unroute(padrao, rota);
   }
   // painel Trabalho e Recursos
@@ -177,11 +183,11 @@ await passo('08-precisa', async () => {
   await ir(d, '/', 2000);
   await enviar(d, '[pergunta] monte um plano de divulgação', 12000);
   await foto(d, '08b-sora-cartao-pergunta');
-  await d.getByRole('button', { name: /Precisa de você/ }).first().click(); await d.waitForTimeout(900); await foto(d, '09-central-precisa'); await d.keyboard.press('Escape');
+  await abrirCentral(d); await d.waitForTimeout(300); await foto(d, '09-central-precisa'); await d.keyboard.press('Escape');
   await foto(d, '09b-barra-lateral-com-pedido');
   await ir(m, `/bots/${bot.id}`, 2500); await foto(m, '08a-bot-cartao-precisa');
   await m.getByRole('button', { name: 'Abrir menu' }).click(); await m.waitForTimeout(600); await foto(m, '13b-menu-com-pedido');
-  await m.getByRole('button', { name: /Precisa de você/ }).first().click(); await m.waitForTimeout(900); await foto(m, '09-central-precisa');
+  await m.keyboard.press('Escape'); await m.waitForTimeout(400); await abrirCentral(m); await m.waitForTimeout(300); await foto(m, '09-central-precisa');
 });
 
 // ---------- galeria ----------
@@ -208,7 +214,7 @@ await passo('05-grupo-mensagens', async () => {
   await foto(d, '05c-grupo-mensagens');
   await enviar(d, 'Qual é o próximo passo?', 9000);
   await foto(d, '05d-grupo-mensagens-2');
-  await d.screenshot({ path: `${SHOTS}/antes-05e-grupo-pagina-inteira-1440.png`, fullPage: true });
+  await d.screenshot({ path: `${SHOTS}/${PREFIXO}-05e-grupo-pagina-inteira-1440.png`, fullPage: true });
   await d.locator('.grp-head button, [aria-label*="grupo" i]').last().click().catch(() => undefined); await d.waitForTimeout(500); await foto(d, '05f-grupo-menu'); await d.keyboard.press('Escape');
   await ir(m, '/grupos', 1800); await foto(m, '05g-grupos-lista');
   await ir(m, `/grupos/${grupoId}`, 2500); await foto(m, '05c-grupo-mensagens');

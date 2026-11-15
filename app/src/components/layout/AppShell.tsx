@@ -8,7 +8,7 @@ import { GestaoHost } from '../gestao';
 import { Comandos } from '../comandos';
 import { FaixaErroEventos, FaixaSemConexao } from '../erros';
 import { EditorAgenteHost, MenuAgente } from '../builder';
-import { ContaRodape, Navegacao, Sidebar } from './Sidebar';
+import { ContaRodape, MarcaSora, Navegacao, Sidebar } from './Sidebar';
 import { statusDaSora } from './useSoraStatus';
 import './etapa5.css';
 
@@ -67,6 +67,7 @@ export function AppShell({ children, agenteId, titulo, acoes, menuItens }: AppSh
       </section>
       <BottomSheet open={menu} onClose={() => setMenu(false)} title="Menu" className="mobile-nav-sheet">
         <div className="mobile-nav">
+          <MarcaSora onNavegar={() => setMenu(false)} />
           <Navegacao onNavegar={() => setMenu(false)} />
           <ContaRodape movel onNavegar={() => setMenu(false)} />
         </div>

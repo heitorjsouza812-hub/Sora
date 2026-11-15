@@ -19,6 +19,16 @@ export function statusDaSora(e: EstadoProjetos, agora: number): { orb: OrbState;
   }
 }
 
+/**
+ * Indicador discreto da marca "Sora" na barra lateral: só aparece quando ela está trabalhando
+ * ou precisa de você; parada, não mostra nada (decisão do dono do produto, 2026-11-14).
+ */
+export function estadoDaMarca(status: { orb: OrbState; rotulo: string }, pedidosDaSora: number): { tipo: 'trabalhando' | 'precisa'; texto: string } | null {
+  if (pedidosDaSora > 0 || status.rotulo === 'Aguardando você') return { tipo: 'precisa', texto: 'Aguardando você' };
+  if (status.orb === 'thinking' || status.orb === 'coordinating') return { tipo: 'trabalhando', texto: status.rotulo.replace(/…$/, '') || 'Trabalhando' };
+  return null;
+}
+
 export const rotuloFase: Record<string, string> = {
   pensando: 'Pensando', conversa: 'Conversa', planejando: 'Planejando', coordenando: 'Em andamento', pronto: 'Pronto para revisar', aprovado: 'Aprovado',
 };
