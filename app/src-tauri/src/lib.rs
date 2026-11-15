@@ -426,16 +426,16 @@ fn ilha_visivel(
 
 #[tauri::command]
 fn titulo_atencao(total: usize, janela: WebviewWindow) -> Result<(), String> {
-    if !janela_pode("titulo_atencao", janela.label()) { return Err("janela inv?lida".into()); }
+    if !janela_pode("titulo_atencao", janela.label()) { return Err("janela inválida".into()); }
     janela.set_title(&if total == 0 { "Sora".into() } else { format!("({total}) Sora") }).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn notificar_atencao(id: i32, origem: String, caminho: String, janela: WebviewWindow, app: AppHandle, estado: State<'_, IlhaEstado>, rotas: State<'_, RotasNotificacao>) -> Result<(), String> {
-    if !janela_pode("notificar_atencao", janela.label()) || !caminho_interno_valido(&caminho) { return Err("pedido inv?lido".into()); }
+    if !janela_pode("notificar_atencao", janela.label()) || !caminho_interno_valido(&caminho) { return Err("pedido inválido".into()); }
     if estado_da_principal(&app, &estado).is_none_or(|(foco, minimizada)| foco && !minimizada) { return Ok(()); }
     rotas.0.lock().map_err(|e| e.to_string())?.insert(id, caminho);
-    app.notification().builder().id(id).title("Precisa de voc?").body(origem).show().map_err(|e| e.to_string())
+    app.notification().builder().id(id).title("Precisa de você").body(origem).show().map_err(|e| e.to_string())
 }
 
 #[derive(Default)]
@@ -783,6 +783,33 @@ pub fn run() {
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    /// Textos que o usuário lê (aviso do sistema, erros) já saíram com o acento trocado por interrogação
+    /// ("Precisa de voc?", "inv?lida"). Letra + interrogação + letra, ou letra + interrogação + aspas de
+    /// fechamento, só existe assim em texto: no código Rust a interrogação (operador) vem depois de uma
+    /// expressão e antes de ponto, ponto e vírgula, parêntese ou espaço.
+    #[test]
+    fn textos_do_rust_nao_perdem_acento() {
+        let fontes = [
+            ("lib.rs", include_str!("lib.rs")),
+            ("pc/mod.rs", include_str!("pc/mod.rs")),
+            ("pc/regras.rs", include_str!("pc/regras.rs")),
+            ("pc/sistema.rs", include_str!("pc/sistema.rs")),
+            ("pc/borda.rs", include_str!("pc/borda.rs")),
+        ];
+        for (arquivo, fonte) in fontes {
+            for (n, linha) in fonte.lines().enumerate() {
+                if linha.trim_start().starts_with("//") {
+                    continue;
+                }
+                let c: Vec<char> = linha.chars().collect();
+                for i in 1..c.len().saturating_sub(1) {
+                    let perdeu = c[i] == '?' && c[i - 1].is_alphabetic() && (c[i + 1].is_alphabetic() || c[i + 1] == '"');
+                    assert!(!perdeu, "{arquivo}:{}: acento perdido (interrogação no fim ou no meio de uma palavra): {}", n + 1, linha.trim());
+                }
+            }
+        }
+    }
 
     #[test]
     fn retangulo_rejeita_valores_ruins() {

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { idDaAncora, LIMITE_CARGAS, seletorDaMensagem, useIrParaMensagem } from '../useIrParaMensagem';
@@ -25,8 +25,8 @@ describe('âncora #msg-<id>', () => {
   it('rola até a mensagem carregada e a destaca', async () => {
     const mais = vi.fn().mockResolvedValue(false);
     render(<MemoryRouter initialEntries={['/#msg-m2']}><Lista hash="x" ids={['m1', 'm2']} mais={mais} /></MemoryRouter>);
-    await act(async () => { await new Promise(r => setTimeout(r, 60)); });
-    expect(rolar).toHaveBeenCalledTimes(1);
+    // espera pelo efeito, não por um tempo fixo: com a máquina carregada 60 ms não bastavam
+    await waitFor(() => expect(rolar).toHaveBeenCalledTimes(1));
     expect(screen.getByText('mensagem m2').classList.contains('msg-destaque')).toBe(true);
     expect(screen.getByText('mensagem m1').classList.contains('msg-destaque')).toBe(false);
     expect(mais).not.toHaveBeenCalled();
@@ -34,7 +34,7 @@ describe('âncora #msg-<id>', () => {
   it('carrega anteriores até achar, com limite, e avisa se não achar', async () => {
     const mais = vi.fn().mockResolvedValue(true);
     render(<MemoryRouter initialEntries={['/#msg-sumida']}><Lista hash="x" ids={['m1']} mais={mais} /></MemoryRouter>);
-    await act(async () => { await new Promise(r => setTimeout(r, 800)); });
+    await waitFor(() => expect(toast).toHaveBeenCalled(), { timeout: 8000 });
     expect(mais).toHaveBeenCalledTimes(LIMITE_CARGAS);
     expect(rolar).not.toHaveBeenCalled();
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({ mensagem: expect.stringContaining('Não encontrei') }));
@@ -42,8 +42,7 @@ describe('âncora #msg-<id>', () => {
   it('para ao não haver mais mensagens', async () => {
     const mais = vi.fn().mockResolvedValue(false);
     render(<MemoryRouter initialEntries={['/#msg-sumida']}><Lista hash="x" ids={['m1']} mais={mais} /></MemoryRouter>);
-    await act(async () => { await new Promise(r => setTimeout(r, 100)); });
+    await waitFor(() => expect(toast).toHaveBeenCalled());
     expect(mais).toHaveBeenCalledTimes(1);
-    expect(toast).toHaveBeenCalled();
   });
 });
