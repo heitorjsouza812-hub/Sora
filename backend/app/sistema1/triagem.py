@@ -322,7 +322,9 @@ async def triar(
 
     # O classificador não cria especialistas ocultos para pedidos de bots/grupos.
     if not contexto.em_conversa_com_agente and re.search(
-        r"\b(bot|bots|grupo|grupos|criar_agente|propor_grupo)\b", pedido, re.IGNORECASE
+        r"\b(bot|bots|grupo|grupos|equipe|equipes|criar_agente|propor_grupo)\b",
+        pedido,
+        re.IGNORECASE,
     ):
         saida = saida.model_copy(
             update={

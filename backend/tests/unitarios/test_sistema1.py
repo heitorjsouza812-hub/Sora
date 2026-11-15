@@ -374,6 +374,7 @@ def test_risco_nulo_nao_vira_nenhum() -> None:
         "Use a sua ferramenta criar_agente para criar um bot.",
         "Peça ao bot Redator que revise este texto.",
         "Envie este pedido ao grupo Marketing.",
+        "Preciso de uma equipe para lançar minha cafeteria.",
     ],
 )
 async def test_pedidos_de_bots_e_grupos_nao_criam_especialistas_ocultos(pedido):
@@ -385,3 +386,16 @@ async def test_pedidos_de_bots_e_grupos_nao_criam_especialistas_ocultos(pedido):
     assert resultado.saida.especialistas == []
     assert resultado.saida.resposta_direta is None
     assert "ferramentas" in resultado.saida.capacidades
+
+
+def test_prompt_da_sora_cita_os_nomes_exatos_dos_catalogos() -> None:
+    from app.agentes.prompts import carregar_prompt
+
+    texto = carregar_prompt("sora_base")
+    for nome in (
+        "conectores_buscar_ferramentas",
+        "conectores_carregar_ferramenta",
+        "conectores_executar_ferramenta",
+        "navegador_buscar_ferramentas",
+    ):
+        assert nome in texto

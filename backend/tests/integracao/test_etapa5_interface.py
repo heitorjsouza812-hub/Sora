@@ -856,3 +856,54 @@ async def test_regressoes_propostas_rascunhos_e_grupo_incompleto(mundo: Mundo) -
         assert (
             await cliente.post(rota, headers=auth, json={"texto": "Continue"})
         ).status_code == 202
+
+
+async def test_grupo_com_429_espera_avisa_no_canal_e_entrega_o_resultado(
+    mundo: Mundo,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import litellm
+    from langchain_core.messages import AIMessage
+
+    tentativas: list[int] = []
+
+    async def turno_falso(*, contexto, modelos, checkpointer, entrada=None, resposta=None):
+        tentativas.append(1)
+        if len(tentativas) == 1:
+            raise litellm.RateLimitError(
+                message="rate limit", llm_provider="groq", model="groq/modelo"
+            )
+        return {"messages": [AIMessage(content="Haicai: café na manhã.")]}
+
+    async def sem_modelos(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr("app.agentes.montar_e_rodar_agente", turno_falso)
+    monkeypatch.setattr("workers.equipe.modelo_falso_ativo", lambda: False)
+    monkeypatch.setattr("workers.equipe.modelos_do_papel", sem_modelos)
+    monkeypatch.setattr("app.llm.limite.ESPERA_PADRAO_S", 0.1)
+    await mundo.iniciar_worker()
+
+    email = f"etapa5-429-{uuid4()}@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, email)
+        bots, grupo = await _criar_bots_e_grupo(cliente, auth)
+        enviada = await cliente.post(
+            f"/v1/canais-equipe/{grupo['id']}/mensagens",
+            headers=auth,
+            json={"texto": "Escreva um haicai.", "destinatario": bots[0]["id"]},
+        )
+        assert enviada.status_code == 202, enviada.text
+
+        async def resultado():
+            mensagens = (
+                await cliente.get(f"/v1/canais-equipe/{grupo['id']}/mensagens", headers=auth)
+            ).json()
+            return [m for m in mensagens if m["texto"] == "Haicai: café na manhã."]
+
+        await _esperar(resultado)
+        mensagens = (
+            await cliente.get(f"/v1/canais-equipe/{grupo['id']}/mensagens", headers=auth)
+        ).json()
+        assert any("limite" in m["texto"] for m in mensagens)
+        assert len(tentativas) == 2
