@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { ToastProvider } from './components/base';
 const SoraChat = lazy(() => import('./screens/SoraChat'));
+const NovoBot = lazy(() => import('./screens/NovoBot'));
 const AgentChat = lazy(() => import('./screens/AgentChat'));
 const Agentes = lazy(() => import('./screens/Agentes'));
 const Grupos = lazy(() => import('./screens/Grupos'));
@@ -29,6 +30,7 @@ function AppRoutes() {
   return <Suspense fallback={<TelaCarregando />}><Routes>
     <Route path="/" element={<SoraChat />} />
     <Route path="/bots" element={<Agentes />} />
+    <Route path="/bots/novo" element={<NovoBot />} />
     <Route path="/bots/:agente" element={<AgentChat />} />
     <Route path="/bots/:id/editar" element={<CriarAgente />} />
     <Route path="/grupos" element={<Grupos />} />

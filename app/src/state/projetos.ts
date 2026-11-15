@@ -531,3 +531,5 @@ if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as 
 export function _aplicarEventoParaTestes(evento: EventoSse) { receber(evento); }
 export function _reiniciarProjetosParaTestes() { encerrarProjetos(); estado = { ...inicial(), carregando: false }; notificar(); }
 export function _definirEstadoParaTestes(snapshot: EstadoProjetos) { estado = snapshot; notificar(); }
+
+export function registrarBot(agente: AgenteApi): void { alterar(e => ({ ...e, agentes: { ...e.agentes, [agente.id]: agenteDaApi(agente) } })); }

@@ -67,3 +67,5 @@ export function confirmarRascunhoBot(id: string, ajustes: AjustesRascunhoBot): P
 export function descartarRascunhoBot(id: string): Promise<void> {
   return api.delete<void>(`/v1/bots/rascunhos/${id}`);
 }
+
+export const criarBotPorDescricao = (descricao: string) => api.post<AgenteBotSaida>('/v1/bots/criar-por-descricao', { descricao });

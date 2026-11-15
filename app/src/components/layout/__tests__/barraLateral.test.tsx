@@ -84,7 +84,7 @@ describe('barra lateral (etapa 6)', () => {
     montar();
     await user.click(screen.getByRole('button', { name: 'Criar novo' }));
     const menu = await screen.findByRole('menu', { name: 'Criar novo' });
-    expect(within(menu).getAllByRole('menuitem').map(i => i.textContent)).toEqual(['Nova conversa com a Sora', 'Novo bot', 'Novo grupo']);
+    expect(within(menu).getAllByRole('menuitem').map(i => i.textContent)).toEqual(['Novo bot', 'Novo grupo']);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   });
@@ -94,30 +94,17 @@ describe('barra lateral (etapa 6)', () => {
     montar();
     await user.click(screen.getByRole('button', { name: 'Criar novo' }));
     await screen.findByRole('menu', { name: 'Criar novo' });
-    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Nova conversa com a Sora' })).toHaveFocus());
-    await user.keyboard('{ArrowDown}');
-    expect(screen.getByRole('menuitem', { name: 'Novo bot' })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Novo bot' })).toHaveFocus());
     await user.keyboard('{ArrowDown}{Enter}');
     expect(await screen.findByRole('dialog', { name: 'Novo grupo' })).toBeInTheDocument();
   });
 
-  it('"Nova conversa com a Sora" vai para / e foca o campo', async () => {
-    const user = userEvent.setup();
-    montar();
-    await user.click(screen.getByRole('button', { name: 'Criar novo' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Nova conversa com a Sora' }));
-    expect(screen.getByTestId('rota')).toHaveTextContent('/');
-    expect(screen.getByTestId('rota')).toHaveAttribute('data-foco', 'true'); // a tela da Sora foca o campo ao receber o sinal
-  });
-
-  it('"Novo bot" vai para / com o campo preenchido "Quero um bot que "', async () => {
-    const user = userEvent.setup();
-    montar();
+  it('Novo bot abre sua tela independente', async () => {
+    const user = userEvent.setup(); montar();
     await user.click(screen.getByRole('button', { name: 'Criar novo' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Novo bot' }));
-    expect(screen.getByTestId('rota')).toHaveTextContent('/');
-    expect(consumirPedidoInicial()).toBe('Quero um bot que ');
-    expect(screen.getByTestId('rota')).toHaveAttribute('data-foco', 'true');
+    expect(screen.getByTestId('rota')).toHaveTextContent('/bots/novo');
+    expect(consumirPedidoInicial()).toBeFalsy();
   });
 
   it('"Novo grupo" abre o Novo grupo', async () => {

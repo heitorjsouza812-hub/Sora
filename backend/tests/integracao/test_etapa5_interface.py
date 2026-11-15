@@ -907,3 +907,35 @@ async def test_grupo_com_429_espera_avisa_no_canal_e_entrega_o_resultado(
         ).json()
         assert any("limite" in m["texto"] for m in mensagens)
         assert len(tentativas) == 2
+
+
+async def test_criar_bot_por_descricao_isolado(mundo: Mundo) -> None:  # noqa: F811
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=45) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, f"novo-{uuid4()}@exemplo.com")
+        outro = await entrar(cliente, mundo.fabrica, f"outro-{uuid4()}@exemplo.com")
+        ids = []
+        for _ in range(2):
+            resposta = await cliente.post(
+                "/v1/bots/criar-por-descricao",
+                headers=auth,
+                json={"descricao": "entre no site https://exemplo.com e compare produtos"},
+            )
+            assert resposta.status_code == 201, resposta.text
+            bot = resposta.json()
+            assert bot["cor"] != "#E2ECFF"
+            assert "navegador_abrir" in bot["ferramentas"]
+            assert "ler_pagina" in bot["ferramentas"]
+            ids.append(bot["id"])
+        lista = (await cliente.get("/v1/agentes", headers=auth)).json()
+        criados = [b for b in lista if b["id"] in ids]
+        assert len({b["nome"] for b in criados}) == 2
+        assert len({b["cor"] for b in criados}) == 2
+        assert (await cliente.get("/v1/bots/rascunhos", headers=auth)).json() == []
+        outros = (await cliente.get("/v1/agentes", headers=outro)).json()
+        assert not any(b["id"] in ids for b in outros)
+        for descricao in ("", "   ", "x" * 2001):
+            assert (
+                await cliente.post(
+                    "/v1/bots/criar-por-descricao", headers=auth, json={"descricao": descricao}
+                )
+            ).status_code == 422

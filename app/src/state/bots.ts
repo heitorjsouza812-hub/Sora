@@ -113,3 +113,5 @@ export function _definirSoraIdParaTestes(id: string | undefined): void {
   carregandoSora = null;
   ouvintesSora.forEach(ouvinte => ouvinte());
 }
+
+export function adicionarBot(agente: AgenteBotSaida): void { bots = [...bots.filter(b => b.id !== agente.id), resumoDoBot(agente)]; notificar(); }

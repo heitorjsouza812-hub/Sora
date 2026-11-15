@@ -1,0 +1,47 @@
+import { chromium } from '@playwright/test';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { entrarNoContexto } from './entrar.mjs';
+const browser = await chromium.launch({headless:false, channel:'chrome'});
+const ctx = await browser.newContext({viewport:{width:1440,height:900}});
+const email = `prumo3-novobot-${Date.now()}@sora.local`;
+const shots = 'qa/shots/novobot'; mkdirSync(shots,{recursive:true});
+try {
+ const login = await entrarNoContexto(ctx,{email});
+ const headers = {Authorization:`Bearer ${login.token_acesso}`};
+ const env = readFileSync('../backend/.env','utf8');
+ const chave = env.match(/^SORA_QA_GROQ_CHAVE\s*=\s*(.+)$/m)?.[1].trim().replace(/^['"]|['"]$/g,'');
+ if (!chave) throw new Error('Chave de QA ausente');
+ const prov = await ctx.request.post('http://localhost:5173/v1/provedores',{headers,data:{tipo:'groq',chave}});
+ if (prov.status()!==201) throw new Error(`Provedor: ${prov.status()}`);
+ const page = await ctx.newPage(); await page.goto('http://localhost:5173');
+ await page.getByRole('button',{name:'Criar novo',exact:true}).click();
+ await page.getByRole('menuitem',{name:'Novo bot',exact:true}).click();
+ await page.getByRole('heading',{name:'Que bot você quer criar?'}).waitFor();
+ await page.screenshot({path:`${shots}/limpa-1440.png`});
+ const pedido = 'crie um bot que entre no site https://br.ridingtimes.com/ e veja qual o produto mais barato';
+ await page.getByRole('textbox').fill(pedido);
+ await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
+ await page.waitForURL(/\/bots\/[0-9a-f-]+$/,{timeout:60000});
+ await page.getByText(pedido,{exact:true}).waitFor();
+ await page.waitForTimeout(12000);
+ await page.screenshot({path:`${shots}/chat-1440.png`});
+ const botId = page.url().split('/').pop();
+ const bots = await (await ctx.request.get('http://localhost:5173/v1/agentes',{headers})).json();
+ console.log(JSON.stringify({email,botId,ferramentas:bots.find(b=>b.id===botId)?.ferramentas}));
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:`${shots}/chat-390.png`});
+ await page.getByRole('button',{name:'Abrir menu',exact:true}).click();
+ await page.getByRole('button',{name:'Criar novo',exact:true}).last().click();
+ await page.getByRole('menuitem',{name:'Novo bot',exact:true}).click();
+ await page.getByRole('heading',{name:'Que bot você quer criar?'}).waitFor();
+ if (await page.getByRole('textbox').inputValue()) throw new Error('Campo nao limpo');
+ await page.screenshot({path:`${shots}/limpa-390.png`});
+ await page.getByRole('textbox').fill('rascunho descartavel');
+ await page.getByRole('button',{name:'Abrir menu',exact:true}).click();
+ await page.getByRole('button',{name:'Criar novo',exact:true}).last().click();
+ await page.getByRole('menuitem',{name:'Novo bot',exact:true}).click();
+ if (await page.getByRole('textbox').inputValue()) throw new Error('Reabertura nao limpou');
+ writeFileSync(`${shots}/resultado.json`,JSON.stringify({email,botId,fluxo:'passou',larguras:[1440,390]},null,2));
+ console.log('FLUXO PASSOU');
+} finally {await ctx.close(); await browser.close();}
+

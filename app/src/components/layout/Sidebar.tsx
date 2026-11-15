@@ -8,14 +8,12 @@ import { carregarPrecisaDeVoce, usePrecisaDeVoce } from '../../state/atencao';
 import { SoraOrb } from '../mascot';
 import { NovoGrupo } from '../grupos/NovoGrupo';
 import { Popover } from '../overlay';
-import { deixarPedidoInicial } from '../inicio';
 import { abrirPaleta, MOD } from '../comandos';
 import { AgentsIcon, GearIcon, PlusIcon, TeamIcon } from '../ui/Icons';
 import { estadoDaMarca, statusDaSora } from './useSoraStatus';
 
 const ClientesIcone = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5" /><path d="M5 19.5c.8-3.4 3.5-5 7-5s6.2 1.6 7 5" /></svg>;
 const BuscaIcone = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" /><path d="m16 16 4 4" /></svg>;
-const ConversaIcone = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" /></svg>;
 
 const pedidos = (n: number) => `${n} ${n === 1 ? 'pedido' : 'pedidos'}`;
 
@@ -62,15 +60,12 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
   }, []);
 
   // A tela da Sora foca o campo quando chega o sinal em location.state (ver SoraChat).
-  const irParaSora = () => navigate('/', { state: { focarCampo: Date.now() } });
-  const novaConversa = () => { setCriar(false); onNavegar?.(); irParaSora(); };
-  const novoBot = () => { setCriar(false); onNavegar?.(); deixarPedidoInicial('Quero um bot que '); irParaSora(); };
+  const novoBot = () => { setCriar(false); onNavegar?.(); navigate('/bots/novo'); };
   const abrirNovoGrupo = () => { setCriar(false); setNovoGrupo(true); };
 
   return <>
     <button ref={criarRef} type="button" className="shell-item shell-criar" aria-haspopup="menu" aria-expanded={criar} onClick={() => setCriar(v => !v)}><PlusIcon /><span>Criar novo</span></button>
     <Popover open={criar} onClose={() => setCriar(false)} anchorRef={criarRef} role="menu" ariaLabel="Criar novo" align="start" width={252} className="shell-menu">
-      <button type="button" role="menuitem" onClick={novaConversa}><ConversaIcone />Nova conversa com a Sora</button>
       <button type="button" role="menuitem" onClick={novoBot}><AgentsIcon />Novo bot</button>
       <button type="button" role="menuitem" onClick={abrirNovoGrupo}><TeamIcon />Novo grupo</button>
     </Popover>

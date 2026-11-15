@@ -121,6 +121,9 @@ Tudo deriva de §4.1 e de `app/src/styles/tokens.css`. Cores de agente e do masc
 
 ### 5.1 Barra lateral
 
+> **Atualização do Heitor (2026-11-15):** "Criar novo" agora tem apenas **Novo bot** e **Novo grupo**. Novo bot abre `/bots/novo`, limpa a descrição em cada clique e cria diretamente no envio; Sora continua no topo. Esta decisão substitui as três opções descritas na nota histórica abaixo.
+
+
 Antes: `antes-01-sora-vazia-1440.png`, `antes-09b-barra-lateral-com-pedido-1440.png`. Depois: qualquer foto `depois-0*-1440.png`.
 
 > **Mudanças do dono do produto (2026-11-14), valem acima do texto abaixo:**

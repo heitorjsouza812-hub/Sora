@@ -39,6 +39,14 @@ RedisDep = Annotated[Redis, Depends(obter_redis)]
 
 FUNCAO_MAX = 80
 FERRAMENTAS_CONHECIDAS = frozenset(n for lista in FERRAMENTAS_POR_PAPEL.values() for n in lista) | {
+    "navegador_abrir",
+    "navegador_observar",
+    "navegador_acao",
+    "navegador_procurar",
+    "navegador_esperar",
+    "navegador_tecla",
+    "navegador_elemento",
+    "navegador_lote",
     *FERRAMENTAS_DO_COMPUTADOR,  # Farol (C2): o bot liga o computador virtual por ferramenta extra
     "consultar_cliente",  # Ponte: entram no bot quando o usuário o autoriza
     "consultar_conhecimento",

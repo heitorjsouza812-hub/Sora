@@ -1,3 +1,14 @@
+
+## Heitor — Novo bot direto (2026-11-15)
+
+- Implementado: menu com Novo bot/Novo grupo; `/bots/novo` sem histórico, reset a cada navegação, thinking orb e texto preservado no erro; criação seguida de registro nos dois estados, navegação e envio otimista normal. Rascunho na conversa com a Sora preservado.
+- Backend: `POST /v1/bots/criar-por-descricao`, descrição 1–2000 caracteres (vazia após trim recusada), seletor/provedor do usuário, JSON validado, fallback local para falha/429/JSON inválido; nome/cor e materialização reaproveitados sob trava por usuário; navegador e leitura garantidos para pedido de site. Sem registrar descrição ou erro do provedor nos logs da nova rota.
+- Validação: ruff check e format check passaram; 1413 unitários passaram / 2 pulados por symlink no Windows; integração nova com PostgreSQL/Redis descartáveis e modelo falso passou. App build e oxlint passaram (7 avisos preexistentes); 384 testes passaram em 73 arquivos. Testes novos cobrem fallback, sugestão, isolamento, nomes/cores, tamanho, menu, reset, criação/envio e erro.
+- Chrome real em conta exclusiva `prumo3-novobot-1794780449663@sora.local`: menu → descrição solicitada → bot Ravi criado por fallback → chat abriu com pedido original → chamadas Groq iniciadas. Novo bot abriu limpo em 390 px, inclusive novo clique na própria tela após digitar rascunho. Capturas `app/qa/shots/novobot/{limpa,chat}-{1440,390}.png`; roteiro `app/qa/novobot-live.mjs`.
+- Limitação ao vivo: o modelo retornou chamada de ferramenta inválida e depois 429; aguardada a retomada, a conversa informou cota diária esgotada e espera de 2031 segundos. Não foi comprovada navegação efetiva no site nem conclusão da comparação de preços. Geração do perfil por modelo real não comprovada (foi fallback); esse caminho passou com modelo controlado em teste unitário.
+- API 8200 e worker reiniciados na mesma chamada, conferidos em execução com modelo real. Vite 5173 preservado. Nenhuma conta/dado do Heitor alterado. Sem push.
+- Próximo passo: retestar geração e pesquisa com cota disponível; demais pendências anteriores de Tauri/Slack/WhatsApp permanecem.
+
 # Onde paramos
 
 ## Etapas 5 e 6 — interface nova e acabamento (2026-11-14 e 2026-11-15)

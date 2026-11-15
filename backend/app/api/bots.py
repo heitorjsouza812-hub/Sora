@@ -41,7 +41,7 @@ from app.rascunhos_bot import (
 from app.rotinas import servico as servico_rotinas
 from app.rotinas.agenda import Agendar
 
-roteador = APIRouter(prefix="/bots/rascunhos", tags=["bots"], dependencies=[Depends(usuario_atual)])
+roteador = APIRouter(prefix="/bots", tags=["bots"], dependencies=[Depends(usuario_atual)])
 Usuario = Annotated[UUID, Depends(usuario_atual)]
 Sessao = Annotated[AsyncSession, Depends(obter_sessao, scope="function")]
 RedisDep = Annotated[Redis, Depends(obter_redis)]
@@ -129,7 +129,7 @@ async def _recusar_se_de_proposta(sessao: AsyncSession, usuario_id: UUID, rascun
         )
 
 
-@roteador.get("")
+@roteador.get("/rascunhos")
 async def listar(usuario_id: Usuario, sessao: Sessao) -> list[RascunhoBotSaida]:
     """Rascunhos ainda pendentes do usuário, na ordem de criação (recarga do cartão)."""
     rascunhos = await sessao.scalars(
@@ -144,7 +144,7 @@ async def listar(usuario_id: Usuario, sessao: Sessao) -> list[RascunhoBotSaida]:
     ]
 
 
-@roteador.post("", status_code=status.HTTP_201_CREATED)
+@roteador.post("/rascunhos", status_code=status.HTTP_201_CREATED)
 async def criar(
     dados: RascunhoBotCriacao, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
 ) -> RascunhoBotSaida:
@@ -155,7 +155,7 @@ async def criar(
     return saida
 
 
-@roteador.post("/{rascunho_id}/confirmar", status_code=status.HTTP_201_CREATED)
+@roteador.post("/rascunhos/{rascunho_id}/confirmar", status_code=status.HTTP_201_CREATED)
 async def confirmar(
     rascunho_id: UUID,
     ajustes: RascunhoBotAjuste,
@@ -182,7 +182,7 @@ async def confirmar(
     return saida
 
 
-@roteador.delete("/{rascunho_id}", status_code=status.HTTP_204_NO_CONTENT)
+@roteador.delete("/rascunhos/{rascunho_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def descartar(
     rascunho_id: UUID, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
 ) -> None:
@@ -199,3 +199,30 @@ async def descartar(
         BotRascunhoResolvido(rascunho_id=rascunho.id, status="descartado"),
         usuario_id,
     )
+
+
+@roteador.post("/criar-por-descricao", status_code=status.HTTP_201_CREATED)
+async def criar_por_descricao(
+    dados: RascunhoBotCriacao, usuario_id: Usuario, sessao: Sessao
+) -> AgenteSaida:
+    from app.bot_por_descricao import sugerir_bot
+
+    descricao = dados.descricao.strip()
+    if not descricao:
+        raise HTTPException(422, "Descreva o bot que você quer criar.")
+    sugestao = await sugerir_bot(sessao, usuario_id, descricao)
+    rascunho = await criar_rascunho(
+        sessao,
+        usuario_id,
+        descricao=descricao,
+        nome=sugestao.get("nome"),
+        funcao=sugestao.get("funcao"),
+    )
+    rascunho.dados = {
+        **rascunho.dados,
+        **{k: v for k, v in sugestao.items() if k in ("instrucoes", "ferramentas")},
+    }
+    agente = await _materializar_rascunho(sessao, usuario_id, rascunho)
+    saida = _saida(agente)
+    await sessao.commit()
+    return saida
