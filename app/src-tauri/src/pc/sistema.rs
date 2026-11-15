@@ -297,7 +297,15 @@ unsafe extern "system" fn coletar_bloqueios(hwnd: HWND, dados: LPARAM) -> BOOL {
         if unsafe { GetWindowRect(hwnd, &mut r) }.is_err() {
             r = RECT { left: 0, top: 0, right: i32::MAX / 2, bottom: i32::MAX / 2 };
         }
-        retangulo(&r)
+        let janela = retangulo(&r);
+        let ilha = super::regras::ilha_conhecida();
+        if ilha.hwnd != 0 && ilha.hwnd == hwnd.0 as isize {
+            // a janela da ilha é quase toda transparente: só a pílula vai à tarja.
+            // SAFETY: só leitura.
+            let dpi = unsafe { windows::Win32::UI::HiDpi::GetDpiForWindow(hwnd) };
+            return super::regras::tarja_da_ilha(janela, dpi, ilha.pilula);
+        }
+        janela
     });
     let cobre = cobertura(hwnd, alvo.pid).iter().map(retangulo).collect();
     pilha.push(super::regras::JanelaNaPilha { tarja, cobre });

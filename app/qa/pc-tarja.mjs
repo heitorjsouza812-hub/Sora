@@ -148,6 +148,28 @@ try {
   console.log('3) bloqueada na frente →', JSON.stringify(resultado.naFrente));
   assert.ok(aviso, 'com a janela "Sora" em primeiro plano a captura deveria ser omitida');
   assert.equal(contar(o3.png, [0, 0, 4000, 4000]).magenta, 0, 'nenhum pixel magenta');
+  // 4) ILHA à mostra (app fora de foco) sobre uma janela comum: só a pílula sai preta, o resto da
+  //    janela da ilha (800×460, transparente) deixa ver o que está atrás.
+  ps('limpar');
+  await espera(600);
+  const ILHA = [560, 0, 800, 460];
+  spawn(EXE, ['outra', ...ILHA.map(String)], { detached: true, stdio: 'ignore' }).unref();
+  await espera(1500);
+  let ilhaVisivel = false;
+  for (let i = 0; i < 20 && !ilhaVisivel; i++) { ilhaVisivel = JSON.parse(ps('estado')).ilha.visivel; if (!ilhaVisivel) await espera(400); }
+  assert.ok(ilhaVisivel, 'a ilha deveria estar à mostra com o app fora de foco');
+  await espera(1200);
+  const o4 = await observar('63-tarja-ilha.png');
+  assert.ok(o4.ok, `observar: ${o4.erro}`);
+  const [ix1, iy1, ix2, iy2] = cap(ILHA);
+  const janelaIlha = contar(o4.png, [ix1 + 2, iy1 + 2, ix2 - 2, iy2 - 2]);
+  // faixa transparente da ilha logo abaixo da pílula (sem a borda da janela de teste nem o Bloco de Notas)
+  const metadeDeBaixo = contar(o4.png, [ix1 + 40, iy1 + Math.round((iy2 - iy1) * 0.25), ix2 - 40, iy1 + Math.round((iy2 - iy1) * 0.5)]);
+  resultado.ilha = { janelaIlha, metadeDeBaixo, pretoNaJanela: fracao(janelaIlha).toFixed(3) };
+  console.log('4) ilha →', JSON.stringify(resultado.ilha));
+  assert.ok(janelaIlha.pretos > 0, 'a pílula da ilha deveria sair preta');
+  assert.ok(fracao(janelaIlha) < 0.3, 'só a pílula pode sair preta, não a janela inteira da ilha');
+  assert.equal(metadeDeBaixo.pretos, 0, 'a faixa transparente da janela da ilha não pode sair preta');
   console.log('RESUMO', JSON.stringify(resultado));
 } finally {
   try { ps('fechar-suave', nomeArquivo); } catch { /* já fechado */ }

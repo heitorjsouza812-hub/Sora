@@ -354,6 +354,7 @@ fn ilha_retangulo(
         .retangulo
         .lock()
         .expect("retângulo da ilha envenenado") = r;
+    pc::regras::ilha_definir_pilula(r.x, r.y, r.w, r.h);
     Ok(())
 }
 
@@ -740,6 +741,7 @@ pub fn run() {
                 #[cfg(windows)]
                 if let Ok(hwnd) = ilha.hwnd() {
                     let _ = estado.hwnd_ilha.set(hwnd.0 as isize);
+                    pc::regras::ilha_definir_janela(hwnd.0 as isize);
                 }
                 // cliques atravessam e a ilha não aceita foco até o mouse entrar na pílula
                 // (ver iniciar_poll_cursor): aparecer não rouba o foco de quem estava digitando.

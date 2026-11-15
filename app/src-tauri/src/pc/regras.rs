@@ -535,6 +535,48 @@ pub struct JanelaNaPilha {
     pub cobre: Vec<Retangulo>,
 }
 
+/// Janela da ilha e retângulo real da pílula (CSS px, relativo ao canto da janela), informados
+/// pela própria ilha. A janela é 800×460 e quase toda transparente: só a pílula vai à tarja.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct IlhaConhecida {
+    pub hwnd: isize,
+    pub pilula: Option<[f64; 4]>,
+}
+
+static ILHA: std::sync::Mutex<IlhaConhecida> = std::sync::Mutex::new(IlhaConhecida { hwnd: 0, pilula: None });
+
+/// Guarda o HWND da janela da ilha (chamado no setup).
+pub fn ilha_definir_janela(hwnd: isize) {
+    ILHA.lock().unwrap_or_else(|e| e.into_inner()).hwnd = hwnd;
+}
+
+/// Guarda o retângulo da pílula `(x, y, largura, altura)` em CSS px; vazio ou inválido = desconhecido.
+pub fn ilha_definir_pilula(x: f64, y: f64, w: f64, h: f64) {
+    let valido = [x, y, w, h].iter().all(|v| v.is_finite()) && w > 0.0 && h > 0.0;
+    ILHA.lock().unwrap_or_else(|e| e.into_inner()).pilula = valido.then_some([x, y, w, h]);
+}
+
+pub fn ilha_conhecida() -> IlhaConhecida {
+    *ILHA.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Área a tarjar da janela da ilha: o retângulo da pílula em pixels físicos (`dpi` da janela),
+/// recortado à janela; sem pílula conhecida (ou fora da janela), a janela inteira.
+pub fn tarja_da_ilha(janela: Retangulo, dpi: u32, pilula: Option<[f64; 4]>) -> Retangulo {
+    let Some([x, y, w, h]) = pilula else {
+        return janela;
+    };
+    let k = f64::from(dpi.max(96)) / 96.0;
+    let r = [
+        janela[0] + (x * k).floor() as i32,
+        janela[1] + (y * k).floor() as i32,
+        janela[0] + ((x + w) * k).ceil() as i32,
+        janela[1] + ((y + h) * k).ceil() as i32,
+    ];
+    let recortado = [r[0].max(janela[0]), r[1].max(janela[1]), r[2].min(janela[2]), r[3].min(janela[3])];
+    if vazio(&recortado) { janela } else { recortado }
+}
+
 /// Teto de pedaços: acima disso a janela é tarjada inteira (pintar a mais é o lado seguro).
 const MAX_PEDACOS: usize = 4_096;
 
@@ -690,6 +732,26 @@ mod testes {
         let cantos = areas_a_tarjar(&[cruz, bloqueada([0, 0, 100, 100], true)]);
         assert_eq!(cantos.len(), 4);
         assert_eq!(area(&cantos), 4 * 8 * 8);
+    }
+
+    #[test]
+    fn ilha_tarja_so_a_pilula() {
+        let janela = [560, 0, 1360, 460];
+        // 100% de escala: pílula 300×60 em (250, 12) dentro da janela
+        assert_eq!(tarja_da_ilha(janela, 96, Some([250.0, 12.0, 300.0, 60.0])), [810, 12, 1110, 72]);
+        // 150%: tudo em pixels físicos
+        assert_eq!(tarja_da_ilha([0, 0, 1200, 690], 144, Some([250.0, 12.0, 300.0, 60.0])), [375, 18, 825, 108]);
+        // sem retângulo conhecido, ou fora da janela: a janela inteira
+        assert_eq!(tarja_da_ilha(janela, 96, None), janela);
+        assert_eq!(tarja_da_ilha(janela, 96, Some([2000.0, 12.0, 300.0, 60.0])), janela);
+        // além da janela: recortado
+        assert_eq!(tarja_da_ilha(janela, 96, Some([700.0, 400.0, 300.0, 300.0])), [1260, 400, 1360, 460]);
+        // na pilha, a ilha só tarja a pílula e não cobre nada
+        let pilula = tarja_da_ilha(janela, 96, Some([250.0, 12.0, 300.0, 60.0]));
+        let pilha = [JanelaNaPilha { tarja: Some(pilula), cobre: Vec::new() }, bloqueada([0, 0, 1920, 1080], true)];
+        let r = areas_a_tarjar(&pilha);
+        assert_eq!(r[0], pilula);
+        assert_eq!(area(&r), area(&[pilula, [0, 0, 1920, 1080]]));
     }
 
     #[test]
