@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react';
 import { api } from '../api/cliente';
 import type { EventoSse } from '../api/eventos';
 import { receberMemoriaCriada } from './pecas';
+import { receberEventoTelas, limparTelaNavegador, reiniciarTelas } from './telas';
 
 export type NivelContexto = 'ok' | 'atencao' | 'compactar' | 'cheio';
 export interface Contexto { agenteId: string; fio: string; porcentagem: number; tokens: number; janela: number; estimado: boolean; nivel: NivelContexto; compactacao: 'parada' | 'compactando' | 'falhou' }
@@ -97,8 +98,22 @@ export const lerEquipe = () => estado;
 export function useEquipe() { return useSyncExternalStore(fn => { ouvintes.add(fn); return () => { ouvintes.delete(fn); }; }, lerEquipe, lerEquipe); }
 export function receberEventoEquipe(ev: Pick<EventoSse, 'tipo' | 'dados'>) {
   if (ev.tipo === 'memoria.criada') { receberMemoriaCriada(ev.dados as Dados); return; }
+  if (ev.tipo === 'navegador.tela' || ev.tipo === 'computador.tela') {
+    const d = ev.dados as Dados;
+    receberEventoTelas({ tipo: ev.tipo, dados: d });
+    if (ev.tipo === 'navegador.tela') {
+      const anterior = estado.abas[txt(d.aba_id)];
+      const a = abaDe({ ...d, carregada: anterior?.carregada ?? true, pedido_de_ajuda: anterior?.pedidoDeAjuda });
+      if (a.id && a.agenteId) definir({ ...estado, abas: { ...estado.abas, [a.id]: a } });
+    }
+    return;
+  }
+  if (ev.tipo === 'navegador.aba' && (ev.dados as Dados).fechada === true) {
+    const a = estado.abas[txt((ev.dados as Dados).aba_id)];
+    if (a) limparTelaNavegador(a.agenteId, a.id);
+  }
   const p = aplicarEventoEquipe(estado, ev); if (p !== estado) definir(p); }
-export function reiniciarEquipe() { definir(equipeInicial()); }
+export function reiniciarEquipe() { definir(equipeInicial()); reiniciarTelas(); }
 
 // ── API (corpo e resposta como em .maestri/contrato-etapa4.md) ──────────────────────────
 

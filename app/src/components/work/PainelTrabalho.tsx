@@ -8,6 +8,7 @@ import { SoraOrb } from '../mascot';
 import { ProgressBar } from '../ui/ProgressBar';
 import { BlocoPrompt, LinhaDoTempo } from './LinhaDoTempo';
 import { SeletorAgente } from './SeletorAgente';
+import { TelasDoBot } from './TelasDoBot';
 import './work.css';
 
 export interface PainelTrabalhoProps {
@@ -77,6 +78,7 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
             {est && est.status !== 'aguardando' && <b className="wk-pct">{est.progresso}%</b>}
           </header>
           {est && est.status !== 'aguardando' && <ProgressBar value={est.progresso} color={agente.cor} />}
+          <TelasDoBot agenteId={agente.id} cor={agente.cor} usaComputador={agente.ferramentas.some(f => f.startsWith('computador_'))} />
           <div className="wk-scroll" ref={scroll}
             onScroll={ev => { const el = ev.currentTarget; colado.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; }}>
             {anteriores.length > 0 && (

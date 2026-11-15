@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import type { CSSProperties } from 'react';
-import { FERRAMENTAS_AGENTE } from '../../data/ferramentas';
+import { FERRAMENTAS_AGENTE, FERRAMENTAS_COMPUTADOR, usaComputador } from '../../data/ferramentas';
 import { COR_SORA, MOVIMENTOS, PALETA_AGENTES } from '../../data/planejador';
 import { modelosAtivos, useModelos, type EscolhaModelo, type ProvedorModeloId } from '../../state/modelos';
 import { SoraOrb } from '../mascot';
+import { NavegadorDoBot } from '../work/NavegadorDoBot';
 import type { RascunhoConstrutor } from './types';
 
 export interface AgentConfigFormProps {
@@ -44,6 +45,10 @@ export function AgentConfigForm({ rascunho: r, onChange, onExcluir, modo = 'agen
     </div></details>
     <details><summary>Modelo<span>Provedor usado por este bot</span></summary><div className="bld-section-grid"><label className="bld-wide"><span>Modelo de IA</span><select value={valorModelo} onChange={e => { const [provedor, modelo] = e.target.value.split('::'); set('modelo', provedor ? { provedor: provedor as ProvedorModeloId, modelo } as EscolhaModelo : null); }}><option value="">Usar padrão dos novos agentes</option>{opcoesModelo.map(x => <option key={`${x.p}::${x.m}`} value={`${x.p}::${x.m}`}>{x.label}</option>)}</select>{!opcoesModelo.length && <small>Nenhum provedor conectado. <Link to="/configuracoes">Conectar modelos</Link></small>}</label></div></details>
     <details><summary>Ferramentas<span>O que ele pode usar</span></summary><div className="bld-tool-grid">{FERRAMENTAS_AGENTE.map(({ id: f, rotulo }) => <label key={f}><input type="checkbox" checked={r.ferramentas.includes(f)} onChange={e => set('ferramentas', e.target.checked ? [...r.ferramentas, f] : r.ferramentas.filter(x => x !== f))} /><span>{rotulo}</span></label>)}</div></details>
+    <details><summary>Computador e navegador<span>Telas próprias do bot</span></summary><div className="bld-section-grid">
+      <label className="bld-wide wk-opcao"><input type="checkbox" checked={usaComputador(r.ferramentas)} onChange={e => set('ferramentas', e.target.checked ? [...new Set([...r.ferramentas, ...FERRAMENTAS_COMPUTADOR.map(f => f.id)])] : r.ferramentas.filter(f => !f.startsWith('computador_')))} /><span>Computador próprio</span><small>O bot ganha um computador isolado, com tela, mouse, teclado e arquivos. As ações seguem as suas permissões de aprovação. Fica desligado até o bot precisar.</small></label>
+      <NavegadorDoBot agenteId={r.id} />
+    </div></details>
     {r.id && <details className="bld-danger"><summary>Zona de perigo<span>Ações irreversíveis</span></summary><div><p>Excluir remove o bot e a conversa dele.</p><button type="button" onClick={onExcluir}>Excluir bot</button></div></details>}
   </div>;
 }
