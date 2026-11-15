@@ -19,6 +19,7 @@ process.env.SORA_QA_BASE ??= 'http://localhost:5173';
 const CDP = process.env.SORA_CDP ?? 'http://127.0.0.1:9333';
 const API = process.env.SORA_QA_API ?? 'http://localhost:8000';
 const EMAIL = process.env.SORA_QA_PC_EMAIL ?? 'qa-pc-e5@sora.local';
+const NOME = process.env.SORA_QA_PC_NOME ?? 'Conta de QA'; // a barra lateral mostra o nome (o e-mail só aparece em Configurações → Conta)
 const shots = join(dirname(fileURLToPath(import.meta.url)), 'shots', 'pc-tauri');
 await mkdir(shots, { recursive: true });
 
@@ -55,7 +56,7 @@ if (!desligar) {
   await main.evaluate(() => sessionStorage.setItem('sora.onboarding-pulado.v1', '1'));
   await main.reload({ waitUntil: 'domcontentloaded' });
   await main.locator('.account-logout, input[type="password"]').first().waitFor({ state: 'attached', timeout: 20_000 });
-  if (!(await main.locator('.shell-account').innerText().catch(() => '')).includes(EMAIL)) {
+  if (!(await main.locator('.shell-account').innerText().catch(() => '')).includes(NOME)) {
     if (await main.locator('.account-logout').count()) {
       await main.evaluate(() => document.querySelector('.account-logout')?.click());
       await main.getByLabel('E-mail').waitFor({ timeout: 10_000 });
@@ -64,6 +65,7 @@ if (!desligar) {
     await main.getByLabel('Senha').fill(QA_SENHA);
     await main.getByRole('button', { name: 'Entrar', exact: true }).click();
     await main.locator('.account-logout, .shell-account').first().waitFor({ state: 'attached', timeout: 15_000 });
+    await main.goto(`${process.env.SORA_QA_BASE}/configuracoes?secao=computador`, { waitUntil: 'domcontentloaded' });
   }
 }
 

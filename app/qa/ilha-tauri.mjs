@@ -142,6 +142,9 @@ try {
   console.log('ok 4b: restaurada → ilha some e continua escondida');
 
   // ---- 4c. dados reais: um pedido "Precisa de você" (pergunta da Sora, modelo falso) aparece na ilha e é respondido por ela ----
+  // O gatilho "[pergunta]" só existe com SORA_MODELO_FALSO=1. Com modelo real (API de QA do desktop real) defina
+  // SORA_QA_ILHA_SEM_PERGUNTA=1: o pedido na ilha é testado por qa/pc-real.mjs (cartão do controle do PC).
+  if (!process.env.SORA_QA_ILHA_SEM_PERGUNTA) {
   const token = await garantirConta(emailQa);
   const sora = (await api('/v1/agentes/sora', { token })).corpo;
   for (const p of (await api('/v1/atencao', { token })).corpo) atencaoAntes.add(p.id);
@@ -179,6 +182,7 @@ try {
   console.log('ok 4c: pedido real aparece na ilha, é respondido por ela e some');
   ps('foco-sora');
   await ate('em foco, ilha escondida', e => e.principal.foco && !e.ilha.visivel);
+  } else console.log('4c pulado (SORA_QA_ILHA_SEM_PERGUNTA): sem modelo falso não há pergunta da Sora para semear');
 
   // ---- 5. preferência "Mostrar ilha" desligada: nunca aparece, mesmo fora de foco ----
   await main.evaluate(() => {
