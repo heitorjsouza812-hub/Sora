@@ -90,7 +90,7 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
             {prompt && <BlocoPrompt passo={prompt} nomeSora={e.sora.nome} corSora={e.sora.cor} />}
             {!execAtual && (
               <div className="wk-empty wk-empty-inline">
-                <p>{est?.rotulo && est.rotulo !== 'Disponível' ? `${est.rotulo}.` : `${agente.nome} está disponível.`} Os passos aparecem aqui quando o trabalho começar.</p>
+                <p>{est?.status === 'trabalhando' ? `${agente.nome} está trabalhando. As ferramentas que usar aparecem aqui assim que o primeiro passo for registrado.` : `${est?.rotulo && est.rotulo !== 'Disponível' ? `${est.rotulo}.` : `${agente.nome} está disponível.`} Os passos aparecem aqui quando o trabalho começar.`}</p>
               </div>
             )}
             <LinhaDoTempo passos={resto} agente={agente} agora={agora} sora={e.sora} agentes={e.agentes} />
