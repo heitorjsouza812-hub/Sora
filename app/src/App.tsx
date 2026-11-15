@@ -5,6 +5,7 @@ const SoraChat = lazy(() => import('./screens/SoraChat'));
 const AgentChat = lazy(() => import('./screens/AgentChat'));
 const Agentes = lazy(() => import('./screens/Agentes'));
 const Grupos = lazy(() => import('./screens/Grupos'));
+const Clientes = lazy(() => import('./screens/Clientes'));
 import { PonteNavegacao } from './desktop/PonteNavegacao';
 import { PonteSessao } from './desktop/PonteSessao';
 import { GateSessao, TelaCarregando } from './components/sessao';
@@ -31,6 +32,7 @@ function AppRoutes() {
     <Route path="/bots/:agente" element={<AgentChat />} />
     <Route path="/bots/:id/editar" element={<CriarAgente />} />
     <Route path="/grupos" element={<Grupos />} />
+    <Route path="/clientes" element={<Clientes />} />
     <Route path="/grupos/:grupoId" element={<Grupos />} />
     <Route path="/configuracoes" element={<Configuracoes />} />
     <Route path="/plugins" element={<Navigate to="/" replace />} />

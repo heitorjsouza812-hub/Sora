@@ -103,6 +103,7 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
         })}
       </div>
     </section>
+    <NavLink to="/clientes" onClick={onNavegar} className="shell-row"><TeamIcon className="shell-group-icon" /><strong>Clientes</strong></NavLink>
     <NovoGrupo aberto={novoGrupo} onFechar={() => setNovoGrupo(false)} onCriado={id => { setNovoGrupo(false); onNavegar?.(); navigate(`/grupos/${id}`); }} />
   </>;
 }

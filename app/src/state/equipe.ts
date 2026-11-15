@@ -2,6 +2,7 @@
 // Os eventos chegam pelo GET /v1/eventos (mesmo stream do resto do app) com os campos exatos de
 // backend/app/eventos/equipe.py; o estado inicial vem das rotas REST (sem simulação).
 import { useSyncExternalStore } from 'react';
+import { receberEventoClientes } from './clientes';
 import { api } from '../api/cliente';
 import type { EventoSse } from '../api/eventos';
 import { receberMemoriaCriada } from './pecas';
@@ -97,6 +98,7 @@ const definir = (p: EstadoEquipe) => { estado = p; ouvintes.forEach(f => f()); }
 export const lerEquipe = () => estado;
 export function useEquipe() { return useSyncExternalStore(fn => { ouvintes.add(fn); return () => { ouvintes.delete(fn); }; }, lerEquipe, lerEquipe); }
 export function receberEventoEquipe(ev: Pick<EventoSse, 'tipo' | 'dados'>) {
+  if (ev.tipo === 'cliente.atualizado' || ev.tipo === 'conhecimento.atualizado') { receberEventoClientes(ev); return; }
   if (ev.tipo === 'memoria.criada') { receberMemoriaCriada(ev.dados as Dados); return; }
   if (ev.tipo === 'navegador.tela' || ev.tipo === 'computador.tela') {
     const d = ev.dados as Dados;
