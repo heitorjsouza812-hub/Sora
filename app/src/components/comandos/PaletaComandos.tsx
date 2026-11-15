@@ -12,6 +12,7 @@ import { SoraOrb } from '../mascot';
 import { empilharCamada } from '../overlay/camadas';
 import { normalizar } from '../projetos/util';
 import { ATALHOS, MOD, fecharPaleta } from './atalhos';
+import { usePrecisaDeVoce } from '../../state/atencao';
 import './comandos.css';
 
 interface Item {
@@ -49,7 +50,10 @@ const IC = {
   engrenagem: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1',
 };
 
-export function PaletaComandos() {
+export function PaletaComandos({ onAbrirCentral }: { onAbrirCentral: () => void }) {
+  const { lista: pedidos } = usePrecisaDeVoce();
+  const pendentes = pedidos.length;
+  const [atalhos, setAtalhos] = useState(false);
   const bots = useBots();
   const estadoGrupos = useGrupos();
   const navigate = useNavigate();
@@ -88,10 +92,12 @@ export function PaletaComandos() {
       id: `g-${grupo.id}`, grupo: 'Grupos', rotulo: grupo.nome, detalhe: `${grupo.membros.length} bots`,
       icone: <Icone d={IC.grupo} />, busca: grupo.nome, executar: ir(`/grupos/${grupo.id}`),
     }));
-    return [...acoes, ...itensBots, ...itensGrupos];
+    const atencao: Item = { id: 'atencao', grupo: 'Ações', rotulo: pendentes ? `Precisa de você (${pendentes})` : 'Precisa de você', icone: <Icone d={IC.agente} />, busca: 'pendencias aprovacoes pedidos', executar: onAbrirCentral };
+    acoes.push({ id: 'atalhos', grupo: 'Ações', rotulo: 'Ver atalhos', icone: <Icone d={IC.mais} />, busca: 'teclado ajuda', executar: () => setAtalhos(true) });
+    return [...(pendentes ? [atencao, ...acoes] : [...acoes, atencao]), ...itensBots, ...itensGrupos];
   // ir/navigate são estáveis o bastante para a vida curta da paleta
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bots, estadoGrupos.lista]);
+  }, [bots, estadoGrupos.lista, pendentes, onAbrirCentral]);
 
   const termo = normalizar(busca.trim());
 
@@ -152,7 +158,7 @@ export function PaletaComandos() {
             aria-activedescendant={visiveis.length ? opcaoId(atual) : undefined} aria-label="Buscar bots, grupos, mensagens e ações"
             placeholder="Buscar bots, grupos, mensagens e ações…" value={busca} autoComplete="off" spellCheck={false}
             onChange={(ev) => { setBusca(ev.target.value); setAtivo(0); }} onKeyDown={tecla} />
-          <kbd>Esc</kbd>
+          <button className="cmd-fechar" type="button" aria-label="Fechar paleta" onClick={fecharPaleta}>Esc</button>
         </div>
         <div ref={lista} id={listaId} className="cmd-lista" role="listbox" aria-label="Resultados">
           {grupos.map((g) => (
@@ -172,12 +178,13 @@ export function PaletaComandos() {
         </div>
         <span className="cmd-sr" role="status" aria-live="polite">{visiveis.length ? `${visiveis.length} resultados` : 'Nenhum resultado'}</span>
         <footer className="cmd-atalhos" aria-label="Atalhos de teclado">
-          <h2>Atalhos</h2>
+          <span>↑↓ Navegar · Enter Abrir · Esc Fechar</span>
+          {atalhos && <><h2>Atalhos</h2>
           <ul>
             {ATALHOS.map((a) => (
               <li key={a.acao}><span className="cmd-teclas">{a.teclas.map((t) => <kbd key={t}>{t}</kbd>)}</span>{a.acao}</li>
             ))}
-          </ul>
+          </ul><button type="button" className="cmd-fechar" onClick={() => { setAtalhos(false); campo.current?.focus(); }}>Voltar à busca</button></>}
         </footer>
       </div>
     </div>,

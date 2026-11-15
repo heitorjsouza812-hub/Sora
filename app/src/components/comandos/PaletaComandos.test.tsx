@@ -1,0 +1,34 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { Comandos } from './Comandos';
+import { alternarPaleta, fecharPaleta } from './atalhos';
+import { act } from 'react';
+const estado = vi.hoisted(() => ({ lista: [{ id: '1' }, { id: '2' }] }));
+vi.mock('../../state/atencao', () => ({ usePrecisaDeVoce: () => estado }));
+vi.mock('../../state/bots', () => ({ useBots: () => [] }));
+vi.mock('../../state/grupos', () => ({ useGrupos: () => ({ lista: [] }) }));
+vi.mock('../pendencias/CentralPrecisaDeVoce', () => ({ CentralPrecisaDeVoce: ({ aberta }: { aberta: boolean }) => aberta ? <div role="dialog" aria-label="Central de pedidos" /> : null }));
+beforeAll(() => { Element.prototype.scrollIntoView = vi.fn(); });
+afterEach(() => { fecharPaleta(); estado.lista = [{ id: '1' }, { id: '2' }]; });
+it('prioriza pedidos, atualiza o contador e mantém a central depois de fechar a paleta', () => {
+  const { rerender } = render(<MemoryRouter><Comandos /></MemoryRouter>);
+  act(() => alternarPaleta());
+  expect(screen.getAllByRole('option')[0]).toHaveTextContent('Precisa de você (2)');
+  estado.lista = [{ id: '1' }];
+  rerender(<MemoryRouter><Comandos /></MemoryRouter>);
+  expect(screen.getAllByRole('option')[0]).toHaveTextContent('Precisa de você (1)');
+  fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+  expect(screen.queryByRole('dialog', { name: 'Paleta de comandos' })).not.toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: 'Central de pedidos' })).toBeInTheDocument();
+});
+it('mantém o acesso sem pedidos e revela atalhos sob demanda', () => {
+  estado.lista = [];
+  render(<MemoryRouter><Comandos /></MemoryRouter>);
+  act(() => alternarPaleta());
+  expect(screen.getAllByRole('option')[0]).toHaveTextContent('Conversar com a Sora');
+  expect(screen.getByRole('option', { name: 'Precisa de você' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Atalhos' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('option', { name: 'Ver atalhos' }));
+  expect(screen.getByRole('heading', { name: 'Atalhos' })).toBeInTheDocument();
+});

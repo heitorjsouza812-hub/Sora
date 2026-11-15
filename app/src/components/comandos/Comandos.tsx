@@ -2,13 +2,15 @@
 //   Ctrl/⌘+K       abre/fecha a paleta (funciona até dentro de campos de texto)
 //   Ctrl/⌘+Shift+O conversa com a Sora
 //   /              foca o campo de mensagem (fora de campos de texto)
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { alternarPaleta, digitando, fecharPaleta, focarCampoMensagem, usePaletaAberta } from './atalhos';
+import { CentralPrecisaDeVoce } from '../pendencias/CentralPrecisaDeVoce';
 import { PaletaComandos } from './PaletaComandos';
 
 export function Comandos() {
   const aberta = usePaletaAberta();
+  const [central, setCentral] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,5 +31,5 @@ export function Comandos() {
   // sair da rota fecha a paleta (ex.: voltar no navegador com ela aberta)
   useEffect(() => () => fecharPaleta(), []);
 
-  return aberta ? <PaletaComandos /> : null;
+  return <>{aberta && <PaletaComandos onAbrirCentral={() => { fecharPaleta(); setCentral(true); }} />}<CentralPrecisaDeVoce aberta={central} onFechar={() => setCentral(false)} /></>;
 }
