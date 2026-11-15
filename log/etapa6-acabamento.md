@@ -76,3 +76,18 @@ As de `log/etapa5-interface.md` (portas 8200/5383, bancos `sora-e5-*`, PT-BR, se
 - O app e o worker do ambiente de testes passam a rodar com **modelo real (Groq)**, não com `SORA_MODELO_FALSO`. A chave do Heitor está em `backend/.env` como `SORA_QA_GROQ_CHAVE` (arquivo ignorado pelo git; **nunca** copiar para commit, log, relatório ou contrato). O QA cadastra a chave na conta de teste pela rota `/v1/provedores` lendo a variável.
 - Limite grátis da Groq: ao bater 429, esperar e continuar (o backend já respeita o limite por minuto; scripts de QA com espera e nova tentativa).
 - O modelo falso continua só nas suítes automáticas (unitários e integração com testcontainers), que não podem gastar o limite nem depender de rede.
+
+## Estado em 2026-11-15 (Pena)
+
+**Feito** (validado por Prumo-4 e Âncora-8; ver `log/2026-11-15.md`):
+- [x] P0 1–8: Parar, grupo igual ao 1:1, sem botão morto, bolha na hora, streaming sem puxar a rolagem, rascunho sem termo técnico, central "Precisa de você" com cartão único, `test:visual` atualizado (22/22).
+- [x] P1 9–17: fontes, imagem e visão, editar/refazer/avaliar, primeiro uso, aviso fora de foco, rotinas e memória no bot, gestão do grupo, conversa por voz contínua, busca na paleta Ctrl+K.
+- [x] P2 18–20: navegador do bot ao vivo, código e tabela sob demanda com carga por rota, vocabulário e limpeza de telas.
+- [x] Etapa 5 aberta: B1, B2, B3, B5, B7 (Âncora-2, Rumo-3, Motor-4). Mantida aberta a renovação da sessão (decisão 8).
+- [x] C1 navegador próprio por bot e C2 computador virtual por bot (`docs/computador-por-bot.md`).
+- [x] C3 controle do PC do usuário: implementado e coberto por testes (Rust 22, Python); **falta a prova interativa real** (Bloco de Notas, mouse físico, campo de senha).
+- [x] D1 e D4 canais da empresa só leitura, com ficha por cliente, conhecimento aprovado pelo usuário e sugestões (`docs/canais-da-empresa.md`); D2 e D3 continuam removidos.
+- [x] Teste com modelo real (Groq) no ambiente de QA.
+- [x] Portas de desenvolvimento de volta ao padrão: Vite 5173, API 8000 (as regras acima falam em 8200/5383, que valiam só durante a etapa).
+
+**Aberto:** teste real do Tauri (controle do PC, login desktop, Ilha, aviso fora de foco); Slack e WhatsApp Business reais; instalador assinado com o domínio real da API no CSP; PWA e tema claro (a decidir); MÉDIA/BAIXA de `.maestri/relatorios/prumo4.md` (M4 qualidade da proposta de grupo, M5 resposta repetida, M7 streaming com Groq) e `ancora8.md`; renovação da sessão.
