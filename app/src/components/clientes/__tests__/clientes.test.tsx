@@ -22,6 +22,13 @@ const ficha = { id: 'c1', nome: 'Cliente QA', canal: 'slack' as const, id_extern
 const sugestao: SugestaoEmpresa = { id: 's1', agente_id: 'b1', tipo: 'instrucoes', titulo: 'Melhorar atendimento', motivo: 'Pergunta frequente', texto: 'Informe o prazo de entrega.', habilidade_nome: null, conhecimento_ids: ['k1'], status: 'pendente', aprovacao_id: 'a1', criada_em: '2026-11-15', decidida_em: null, desfeita_em: null };
 
 beforeEach(() => { vi.restoreAllMocks(); });
+describe('sugestão de melhoria', () => {
+  it('nunca oferece "Sempre permitir"', () => {
+    render(<CartaoSugestao sugestao={sugestao} nomeBot="Atendimento" onAtualizar={() => undefined} />);
+    expect(screen.queryByRole('button', { name: /Sempre permitir/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Aplicar' })).toBeTruthy();
+  });
+});
 describe('canais da empresa', () => {
   it('omite segredos vazios na edição e apaga os campos após salvar', async () => {
     vi.spyOn(canaisEmpresa, 'conexoes').mockResolvedValue([conexao]);
@@ -101,15 +108,41 @@ describe('canais da empresa', () => {
     expect(await screen.findByText('Nenhum cliente encontrado.')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Conectar um canal' })).toBeNull();
   });
-  it('conhecimento contraditório exibe versões, contagem e reage ao SSE', async () => {
-    const listar = vi.spyOn(canaisEmpresa, 'conhecimento').mockResolvedValue([{ id: 'k1', categoria: 'politica', titulo: 'Trocas', conteudo: 'Prazo de 30 dias', ocorrencias: 4, contraditorio: true, editado: false, anteriores: [{ conteudo: 'Prazo de 7 dias', em: '2026-11-14' }], origens: [], primeira_em: '2026-11-14', ultima_em: '2026-11-15' }]);
+  const base = { categoria: 'politica' as const, ocorrencias: 4, contraditorio: false, editado: false, anteriores: [], origens: [], primeira_em: '2026-11-14', ultima_em: '2026-11-15' };
+  it('conhecimento contraditório mostra a atual e a nova, resolve pela rota e reage ao SSE', async () => {
+    const disputado = { ...base, id: 'k1', titulo: 'Trocas', conteudo: 'Prazo de 30 dias', contraditorio: true, estado: 'aprovado' as const, em_disputa: [{ conteudo: 'Prazo de 7 dias', em: '2026-11-14' }] };
+    const listar = vi.spyOn(canaisEmpresa, 'conhecimento').mockResolvedValue([]);
+    vi.spyOn(canaisEmpresa, 'disputas').mockResolvedValue([disputado]);
+    const resolver = vi.spyOn(canaisEmpresa, 'resolverConhecimento').mockResolvedValue(disputado);
     vi.spyOn(canaisEmpresa, 'sugestoes').mockResolvedValue([]);
     render(<Aprendizado />);
     expect(await screen.findByText(/Informações contraditórias/)).toBeTruthy();
-    expect(screen.getByText(/4 ocorrências/)).toBeTruthy();
-    expect(screen.getByText('Prazo de 7 dias')).toBeTruthy();
-    act(() => receberEventoClientes({ tipo: 'conhecimento.atualizado' }));
-    await waitFor(() => expect(listar).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(/Prazo de 30 dias/)).toBeTruthy();
+    expect(screen.getByText(/Prazo de 7 dias/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Para aprovar (1)' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Usar a nova' }));
+    await waitFor(() => expect(resolver).toHaveBeenCalledWith('k1', 0));
+    fireEvent.click(screen.getByRole('button', { name: 'Manter a atual' }));
+    await waitFor(() => expect(resolver).toHaveBeenCalledWith('k1', null));
+    await waitFor(() => expect(listar.mock.calls.length).toBeGreaterThan(2));
+  });
+  it('item pendente só vale depois de Aprovar; sem resposta não oferece Aprovar; Descartar apaga', async () => {
+    const pendente = { ...base, id: 'k2', titulo: 'Frete', conteudo: 'Frete grátis acima de R$ 200', estado: 'pendente' as const, no_prompt: false };
+    const semResposta = { ...base, id: 'k3', titulo: 'Horário', conteudo: '', estado: 'pendente' as const, sem_resposta: true };
+    vi.spyOn(canaisEmpresa, 'conhecimento').mockImplementation(async (_b, _c, _p, _s, estado) => estado === 'pendente' ? [pendente, semResposta] : []);
+    vi.spyOn(canaisEmpresa, 'disputas').mockResolvedValue([]);
+    vi.spyOn(canaisEmpresa, 'sugestoes').mockResolvedValue([]);
+    const aprovar = vi.spyOn(canaisEmpresa, 'aprovarConhecimento').mockResolvedValue(pendente);
+    const apagar = vi.spyOn(canaisEmpresa, 'apagarConhecimento').mockResolvedValue(undefined as never);
+    render(<Aprendizado />);
+    expect(await screen.findByText('Frete grátis acima de R$ 200')).toBeTruthy();
+    expect(screen.getByText(/Sem resposta de funcionário ainda/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Aprovar' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Aprovar' }));
+    await waitFor(() => expect(aprovar).toHaveBeenCalledWith('k2'));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Descartar' })[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirmar descarte' }));
+    await waitFor(() => expect(apagar).toHaveBeenCalledWith('k2'));
   });
   it('descarta respostas antigas e não aceita link de origem executável', async () => {
     let resolver!: (valor: string) => void;

@@ -7,6 +7,7 @@ import { Button } from '../components/base';
 import { SoraOrb } from '../components/mascot';
 import { Ficha } from '../components/clientes/Ficha';
 import { Aprendizado } from '../components/clientes/Aprendizado';
+import { usePendentesConhecimento } from '../components/clientes/usePendentesConhecimento';
 import { Autorizacoes } from '../components/clientes/Autorizacoes';
 import { EstadoConsulta, Paginacao, nomeCanal, useConsulta } from '../components/clientes/comum';
 import '../components/clientes/clientes.css';
@@ -26,8 +27,9 @@ function ListaClientes() {
 }
 export default function Clientes() {
   const [aba, setAba] = useState('clientes');
+  const { total: pendentes } = usePendentesConhecimento();
   return <AppShell titulo="Clientes" acoes={<span />}><main className="ce-page"><div className="ce-coluna ce-area">
-    <nav className="ce-abas" aria-label="Seções de clientes">{[['clientes', 'Fichas de clientes'], ['conhecimento', 'O que a Sora aprendeu'], ['autorizacoes', 'Quem pode consultar']].map(([id, nome]) => <Button key={id} variante="fantasma" aria-pressed={aba === id} onClick={() => setAba(id)}>{nome}</Button>)}</nav>
+    <nav className="ce-abas" aria-label="Seções de clientes">{[['clientes', 'Fichas de clientes'], ['conhecimento', 'O que a Sora aprendeu'], ['autorizacoes', 'Quem pode consultar']].map(([id, nome]) => <Button key={id} variante="fantasma" aria-pressed={aba === id} onClick={() => setAba(id)}>{nome}{id === 'conhecimento' && pendentes > 0 && <span className="ce-contador" aria-label={`${pendentes} para aprovar`}>{pendentes}</span>}</Button>)}</nav>
     {aba === 'clientes' ? <ListaClientes /> : aba === 'conhecimento' ? <Aprendizado /> : <Autorizacoes />}
   </div></main></AppShell>;
 }

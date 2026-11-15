@@ -22,7 +22,9 @@ export const CATEGORIAS = { faq: 'FAQ', produto: 'Produtos e preços', politica:
 export interface ConhecimentoEmpresa {
   id: string; categoria: keyof typeof CATEGORIAS; titulo: string; conteudo: string; ocorrencias: number;
   contraditorio: boolean; editado: boolean; anteriores: { conteudo: string; em: string }[];
-  origens: { canal: string; mensagem_id: string; externo_id: string; link?: string; em: string }[];
+  estado?: 'pendente' | 'aprovado'; aprovado_em?: string | null; no_prompt?: boolean; sem_resposta?: boolean;
+  em_disputa?: { conteudo: string; em: string; papel?: string }[];
+  origens: { canal: string; mensagem_id: string; externo_id: string; link?: string; em: string; papel?: 'funcionario' | 'cliente' }[];
   primeira_em: string; ultima_em: string;
 }
 export interface SugestaoEmpresa {
@@ -46,7 +48,10 @@ export const canaisEmpresa = {
   apagarCliente: (id: string) => api.delete(`${RAIZ}/clientes/${id}`),
   editarFato: (id: string, dados: Pick<FatoCliente, 'texto' | 'tipo' | 'data_referencia'> & { limpar_data: boolean }) => api.patch<FatoCliente>(`${RAIZ}/fatos/${id}`, dados),
   apagarFato: (id: string) => api.delete(`${RAIZ}/fatos/${id}`),
-  conhecimento: (busca: string, categoria: string, pagina: number, signal?: AbortSignal) => api.get<ConhecimentoEmpresa[]>(`${RAIZ}/conhecimento?${new URLSearchParams({ busca, ...(categoria ? { categoria } : {}), limite: '50', deslocamento: String(pagina * 50) })}`, { signal }),
+  conhecimento: (busca: string, categoria: string, pagina: number, signal?: AbortSignal, estado?: 'pendente' | 'aprovado') => api.get<ConhecimentoEmpresa[]>(`${RAIZ}/conhecimento?${new URLSearchParams({ busca, ...(categoria ? { categoria } : {}), ...(estado ? { estado } : {}), limite: '50', deslocamento: String(pagina * 50) })}`, { signal }),
+  disputas: (signal?: AbortSignal) => api.get<ConhecimentoEmpresa[]>(`${RAIZ}/conhecimento?${new URLSearchParams({ contraditorio: 'true', limite: '50' })}`, { signal }),
+  aprovarConhecimento: (id: string) => api.post<ConhecimentoEmpresa>(`${RAIZ}/conhecimento/${id}/aprovar`),
+  resolverConhecimento: (id: string, versao: number | null) => api.post<ConhecimentoEmpresa>(`${RAIZ}/conhecimento/${id}/resolver`, { versao }),
   editarConhecimento: (id: string, dados: Pick<ConhecimentoEmpresa, 'titulo' | 'conteudo' | 'categoria'>) => api.patch<ConhecimentoEmpresa>(`${RAIZ}/conhecimento/${id}`, dados),
   apagarConhecimento: (id: string) => api.delete(`${RAIZ}/conhecimento/${id}`),
   sugestoes: (signal?: AbortSignal) => api.get<SugestaoEmpresa[]>(`${RAIZ}/sugestoes`, { signal }),
