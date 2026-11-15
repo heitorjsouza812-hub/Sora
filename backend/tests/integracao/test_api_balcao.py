@@ -307,7 +307,7 @@ async def _aprovacao(api: Ambiente, uid: UUID, cena: Cena, expira: timedelta) ->
             usuario_id=uid,
             etapa_id=cena.etapa_id,
             agente_id=cena.agente_id,
-            acao={"ferramenta": "enviar_email", "condicao": {"dominio": "x.com"}},
+            acao={"ferramenta": "mcp__notion__criar_pagina", "condicao": {"pasta": "x"}},
             avaliacao={"dano": "baixo"},
             expira_em=datetime.now(UTC) + expira,
         )
@@ -330,7 +330,7 @@ async def test_aprovacao_sempre_permitir_cria_regra_publica_evento_e_retoma(api:
         regras = list(await sessao.scalars(select(RegraPermissao)))
     assert aprovacao is not None and aprovacao.status == StatusAprovacao.PERMITIDA
     assert [(r.ferramenta, r.agente_id, r.condicao) for r in regras] == [
-        ("enviar_email", cena.agente_id, {"dominio": "x.com"})
+        ("mcp__notion__criar_pagina", cena.agente_id, {"pasta": "x"})
     ]
     assert api.fila.jobs[0][0:2] == (
         "executar_etapa",

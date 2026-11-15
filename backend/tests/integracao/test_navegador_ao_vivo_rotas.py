@@ -155,7 +155,6 @@ async def test_arquivo_do_computador_vira_anexo_baixavel_so_pelo_dono(mundo: Mun
     from app.ferramentas import saidas_do_turno
     from app.ferramentas.base import ContextoFerramenta
 
-    saidas_do_turno.limpar()
     async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as cliente:
         a = await entrar(cliente, mundo.fabrica, "ao-vivo-c@exemplo.com")
         b = await entrar(cliente, mundo.fabrica, "ao-vivo-d@exemplo.com")
@@ -170,7 +169,7 @@ async def test_arquivo_do_computador_vira_anexo_baixavel_so_pelo_dono(mundo: Mun
         assert baixado.status_code == 200 and baixado.content == dados
         assert (await cliente.get(f"/v1/anexos/{anexo_id}", headers=b)).status_code == 404
         # a próxima mensagem do bot leva o anexo mesmo que o modelo esqueça o id
-        assert saidas_do_turno.recolher(usuario, agente) == [anexo_id]
+        assert await saidas_do_turno.recolher(usuario, agente) == [anexo_id]
         # nome estranho vira um nome seguro em vez de derrubar a entrega
         outro = await guardar_anexo_do_computador(ctx, "../../x", b"abc")
         assert (await cliente.get(f"/v1/anexos/{outro}", headers=a)).status_code == 200

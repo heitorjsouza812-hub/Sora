@@ -130,7 +130,7 @@ async def guardar_anexo_do_computador(
                 origem="computador",
             )
         )
-    registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
+    await registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
     return anexo_id
 
 
@@ -144,22 +144,23 @@ def obter_servico() -> ServicoComputador:
     global _servico
     if _servico is None:
         from app.computador.pc_usuario import ProvedorPcUsuario
+        from app.computador.servico import publicar_tela_limitada
         from app.computador.virtual import ClienteDocker, GerenteComputadoresDocker
         from app.core.config import obter_configuracao
-        from app.eventos.equipe import publicar_evento_equipe
         from app.ferramentas.ambiente import redis_dos_eventos
 
         config = obter_configuracao()
         redis = redis_dos_eventos()
 
         async def publicar(evento, usuario_id) -> None:
-            await publicar_evento_equipe(redis, evento, usuario_id)
+            await publicar_tela_limitada(redis, evento, usuario_id)
 
         _servico = ServicoComputador(
             provedores={
                 Alvo.VIRTUAL: GerenteComputadoresDocker(
                     ClienteDocker(docker_host=config.sandbox_docker_host or None),
                     imagem=config.computador_imagem,
+                    redis=redis,
                     imagem_proxy=config.computador_proxy_imagem,
                 ),
                 Alvo.PC_USUARIO: ProvedorPcUsuario(),

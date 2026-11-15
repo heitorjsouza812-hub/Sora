@@ -129,7 +129,9 @@ async def canal_resultado(args: CanalResultado, contexto: ContextoFerramenta) ->
     _, tarefa_id, revisao = _ids(contexto)
     # Imagens e arquivos que o bot produziu no turno chegam com o resultado (item 10, etapa 6).
     args = args.model_copy(
-        update={"anexos": recolher(contexto.usuario_id, contexto.agente_id, args.anexos or [])}
+        update={
+            "anexos": await recolher(contexto.usuario_id, contexto.agente_id, args.anexos or [])
+        }
     )
     async with fabrica_sessoes()() as sessao:
         if args.anexos:

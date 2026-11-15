@@ -78,7 +78,7 @@ async def escrever_arquivo(args: EscreverArquivo, contexto: ContextoFerramenta) 
         sessao.add(anexo)
         await sessao.flush()
         anexo_id = anexo.id
-    registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
+    await registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
     return (
         f"Arquivo {args.nome} salvo. anexo_id: {anexo_id}. "
         "Ele vai junto com a sua próxima mensagem ao usuário."

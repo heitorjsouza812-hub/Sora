@@ -441,3 +441,38 @@ async def marcar_desligado(
         ),
         usuario_id,
     )
+
+
+async def publicar_tela_limitada(redis: Any, evento: TelaComputadorEvento, usuario_id: UUID) -> str:
+    """Publica atomicamente, deduplica quadros e retém três por conta/bot/alvo.
+
+    Apaga apenas IDs deste computador; outros eventos do usuário ficam intactos.
+    """
+    import hashlib
+
+    from app.eventos.streams import canal_usuario
+
+    chave = f"computador:quadros:{usuario_id}:{evento.agente_id}:{evento.alvo}"
+    assinatura = hashlib.sha256((evento.miniatura or "").encode()).hexdigest()
+    dados = json.dumps(evento.model_dump(mode="json"), ensure_ascii=False)
+    resultado = await redis.eval(
+        """
+        if ARGV[1] ~= '' and redis.call('GET', KEYS[3]) == ARGV[1] then return '' end
+        local id = redis.call('XADD', KEYS[1], '*', 'event', 'computador.tela', 'data', ARGV[2])
+        redis.call('RPUSH', KEYS[2], id)
+        while redis.call('LLEN', KEYS[2]) > 3 do
+            redis.call('XDEL', KEYS[1], redis.call('LPOP', KEYS[2]))
+        end
+        redis.call('SET', KEYS[3], ARGV[1], 'EX', 86400)
+        redis.call('EXPIRE', KEYS[1], 86400)
+        redis.call('EXPIRE', KEYS[2], 86400)
+        return id
+        """,
+        3,
+        canal_usuario(usuario_id),
+        chave,
+        chave + ":hash",
+        assinatura if evento.miniatura else "",
+        dados,
+    )
+    return resultado.decode() if isinstance(resultado, bytes) else resultado

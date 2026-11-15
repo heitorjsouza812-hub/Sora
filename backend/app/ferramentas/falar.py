@@ -46,7 +46,7 @@ async def falar(args: Falar, contexto: ContextoFerramenta, *, estado: str = "con
         raise ErroFerramenta(f"No máximo {MAX_ANEXOS} anexos por mensagem.")
     # Imagens e arquivos que o próprio agente produziu neste turno vão junto, mesmo que o modelo
     # tenha esquecido de copiar o ``anexo_id`` (item 10 da etapa 6).
-    anexos = recolher(contexto.usuario_id, contexto.agente_id, anexos, limite=MAX_ANEXOS)
+    anexos = await recolher(contexto.usuario_id, contexto.agente_id, anexos, limite=MAX_ANEXOS)
 
     mensagem_id = uuid4()
     async with abrir_sessao() as sessao:
@@ -56,7 +56,7 @@ async def falar(args: Falar, contexto: ContextoFerramenta, *, estado: str = "con
             )
         )
         if tipo is None:
-            raise ErroFerramenta("Agente não encontrado.")
+            raise ErroFerramenta("Bot não encontrado.")
         if anexos:
             achados = set(
                 (

@@ -17,7 +17,6 @@ from redis.asyncio import Redis
 from sqlalchemy import insert, select, update
 
 from app.eventos.streams import canal_usuario
-from app.ferramentas import saidas_do_turno
 from app.ferramentas.base import ContextoFerramenta
 from app.modelos.enumeracoes import AutorMensagem
 from app.modelos.tabelas import (
@@ -54,9 +53,7 @@ def servicos_relogio():
 def pasta(tmp_path, monkeypatch):
     """Volume de anexos descartável (definido antes de ``mundo`` ler a configuração)."""
     monkeypatch.setenv("PASTA_ARQUIVOS", str(tmp_path / "arquivos"))
-    saidas_do_turno.limpar()
     yield tmp_path / "arquivos"
-    saidas_do_turno.limpar()
 
 
 async def _usuario_id(mundo_: Mundo, email: str) -> UUID:
@@ -845,3 +842,110 @@ async def test_agente_sem_ferramenta_de_imagem_nao_a_recebe_sem_modelo_de_imagem
                 await sessao.scalars(select(Agente.id).where(Agente.usuario_id == usuario_id))
             ).all()
         assert agente_ids  # a conta existe; só não há modelo de imagem
+
+
+async def test_imagem_pendente_sobrevive_ao_reinicio_do_worker(
+    mundo: Mundo,  # noqa: F811
+    pasta,
+    seletor_de_imagem,
+) -> None:
+    """Prumo M5: o registro das saídas do turno fica no Redis, não no processo. Depois de um
+    "reinício" (cliente do Redis e módulo recarregados) a mensagem seguinte ainda leva a imagem."""
+    import importlib
+
+    from app.ferramentas import ambiente, saidas_do_turno
+    from app.ferramentas.falar import Falar, falar
+    from app.ferramentas.gerar_imagem import GerarImagem, gerar_imagem
+
+    email = f"reinicio-{uuid4()}@exemplo.com"
+    async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as cliente:
+        auth = await entrar(cliente, mundo.fabrica, email)
+        bot = await _bot(cliente, auth, "Lume")
+        usuario_id = await _usuario_id(mundo, email)
+        conversa_id = await _conversa(mundo, usuario_id, UUID(bot["id"]))
+        contexto = ContextoFerramenta(
+            usuario_id=usuario_id, agente_id=UUID(bot["id"]), conversa_id=conversa_id
+        )
+        await gerar_imagem(GerarImagem(descricao="um gato astronauta"), contexto)
+
+        ambiente.redis_dos_eventos.cache_clear()  # conexão nova, como num processo novo
+        importlib.reload(saidas_do_turno)  # e nenhum estado de módulo sobrando
+
+        await falar(Falar(texto="Aqui está."), contexto)
+        mensagens = (
+            await cliente.get(f"/v1/conversas/{conversa_id}/mensagens", headers=auth)
+        ).json()
+        assert len([m for m in mensagens if m["autor"] == "agente"][-1]["anexos"]) == 1
+
+
+async def test_quadros_limitados_sem_apagar_outros_eventos(mundo: Mundo):  # noqa: F811
+    from app.computador.eventos import TelaComputadorEvento
+    from app.computador.servico import publicar_tela_limitada
+    from app.eventos.streams import canal_usuario
+
+    redis = Redis.from_url(mundo.url_redis, decode_responses=True)
+    usuario, bot = uuid4(), uuid4()
+    canal = canal_usuario(usuario)
+    try:
+        outro = await redis.xadd(canal, {"event": "outro", "data": "{}"})
+        for imagem in ["a", "b", "c", "d", "d"]:
+            await publicar_tela_limitada(
+                redis,
+                TelaComputadorEvento(
+                    agente_id=bot,
+                    alvo="virtual",
+                    ligado=True,
+                    miniatura=imagem,
+                    em=datetime.now(UTC),
+                ),
+                usuario,
+            )
+        entradas = await redis.xrange(canal)
+        assert len(entradas) == 4
+        assert entradas[0][0] == outro
+        assert [json.loads(e[1]["data"])["miniatura"] for e in entradas[1:]] == ["b", "c", "d"]
+    finally:
+        await redis.aclose()
+
+
+async def test_anexo_pendente_entre_processos(mundo: Mundo):  # noqa: F811
+    import asyncio
+    import subprocess
+    import sys
+
+    usuario, bot, anexo = uuid4(), uuid4(), uuid4()
+    codigo = """
+import asyncio, sys
+from uuid import UUID
+from redis.asyncio import Redis
+from app.ferramentas.saidas_do_turno import registrar, recolher
+async def main():
+    redis = Redis.from_url(sys.argv[1])
+    usuario, bot, anexo = map(UUID, sys.argv[2:5])
+    try:
+        if sys.argv[5] == 'gravar':
+            await registrar(usuario, bot, anexo, redis=redis)
+        else:
+            assert await recolher(usuario, bot, redis=redis) == [anexo]
+            assert await recolher(usuario, bot, redis=redis) == []
+    finally:
+        await redis.aclose()
+asyncio.run(main())
+"""
+    for modo in ("gravar", "ler"):
+        resultado = await asyncio.to_thread(
+            subprocess.run,
+            [
+                sys.executable,
+                "-c",
+                codigo,
+                mundo.url_redis,
+                str(usuario),
+                str(bot),
+                str(anexo),
+                modo,
+            ],
+            capture_output=True,
+            timeout=30,
+        )
+        assert resultado.returncode == 0, resultado.stderr.decode(errors="replace")

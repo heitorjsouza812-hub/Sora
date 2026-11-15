@@ -106,7 +106,7 @@ class AcaoComputador(BaseModel):
         default=None, max_length=MAX_TEXTO_DIGITADO, description="Para digitar. Nunca senha."
     )
     tecla: str | None = Field(
-        default=None, max_length=40, description="Ex.: Enter, Tab, ctrl+l, alt+tab."
+        default=None, max_length=40, description="Ex.: Enter, Tab, ctrl+l, ctrl+c."
     )
     direcao: Literal["cima", "baixo", "esquerda", "direita"] = "baixo"
     quantidade: int = Field(default=3, ge=1, le=15, description="Passos de rolagem.")

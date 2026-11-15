@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import base64
 import time
+from collections.abc import AsyncIterator
 from uuid import UUID, uuid4
 
+import fakeredis
 import pytest
 
 from app.agentes import visao
@@ -33,48 +35,80 @@ from app.memoria.servico import ArmazemMemoriasEmMemoria, ServicoMemoria
 # ------------------------------------------------------------------ item 10: saídas do turno
 
 
-@pytest.fixture(autouse=True)
-def _limpar_saidas():
-    saidas_do_turno.limpar()
-    yield
-    saidas_do_turno.limpar()
+@pytest.fixture
+async def redis_saidas() -> AsyncIterator[fakeredis.FakeAsyncRedis]:
+    cliente = fakeredis.FakeAsyncRedis(decode_responses=True)
+    yield cliente
+    await cliente.aclose()
 
 
-def test_recolher_junta_explicitos_e_pendentes_sem_repetir_e_so_uma_vez() -> None:
+async def test_recolher_junta_explicitos_e_pendentes_sem_repetir_e_so_uma_vez(redis_saidas) -> None:
     usuario, agente = uuid4(), uuid4()
     a, b, c = uuid4(), uuid4(), uuid4()
-    saidas_do_turno.registrar(usuario, agente, a)
-    saidas_do_turno.registrar(usuario, agente, b)
+    await saidas_do_turno.registrar(usuario, agente, a, redis=redis_saidas)
+    await saidas_do_turno.registrar(usuario, agente, b, redis=redis_saidas)
 
-    primeira = saidas_do_turno.recolher(usuario, agente, [b, c])
+    primeira = await saidas_do_turno.recolher(usuario, agente, [b, c], redis=redis_saidas)
     assert primeira == [b, c, a]  # o que o modelo indicou vem primeiro; ``b`` não repete
-    assert saidas_do_turno.recolher(usuario, agente) == []  # cada arquivo sai uma vez
+    # cada arquivo sai uma vez
+    assert await saidas_do_turno.recolher(usuario, agente, redis=redis_saidas) == []
 
 
-def test_recolher_nao_mistura_agentes_nem_usuarios() -> None:
+async def test_recolher_nao_mistura_agentes_nem_usuarios(redis_saidas) -> None:
     usuario, outro_usuario, agente, outro_agente = uuid4(), uuid4(), uuid4(), uuid4()
     anexo = uuid4()
-    saidas_do_turno.registrar(usuario, agente, anexo)
-    assert saidas_do_turno.recolher(usuario, outro_agente) == []
-    assert saidas_do_turno.recolher(outro_usuario, agente) == []
-    assert saidas_do_turno.recolher(usuario, agente) == [anexo]
+    await saidas_do_turno.registrar(usuario, agente, anexo, redis=redis_saidas)
+    assert await saidas_do_turno.recolher(usuario, outro_agente, redis=redis_saidas) == []
+    assert await saidas_do_turno.recolher(outro_usuario, agente, redis=redis_saidas) == []
+    assert await saidas_do_turno.recolher(usuario, agente, redis=redis_saidas) == [anexo]
 
 
-def test_saida_nao_recolhida_expira(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_saida_nao_recolhida_expira(monkeypatch: pytest.MonkeyPatch, redis_saidas) -> None:
     usuario, agente, anexo = uuid4(), uuid4(), uuid4()
     relogio = [1000.0]
-    monkeypatch.setattr(time, "monotonic", lambda: relogio[0])
-    saidas_do_turno.registrar(usuario, agente, anexo)
+    monkeypatch.setattr(time, "time", lambda: relogio[0])
+    await saidas_do_turno.registrar(usuario, agente, anexo, redis=redis_saidas)
     relogio[0] += saidas_do_turno.VALIDADE_S + 1
-    assert saidas_do_turno.recolher(usuario, agente) == []
+    assert await saidas_do_turno.recolher(usuario, agente, redis=redis_saidas) == []
 
 
-def test_registro_guarda_no_maximo_dez_por_agente() -> None:
+async def test_registro_guarda_no_maximo_dez_por_agente(
+    monkeypatch: pytest.MonkeyPatch, redis_saidas
+) -> None:
     usuario, agente = uuid4(), uuid4()
+    relogio = [1000.0]
+    monkeypatch.setattr(time, "time", lambda: relogio[0])
     ids = [uuid4() for _ in range(15)]
     for anexo in ids:
-        saidas_do_turno.registrar(usuario, agente, anexo)
-    assert saidas_do_turno.recolher(usuario, agente) == ids[-10:]
+        relogio[0] += 1
+        await saidas_do_turno.registrar(usuario, agente, anexo, redis=redis_saidas)
+    assert await saidas_do_turno.recolher(usuario, agente, redis=redis_saidas) == ids[-10:]
+
+
+async def test_pendente_sobrevive_ao_reinicio_do_worker(redis_saidas) -> None:
+    """O registro mora no Redis: outro processo (ou o mesmo, reiniciado) ainda o recolhe, e o
+    registro tem prazo no próprio Redis."""
+    usuario, agente, anexo = uuid4(), uuid4(), uuid4()
+    await saidas_do_turno.registrar(usuario, agente, anexo, redis=redis_saidas)
+    chave = saidas_do_turno.chave_das_saidas(usuario, agente)
+    assert 0 < await redis_saidas.ttl(chave) <= int(saidas_do_turno.VALIDADE_S)
+    # "reinício": nada do processo é reaproveitado, só o Redis
+    import importlib
+
+    importlib.reload(saidas_do_turno)
+    assert await saidas_do_turno.recolher(usuario, agente, redis=redis_saidas) == [anexo]
+
+
+async def test_redis_fora_do_ar_nao_derruba_a_mensagem() -> None:
+    class Quebrado:
+        def pipeline(self, *a, **k):
+            raise ConnectionError("sem Redis")
+
+    explicito = uuid4()
+    await saidas_do_turno.registrar(uuid4(), uuid4(), uuid4(), redis=Quebrado())  # só avisa no log
+    assert await saidas_do_turno.recolher(uuid4(), uuid4(), [explicito], redis=Quebrado()) == [
+        explicito
+    ]
 
 
 # ------------------------------------------------------------------ item 10: visão
@@ -269,3 +303,26 @@ def test_trecho_troca_quebra_de_linha_por_espaco() -> None:
     trecho, destaques = trecho_destacado("linha um\n\nlinha dois com ideia", ["ideia"])
     assert "\n" not in trecho
     assert [trecho[i:f] for i, f in destaques] == ["ideia"]
+
+
+@pytest.mark.parametrize(
+    "donos, global_max, mensagem", [("proprio", "10", "Sua conta"), ("outro", "2", "ocupados")]
+)
+async def test_limites_computadores(donos, global_max, mensagem, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from app.computador.virtual import ErroDocker, GerenteComputadoresDocker
+
+    usuario = uuid4()
+    dono = str(usuario) if donos == "proprio" else str(uuid4())
+    cliente = SimpleNamespace(
+        rodar=AsyncMock(
+            return_value=SimpleNamespace(
+                returncode=0, stdout=(dono + "\n" + dono + "\n").encode(), stderr=b""
+            )
+        )
+    )
+    monkeypatch.setenv("COMPUTADOR_MAX_GLOBAL", global_max)
+    with pytest.raises(ErroDocker, match=mensagem):
+        await GerenteComputadoresDocker(cliente)._conferir_limite(usuario)

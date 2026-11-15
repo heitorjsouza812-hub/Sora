@@ -27,6 +27,7 @@ import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
+from typing import Any
 from uuid import UUID
 
 from app.computador.interface import (
@@ -376,6 +377,8 @@ class GerenteComputadoresDocker:
     imagem: str = "sora-computador:1"
     imagem_proxy: str = "sora-proxy-egresso:1"
     tela: str = "1280x800x24"
+    redis: Any = None
+    _trava_criacao: asyncio.Lock = field(default_factory=asyncio.Lock)
     _travas: dict[UUID, asyncio.Lock] = field(default_factory=dict)
     _trava_proxy: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -468,6 +471,34 @@ class GerenteComputadoresDocker:
         raise ErroDocker("O computador virtual não ligou. Tente de novo em instantes.")
 
     async def obter(self, usuario_id: UUID, agente_id: UUID) -> ComputadorDocker:
+        # A trava distribuída cobre a contagem e a criação entre processos do worker.
+        async with self._trava_criacao:
+            if self.redis is not None:
+                async with self.redis.lock("computador:criacao", timeout=240, blocking_timeout=240):
+                    return await self._obter_limitado(usuario_id, agente_id)
+            return await self._obter_limitado(usuario_id, agente_id)
+
+    async def _conferir_limite(self, usuario_id: UUID) -> None:
+        resultado = await self.cliente.rodar(
+            "ps",
+            "--all",
+            "--filter",
+            f"label={ROTULO}=1",
+            "--format",
+            '{{.Label "sora.usuario"}}',
+        )
+        if resultado.returncode != 0:
+            raise ErroDocker("Não consegui conferir os computadores ligados. Tente novamente.")
+        donos = resultado.stdout.decode().splitlines()
+        max_global = max(1, int(os.environ.get("COMPUTADOR_MAX_GLOBAL", "10")))
+        if donos.count(str(usuario_id)) >= 2:
+            raise ErroDocker(
+                "Sua conta já tem 2 computadores virtuais. Desligue um para continuar."
+            )
+        if len(donos) >= max_global:
+            raise ErroDocker("Todos os computadores virtuais estão ocupados. Tente mais tarde.")
+
+    async def _obter_limitado(self, usuario_id: UUID, agente_id: UUID) -> ComputadorDocker:
         nome = nome_do_computador(agente_id)
         trava = self._travas.setdefault(agente_id, asyncio.Lock())
         async with trava:
@@ -479,6 +510,7 @@ class GerenteComputadoresDocker:
                 if rodando:
                     return ComputadorDocker(self.cliente, nome)
                 await self.cliente.rodar("rm", "-f", nome)
+            await self._conferir_limite(usuario_id)
             await self._garantir_proxy()
             await self._garantir_rede(nome)
             criado = await self.cliente.rodar(

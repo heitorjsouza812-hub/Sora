@@ -105,7 +105,7 @@ async def gerar_imagem(args: GerarImagem, contexto: ContextoFerramenta) -> str:
                 etapa_id=contexto.etapa_id,
             )
     for anexo_id in ids:
-        registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
+        await registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
     lista = ", ".join(str(i) for i in ids)
     return (
         f"{len(ids)} imagem(ns) gerada(s). anexo_ids: {lista}. "
