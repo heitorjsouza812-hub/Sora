@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
 import { BorderBeam } from 'border-beam';
 import { useGravacaoVoz } from './useGravacaoVoz';
 import { VoiceBeam, useMicrophone, type VoiceBeamMotion } from 'voice-glow';
@@ -9,9 +9,14 @@ import '../anexos/anexos.css';
 import { useConexao } from '../erros';
 import { Button } from '../base';
 import { MicIcon, PlusIcon, SendIcon } from './Icons';
+import { useMedia } from './useMedia';
+import './compositor.css';
 
 interface Props {
+  /** texto do campo; também é o rótulo acessível (aria-label) */
   placeholder: string;
+  /** versão curta para o celular, quando o nome não cabe (padrão: "Mensagem…" se o texto passar de 26 letras) */
+  placeholderCurto?: string;
   /** texto e anexos (com anexos e sem texto, o texto chega '') */
   onSend?: (text: string, anexos: Anexo[]) => void;
   /** valor inicial (modo não controlado) */
@@ -20,9 +25,11 @@ interface Props {
   value?: string;
   onValueChange?: (text: string) => void;
   processing?: boolean;
+  /** @deprecated o compositor é um só; use `grande` para o estado vazio da Sora */
   compact?: boolean;
+  /** estado vazio da Sora (desktop): texto em cima, ações embaixo, altura mínima de 120 px */
+  grande?: boolean;
   tools?: boolean;
-  accent?: string;
   /** digitando, com foco ou microfone ao vivo → true (a Sora fica "ouvindo") */
   onActivity?: (active: boolean) => void;
   /** microfone ao vivo ligado/desligado */
@@ -32,8 +39,10 @@ interface Props {
   /** resposta sendo gerada: Enviar vira Parar e Enter não envia */
   gerando?: boolean;
   onParar?: () => void;
-  /** controles extras na barra do campo, depois de "Ferramentas" (ex.: Equipe / Agente independente) */
+  /** controles extras à esquerda, depois de "Ferramentas" */
   extras?: ReactNode;
+  /** botões extras à direita, antes do microfone e do Enviar (ex.: @ no grupo, conversar por voz no bot) */
+  acoesDireita?: ReactNode;
   /** voz fica restrita ao chat 1:1 do bot na interface da etapa 5 */
   voz?: boolean;
   /** muda de valor → o foco vai para o campo (com o cursor no fim) */
@@ -67,8 +76,8 @@ const avisoMic: Record<string, string> = {
 };
 
 export function MessageComposer({
-  placeholder, onSend, initialValue = '', value: controlado, onValueChange, processing = false,
-  compact = false, tools = false, accent, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras, voz = false, focoSinal,
+  placeholder, placeholderCurto, onSend, initialValue = '', value: controlado, onValueChange, processing = false,
+  grande = false, tools = false, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras, acoesDireita, voz = false, focoSinal,
 }: Props) {
   const campoRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -85,7 +94,14 @@ export function MessageComposer({
   const toolsRef = useRef<HTMLButtonElement>(null);
   const mic = useMicrophone();
   const live = mic.state === 'live';
-  const active = focused || value.trim().length > 0 || live;
+  const movimentoReduzido = useMedia('(prefers-reduced-motion: reduce)');
+  // beam: aparece no foco (0,45) e fica mais forte enquanto digita ou fala (0,7); sem movimento, só a borda de foco (CSS)
+  const [digitando, setDigitando] = useState(false);
+  const fimDigitacao = useRef<number>(0);
+  useEffect(() => () => window.clearTimeout(fimDigitacao.current), []);
+  const marcarDigitacao = () => { setDigitando(true); window.clearTimeout(fimDigitacao.current); fimDigitacao.current = window.setTimeout(() => setDigitando(false), 1200); };
+  const active = !movimentoReduzido && (focused || live);
+  const forcaBeam = live || digitando ? 0.7 : 0.45;
   const avisoId = useId();
   const valorRef = useRef(value);
   useEffect(() => { valorRef.current = value; });
@@ -125,6 +141,13 @@ export function MessageComposer({
     return () => document.removeEventListener('keydown', aoTeclar);
   }, [podeParar]);
 
+  // o campo cresce com o texto até 200 px; depois rola por dentro
+  useLayoutEffect(() => {
+    const c = campoRef.current; if (!c) return;
+    c.style.height = 'auto';
+    if (c.scrollHeight > 0) c.style.height = `${Math.min(c.scrollHeight, 200)}px`;
+  }, [value, mobile]);
+
   const colar = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     if (!anexar) return;
     const arquivos = Array.from(event.clipboardData.files);
@@ -162,16 +185,16 @@ export function MessageComposer({
   };
 
   const formulario = (
-        <form className={`composer ${compact ? 'composer-compact' : ''}`} onSubmit={submit} style={accent ? { borderColor: `${accent}45` } : undefined}>
+        <form className={`composer ${grande ? 'composer-grande' : 'composer-compact'}`} onSubmit={submit}>
           <ListaAnexos anexos={anexos} onRemover={remover} />
           <textarea
             ref={campoRef}
             value={value}
-            rows={compact ? 1 : 2}
+            rows={1}
             aria-label={placeholder}
-            placeholder={live ? 'Ouvindo…' : placeholder}
+            placeholder={live ? 'Ouvindo…' : mobile ? (placeholderCurto ?? (placeholder.length > 26 ? 'Mensagem…' : placeholder)) : placeholder}
             aria-describedby={aviso ? avisoId : undefined}
-            onChange={(event) => { setValue(event.target.value); atividade(event.target.value.length > 0); }}
+            onChange={(event) => { setValue(event.target.value); atividade(event.target.value.length > 0); marcarDigitacao(); }}
             onFocus={() => { setFocused(true); atividade(true); }}
             onBlur={() => { setFocused(false); atividade(value.length > 0); }}
             onPaste={colar}
@@ -187,7 +210,7 @@ export function MessageComposer({
               }
             }}
           />
-          <div className="composer-actions">
+          <div className="composer-esq">
             {anexar && <>
               <button type="button" className="add-button" aria-label="Anexar arquivos" title={`Anexar arquivos (até ${MAX_ANEXOS}, 20 MB cada)`}
                 disabled={anexos.length >= MAX_ANEXOS} onClick={() => arquivoRef.current?.click()}><PlusIcon /></button>
@@ -199,7 +222,9 @@ export function MessageComposer({
               <ToolsPopover open={toolsOpen} onClose={() => setToolsOpen(false)} anchorRef={toolsRef} plugins={pluginsConectados} />
             </>}
             {extras}
-            <span className="composer-spacer" />
+          </div>
+          <div className="composer-dir">
+            {acoesDireita}
             {voz && <button
               type="button"
               className={`icon-button ${live ? 'is-live' : ''}`}
@@ -237,7 +262,7 @@ export function MessageComposer({
   return (
     <FormularioDoCampo.Provider value={formulario}>
     <ConteudoDoCampo.Provider value={conteudo}>
-      <BorderBeam size="md" colorVariant="colorful" strength={0.7} theme="dark" active={active} className="composer-beam">{CORPO_ESTAVEL}</BorderBeam>
+      <BorderBeam size="md" colorVariant="colorful" strength={forcaBeam} duration={3.2} theme="dark" active={active} className="composer-beam">{CORPO_ESTAVEL}</BorderBeam>
     </ConteudoDoCampo.Provider>
     </FormularioDoCampo.Provider>
   );

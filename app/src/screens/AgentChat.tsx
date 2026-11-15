@@ -94,6 +94,7 @@ export default function AgentChat() {
   const st = a ? estadoAgente(e, a.id, agora) : null;
   const painel = usePainelLateral('sora.painel.agente', 'trabalho');
   const [folha, setFolha] = useState(params.get('painel') === 'trabalho');
+  const [faixaVoz, setFaixaVoz] = useState<HTMLElement | null>(null);
   const { setAba } = painel;
   // "Ver trabalho" vindo de outra tela (?painel=trabalho) abre direto na aba Trabalho
   useEffect(() => { if (params.get('painel') === 'trabalho') setAba('trabalho'); }, [params, setAba]);
@@ -192,8 +193,9 @@ export default function AgentChat() {
           </div>
           <div className="chat-composer">
             <AvisosMemoria agenteId={a.id} />
-            <ConversaVoz key={a.id} agenteId={a.id} cor={a.cor} movimento={a.tipoMovimento} />
-            <MessageComposer placeholder={`Mensagem para ${a.nome}…`} compact accent={a.cor} processing={st.status === 'trabalhando'} voz
+            <div ref={setFaixaVoz} className="conversa-voz-faixa" />
+            <MessageComposer placeholder={`Mensagem para ${a.nome}…`} processing={st.status === 'trabalhando'} voz
+              acoesDireita={<ConversaVoz key={a.id} agenteId={a.id} cor={a.cor} movimento={a.tipoMovimento} faixa={faixaVoz} />}
               onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => enviarParaAgente(a.id, t, undefined, true, enviados)); seguirFim(); }}
               gerando={gerando} onParar={() => { void pararConversa(a.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
           </div>

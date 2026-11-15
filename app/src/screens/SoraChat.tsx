@@ -83,7 +83,7 @@ export default function SoraChat() {
           {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
         </div>
         <div className="chat-composer">
-          <MessageComposer placeholder="Mensagem para a Sora…" compact focoSinal={focoSinal} value={rascunho} onValueChange={setRascunho}
+          <MessageComposer placeholder="Mensagem para a Sora…" focoSinal={focoSinal} value={rascunho} onValueChange={setRascunho}
             processing={pensando}
             onSend={(texto, anexos) => { seguirFim(); void anexarEnvio(anexos, enviados => conversarComSora(texto, undefined, enviados)); }}
             gerando={gerando} onParar={() => { if (projeto) void pararConversa(projeto.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, mensagemDeErro } from '../../api/cliente';
 import { MSG_SEM_VOZ, sintetizarFala, transcreverAudio } from '../../api/voz';
 import { enviarParaAgente, gerandoNa, lerEstado, mensagensDa, pararConversa, useProjetos } from '../../state/projetos';
@@ -19,7 +20,7 @@ function textoDoErro(falha: unknown): string {
 }
 
 /** Sessão com recursos próprios: nunca grava enquanto reproduz a resposta. */
-export function ConversaVoz({ agenteId, cor, movimento }: { agenteId: string; cor: string; movimento: Movimento }) {
+export function ConversaVoz({ agenteId, cor, movimento, faixa }: { agenteId: string; cor: string; movimento: Movimento; /** contêiner (acima do compositor) onde aparece o estado da conversa por voz */ faixa?: HTMLElement | null }) {
   const estado = useProjetos();
   const [fase, setFase] = useState<Fase>('inativo');
   const [erro, setErro] = useState('');
@@ -139,13 +140,25 @@ export function ConversaVoz({ agenteId, cor, movimento }: { agenteId: string; co
     return () => clearTimeout(timer);
   }, [estado, fase, agenteId]);
 
-  return <div className="conversa-voz">
-    {fase === 'inativo' ? <button type="button" disabled={gerandoNa(estado, agenteId, 0)} onClick={() => void iniciar()}>Conversar por voz</button> : <>
-      <SoraOrb size={38} color={cor} movimento={movimento} state={fase === 'ouvindo' ? 'listening' : 'thinking'} title={rotulos[fase]} />
+  const ativa = fase !== 'inativo';
+  // Faixa de estado (só durante a conversa ou com erro): vai para o contêiner acima do compositor, quando existe.
+  const faixaDeEstado = (ativa || erro) ? <div className="conversa-voz">
+    {ativa && <>
+      <SoraOrb size={28} color={cor} movimento={movimento} state={fase === 'ouvindo' ? 'listening' : 'thinking'} title={rotulos[fase]} />
       <span role="status">{rotulos[fase]}</span>
-      {fase === 'falando' && <button type="button" onClick={interromper}>Interromper leitura</button>}
-      <button type="button" onClick={encerrar}>Encerrar conversa por voz</button>
+      {fase === 'falando' && <button type="button" className="conversa-voz-acao" onClick={interromper}>Interromper leitura</button>}
     </>}
     {erro && <span role="alert">{erro}</span>}
-  </div>;
+  </div> : null;
+  return <>
+    {/* O gatilho é um ícone dentro do campo (ao lado do microfone e do Enviar). */}
+    {ativa
+      ? <button type="button" className="icon-button is-live" aria-label="Encerrar conversa por voz" title="Encerrar conversa por voz" onClick={encerrar}><IconeVoz /></button>
+      : <button type="button" className="icon-button" aria-label="Conversar por voz" title="Conversar por voz" disabled={gerandoNa(estado, agenteId, 0)} onClick={() => void iniciar()}><IconeVoz /></button>}
+    {faixa ? createPortal(faixaDeEstado, faixa) : faixaDeEstado}
+  </>;
+}
+
+function IconeVoz() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" /></svg>;
 }

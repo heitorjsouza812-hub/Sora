@@ -1,0 +1,63 @@
+/* Compositor único (etapa 6, §5.3): Sora, bot e grupo. Compacto no rodapé; grande no estado vazio da Sora. */
+.composer-beam, .voice-beam-wrap { width: 100%; border-radius: var(--r-24); }
+
+.composer {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "anexos anexos anexos" "esq campo dir";
+  align-items: center; column-gap: var(--sp-1); min-height: 54px; padding: var(--sp-2); overflow: hidden;
+  background: var(--surface-3); border: 1px solid var(--line); border-radius: var(--r-24); box-shadow: 0 12px 40px rgba(0, 0, 0, .28);
+  transition: border-color var(--dur-fast);
+}
+.composer:hover, .composer:focus-within { border-color: var(--line-strong); }
+.composer textarea {
+  grid-area: campo; width: 100%; min-width: 0; min-height: 36px; max-height: 200px; padding: 6px var(--sp-2); resize: none; overflow-y: auto;
+  color: var(--text-1); caret-color: var(--focus); border: 0; outline: 0; background: transparent;
+  font: 400 var(--fs-16)/24px var(--font); scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent;
+}
+.composer textarea::placeholder { color: var(--text-2); opacity: 1; }
+.composer textarea:focus-visible { outline: 0; } /* o foco do campo é a borda mais o beam (§7.5) */
+.composer-esq, .composer-dir { display: flex; align-items: center; align-self: end; gap: var(--sp-1); }
+.composer-esq { grid-area: esq; }
+.composer-dir { grid-area: dir; }
+.composer-file { display: none; }
+
+/* estado vazio da Sora (desktop): texto em cima, ações embaixo */
+.composer-grande { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "anexos anexos" "campo campo" "esq dir"; align-content: space-between; row-gap: var(--sp-2); min-height: 120px; padding: var(--sp-3) var(--sp-3) var(--sp-2) var(--sp-4); }
+.composer-grande textarea { min-height: 54px; padding: var(--sp-2) 0; }
+
+/* botões redondos de 36 px: Anexar, microfone, voz, @ e Enviar */
+.add-button, .icon-button, .send-button {
+  flex: none; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: var(--text-2);
+  background: transparent; border: 0; border-radius: 50%; cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast);
+}
+.add-button:hover:not(:disabled), .icon-button:hover:not(:disabled) { color: var(--text-1); background: var(--hover); }
+.add-button:disabled { opacity: .45; cursor: not-allowed; }
+.add-button svg, .icon-button svg, .send-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-button.is-live { color: var(--text-inverse); background: var(--action); }
+.icon-button:disabled { cursor: default; color: var(--off-fg); }
+.send-button { color: var(--text-inverse); background: var(--action); }
+.send-button:hover:not(:disabled) { background: var(--action-hover); }
+.send-button:active:not(:disabled) { transform: scale(.94); }
+.send-button:disabled { color: var(--off-fg); background: var(--off-bg); cursor: default; }
+.send-button.is-parar svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+.tool-button { display: inline-flex; align-items: center; gap: var(--sp-2); height: 36px; padding: 0 var(--sp-3); color: var(--text-2); background: transparent; border: 1px solid var(--line-strong); border-radius: var(--r-pill); font-size: var(--fs-13); font-weight: 500; }
+.tool-button:hover { color: var(--text-1); background: var(--hover); }
+
+/* avisos, erros e anexos ocupam a linha inteira */
+.composer .anx-lista { grid-area: anexos; margin: 0 var(--sp-1) var(--sp-2); }
+.composer-notice:not(.is-on) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.composer-notice.is-on { grid-column: 1 / -1; display: block; margin: var(--sp-1) var(--sp-2) 0; color: var(--text-2); font-size: var(--fs-13); line-height: 18px; }
+.composer-erro { grid-column: 1 / -1; margin: var(--sp-1) var(--sp-2) 0; color: var(--danger); font-size: var(--fs-13); line-height: 18px; }
+.composer-bloqueio { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin: var(--sp-1) var(--sp-2) 0; color: var(--text-2); font-size: var(--fs-13); line-height: 18px; }
+.composer-bloqueio .b-btn { flex: none; }
+
+@media (max-width: 767px) {
+  .composer { min-height: 54px; }
+  .add-button, .icon-button, .send-button { width: 44px; height: 44px; }
+  .tool-button { height: 44px; }
+}
+/* movimento reduzido: sem beam; o foco vira uma borda sólida de 1,5 px */
+@media (prefers-reduced-motion: reduce) {
+  .composer, .add-button, .icon-button, .send-button { transition: none; }
+  .composer:focus-within { border-color: var(--focus); box-shadow: 0 0 0 .5px var(--focus), 0 12px 40px rgba(0, 0, 0, .28); }
+  .send-button:active:not(:disabled) { transform: none; }
+}
