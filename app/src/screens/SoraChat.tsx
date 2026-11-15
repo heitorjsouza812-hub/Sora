@@ -1,8 +1,9 @@
 import { mensagemDeErro } from '../api/cliente';
 import { toast } from '../components/base';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { InicioSora, aoDeixarPedidoInicial, consumirPedidoInicial } from '../components/inicio';
+import { animarDescida, fantasma } from '../components/inicio/descida';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb, SoraThinking } from '../components/mascot';
 import { CartaoRascunhoBot } from '../components/builder';
@@ -12,6 +13,7 @@ import { MessageComposer } from '../components/ui/MessageComposer';
 import { HistoricoConversa } from '../components/ui/HistoricoConversa';
 import { IrParaFim } from '../components/ui/IrParaFim';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
+import { useCelular } from '../components/ui/useMedia';
 import { useIrParaMensagemDaConversa } from '../components/ui/useIrParaMensagem';
 import { MensagemChat } from '../components/ui/MensagemChat';
 import { ZonaSoltar } from '../components/anexos';
@@ -23,10 +25,17 @@ import {
   projetoAtivo, textoVisivel, useAgora, useProjetos,
 } from '../state/projetos';
 
+// O mascote "chega" só na primeira abertura da sessão (CLAUDE.md §3.2); depois fica em repouso.
+let jaChegou = false;
+
 export default function SoraChat() {
   const estado = useProjetos();
+  const celular = useCelular();
   const [rascunho, setRascunho] = useState('');
-  const focoSinal = (useLocation().state as { focarCampo?: number } | null)?.focarCampo;
+  const [focoLocal, setFocoLocal] = useState(0);
+  const [ouvindo, setOuvindo] = useState(false);
+  const [chegando, setChegando] = useState(!jaChegou);
+  const focoSinal = Math.max(focoLocal, (useLocation().state as { focarCampo?: number } | null)?.focarCampo ?? 0) || undefined;
   useEffect(() => {
     const pedido = consumirPedidoInicial();
     // A galeria deixa o pedido em uma caixa externa ao React; consumir no efeito é seguro no StrictMode.
@@ -59,19 +68,46 @@ export default function SoraChat() {
   const gerando = !!projeto && gerandoNa(estado, projeto.id, agora);
   const pensando = !!projeto?.mensagensPendentes && !gerando;
 
+  // Estado vazio: orb e compositor juntos no centro. Depois do 1º envio o compositor desce (FLIP).
+  const vazio = !estado.carregando && !mensagens.length && !pensando && !cartoes.rascunhos.length && !cartoes.propostas.length && !pedidosDaSora.length;
+  const compositor = useRef<HTMLDivElement>(null);
+  const hero = useRef<HTMLElement>(null);
+  const rodapeVazio = useRef<HTMLDivElement>(null);
+  const antes = useRef<{ rect: DOMRect; altura: number } | null>(null);
+  const enviouDoCentro = useRef(false);
+  useLayoutEffect(() => {
+    const el = compositor.current;
+    if (!el) return;
+    if (vazio) return;
+    const de = antes.current; antes.current = null;
+    if (de && enviouDoCentro.current && !celular) animarDescida(el, de.rect, de.altura);
+    enviouDoCentro.current = false;
+  }, [vazio, celular]);
+
+  const enviar = (texto: string, anexos: Parameters<typeof anexarEnvio>[0]) => {
+    if (vazio && !celular && compositor.current) { // o que sai de cena fica como cópia por 120–320 ms
+      antes.current = { rect: compositor.current.getBoundingClientRect(), altura: compositor.current.querySelector('.composer')?.getBoundingClientRect().height ?? 0 };
+      enviouDoCentro.current = true;
+      fantasma(hero.current, { orb: true });
+      fantasma(rodapeVazio.current);
+    }
+    seguirFim();
+    void anexarEnvio(anexos, enviados => conversarComSora(texto, undefined, enviados));
+  };
+
   return <AppShell>
-    <main className="conversation sora-main-chat" aria-label="Conversa com a Sora">
+    <main className={`conversation sora-main-chat${vazio ? ' is-vazio' : ''}${estado.carregando ? ' is-carregando' : ''}`} aria-label="Conversa com a Sora">
       <ZonaSoltar className="conversation-drop">
         <div className="conversation-area">
+          {vazio && <section className="sora-hero" ref={hero} aria-label="Início da conversa">
+            <div className="sora-hero-orb">
+              <SoraOrb size={celular ? 96 : 120} color="#E2ECFF" state={chegando ? 'arriving' : ouvindo ? 'listening' : 'idle'} onArrived={() => { jaChegou = true; setChegando(false); }} title="Sora" />
+            </div>
+            <h1>Em que posso te ajudar hoje?</h1>
+          </section>}
           <div className="conversation-scroll" ref={rolagemRef} onScroll={aoRolar} aria-live="polite" aria-relevant="additions">
             <HistoricoConversa conversaId={projeto?.id} />
-            {estado.carregando && <p role="status">Carregando conversa…</p>}
-            {!mensagens.length && !pensando && <section className="sora-chat-empty">
-              <SoraOrb size={150} color="#E2ECFF" state="idle" title="Sora" />
-              <h1>Converse com a Sora</h1>
-              <p>Explique o que você precisa. Ela pode criar um bot, reunir um grupo ou ajudar diretamente.</p>
-              <InicioSora onPreencher={setRascunho} />
-            </section>}
+            {estado.carregando && <p role="status" className="sr-only">Carregando conversa…</p>}
             {mensagens.map(mensagem => <div className="chat-item" data-chave={mensagem.id} key={mensagem.id}>
               <MensagemChat m={mensagem} agora={agora} nome={mensagem.autor === 'usuario' ? undefined : 'Sora'} avatar={mensagem.autor === 'usuario' ? undefined : <SoraOrb size={30} color="#E2ECFF" state={textoVisivel(mensagem, agora).gerando ? 'thinking' : 'idle'} glow={false} decorative seed={31} />} />
             </div>)}
@@ -82,12 +118,15 @@ export default function SoraChat() {
           </div>
           {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
         </div>
-        <div className="chat-composer">
-          <MessageComposer placeholder="Mensagem para a Sora…" focoSinal={focoSinal} value={rascunho} onValueChange={setRascunho}
-            processing={pensando}
-            onSend={(texto, anexos) => { seguirFim(); void anexarEnvio(anexos, enviados => conversarComSora(texto, undefined, enviados)); }}
+        <div className="chat-composer" ref={compositor}>
+          <MessageComposer placeholder="Mensagem para a Sora…" grande={vazio && !celular} focoSinal={focoSinal} value={rascunho} onValueChange={setRascunho}
+            processing={pensando} onActivity={setOuvindo}
+            onSend={enviar}
             gerando={gerando} onParar={() => { if (projeto) void pararConversa(projeto.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
         </div>
+        {vazio && <div className="sora-vazio-rodape" ref={rodapeVazio}>
+          <InicioSora onPreencher={texto => { setRascunho(texto); setFocoLocal(Date.now()); }} />
+        </div>}
       </ZonaSoltar>
     </main>
   </AppShell>;

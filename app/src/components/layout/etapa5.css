@@ -67,9 +67,11 @@
 }
 @media (prefers-reduced-motion: reduce) { .shell-ponto.is-trabalhando { animation: none; } .shell-marca, .shell-item, .shell-row { transition: none; } }
 
-.conversation.sora-main-chat { min-height:0; height:calc(100dvh - var(--topbar)); }.sora-chat-empty { min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:48px 24px; text-align:center; box-sizing:border-box; }.sora-chat-empty h1 { margin:8px 0 0; color:var(--text-1); font-size:clamp(24px,3vw,34px); font-weight:500; }.sora-chat-empty p { max-width:510px; margin:0; color:var(--text-2); line-height:1.6; }
+.conversation.sora-main-chat { min-height:0; height:calc(100dvh - var(--topbar)); }
 .agent-resources { display:grid; gap:12px; padding-bottom:18px; }.agent-resources section { padding-top:4px; border-top:1px solid var(--line); }.agent-resources ul { display:grid; gap:7px; margin:0; padding:0; list-style:none; }.agent-resources li { display:flex; justify-content:space-between; gap:10px; padding:9px 10px; color:var(--text-2); background:var(--surface-3); border-radius:9px; font-size:12px; line-height:1.45; }.agent-resources li strong { color:var(--text-1); }.agent-resources li span:last-child:not(:only-child) { color:var(--text-3); }
 /* Celular: o orb do título fica do tamanho da marca (a regra geral da topbar força 34 px). */
-@media (max-width:767px){.topbar-title .mobile-brand{width:22px;height:22px;flex:none}.topbar-title .mobile-brand canvas{width:22px!important;height:22px!important}.topbar-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+
+@media (max-width:767px) {.topbar-title .mobile-brand{width:22px;height:22px;flex:none}.topbar-title .mobile-brand canvas{width:22px!important;height:22px!important}.topbar-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 /* Celular: o título do grupo/bot precisa de espaço; copiar link fica para o desktop. */
-@media (max-width:767px){.topbar-actions .share-button{display:none}}
+
+@media (max-width:767px) {.topbar-actions .share-button{display:none}}
