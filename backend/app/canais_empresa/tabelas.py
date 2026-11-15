@@ -59,6 +59,8 @@ class PreferenciasCanaisEmpresa(Base):
     usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"), primary_key=True)
     retencao_dias: Mapped[int] = mapped_column(Integer, default=90, server_default="90")
     sugestoes_intervalo_dias: Mapped[int] = mapped_column(Integer, default=7, server_default="7")
+    # Prazo dos fatos da ficha, contado do ``criado_em`` (migração 0013).
+    retencao_fatos_dias: Mapped[int] = mapped_column(Integer, default=365, server_default="365")
     ultima_analise_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     atualizada_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -163,6 +165,15 @@ class ConhecimentoEmpresa(Base):
     ocorrencias: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     contraditorio: Mapped[bool] = mapped_column(default=False, server_default="false")
     travado: Mapped[bool] = mapped_column(default=False, server_default="false")
+    # ``pendente`` (nasceu do atendimento, fora do prompt dos bots) | ``aprovado`` (o usuário
+    # aprovou ou editou). Migração 0013.
+    estado: Mapped[str] = mapped_column(Text, default="pendente", server_default="pendente")
+    aprovado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Versões novas que contradizem ``conteudo``: ``[{conteudo, em, papel}]``. O conteúdo
+    # vigente nunca é trocado sozinho; o usuário escolhe (``POST /conhecimento/{id}/resolver``).
+    em_disputa: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
     anteriores: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb")
     )

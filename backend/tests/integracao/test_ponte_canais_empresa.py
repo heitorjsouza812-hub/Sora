@@ -502,73 +502,93 @@ async def _registrar(
 async def test_conhecimento_funde_repetidos_marca_contradicao_e_respeita_edicao(
     mundo: Mundo,
 ) -> None:
+    """Só fala de funcionário ensina a empresa; contradição não troca nada sozinha."""
     async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as http:
         auth, uid = await _conta(mundo, http, "conh")
-        await _slack(http, auth, ["C111AAAA"], funcionarios=["UFUNC1"])
+        await _slack(http, auth, ["C111AAAA"], funcionarios=["UFUNC1", "UFUNC2"])
         agora = datetime.now(UTC)
-        pergunta = "Qual o prazo de troca?"
-        await _registrar(mundo, uid, [("1.1", "UCLI1", pergunta, agora - timedelta(days=3))])
-        r = await _processar(mundo, uid, _extrator_faq(pergunta, "A troca é em até 7 dias."))
+
+        async def lista() -> list[dict]:
+            return (await http.get(f"{PREFIXO}/conhecimento", headers=auth)).json()
+
+        await _registrar(
+            mundo, uid, [("1.1", "UFUNC1", "A troca é em até 7 dias.", agora - timedelta(days=3))]
+        )
+        r = await _processar(
+            mundo, uid, _extrator_faq("Qual o prazo de troca?", "A troca é em até 7 dias.")
+        )
         assert r.conhecimento_novo == 1
-        # a mesma FAQ, com outras palavras, funde e soma a contagem
-        await _registrar(mundo, uid, [("2.1", "UCLI2", "prazo troca?", agora - timedelta(days=2))])
+        item = (await lista())[0]
+        assert item["estado"] == "pendente" and item["no_prompt"] is False
+        # a mesma FAQ, com outras palavras e outro funcionário: funde e soma a contagem
+        await _registrar(
+            mundo, uid, [("2.1", "UFUNC2", "Pode trocar em 7 dias.", agora - timedelta(days=2))]
+        )
         r = await _processar(
             mundo, uid, _extrator_faq("O prazo da troca é qual?", "Você pode trocar em até 7 dias.")
         )
         assert (r.conhecimento_novo, r.conhecimento_atualizado) == (0, 1)
-        itens = (await http.get(f"{PREFIXO}/conhecimento", headers=auth)).json()
-        assert (
-            len(itens) == 1 and itens[0]["ocorrencias"] == 2 and itens[0]["contraditorio"] is False
-        )
-        # resposta diferente: contradição marcada, o mais recente vence, o antigo fica guardado
+        itens = await lista()
+        assert len(itens) == 1 and itens[0]["ocorrencias"] == 2 and not itens[0]["contraditorio"]
+        # o usuário aprova: só agora o item vale para os bots
+        r = await http.post(f"{PREFIXO}/conhecimento/{item['id']}/aprovar", headers=auth)
+        assert r.status_code == 200 and r.json()["estado"] == "aprovado"
+        assert r.json()["no_prompt"] is True and r.json()["aprovado_em"]
+
+        # resposta diferente: o item fica contraditório e FORA do prompt; o conteúdo não troca
         await _registrar(
-            mundo, uid, [("3.1", "UCLI3", "prazo de troca?", agora - timedelta(days=1))]
+            mundo, uid, [("3.1", "UFUNC1", "Agora é 30 dias.", agora - timedelta(days=1))]
         )
-        await _processar(
+        r = await _processar(
             mundo, uid, _extrator_faq("Prazo de troca?", "Agora a troca é em até 30 dias.")
         )
-        item = (await http.get(f"{PREFIXO}/conhecimento", headers=auth)).json()[0]
-        assert item["contraditorio"] is True and item["ocorrencias"] == 3
-        assert "30 dias" in item["conteudo"]
-        assert any("7 dias" in a["conteudo"] for a in item["anteriores"])
+        item = (await lista())[0]
+        assert item["contraditorio"] is True and item["no_prompt"] is False
+        assert "7 dias" in item["conteudo"]
+        assert [d["conteudo"] for d in item["em_disputa"]] == ["Agora a troca é em até 30 dias."]
         assert (
             await http.get(f"{PREFIXO}/conhecimento", headers=auth, params={"contraditorio": True})
         ).json()
-        # uma resposta mais ANTIGA que a atual não sobrescreve (continua marcada)
-        await _registrar(
-            mundo, uid, [("0.1", "UCLI4", "prazo de troca?", agora - timedelta(days=10))]
+        # aprovar com contradição aberta: 409
+        r = await http.post(f"{PREFIXO}/conhecimento/{item['id']}/aprovar", headers=auth)
+        assert r.status_code == 409
+        # versão inexistente: 409; a escolha fecha a contradição e aprova
+        r = await http.post(
+            f"{PREFIXO}/conhecimento/{item['id']}/resolver", headers=auth, json={"versao": 7}
         )
-        await _processar(mundo, uid, _extrator_faq("Prazo de troca?", "A troca era em 15 dias."))
-        item = (await http.get(f"{PREFIXO}/conhecimento", headers=auth)).json()[0]
-        assert "30 dias" in item["conteudo"] and item["ocorrencias"] == 4
+        assert r.status_code == 409
+        r = await http.post(
+            f"{PREFIXO}/conhecimento/{item['id']}/resolver", headers=auth, json={"versao": 0}
+        )
+        item = r.json()
+        assert "30 dias" in item["conteudo"] and item["contraditorio"] is False
+        assert item["no_prompt"] is True and item["em_disputa"] == []
+        assert any("7 dias" in a["conteudo"] for a in item["anteriores"])
 
         # busca
         achados = (
             await http.get(f"{PREFIXO}/conhecimento", headers=auth, params={"busca": "troca"})
         ).json()
         assert len(achados) == 1
-        # editar trava: depois, uma resposta nova só conta
+        # editar trava (e aprova): depois, uma resposta nova só conta
         r = await http.patch(
             f"{PREFIXO}/conhecimento/{item['id']}",
             headers=auth,
             json={"conteudo": "A troca é em até 14 dias."},
         )
-        assert (
-            r.status_code == 200
-            and r.json()["editado"] is True
-            and r.json()["contraditorio"] is False
-        )
-        await _registrar(mundo, uid, [("4.1", "UCLI5", "prazo de troca?", agora)])
+        assert r.status_code == 200 and r.json()["editado"] is True
+        assert r.json()["contraditorio"] is False and r.json()["no_prompt"] is True
+        await _registrar(mundo, uid, [("4.1", "UFUNC1", "Troca em 3 dias úteis.", agora)])
         await _processar(mundo, uid, _extrator_faq("Prazo de troca?", "Troca em 3 dias úteis."))
-        item = (await http.get(f"{PREFIXO}/conhecimento", headers=auth)).json()[0]
-        assert "14 dias" in item["conteudo"] and item["ocorrencias"] == 5
+        item = (await lista())[0]
+        assert "14 dias" in item["conteudo"] and not item["contraditorio"]
         # apagar: some e não volta sozinho
         assert (
             await http.delete(f"{PREFIXO}/conhecimento/{item['id']}", headers=auth)
         ).status_code == 204
-        await _registrar(mundo, uid, [("5.1", "UCLI6", "prazo de troca?", agora)])
+        await _registrar(mundo, uid, [("5.1", "UFUNC2", "7 dias.", agora)])
         await _processar(mundo, uid, _extrator_faq("Prazo de troca?", "7 dias."))
-        assert (await http.get(f"{PREFIXO}/conhecimento", headers=auth)).json() == []
+        assert await lista() == []
 
 
 async def test_conhecimento_isolado_entre_contas_e_apagar_cliente_limpa_rastros(
@@ -683,11 +703,19 @@ async def test_ferramentas_exigem_autorizacao_de_bot_ou_grupo(mundo: Mundo) -> N
     async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as http:
         auth, uid = await _conta(mundo, http, "aut2")
         auth_b, uid_b = await _conta(mundo, http, "aut2-b")
-        await _slack(http, auth, ["C111AAAA"])
-        await _registrar(mundo, uid, [("1.1", "UCLI1", "oi", datetime.now(UTC))])
+        await _slack(http, auth, ["C111AAAA"], funcionarios=["UFUNC1"])
+        await _registrar(
+            mundo,
+            uid,
+            [
+                ("1.1", "UCLI1", "oi", datetime.now(UTC)),
+                ("1.2", "UFUNC1", "7 dias.", datetime.now(UTC) + timedelta(seconds=1)),
+            ],
+        )
         await _processar(
             mundo, uid, _extrator_faq("Prazo de troca", "7 dias", fato="Prefere entrega à tarde")
         )
+        [pendente] = (await http.get(f"{PREFIXO}/conhecimento", headers=auth)).json()
         async with mundo.fabrica() as sessao:
             await sessao.execute(
                 update(ContatoEmpresa)
@@ -724,6 +752,10 @@ async def test_ferramentas_exigem_autorizacao_de_bot_ou_grupo(mundo: Mundo) -> N
             json={"alvo_tipo": "agente", "alvo_id": bot["id"], "escopos": ["conhecimento"]},
         )
         assert r.status_code == 200 and r.json()["escopos"] == ["conhecimento"]
+        # item novo, ainda não aprovado: o bot autorizado não enxerga
+        assert "nada" in await consultar_conhecimento(busca, ctx(uid, bot["id"]))
+        r = await http.post(f"{PREFIXO}/conhecimento/{pendente['id']}/aprovar", headers=auth)
+        assert r.status_code == 200
         assert "7 dias" in await consultar_conhecimento(busca, ctx(uid, bot["id"]))
         with pytest.raises(ErroFerramenta):
             await consultar_cliente(pedido, ctx(uid, bot["id"]))
@@ -806,7 +838,8 @@ async def _item_de_conhecimento(m: Mundo, uid: UUID) -> None:
             ConhecimentoEmpresa(
                 usuario_id=uid, categoria="politica", chave=f"politica:troca:{uuid4()}",
                 titulo="Prazo de troca", conteudo="A troca é em até 7 dias.", ocorrencias=4,
-                origens=[],
+                origens=[{"papel": "funcionario", "contato_id": str(uuid4())}],
+                estado="aprovado",
             )
         )  # fmt: skip
         await sessao.commit()
@@ -890,6 +923,12 @@ async def test_sugestoes_aplicar_editar_descartar_e_desfazer(mundo: Mundo) -> No
             f"/v1/aprovacoes/{cartao['id']}/decidir",
             headers=auth,
             json={"decisao": "sempre_permitir"},
+        )
+        assert r.status_code == 422, r.text  # instruções só aceitam "uma vez" (decisoes.py)
+        r = await http.post(
+            f"/v1/aprovacoes/{cartao['id']}/decidir",
+            headers=auth,
+            json={"decisao": "permitir_uma_vez"},
         )
         assert r.status_code == 204, r.text
         depois = await _instrucoes(mundo, bot["id"])
@@ -1065,12 +1104,38 @@ async def test_analise_periodica_so_para_quem_tem_bot_autorizado_e_intervalo_ven
 # ------------------------------------------------------------------ job do worker, ponta a ponta
 
 
-async def test_job_do_worker_resume_com_o_modelo_falso(mundo: Mundo) -> None:
+async def test_job_do_worker_resume_com_o_modelo_falso(
+    mundo: Mundo, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from workers.canais_empresa import processar_canais_empresa
+
+    def responder(req: httpx.Request) -> httpx.Response:
+        funcionario = b"UFUNC1" in req.content
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "user": {
+                    "team_id": "T1",
+                    "is_restricted": not funcionario,
+                    "profile": {"real_name": "Equipe" if funcionario else "Cliente"},
+                },
+            },
+        )
+
+    monkeypatch.setattr(
+        clientes,
+        "fabrica_http",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(responder)),
+    )
 
     async with httpx.AsyncClient(base_url=mundo.url, timeout=30) as http:
         auth, uid = await _conta(mundo, http, "job")
         conexao_id, segredo = await _slack(http, auth, ["C111AAAA"], funcionarios=["UFUNC1"])
+        async with mundo.fabrica() as sessao:
+            conexao = await sessao.get(ConexaoCanalEmpresa, UUID(conexao_id))
+            conexao.config = {**conexao.config, "team_id": "T1"}
+            await sessao.commit()
         base_ts = int(time.time()) - 600
         for i, (quem, texto) in enumerate(
             [

@@ -143,6 +143,7 @@ class AutorizacaoEntrada(BaseModel):
 
 class PreferenciasSaida(BaseModel):
     retencao_dias: int
+    retencao_fatos_dias: int
     sugestoes_intervalo_dias: int
     ultima_analise_em: datetime | None
 
@@ -151,6 +152,10 @@ class PreferenciasEntrada(BaseModel):
     retencao_dias: int | None = Field(
         default=None, ge=lgpd.RETENCAO_MIN_DIAS, le=lgpd.RETENCAO_MAX_DIAS
     )
+    retencao_fatos_dias: int | None = Field(
+        default=None, ge=lgpd.RETENCAO_MIN_DIAS, le=lgpd.RETENCAO_MAX_DIAS
+    )
+    """Prazo dos fatos da ficha (padrão 365), contado da criação do fato."""
     sugestoes_intervalo_dias: int | None = Field(default=None, ge=0, le=90)
     """0 desliga a análise periódica."""
 
@@ -163,6 +168,14 @@ class ConhecimentoSaida(BaseModel):
     ocorrencias: int
     contraditorio: bool
     editado: bool
+    estado: Literal["pendente", "aprovado"]
+    aprovado_em: datetime | None
+    no_prompt: bool
+    """Os bots só leem o item aprovado, sem contradição e com conteúdo."""
+    sem_resposta: bool
+    """Item que nasceu da pergunta de um cliente e ainda não tem resposta de funcionário."""
+    em_disputa: list[dict[str, Any]]
+    """Versões novas que contradizem ``conteudo`` (``{conteudo, em, papel}``)."""
     anteriores: list[dict[str, Any]]
     origens: list[dict[str, Any]]
     primeira_em: datetime
@@ -392,13 +405,19 @@ async def canais_disponiveis(usuario_id: Usuario, sessao: Sessao) -> list[CanalD
 
 
 async def _corpo_limitado(requisicao: Request) -> bytes:
+    """Lê o corpo no fluxo e para em ``LIMITE_CORPO_WEBHOOK`` (413), com ou sem
+    ``Content-Length`` (``Transfer-Encoding: chunked`` não tem): nunca guarda mais que o teto."""
     declarado = requisicao.headers.get("content-length")
     if declarado and declarado.isdigit() and int(declarado) > LIMITE_CORPO_WEBHOOK:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
-    corpo = await requisicao.body()
-    if len(corpo) > LIMITE_CORPO_WEBHOOK:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
-    return corpo
+    pedacos: list[bytes] = []
+    total = 0
+    async for pedaco in requisicao.stream():
+        total += len(pedaco)
+        if total > LIMITE_CORPO_WEBHOOK:
+            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+        pedacos.append(pedaco)
+    return b"".join(pedacos)
 
 
 async def _conexao_do_webhook(
@@ -735,6 +754,7 @@ async def _preferencias(sessao: AsyncSession, usuario_id: UUID) -> PreferenciasC
         prefs = PreferenciasCanaisEmpresa(
             usuario_id=usuario_id,
             retencao_dias=lgpd.RETENCAO_PADRAO_DIAS,
+            retencao_fatos_dias=lgpd.RETENCAO_FATOS_PADRAO_DIAS,
             sugestoes_intervalo_dias=7,
         )
         sessao.add(prefs)
@@ -745,6 +765,7 @@ async def _preferencias(sessao: AsyncSession, usuario_id: UUID) -> PreferenciasC
 def _saida_prefs(p: PreferenciasCanaisEmpresa) -> PreferenciasSaida:
     return PreferenciasSaida(
         retencao_dias=p.retencao_dias,
+        retencao_fatos_dias=p.retencao_fatos_dias,
         sugestoes_intervalo_dias=p.sugestoes_intervalo_dias,
         ultima_analise_em=p.ultima_analise_em,
     )
@@ -762,6 +783,8 @@ async def salvar_preferencias(
     prefs = await _preferencias(sessao, usuario_id)
     if dados.retencao_dias is not None:
         prefs.retencao_dias = dados.retencao_dias
+    if dados.retencao_fatos_dias is not None:
+        prefs.retencao_fatos_dias = dados.retencao_fatos_dias
     if dados.sugestoes_intervalo_dias is not None:
         prefs.sugestoes_intervalo_dias = dados.sugestoes_intervalo_dias
     prefs.atualizada_em = datetime.now(UTC)
@@ -781,6 +804,11 @@ def _saida_conhecimento(i: ConhecimentoEmpresa) -> ConhecimentoSaida:
         ocorrencias=i.ocorrencias,
         contraditorio=i.contraditorio,
         editado=i.travado,
+        estado="aprovado" if i.estado == base.ESTADO_APROVADO else "pendente",
+        aprovado_em=i.aprovado_em,
+        no_prompt=base.entra_no_prompt(i),
+        sem_resposta=not i.conteudo.strip(),
+        em_disputa=i.em_disputa,
         anteriores=i.anteriores,
         origens=i.origens,
         primeira_em=i.primeira_em,
@@ -795,6 +823,7 @@ async def listar_conhecimento(
     busca: Annotated[str | None, Query(max_length=300)] = None,
     categoria: Annotated[str | None, Query()] = None,
     contraditorio: Annotated[bool | None, Query()] = None,
+    estado: Annotated[Literal["pendente", "aprovado"] | None, Query()] = None,
     limite: Annotated[int, Query(ge=1, le=200)] = 50,
     deslocamento: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ConhecimentoSaida]:
@@ -806,6 +835,8 @@ async def listar_conhecimento(
         )
         if contraditorio is not None:
             itens = [i for i in itens if i.contraditorio == contraditorio]
+        if estado is not None:
+            itens = [i for i in itens if i.estado == estado]
         return [_saida_conhecimento(i) for i in itens[deslocamento : deslocamento + limite]]
     consulta = select(ConhecimentoEmpresa).where(
         ConhecimentoEmpresa.usuario_id == usuario_id, ConhecimentoEmpresa.apagado_em.is_(None)
@@ -814,6 +845,8 @@ async def listar_conhecimento(
         consulta = consulta.where(ConhecimentoEmpresa.categoria == categoria)
     if contraditorio is not None:
         consulta = consulta.where(ConhecimentoEmpresa.contraditorio == contraditorio)
+    if estado is not None:
+        consulta = consulta.where(ConhecimentoEmpresa.estado == estado)
     itens = await sessao.scalars(
         consulta.order_by(
             ConhecimentoEmpresa.ocorrencias.desc(), ConhecimentoEmpresa.ultima_em.desc()
@@ -841,20 +874,82 @@ async def _item(sessao: AsyncSession, usuario_id: UUID, item_id: UUID) -> Conhec
 async def editar_conhecimento(
     item_id: UUID, dados: ConhecimentoEntrada, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
 ) -> ConhecimentoSaida:
-    """Editar trava o item: o aprendizado automático passa a só contar, sem sobrescrever."""
+    """Editar o conteúdo ou a categoria trava o item (o aprendizado automático passa a só contar,
+    sem sobrescrever), resolve a contradição e aprova o texto que o usuário escreveu. Só renomear
+    o título não trava, não aprova e não apaga uma contradição aberta."""
     i = await _item(sessao, usuario_id, item_id)
     if dados.titulo is not None:
         i.titulo = anonimizar_para_conhecimento(" ".join(dados.titulo.split()))[:200]
+    mudou_o_sentido = dados.conteudo is not None or dados.categoria is not None
     if dados.conteudo is not None:
         i.conteudo = anonimizar_para_conhecimento(" ".join(dados.conteudo.split()))[:800]
     if dados.categoria is not None:
         i.categoria = dados.categoria
-    i.chave = f"editado:{i.id}"
-    i.travado = True
-    i.contraditorio = False
+    if mudou_o_sentido:
+        i.chave = f"editado:{i.id}"
+        i.travado = True
+        i.contraditorio = False
+        i.em_disputa = []
     i.atualizado_em = datetime.now(UTC)
+    if mudou_o_sentido and i.conteudo.strip():
+        base.aprovar(i)  # quem escreve o conteúdo está aprovando
     await sessao.commit()
     await publicar(redis, ConhecimentoAtualizado(motivo="edicao"), usuario_id)
+    return _saida_conhecimento(i)
+
+
+class AprovarEntrada(BaseModel):
+    ids: list[UUID] = Field(min_length=1, max_length=100)
+
+
+class ResolverEntrada(BaseModel):
+    versao: int | None = Field(default=None, ge=0)
+    """``null`` mantém o conteúdo vigente; ``n`` adota ``em_disputa[n]``."""
+
+
+@roteador.post("/conhecimento/aprovar")
+async def aprovar_conhecimento_em_lote(
+    dados: AprovarEntrada, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
+) -> list[ConhecimentoSaida]:
+    """Aprova vários itens de uma vez (só valem para os bots depois disto). Item com
+    contradição aberta ou sem resposta de funcionário responde 409 e nada é aprovado."""
+    itens = [await _item(sessao, usuario_id, item_id) for item_id in dict.fromkeys(dados.ids)]
+    try:
+        for item in itens:
+            base.aprovar(item)
+    except base.ErroConhecimento as erro:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(erro)) from erro
+    await sessao.commit()
+    await publicar(redis, ConhecimentoAtualizado(motivo="aprovacao"), usuario_id)
+    return [_saida_conhecimento(i) for i in itens]
+
+
+@roteador.post("/conhecimento/{item_id}/aprovar")
+async def aprovar_conhecimento(
+    item_id: UUID, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
+) -> ConhecimentoSaida:
+    i = await _item(sessao, usuario_id, item_id)
+    try:
+        base.aprovar(i)
+    except base.ErroConhecimento as erro:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(erro)) from erro
+    await sessao.commit()
+    await publicar(redis, ConhecimentoAtualizado(motivo="aprovacao"), usuario_id)
+    return _saida_conhecimento(i)
+
+
+@roteador.post("/conhecimento/{item_id}/resolver")
+async def resolver_conhecimento(
+    item_id: UUID, dados: ResolverEntrada, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
+) -> ConhecimentoSaida:
+    """Fecha a contradição: o usuário escolhe qual versão vale (e o item fica aprovado)."""
+    i = await _item(sessao, usuario_id, item_id)
+    try:
+        base.resolver_contradicao(i, dados.versao)
+    except base.ErroConhecimento as erro:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(erro)) from erro
+    await sessao.commit()
+    await publicar(redis, ConhecimentoAtualizado(motivo="aprovacao"), usuario_id)
     return _saida_conhecimento(i)
 
 

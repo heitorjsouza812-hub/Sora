@@ -34,9 +34,8 @@ _MAX_DIGITOS = 19
 
 _SEPARADOR_CVV = r"((?:\s*(?:[:=]|->|=>|é|eh|e|is|foi))*\s*)"
 _CVV = re.compile(
-    r"(?i)\b(cvv2?|cvc2?|cid|c[oó]d(?:igo)?\.?(?: de)? seguran[cç]a|c[oó]d(?:igo)?\.? do cart[aã]o)\b"
-    + _SEPARADOR_CVV
-    + r"(\d{3,4})(?!\d)"
+    r"(?i)\b(cvv2?|cvc2?|cid|c[oó]d(?:igo)?\.?(?: de)? seguran[cç]a"
+    r"|c[oó]d(?:igo)?\.? do cart[aã]o)\b" + _SEPARADOR_CVV + r"(\d{3,4})(?!\d)"
 )
 _CODIGO = re.compile(
     r"(?i)\b(c[oó]digo(?: de (?:verifica[cç][aã]o|acesso|confirma[cç][aã]o|seguran[cç]a))?|otp)\b"
@@ -46,7 +45,6 @@ _CODIGO = re.compile(
 _CHAVE_DE_SENHA = re.compile(
     r"(?i)(?<![\w@\[-])(senhas?|password|passwd|pwd|pass|pin|puk|token|secret|segredo)(?![\w@\]-])"
 )
-_CHAVES_SO_COM_SINAL = frozenset({"pass", "pin", "puk", "token", "secret", "segredo"})
 _CHAVES_DE_TOKEN = frozenset({"token", "secret", "segredo"})
 _PREENCHIMENTO = frozenset(
     "nova novo atual antiga antigo do da de dos das no na em para pra o a wifi wi-fi login conta "
@@ -232,7 +230,7 @@ def _mascarar_senhas(texto: str) -> str:
         if not parece_senha:
             if simples in _PALAVRAS_COMUNS:
                 continue  # "esqueci a senha e não consigo entrar"
-            if not com_separador and (chave in _CHAVES_SO_COM_SINAL or len(simples) < 4):
+            if not com_separador and simples == "colorido":
                 continue  # "o token expirou"
         saida.append(texto[cursor:ini])
         saida.append(TOKEN_MASCARA if chave in _CHAVES_DE_TOKEN else SENHA_MASCARA)

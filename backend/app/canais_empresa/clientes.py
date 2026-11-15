@@ -101,10 +101,26 @@ class ClienteSlackLeitura:
         return []
 
     async def nome_do_usuario(self, usuario_id: str) -> str:
+        return (await self.perfil_do_usuario(usuario_id, ""))[0]
+
+    async def perfil_do_usuario(self, usuario_id: str, team_id: str) -> tuple[str, bool]:
+        """``users.info``: ``(nome, membro)``. ``membro`` = membro pleno do workspace
+        ``team_id``: convidado (``is_restricted``, ``is_ultra_restricted``), externo do Slack
+        Connect (``is_stranger`` ou outro ``team_id``), bot e conta desativada não são. Sem
+        ``team_id`` conhecido não dá para afirmar nada: ``False``."""
         resposta = await self._chamar("users.info", {"user": usuario_id})
         usuario = self._corpo(resposta).get("user") or {}
         perfil = usuario.get("profile") or {}
-        return str(perfil.get("real_name") or usuario.get("real_name") or usuario.get("name") or "")
+        nome = str(perfil.get("real_name") or usuario.get("real_name") or usuario.get("name") or "")
+        membro = bool(team_id) and (
+            str(usuario.get("team_id") or "") == team_id
+            and not usuario.get("is_restricted")
+            and not usuario.get("is_ultra_restricted")
+            and not usuario.get("is_stranger")
+            and not usuario.get("is_bot")
+            and not usuario.get("deleted")
+        )
+        return nome, membro
 
 
 class ClienteWhatsAppLeitura:

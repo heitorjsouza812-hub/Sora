@@ -2,7 +2,8 @@
 
 - ``processar_canais_empresa``: enfileirado pelo webhook (adiado ~60 s para juntar a conversa).
 - ``processar_pendentes_canais_empresa`` (cron, 5 min): rede de segurança; pega o que sobrou.
-- ``apagar_mensagens_vencidas`` (cron, 1 h): retenção da mensagem crua (padrão 90 dias).
+- ``apagar_mensagens_vencidas`` (cron, 1 h): retenção da mensagem crua (padrão 90 dias) e
+  dos fatos da ficha (``retencao_fatos_dias``, padrão 365).
 - ``analisar_aprendizado_empresa`` e ``analisar_aprendizado_periodico`` (cron, 1 h): as
   sugestões de melhoria dos bots (padrão semanal por usuário).
 
@@ -16,9 +17,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import httpx
 from sqlalchemy import select
 
 from app.canais_empresa import clientes, conexoes, lgpd, resumo
+from app.canais_empresa import conhecimento as base
 from app.canais_empresa.tabelas import (
     AutorizacaoEmpresa,
     ConhecimentoEmpresa,
@@ -31,41 +34,55 @@ registro = logging.getLogger(__name__)
 
 ESPERA_MINIMA = timedelta(minutes=2)
 USUARIOS_POR_PASSADA = 20
-NOMES_POR_PASSADA = 10
 
 
 async def _enriquecer_nomes_slack(fabrica: Any, usuario_id: UUID) -> None:
-    """Preenche o nome dos contatos do Slack (``users:read``). Falha aqui nunca atrapalha."""
+    """Confere o papel de todos os autores Slack pendentes antes de resumir.
+
+    Nome conhecido ou lista manual não provam vínculo. Falha na consulta mantém o autor
+    como cliente; convidados, externos e contas desativadas nunca ensinam a empresa.
+    """
     async with fabrica() as sessao:
-        sem_nome = list(
-            (
-                await sessao.scalars(
-                    select(ContatoEmpresa)
-                    .where(
-                        ContatoEmpresa.usuario_id == usuario_id,
-                        ContatoEmpresa.canal == "slack",
-                        ContatoEmpresa.nome == "",
-                    )
-                    .limit(NOMES_POR_PASSADA)
-                )
-            ).all()
+        pendentes = select(MensagemEmpresa.contato_id).where(
+            MensagemEmpresa.usuario_id == usuario_id,
+            MensagemEmpresa.processada_em.is_(None),
+            MensagemEmpresa.texto.is_not(None),
         )
-        if not sem_nome:
+        contatos = list(
+            await sessao.scalars(
+                select(ContatoEmpresa).where(
+                    ContatoEmpresa.usuario_id == usuario_id,
+                    ContatoEmpresa.canal == "slack",
+                    ContatoEmpresa.id.in_(pendentes),
+                )
+            )
+        )
+        if not contatos:
             return
         conexao = await conexoes.obter(sessao, usuario_id, "slack")
-        if conexao is None:
-            return
-        try:
-            cliente = clientes.ClienteSlackLeitura(
-                conexoes.decifrar_segredos(conexao)["bot_token"], cliente=clientes.fabrica_http()
-            )
-            for contato in sem_nome:
-                nome = await cliente.nome_do_usuario(contato.id_externo)
-                if nome:
-                    contato.nome = nome
-            await sessao.commit()
-        except Exception:
-            registro.warning("não consegui buscar os nomes do Slack", exc_info=True)
+        for contato in contatos:
+            contato.papel = "cliente"
+        if conexao is not None:
+            async with clientes.fabrica_http() or httpx.AsyncClient(
+                timeout=15, trust_env=False
+            ) as http:
+                cliente = clientes.ClienteSlackLeitura(
+                    conexoes.decifrar_segredos(conexao)["bot_token"], cliente=http
+                )
+                workspace = str(conexao.config.get("team_id") or "")
+                for contato in contatos:
+                    try:
+                        nome, membro = await cliente.perfil_do_usuario(
+                            contato.id_externo, workspace
+                        )
+                    except Exception:
+                        registro.warning("não consegui conferir o vínculo no Slack")
+                        continue
+                    if nome:
+                        contato.nome = nome
+                    if membro:
+                        contato.papel = "funcionario"
+        await sessao.commit()
 
 
 async def processar_canais_empresa(ctx: dict[str, Any], usuario_id: str) -> int:
@@ -105,7 +122,10 @@ async def processar_pendentes_canais_empresa(ctx: dict[str, Any]) -> int:
 async def apagar_mensagens_vencidas(ctx: dict[str, Any]) -> int:
     async with ctx["sessoes"]() as sessao:
         apagadas = await lgpd.apagar_mensagens_vencidas(sessao)
+        fatos = await lgpd.apagar_fatos_vencidos(sessao)
         await sessao.commit()
+    if fatos:
+        registro.info("retenção: %d fatos de ficha vencidos apagados", fatos)
     return apagadas
 
 
@@ -137,7 +157,7 @@ async def usuarios_para_analisar(sessao: Any, agora: datetime | None = None) -> 
             select(ConhecimentoEmpresa.id)
             .where(
                 ConhecimentoEmpresa.usuario_id == uid,
-                ConhecimentoEmpresa.apagado_em.is_(None),
+                *base.condicoes_do_prompt(),  # só o que o usuário aprovou conta como mudança
                 *([ConhecimentoEmpresa.atualizado_em > ultima] if ultima else []),
             )
             .limit(1)

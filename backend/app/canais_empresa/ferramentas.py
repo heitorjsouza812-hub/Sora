@@ -94,7 +94,10 @@ async def consultar_cliente(args: ConsultarCliente, contexto: ContextoFerramenta
             return "Nenhum cliente encontrado com esse nome ou telefone."
         if len(contatos) > 1:
             nomes = ", ".join(c.nome or c.id_externo for c in contatos)
-            return f"Mais de um cliente combina: {nomes}. Peça um nome mais completo ou o telefone."
+            return _cercado(
+                f"Mais de um cliente combina: {nomes}. Peça um nome mais completo ou o telefone.",
+                "clientes_encontrados",
+            )
         contato = contatos[0]
         fatos = list(
             (
@@ -109,7 +112,10 @@ async def consultar_cliente(args: ConsultarCliente, contexto: ContextoFerramenta
             ).all()
         )
     if not fatos:
-        return f"{contato.nome or contato.id_externo}: ainda não há fatos na ficha."
+        return _cercado(
+            f"{contato.nome or contato.id_externo}: ainda não há fatos na ficha.",
+            "ficha_do_cliente",
+        )
     linhas = [f"Ficha de {contato.nome or contato.id_externo} ({contato.canal}):"]
     for tipo, rotulo in ROTULO_DO_TIPO.items():
         itens = [f for f in fatos if f.tipo == tipo]
@@ -127,7 +133,12 @@ async def consultar_conhecimento(args: ConsultarConhecimento, contexto: Contexto
     async with abrir_sessao() as sessao:
         await _checar(sessao, contexto, "conhecimento")
         itens = await base.buscar(
-            sessao, contexto.usuario_id, args.consulta, categoria=args.categoria, limite=5
+            sessao,
+            contexto.usuario_id,
+            args.consulta,
+            categoria=args.categoria,
+            limite=5,
+            so_do_prompt=True,
         )
         texto = "\n".join(base.texto_do_item(i) for i in itens)
     if not texto:
@@ -136,8 +147,9 @@ async def consultar_conhecimento(args: ConsultarConhecimento, contexto: Contexto
 
 
 async def bloco_de_conhecimento(sessao, contexto) -> str:
-    """Trecho do prompt de um bot autorizado: o que a empresa mais repete (política e FAQ), cercado
-    como dado. Vazio se o bot não está autorizado ou não há nada."""
+    """Trecho do prompt de um bot autorizado: o que a empresa mais repete e o **usuário aprovou**
+    (política e FAQ), cercado como dado. Vazio se o bot não está autorizado ou não há nada.
+    Item novo, contraditório ou só de cliente não entra (``condicoes_do_prompt``)."""
     from sqlalchemy import desc
 
     from app.canais_empresa.tabelas import ConhecimentoEmpresa
@@ -152,8 +164,7 @@ async def bloco_de_conhecimento(sessao, contexto) -> str:
                 select(ConhecimentoEmpresa)
                 .where(
                     ConhecimentoEmpresa.usuario_id == contexto.usuario_id,
-                    ConhecimentoEmpresa.apagado_em.is_(None),
-                    ConhecimentoEmpresa.ocorrencias >= 2,
+                    *base.condicoes_do_prompt(),
                 )
                 .order_by(
                     desc(ConhecimentoEmpresa.ocorrencias), desc(ConhecimentoEmpresa.ultima_em)

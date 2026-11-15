@@ -32,7 +32,9 @@ class ConhecimentoAtualizado(EventoBase):
     """A base de conhecimento ou as sugestões de melhoria mudaram."""
 
     evento: ClassVar[Literal["conhecimento.atualizado"]] = "conhecimento.atualizado"
-    motivo: Literal["leitura", "edicao", "remocao", "sugestoes", "aplicacao", "desfeita"]
+    motivo: Literal[
+        "leitura", "edicao", "remocao", "sugestoes", "aplicacao", "desfeita", "aprovacao"
+    ]
     itens_novos: int = 0
     itens_atualizados: int = 0
     sugestoes_pendentes: int = 0

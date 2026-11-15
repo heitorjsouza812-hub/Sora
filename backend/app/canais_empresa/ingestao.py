@@ -55,6 +55,25 @@ def link_slack(config: dict[str, Any], canal: str, ts: str) -> str:
     return f"https://app.slack.com/client/{equipe}/{canal}" if equipe else ""
 
 
+def slack_e_funcionario(
+    carga: dict[str, Any], evento: dict[str, Any], config: dict[str, Any], usuario: str
+) -> bool:
+    """Quem escreve no Slack é cliente até prova em contrário (a prova vem do dono):
+
+    - só os ids em ``config["ids_funcionarios"]`` entram como funcionário na hora;
+    - quem é de **outro workspace** (Slack Connect: ``user_team`` diferente do workspace) é
+      cliente, mesmo que alguém tenha posto o id na lista;
+    - convidados e membros reais são conferidos depois, com ``users.info``
+      (``workers.canais_empresa``): membro pleno do workspace vira funcionário, convidado
+      (``is_restricted``) e externo (``is_stranger``) continuam cliente.
+    """
+    workspace = str(config.get("team_id") or carga.get("team_id") or "")
+    time_do_autor = str(evento.get("user_team") or "")
+    if workspace and time_do_autor and time_do_autor != workspace:
+        return False
+    return usuario in (config.get("ids_funcionarios") or [])
+
+
 def normalizar_slack(
     carga: dict[str, Any], config: dict[str, Any], escolhidos: list[str]
 ) -> list[MensagemNormalizada]:
@@ -74,7 +93,7 @@ def normalizar_slack(
         return []
     if usuario == config.get("bot_user_id"):
         return []
-    funcionario = usuario in (config.get("ids_funcionarios") or [])
+    funcionario = slack_e_funcionario(carga, evento, config, usuario)
     fio_ref = str(evento.get("thread_ts") or canal)
     return [
         MensagemNormalizada(

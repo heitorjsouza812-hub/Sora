@@ -20,6 +20,7 @@ from app.canais_empresa.tabelas import (
 )
 
 RETENCAO_PADRAO_DIAS = 90
+RETENCAO_FATOS_PADRAO_DIAS = 365
 RETENCAO_MIN_DIAS = 1
 RETENCAO_MAX_DIAS = 3650
 
@@ -105,5 +106,24 @@ async def apagar_mensagens_vencidas(sessao: AsyncSession, agora: datetime | None
                          WHERE p.usuario_id = m.usuario_id), :padrao))
             """
         ).bindparams(agora=agora or datetime.now(UTC), padrao=RETENCAO_PADRAO_DIAS)
+    )
+    return resultado.rowcount or 0
+
+
+async def apagar_fatos_vencidos(sessao: AsyncSession, agora: datetime | None = None) -> int:
+    """Retenção dos fatos da ficha (Prumo B5): apaga o fato mais velho que ``retencao_fatos_dias``
+    do usuário (padrão 365, contados da criação; sem exceção para fato editado, porque o prazo
+    é do dado pessoal). O contato e as mensagens seguem as próprias regras; "apagar cliente"
+    continua apagando tudo na hora. Devolve quantos fatos saíram."""
+    resultado = await sessao.execute(
+        text(
+            """
+            DELETE FROM ce_fatos f
+             WHERE f.criado_em < :agora - make_interval(
+                     days => COALESCE(
+                       (SELECT p.retencao_fatos_dias FROM ce_preferencias p
+                         WHERE p.usuario_id = f.usuario_id), :padrao))
+            """
+        ).bindparams(agora=agora or datetime.now(UTC), padrao=RETENCAO_FATOS_PADRAO_DIAS)
     )
     return resultado.rowcount or 0

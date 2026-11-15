@@ -44,6 +44,8 @@ class ResultadoDaPassada:
     fatos_novos: int = 0
     conhecimento_novo: int = 0
     conhecimento_atualizado: int = 0
+    conhecimento_descartado: int = 0
+    conhecimento_em_disputa: int = 0
     falhas: int = 0
 
 
@@ -67,6 +69,16 @@ async def extrator_do_usuario(sessao: Any, usuario_id: UUID) -> Extrator:
         return await extrair_com_modelo(modelos, mensagens)
 
     return com_modelo
+
+
+def papel_da_mensagem(m: MensagemEmpresa, contato: ContatoEmpresa) -> str:
+    """Quem escreveu: a saída do número da empresa (eco do WhatsApp) e o contato marcado como
+    funcionário são da equipe; o resto é cliente. Decidido aqui, pelo canal, nunca pelo modelo."""
+    if contato.canal == "whatsapp":
+        return base.PAPEL_FUNCIONARIO if m.direcao == "saida" else base.PAPEL_CLIENTE
+    if contato.papel == "funcionario":
+        return base.PAPEL_FUNCIONARIO
+    return base.PAPEL_CLIENTE
 
 
 def _fatia(lista: list[Any], tamanho: int) -> list[list[Any]]:
@@ -215,15 +227,14 @@ async def _processar_pedaco(
         contato = contatos.get(m.contato_id)
         if contato is None or m.texto is None:
             continue
-        if m.direcao == "saida":
+        papel = papel_da_mensagem(m, contato)
+        if papel == base.PAPEL_FUNCIONARIO:
             apelido = apelidos_staff.setdefault(
                 m.contato_id if contato.papel == "funcionario" else UUID(int=0),
                 f"F{len(apelidos_staff) + 1}",
             )
-            papel = "funcionario"
         else:
             apelido = apelidos_cliente.setdefault(m.contato_id, f"C{len(apelidos_cliente) + 1}")
-            papel = "cliente"
         para_extrair.append(
             MensagemParaExtrair(indice, apelido, papel, m.texto, str(m.id), m.enviada_em)
         )
@@ -275,7 +286,15 @@ async def _processar_pedaco(
         resultado.fatos_novos += 1
     itens = []
     for c in extracao.conhecimento:
-        origem = por_indice.get(c.mensagem_indice or -1) or pendentes[-1]
+        citada = por_indice.get(c.mensagem_indice or -1)
+        origem = citada or pendentes[-1]
+        # Sem mensagem de origem que a gente reconheça, vale como fala de cliente (a mais
+        # restrita): o modelo não decide quem é funcionário.
+        papel = (
+            papel_da_mensagem(citada, contatos[citada.contato_id])
+            if citada is not None
+            else base.PAPEL_CLIENTE
+        )
         itens.append(
             (
                 c,
@@ -286,13 +305,16 @@ async def _processar_pedaco(
                     "link": origem.link,
                     "em": origem.enviada_em.astimezone(UTC).isoformat(),
                     "contato_id": str(origem.contato_id),
+                    "papel": papel,
                 },
                 origem.enviada_em,
             )
         )
-    novos, atualizados = await base.fundir(sessao, usuario_id, itens)
-    resultado.conhecimento_novo += novos
-    resultado.conhecimento_atualizado += atualizados
+    fusao = await base.fundir(sessao, usuario_id, itens)
+    resultado.conhecimento_novo += fusao.novos
+    resultado.conhecimento_atualizado += fusao.atualizados
+    resultado.conhecimento_descartado += fusao.descartados
+    resultado.conhecimento_em_disputa += fusao.em_disputa
     resultado.mensagens += len(pendentes)
     agora = datetime.now(UTC)
     await sessao.execute(
