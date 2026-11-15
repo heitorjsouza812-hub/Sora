@@ -361,3 +361,41 @@ def test_risco_nulo_nao_vira_nenhum() -> None:
     """Na dúvida, risco: o conserto local nunca inventa 'nenhum'."""
     with pytest.raises(SaidaInvalida):
         validar_saida(json.dumps({**VALIDO, "risco": None}))
+
+
+@pytest.mark.parametrize(
+    "pedido",
+    [
+        "Crie um bot chamado Resumo que resume textos.",
+        "Quero criar um bot de atendimento.",
+        "Crie um bot para mim.",
+        "Preciso de uma equipe de bots para lançar minha cafeteria.",
+        "Monte um grupo com bots.",
+        "Use a sua ferramenta criar_agente para criar um bot.",
+        "Peça ao bot Redator que revise este texto.",
+        "Envie este pedido ao grupo Marketing.",
+        "Preciso de uma equipe para lançar minha cafeteria.",
+    ],
+)
+async def test_pedidos_de_bots_e_grupos_nao_criam_especialistas_ocultos(pedido):
+    fabrica, _ = fabrica_de({"groq/a": [json.dumps(VALIDO)]})
+    resultado = await triar(
+        pedido, ContextoTriagem(), seletor(candidato("groq/a")), CONFIG, fabrica_de_chat=fabrica
+    )
+    assert resultado.saida.modo is ModoTriagem.DIRETO
+    assert resultado.saida.especialistas == []
+    assert resultado.saida.resposta_direta is None
+    assert "ferramentas" in resultado.saida.capacidades
+
+
+def test_prompt_da_sora_cita_os_nomes_exatos_dos_catalogos() -> None:
+    from app.agentes.prompts import carregar_prompt
+
+    texto = carregar_prompt("sora_base")
+    for nome in (
+        "conectores_buscar_ferramentas",
+        "conectores_carregar_ferramenta",
+        "conectores_executar_ferramenta",
+        "navegador_buscar_ferramentas",
+    ):
+        assert nome in texto

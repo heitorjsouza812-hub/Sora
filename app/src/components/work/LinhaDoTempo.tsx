@@ -54,7 +54,7 @@ export function LinhaDoTempo({ passos, agente, agora, sora, agentes }: { passos:
     <ol className="wk-timeline" style={{ '--agent': agente.cor } as CSSProperties}>
       {passos.map(p => (
         <li key={p.id} className={`wk-step wk-step-${p.tipo} wk-${p.status}`}>
-          <i className="wk-node" aria-hidden="true" />
+          <i className="wk-node" aria-hidden="true">{p.status === 'concluido' ? '✓' : p.status === 'erro' ? '×' : ''}</i>
           <Passo passo={p} agente={agente} agora={agora} ctx={{ sora, agentes }} />
         </li>
       ))}

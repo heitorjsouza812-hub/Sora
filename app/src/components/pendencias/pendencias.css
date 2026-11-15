@@ -1,18 +1,91 @@
-.pend-lista { display: grid; gap: var(--sp-3); }
+/* Cartões e central "Precisa de você" (etapa 6, §6.8). Tokens novos com reserva, para não depender da ordem das tarefas. */
+.pend-lista { display: grid; gap: var(--sp-3); max-width: 560px; }
 .pend-card {
-  display: grid; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5);
-  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--r-16);
-  box-shadow: 0 0 0 1px rgba(226, 236, 255, 0.04), 0 8px 28px -16px rgba(226, 236, 255, 0.25);
+  --faixa: var(--cor, var(--sora, #E2ECFF));
+  position: relative; display: grid; gap: var(--sp-3); max-width: 560px; padding: 16px 16px 16px 19px; overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16);
 }
-.pend-cabeca { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-13, 13px); font-weight: 600; }
-.pend-texto { margin: 0; color: var(--text-1); font-size: var(--fs-15, 15px); line-height: 1.5; }
-.pend-dano, .pend-nota { margin: 0; color: var(--text-2); font-size: var(--fs-13, 13px); line-height: 1.5; }
+.pend-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--faixa); }
+.pend-cabeca { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: var(--text-2); font-size: 12px; font-weight: 600; }
+.pend-cabeca strong { font-weight: 600; }
+.pend-sinal { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--action, #EEF2FA); }
+.pend-origem { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 12px; font-weight: 400; }
+.pend-hora { margin-left: auto; color: var(--text-3); font-size: 12px; font-weight: 400; white-space: nowrap; }
+.pend-conteudo { display: grid; gap: var(--sp-1, 4px); }
+.pend-conteudo h3 { margin: 0; color: var(--text-1); font-size: 15px; font-weight: 600; line-height: 22px; }
+.pend-texto { margin: 0; color: var(--text-1); font-size: 15px; line-height: 22px; }
+.pend-dano, .pend-nota { margin: 0; color: var(--text-2); font-size: 13px; line-height: 1.5; }
 .pend-dano b { color: var(--text-1); font-weight: 600; }
-.pend-acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.pend-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .pend-livre { display: flex; gap: var(--sp-2); align-items: flex-end; }
 .pend-livre > :first-child { flex: 1; min-width: 0; }
-.pend-erro { margin: 0; color: var(--danger); font-size: var(--fs-13, 13px); }
-.ilha .pend-card { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-12, 12px); }
-@media (max-width: 767px) { .pend-acoes > * { flex: 1 1 auto; } .pend-livre { flex-direction: column; align-items: stretch; } }
-.ilha-visao > .ilha-pendencias { grid-column: 1 / -1; }
+.pend-erro { margin: 0; color: var(--danger); font-size: 13px; }
 .pend-url { word-break: break-all; font-size: 12px; }
+
+/* Densidade da Ilha: mesmo cartão, menos ar. */
+.ilha .pend-card { padding: var(--sp-3) var(--sp-4) var(--sp-3) 19px; border-radius: var(--r-12, 12px); }
+.pend-compacto { gap: var(--sp-2); }
+.pend-compacto .pend-dano, .pend-compacto .pend-nota { display: none; }
+.ilha-visao > .ilha-pendencias { grid-column: 1 / -1; }
+
+/* Proposta de grupo */
+.pend-bots { border: 0; padding: 0; margin: 0; display: grid; gap: 0; }
+.pend-bots legend { margin-bottom: var(--sp-2); color: var(--text-2); font-size: 13px; font-weight: 600; }
+.pend-bots label { display: flex; align-items: center; gap: var(--sp-3); min-height: 48px; padding: 0 var(--sp-2); border-top: 1px solid var(--line-soft, rgba(255, 255, 255, .05)); }
+.pend-bots label > i { flex: none; width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+.pend-bots label > span { display: grid; gap: 2px; min-width: 0; }
+.pend-bots small { color: var(--text-2); font-size: 13px; }
+
+/* Depois da decisão o cartão vira uma linha. */
+.pend-resolvida {
+  margin: 0; padding: 10px 16px; max-width: 560px; color: var(--text-2); font-size: 14px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-12, 12px);
+  animation: pend-encolhe 240ms var(--ease, cubic-bezier(.2, .8, .2, 1)) both;
+}
+.pend-resolvida > span { color: var(--ok, #7EF2C4); }
+@keyframes pend-encolhe { from { padding-block: 40px; opacity: .6; } }
+
+/* Central */
+.pend-modal.sora-modal { width: min(100%, 560px); margin-top: 0; border-radius: var(--r-20, 20px); }
+.sora-overlay-backdrop:has(> .pend-modal) { align-items: start; padding-top: 11vh; }
+.pend-modal .sora-modal__body { padding: 0 var(--sp-6); }
+.pend-central { display: block; margin: 0; padding: 0; list-style: none; }
+.pend-central-item { display: grid; grid-template-rows: 1fr; border-top: 1px solid var(--line); transition: grid-template-rows var(--saida, 200ms) var(--ease, ease), opacity var(--saida, 200ms) var(--ease, ease); }
+.pend-central-item:first-child { border-top: 0; }
+.pend-central-item[data-saindo] { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+.pend-central-conteudo { min-height: 0; overflow: hidden; }
+.pend-faixa { max-width: none; padding: var(--sp-4) 0; background: transparent; border: 0; border-radius: 0; overflow: visible; }
+.pend-faixa::before { display: none; }
+.pend-origem-linha { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; font-size: 14px; }
+.pend-orb { display: inline-flex; flex: none; }
+.pend-quem { flex: none; color: var(--cor, var(--text-1)); font-weight: 600; }
+.pend-quando { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 13px; }
+.pend-central-link { margin-left: auto; flex: none; color: var(--text-2); font-size: 13px; text-decoration: none; }
+.pend-central-link:hover { color: var(--text-1); text-decoration: underline; text-underline-offset: 3px; }
+.pend-vazia { display: grid; justify-items: center; gap: var(--sp-2); padding: var(--sp-8, 32px) 0 var(--sp-6); text-align: center; }
+.pend-vazia h3 { margin: var(--sp-3) 0 0; color: var(--text-1); font-size: 20px; line-height: 28px; font-weight: 600; }
+.pend-vazia p { max-width: 360px; margin: 0; color: var(--text-2); font-size: 13px; line-height: 1.5; }
+
+@media (max-width: 767px) {
+  .pend-acoes .b-btn, .pend-livre .b-btn { min-height: 44px; }
+  .pend-acoes > :first-child { flex: 1 1 100%; }
+  .pend-acoes > :not(:first-child) { flex: 1 1 0; }
+  .pend-livre { flex-direction: column; align-items: stretch; }
+  .sora-overlay-backdrop:has(> .pend-modal) { align-items: end; padding: 0; }
+  .pend-modal.sora-modal { width: 100%; max-height: 82dvh; border-radius: var(--r-20, 20px) var(--r-20, 20px) 0 0; border-bottom: 0; }
+  .pend-modal .sora-modal__body { padding-inline: var(--sp-4); }
+  .pend-origem-linha { flex-wrap: wrap; }
+  .pend-central-link { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .pend-resolvida, .pend-central-item { animation: none; transition: none; } }
+
+/* Item "Precisa de você" da barra lateral (dono: Prisma-3; mantido aqui até a tarefa 2 mexer nele). */
+.shell-precisa { margin-bottom: 8px; }
+.shell-precisa .shell-precisa-contador { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center; color: #0B0D12; background: #E2ECFF; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.shell-precisa[data-pendente='true'] { color: var(--text-1); border-color: rgba(226, 236, 255, .3); }
+
+/* Vitral-10: texto novo proposto pelo bot, lido antes de aprovar. */
+.pend-proposta { display: grid; gap: var(--sp-2); min-width: 0; }
+.pend-proposta-texto { margin: 0; max-height: 240px; overflow: auto; padding: var(--sp-3); white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 var(--font-ui, inherit); color: var(--text-1); background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--r-10); box-sizing: border-box; }
+.pend-proposta-dif summary { cursor: pointer; color: var(--text-2); font-size: 13px; padding: var(--sp-1) 0; }
+.pend-proposta-dif .pend-proposta-texto { margin-top: var(--sp-2); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }

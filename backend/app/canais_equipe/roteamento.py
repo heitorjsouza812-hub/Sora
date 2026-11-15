@@ -157,7 +157,9 @@ def rotear(
 
     mencionados, todos, resto = ler_mencoes(texto, membros)
     if todos:
-        return Rota("donos", tuple(m.id for m in disponiveis), texto=resto)
+        # O líder (a Sora, nos grupos) coordena: ``@todos`` é para os outros membros.
+        alvos = [m.id for m in disponiveis if m.id != lider_id] or [m.id for m in disponiveis]
+        return Rota("donos", tuple(alvos), texto=resto)
     mencionados = [a for a in mencionados if a in ids_disponiveis]
     if mencionados:
         return Rota("donos", tuple(mencionados), texto=resto)

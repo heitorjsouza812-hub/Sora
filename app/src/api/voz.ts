@@ -1,17 +1,21 @@
 // Voz com a chave do próprio usuário (Relógio): POST /v1/voz/transcrever e /v1/voz/falar.
-// 404 = o usuário não conectou um provedor de voz; a tela mostra o aviso em PT-BR em vez de falhar.
+// 404 = sem provedor de voz (ou sem modelo de fala); 424 = o provedor recusou (ex.: termos do modelo ainda não aceitos no console).
+// O backend já explica o motivo em PT-BR no `detail`: o app mostra esse texto e só cai nos avisos próprios quando ele não vem.
 import { buscarAutenticado, ehErroApi, ErroApi } from './cliente';
 
-export const MSG_SEM_VOZ = 'Para usar a voz, conecte uma chave da OpenAI em Configurações → Modelos de IA.';
+export const MSG_SEM_VOZ = 'Para usar a voz, conecte uma chave da OpenAI ou do Groq em Configurações → Modelos de IA.';
 const MSG_VAZIO = 'Não ouvi nada. Tente falar de novo.';
 const MSG_GRANDE = 'O áudio ficou grande demais. Fale um trecho mais curto.';
 const MSG_PROVEDOR = 'O provedor de voz não conseguiu responder agora. Tente de novo.';
+const MSG_RECUSADA = 'O provedor de voz recusou o pedido. Veja o modelo de voz no console do provedor e tente de novo.';
 
 /** Troca as mensagens do servidor por avisos próprios do app; o que não conhecemos passa como veio. */
 function erroDeVoz(e: unknown): unknown {
   if (!ehErroApi(e)) return e;
-  const texto = e.status === 404 ? MSG_SEM_VOZ : e.status === 413 ? MSG_GRANDE : e.status === 422 ? MSG_VAZIO : e.status === 502 ? MSG_PROVEDOR : null;
-  return texto ? new ErroApi(e.status, texto) : e;
+  const doServidor = typeof e.detalhe === 'string' && e.detalhe.trim() ? e.detalhe.trim() : null;
+  const texto = e.status === 404 ? doServidor ?? MSG_SEM_VOZ : e.status === 424 ? doServidor ?? MSG_RECUSADA : e.status === 502 ? doServidor ?? MSG_PROVEDOR
+    : e.status === 413 ? MSG_GRANDE : e.status === 422 ? MSG_VAZIO : null;
+  return texto ? new ErroApi(e.status, texto, { detalhe: e.detalhe }) : e;
 }
 
 export async function transcreverAudio(audio: Blob, idioma = 'pt', signal?: AbortSignal): Promise<string> {

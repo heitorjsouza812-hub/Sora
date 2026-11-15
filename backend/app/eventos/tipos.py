@@ -45,6 +45,8 @@ class MensagemFim(EventoBase):
     evento: ClassVar[Literal["mensagem.fim"]] = "mensagem.fim"
     mensagem_id: UUID
     anexos: list[UUID] = Field(default_factory=list)
+    estado: Literal["concluida", "interrompida"] = "concluida"
+    fontes: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RoteamentoEvento(EventoBase):
@@ -115,6 +117,16 @@ class PassoEvento(EventoBase):
     resultado: dict[str, Any] | None = None
     status: StatusPasso
     para_agente_id: UUID | None = None
+    origem: Literal["usuario"] | None = None
+    """``usuario`` no passo ``prompt`` da conversa direta: o pedido veio do usuário, não da Sora."""
+
+    @model_serializer(mode="wrap")
+    def _sem_origem_vazia(self, proximo: Any) -> dict[str, Any]:
+        """O contrato do passo não muda: ``origem`` só vai quando existe."""
+        dados = proximo(self)
+        if dados.get("origem") is None:
+            dados.pop("origem", None)
+        return dados
 
 
 class EntregaEvento(EventoBase):
@@ -161,13 +173,29 @@ class AprovacaoPedida(EventoBase):
     perfil: dict[str, Any] | None = None
     agente_id: UUID | None = None
     opcoes: list[dict[str, str]] | None = None
+    conversa_id: UUID | None = None
+    bot_id: UUID | None = None
+    grupo_id: UUID | None = None
+    proposta: dict[str, str] | None = None
+    """Só no cartão de ``propor_instrucoes``: ``instrucoes`` novas, ``diferenca`` e ``motivo``."""
 
     @model_serializer(mode="wrap")
     def _sem_extras_vazios(self, proximo: Any) -> dict[str, Any]:
-        """Cartão comum mantém o formato de sempre; os campos do cartão de domínio só vão
-        quando existem (Leme, etapa 4)."""
+        """Cartão comum mantém o formato de sempre; os campos do cartão de domínio e os que
+        levam o cartão ao chat (conversa, bot, grupo) só vão quando existem."""
         dados = proximo(self)
-        for campo in ("tipo", "dominio", "url", "perfil", "agente_id", "opcoes"):
+        for campo in (
+            "tipo",
+            "dominio",
+            "url",
+            "perfil",
+            "agente_id",
+            "opcoes",
+            "conversa_id",
+            "bot_id",
+            "grupo_id",
+            "proposta",
+        ):
             if dados.get(campo) is None:
                 dados.pop(campo, None)
         return dados

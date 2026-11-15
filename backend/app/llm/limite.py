@@ -29,7 +29,20 @@ class ErroLimiteDoProvedor(Exception):
     """
 
     def __init__(self, detalhe: str = "") -> None:
-        super().__init__(MENSAGEM_LIMITE + (f" [{detalhe}]" if detalhe else ""))
+        mensagem = MENSAGEM_LIMITE
+        if detalhe == "pedido grande demais":
+            mensagem = (
+                "O pedido excede o limite deste modelo. "
+                "Compacte a conversa ou escolha outro modelo."
+            )
+        elif detalhe.startswith("cota do dia"):
+            resto = detalhe.removeprefix("cota do dia:").strip()
+            mensagem = (
+                "A cota diária deste modelo acabou. "
+                + (resto[:1].upper() + resto[1:] if resto else "")
+                + ". Escolha outro modelo."
+            )
+        super().__init__(mensagem)
 
 
 def _cadeia(erro: BaseException) -> list[BaseException]:
@@ -120,6 +133,8 @@ async def com_espera_de_limite(chamar: Any, *, ao_esperar: Any = None, dormir: A
         except Exception as erro:
             if classificar_erro(erro) is not MotivoTroca.LIMITE_DE_TAXA:
                 raise
+            if cota_diaria(erro):
+                raise erro_cota_diaria(erro) from None
             espera = espera_com_teto(erro)
             if espera is None or esperas >= TENTATIVAS_NO_LIMITE:
                 raise ErroLimiteDoProvedor("limite por minuto") from None
@@ -168,3 +183,95 @@ def enxugar(mensagens: list[Any], nivel: int) -> list[Any]:
                 update={"content": texto[:limite] + " … [resultado antigo resumido]"}
             )
     return saida
+
+
+TENTATIVAS_CHAMADA_MALFORMADA = 2
+
+
+def chamada_de_ferramenta_malformada(erro: BaseException) -> bool:
+    """O provedor recusou a chamada de ferramenta que o modelo montou (nome inventado,
+    argumentos fora do esquema). É falha do modelo, não do usuário: repetir costuma resolver."""
+    texto = _texto(erro)
+    return any(
+        marca in texto
+        for marca in (
+            "tool_use_failed",
+            "tool call validation failed",
+            "failed to call a function",
+            "which was not in request.tools",
+        )
+    )
+
+
+def cota_diaria(erro: BaseException) -> bool:
+    return any(
+        marca in _texto(erro)
+        for marca in ("tokens per day", "requests per day", "tpd", "rpd", "daily quota")
+    )
+
+
+def erro_cota_diaria(erro: BaseException) -> ErroLimiteDoProvedor:
+    segundos = espera_pedida(erro)
+    volta = (
+        f"cota do dia: tente novamente em {int(segundos) + 1} segundos"
+        if segundos is not None
+        else "cota do dia: o provedor não informou quando renova"
+    )
+    return ErroLimiteDoProvedor(volta)
+
+
+def mensagem_de_limite(erro: BaseException) -> str | None:
+    """Texto PT-BR do limite do provedor, ou ``None`` se o erro não é de limite.
+
+    Distingue os três casos do Motor-4: limite por minuto, cota do dia e pedido grande demais.
+    Serve tanto para o ``ErroLimiteDoProvedor`` que o middleware já montou quanto para o 429/413
+    cru (a triagem não passa pelo middleware).
+    """
+    for e in _cadeia(erro):
+        if isinstance(e, ErroLimiteDoProvedor):
+            return str(e)
+    if pedido_grande_demais(erro):
+        return str(ErroLimiteDoProvedor("pedido grande demais"))
+    from app.llm.troca import MotivoTroca, classificar_erro
+
+    if classificar_erro(erro) is not MotivoTroca.LIMITE_DE_TAXA:
+        return None
+    if cota_diaria(erro):
+        return str(erro_cota_diaria(erro))
+    return str(ErroLimiteDoProvedor("limite por minuto"))
+
+
+MENSAGEM_CHAVE_RECUSADA = (
+    "O provedor recusou a chave de API do seu modelo de IA. Confira a chave em "
+    "Configurações → Modelos de IA."
+)
+MENSAGEM_PROVEDOR_FORA = (
+    "O provedor do seu modelo de IA está fora do ar ou demorou demais para responder. "
+    "Tente de novo em alguns instantes ou escolha outro modelo em Configurações → Modelos de IA."
+)
+
+
+def chave_recusada(erro: BaseException) -> bool:
+    from app.llm.troca import _status_http
+
+    for e in _cadeia(erro):
+        if _status_http(e) in (401, 403):
+            return True
+        if type(e).__name__ in {"AuthenticationError", "PermissionDeniedError"}:
+            return True
+    return False
+
+
+def mensagem_da_falha_do_provedor(erro: BaseException, generica: str) -> str:
+    """Escolhe o texto da falha: limite, cota, pedido grande, chave recusada, provedor fora do
+    ar. Qualquer outra coisa (sem modelo conectado, saída ilegível) cai em ``generica``."""
+    limite = mensagem_de_limite(erro)
+    if limite is not None:
+        return limite
+    if chave_recusada(erro):
+        return MENSAGEM_CHAVE_RECUSADA
+    from app.llm.troca import MotivoTroca, classificar_erro
+
+    if classificar_erro(erro) in {MotivoTroca.ERRO_DO_SERVIDOR, MotivoTroca.PRAZO}:
+        return MENSAGEM_PROVEDOR_FORA
+    return generica

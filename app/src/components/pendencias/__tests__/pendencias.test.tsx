@@ -66,3 +66,14 @@ describe('cartões de pendência', () => {
     await waitFor(() => expect(lerEstado().pendencias).toEqual([]));
   });
 });
+
+describe('cartão de propor_instrucoes', () => {
+  it('mostra o texto novo e a diferença antes de aprovar', () => {
+    const ap: Pendencia = { ...aprovacao, id: 'a2', proposta: { instrucoes: 'Responda sempre em PT-BR, de forma curta.', diferenca: '- Seja formal\n+ Responda sempre em PT-BR', motivo: 'Você pediu respostas curtas' } } as Pendencia;
+    comPendencias(ap);
+    render(<ListaPendencias pendencias={[ap]} cor="#E2ECFF" />);
+    expect(screen.getByLabelText('Instruções propostas').textContent).toBe('Responda sempre em PT-BR, de forma curta.');
+    expect(screen.getByText('Você pediu respostas curtas')).toBeTruthy();
+    expect(screen.getByText('Ver o que mudou')).toBeTruthy();
+  });
+});

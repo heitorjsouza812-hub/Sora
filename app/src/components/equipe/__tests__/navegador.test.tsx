@@ -19,17 +19,17 @@ describe('perfil do navegador do agente', () => {
   it('mostra o perfil atual e só oferece perfis nomeados além de compartilhado e sem login', async () => {
     servidor(comoAgente('compartilhado'));
     render(<PerfilNavegadorDoAgente agenteId="a1" />);
-    const seletor = await screen.findByLabelText('Perfil do navegador deste agente') as HTMLSelectElement;
+    const seletor = await screen.findByLabelText('Perfil do navegador deste bot') as HTMLSelectElement;
     await waitFor(() => expect(seletor.disabled).toBe(false));
     expect(seletor.value).toBe('compartilhado');
-    expect([...seletor.options].map(o => o.textContent)).toEqual(['Compartilhado entre os agentes', 'Sem login (aba descartável)', 'Trabalho']);
+    expect([...seletor.options].map(o => o.textContent)).toEqual(['Compartilhado entre os bots', 'Sem login (aba descartável)', 'Trabalho']);
   });
 
   it('troca para um perfil e para sem login pelo PUT do contrato', async () => {
     servidor(comoAgente('compartilhado'));
     api.put.mockResolvedValueOnce(comoAgente('perfil', 'p1', 'Trabalho')).mockResolvedValueOnce(comoAgente('efemero'));
     render(<PerfilNavegadorDoAgente agenteId="a1" />);
-    const seletor = await screen.findByLabelText('Perfil do navegador deste agente') as HTMLSelectElement;
+    const seletor = await screen.findByLabelText('Perfil do navegador deste bot') as HTMLSelectElement;
     await waitFor(() => expect(seletor.disabled).toBe(false));
     fireEvent.change(seletor, { target: { value: 'perfil:p1' } });
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/v1/agentes/a1/navegador', { tipo: 'perfil', perfil_id: 'p1' }));
@@ -43,7 +43,7 @@ describe('perfil do navegador do agente', () => {
     servidor(comoAgente('perfil', 'p1', 'Trabalho'));
     api.put.mockRejectedValue(new ErroApi(404, 'Perfil não encontrado.'));
     render(<PerfilNavegadorDoAgente agenteId="a1" />);
-    const seletor = await screen.findByLabelText('Perfil do navegador deste agente') as HTMLSelectElement;
+    const seletor = await screen.findByLabelText('Perfil do navegador deste bot') as HTMLSelectElement;
     await waitFor(() => expect(seletor.value).toBe('perfil:p1'));
     fireEvent.change(seletor, { target: { value: 'compartilhado' } });
     expect((await screen.findByRole('alert')).textContent).toContain('Perfil não encontrado.');

@@ -141,6 +141,7 @@ class AmbienteNavegador:
                         usuario_id=contexto.usuario_id,
                         etapa_id=contexto.etapa_id,
                         agente_id=contexto.agente_id,
+                        grupo_id=contexto.canal_id,
                         acao={
                             "tipo": "aprovar_dominio",
                             "ferramenta": ferramenta,
@@ -189,13 +190,21 @@ class AmbienteNavegador:
                     url=revisao.url,
                     perfil=await self._perfil_do_cartao(revisao.particao),
                     agente_id=contexto.agente_id,
+                    conversa_id=contexto.conversa_id,
+                    bot_id=contexto.agente_id,
+                    grupo_id=contexto.canal_id,
                     opcoes=[
-                        {"rotulo": "Aprovar domínio", "valor": "sempre_permitir"},
+                        {"rotulo": "Aprovar domínio", "valor": "permitir_uma_vez"},
                         {"rotulo": "Negar", "valor": "negar"},
                     ],
                 ),
                 contexto.conversa_id,
                 contexto.usuario_id,
+            )
+            from app.atencao import publicar_estado_atencao_persistido
+
+            await publicar_estado_atencao_persistido(
+                contexto.usuario_id, agente_id=contexto.agente_id, grupo_id=contexto.canal_id
             )
         from langgraph.types import interrupt
 

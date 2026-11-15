@@ -40,6 +40,7 @@ class CanalResultado(BaseModel):
     """Entrega o resultado da sua tarefa no canal. Use quando terminar."""
 
     texto: str = Field(min_length=1, max_length=MAX_TEXTO_MENSAGEM)
+    anexos: list[UUID] = Field(default_factory=list, max_length=10)
 
 
 FERRAMENTAS_DO_CANAL: dict[str, type[BaseModel]] = {

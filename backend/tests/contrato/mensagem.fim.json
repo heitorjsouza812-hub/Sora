@@ -3,6 +3,8 @@
   "event": "mensagem.fim",
   "data": {
     "mensagem_id": "22222222-2222-4222-8222-222222222222",
-    "anexos": []
+    "anexos": [],
+    "estado": "concluida",
+    "fontes": []
   }
 }

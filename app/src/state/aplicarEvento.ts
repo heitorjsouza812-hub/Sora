@@ -1,4 +1,6 @@
+import { normalizarAnexos, type FonteMensagem, type AnexoMsg } from './projetos';
 import type { Movimento, PassoTrabalho } from '../types';
+import { propostaDe } from '../components/pendencias/proposta';
 import type { RevisaoDominio, AgenteSora, EntregaGerada, EstadoProjetos, Execucao, ProjetoSora, TarefaGerada } from './projetos';
 import type { EventoSse } from '../api/eventos';
 
@@ -34,12 +36,29 @@ function garantirExecucao(estado: EstadoProjetos, conversaId: string, etapaId: s
   return { ...estado, execucoes: [...estado.execucoes, nova] };
 }
 
+export const PREFIXO_PREVIA = 'previa:';
+const SEM_PREVIA = (conversaId: string) => (m: { conversaId: string; previa?: boolean }) => !(m.previa && m.conversaId === conversaId);
+
 /** Redutor único do contrato SSE. É idempotente por id de mensagem, etapa, passo e entrega. */
 export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): EstadoProjetos {
   const d = evento.dados as Dados;
   const conversaId = texto(d.conversa_id) || estado.projetoAtivoId || '';
-  if (!conversaId) return estado;
+  if (!conversaId || estado.mensagensOcultas?.includes(texto(d.mensagem_id))) return estado;
 
+  if (evento.tipo === 'mensagem.token') {
+    // Prévia ao vivo: `texto` é o acumulado (substitui), `fluxo_id` identifica a chamada ao modelo. Grupo (`canal_id`)
+    // é tratado em state/grupos. Só vale com conversa explícita (o canal da conversa a injeta; o global não).
+    const fluxo = texto(d.fluxo_id), explicita = texto(d.conversa_id);
+    if (!fluxo || !explicita || d.canal_id) return estado;
+    const idPrevia = PREFIXO_PREVIA + fluxo, fechados = estado.fluxosFechados ?? [];
+    if (d.fim === true) return { ...estado, mensagens: estado.mensagens.filter(m => m.id !== idPrevia), fluxosFechados: [...fechados.filter(f => f !== fluxo), fluxo].slice(-50) };
+    if (fechados.includes(fluxo)) return estado;
+    const conteudo = texto(d.texto), atual = estado.mensagens.find(m => m.id === idPrevia);
+    if (atual) return atual.texto === conteudo ? estado : { ...estado, mensagens: estado.mensagens.map(m => m.id === idPrevia ? { ...m, texto: conteudo } : m) };
+    if (!conteudo) return estado;
+    const agenteId = texto(d.agente_id) || undefined;
+    return { ...estado, mensagens: [...estado.mensagens, { id: idPrevia, conversaId, autor: agenteId && estado.agentes[agenteId] ? agenteId : 'sora', agenteId, texto: conteudo, criadoEm: evento.recebidoEm, gerando: true, previa: true }] };
+  }
   if (evento.tipo === 'pergunta') {
     const id = texto(d.pergunta_id); if (!id || (estado.pendencias ?? []).some(p => p.id === id)) return estado;
     const opcoes = (lista(d.opcoes) as Dados[]).map(o => ({ rotulo: texto(o.rotulo), valor: texto(o.valor) }));
@@ -51,6 +70,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
       tipo: 'aprovacao', id, conversaId, resumo: texto(d.resumo), dano: texto(d.dano), quemRecebe: texto(d.quem_recebe) || null,
       expiraEm: Date.parse(texto(d.expira_em)) || 0, desde: evento.recebidoEm,
       ...(d.tipo === 'aprovar_dominio' ? { revisaoDominio: revisaoDominioDe(d) } : {}),
+      ...(propostaDe(d.proposta) ? { proposta: propostaDe(d.proposta) } : {}),
     }] };
   }
   if (evento.tipo === 'aprovacao.resolvida') return { ...estado, pendencias: (estado.pendencias ?? []).filter(p => p.id !== texto(d.aprovacao_id)) };
@@ -63,11 +83,14 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
 
   if (evento.tipo === 'mensagem.inicio') {
     const id = texto(d.mensagem_id);
-    if (!id || estado.mensagens.some(m => m.id === id)) return estado;
+    if (!id || estado.mensagens.some(m => m.id === id) || evento.recebidoEm <= (estado.historicos?.[conversaId]?.ultimo ?? 0)) return estado;
     const autorBruto = texto(d.autor);
     const agenteId = texto(d.agente_id) || undefined;
     const autor = autorBruto === 'agente' && agenteId ? agenteId : autorBruto === 'usuario' ? 'usuario' : 'sora';
-    return { ...estado, mensagens: [...estado.mensagens, { id, conversaId, autor, agenteId, texto: '', criadoEm: evento.recebidoEm, gerando: true }] };
+    // A mensagem oficial substitui a prévia (mesma conversa): sem bolha duplicada.
+    const comMensagem = { ...estado, mensagens: [...estado.mensagens.filter(SEM_PREVIA(conversaId)), { id, conversaId, autor, agenteId, texto: '', criadoEm: evento.recebidoEm, gerando: true }] };
+    // Resposta direta: o backend publica só a resposta (sem confirmação); a mensagem já mantém o "gerando" até o `fim`.
+    return autor === 'usuario' ? comMensagem : atualizarProjeto(comMensagem, conversaId, p => p.aguardaRespostaDesde ? { ...p, aguardaRespostaDesde: undefined } : p);
   }
   if (evento.tipo === 'mensagem.delta') {
     const id = texto(d.mensagem_id);
@@ -78,10 +101,12 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
   if (evento.tipo === 'mensagem.fim') {
     const id = texto(d.mensagem_id);
     // A resposta terminou: some o "pensando". Cobre a falha da triagem, em que o backend só publica mensagem.*.
-    const fechado = { ...estado, mensagens: estado.mensagens.map(m => m.id === id ? { ...m, gerando: false } : m) };
+    const fechado = { ...estado, mensagens: estado.mensagens.filter(SEM_PREVIA(conversaId)).map(m => m.id === id ? { ...m, gerando: false, estado: d.estado === 'interrompida' ? 'interrompida' as const : 'concluida' as const, fontes: Array.isArray(d.fontes) && d.fontes.length ? d.fontes as FonteMensagem[] : m.fontes, anexos: Array.isArray(d.anexos) && d.anexos.length ? normalizarAnexos(d.anexos as (AnexoMsg | string)[]) : m.anexos } : m) };
     return atualizarProjeto(fechado, conversaId, p => p.mensagensPendentes ? { ...p, mensagensPendentes: false } : p);
   }
-  if (evento.tipo === 'roteamento') return atualizarProjeto(estado, conversaId, p => ({ ...p, roteamento: texto(d.modo) as ProjetoSora['roteamento'], mensagensPendentes: false }));
+  if (evento.tipo === 'roteamento') return atualizarProjeto(estado, conversaId, p => ({ ...p, roteamento: texto(d.modo) as ProjetoSora['roteamento'], mensagensPendentes: false,
+    // resposta direta: entre o roteamento e a 1ª mensagem a conversa segue "pensando"; a mensagem assume depois
+    aguardaRespostaDesde: d.modo === 'direto' && evento.recebidoEm > (estado.historicos?.[conversaId]?.ultimo ?? 0) ? evento.recebidoEm : undefined }));
 
   if (evento.tipo === 'agente.criado') {
     const id = texto(d.agente_id); if (!id) return estado;
@@ -133,6 +158,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
       resultado: d.resultado && typeof d.resultado === 'object' ? d.resultado as PassoTrabalho['resultado'] : undefined,
       status: texto(d.status) as PassoTrabalho['status'], inicio: evento.recebidoEm, fim: d.status === 'executando' ? undefined : evento.recebidoEm,
       paraAgenteId: texto(d.para_agente_id) || undefined,
+      origem: d.origem === 'usuario' ? 'usuario' : d.origem === 'sora' ? 'sora' : undefined,
     };
     return { ...proximo, execucoes: proximo.execucoes.map(x => x.id === etapaId ? { ...x, agenteId: agenteId || x.agenteId, roteiro: x.roteiro.some(p => p.id === passoId) ? x.roteiro.map(p => p.id === passoId ? { ...p, ...passo, inicio: p.inicio } : p) : [...x.roteiro, passo] } : x) };
   }
@@ -150,7 +176,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     ...p, mensagensPendentes: false, cadeiaStatus: texto(d.status) as ProjetoSora['cadeiaStatus'],
     marcos: d.status === 'concluida' ? { ...p.marcos, fim: evento.recebidoEm } : p.marcos,
   }));
-  if (evento.tipo === 'erro') return atualizarProjeto(estado, conversaId, p => ({ ...p, mensagensPendentes: false, erro: texto(d.mensagem) || 'O trabalho foi interrompido.' }));
+  if (evento.tipo === 'erro') return atualizarProjeto(estado, conversaId, p => ({ ...p, mensagensPendentes: false, aguardaRespostaDesde: undefined, erro: texto(d.mensagem) || 'O trabalho foi interrompido.' }));
   return estado;
 }
 
@@ -161,12 +187,13 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
  */
 export function registrarEnvioDoUsuario(
   estado: EstadoProjetos,
-  m: { id: string; conversaId: string; agenteId?: string; texto: string; enviadoEm: number; anexos?: EstadoProjetos['mensagens'][number]['anexos'] },
+  m: { id: string; localId?: string; conversaId: string; agenteId?: string; texto: string; enviadoEm: number; anexos?: EstadoProjetos['mensagens'][number]['anexos'] },
 ): EstadoProjetos {
+  // Remove só a bolha deste POST; nunca deduplica pelo texto (perguntas iguais são válidas).
+  if (m.localId) estado = { ...estado, mensagens: estado.mensagens.filter(x => x.id !== m.localId) };
   const existente = estado.mensagens.find(x => x.id === m.id);
   if (existente) {
-    return existente.criadoEm <= m.enviadoEm ? estado
-      : { ...estado, mensagens: estado.mensagens.map(x => x.id === m.id ? { ...x, criadoEm: m.enviadoEm } : x) };
+    return { ...estado, mensagens: estado.mensagens.map(x => x.id === m.id ? { ...x, texto: m.texto, anexos: m.anexos ?? x.anexos, gerando: false, criadoEm: Math.min(x.criadoEm, m.enviadoEm) } : x) };
   }
   return { ...estado, mensagens: [...estado.mensagens, { id: m.id, conversaId: m.conversaId, agenteId: m.agenteId, autor: 'usuario', texto: m.texto, criadoEm: m.enviadoEm, anexos: m.anexos ?? [], gerando: false }] };
 }

@@ -8,12 +8,16 @@
 //   Desktop (Tauri): cabeçalho X-Sora-Cliente: desktop; o token de renovação vem no corpo e fica no
 //   cofre do sistema (cofreLer/cofreGravar/cofreApagar em desktop/ponte.ts).
 // • Erros viram ErroApi { status, mensagem } com a mensagem PT-BR do backend (`detail`).
-import { cofreApagar, cofreGravar, cofreLer, noDesktop } from '../desktop/ponte';
+import { cofreApagar, cofreGravar, cofreLer, emitirSessao, janelaAtual, noDesktop, pedirSessaoAoPrincipal } from '../desktop/ponte';
 
 export const API_BASE: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') ?? '';
 
-export const MSG_SEM_REDE = 'Não foi possível falar com o servidor da Sora.';
+export const MSG_SEM_REDE = 'Sem conexão com a Sora. Confira a internet e tente de novo.';
 const MSG_GENERICA = 'Algo deu errado no servidor da Sora. Tente de novo.';
+const MSG_SERVIDOR_FORA = 'O servidor da Sora está fora do ar agora. Tente de novo em instantes.';
+/** Falha que não veio do servidor nem da rede (ex.: o app não conseguiu guardar algo neste computador). */
+const MSG_LOCAL = 'Algo deu errado neste computador. Feche e abra a Sora e tente de novo.';
+export const MSG_COFRE = 'Não foi possível lembrar o login neste computador. Você continua conectado até fechar a Sora.';
 const MSG_VALIDACAO = 'Confira os campos e tente de novo.';
 const MSG_LIMITE = 'Muitas tentativas. Espere um pouco e tente de novo.';
 
@@ -40,7 +44,7 @@ export const ehErroApi = (e: unknown): e is ErroApi => e instanceof ErroApi;
 
 /** Mensagem pronta para mostrar ao usuário a partir de qualquer erro. */
 export function mensagemDeErro(e: unknown): string {
-  return ehErroApi(e) ? e.mensagem : MSG_GENERICA;
+  return ehErroApi(e) ? e.mensagem : MSG_LOCAL;
 }
 
 export interface OpcoesPedido {
@@ -58,6 +62,8 @@ const ouvintesEncerrada = new Set<() => void>();
 
 export function definirTokenAcesso(token: string | null): void { tokenAcesso = token; }
 export function temTokenAcesso(): boolean { return tokenAcesso !== null; }
+/** Só para a ponte com a janela da ilha (desktop): quem pede o token à principal recebe este. */
+export function lerTokenAcesso(): string | null { return tokenAcesso; }
 
 /** Chamado quando a renovação falha (sessão perdida). Devolve a função para parar de ouvir. */
 export function aoSessaoEncerrada(cb: () => void): () => void {
@@ -65,8 +71,26 @@ export function aoSessaoEncerrada(cb: () => void): () => void {
   return () => { ouvintesEncerrada.delete(cb); };
 }
 
+// Marca (sem segredo) de que este navegador já teve login: sem ela não adianta tentar renovar
+// e o 401 sujaria o console a cada abertura.
+const CHAVE_TEVE_SESSAO = 'sora.sessao.marca.v1';
+function marcarSessao(tem: boolean): void {
+  try { if (tem) localStorage.setItem(CHAVE_TEVE_SESSAO, '1'); else localStorage.removeItem(CHAVE_TEVE_SESSAO); } catch { /* sem armazenamento */ }
+}
+function teveSessao(): boolean {
+  try { return localStorage.getItem(CHAVE_TEVE_SESSAO) === '1'; } catch { return true; }
+}
+const ouvintesAviso = new Set<(mensagem: string) => void>();
+/** Avisos que não derrubam a sessão (ex.: o cofre do sistema não guardou o login). */
+export function aoAvisoDeSessao(cb: (mensagem: string) => void): () => void {
+  ouvintesAviso.add(cb);
+  return () => { ouvintesAviso.delete(cb); };
+}
+
 function encerrarSessaoLocal(): void {
+  marcarSessao(false);
   tokenAcesso = null;
+  void emitirSessao(null).catch(() => {});
   for (const cb of [...ouvintesEncerrada]) cb();
 }
 
@@ -82,6 +106,7 @@ function mensagemDoDetalhe(status: number, detalhe: unknown): string {
   if (typeof detalhe === 'string' && detalhe.trim()) return detalhe;
   if (status === 422) return MSG_VALIDACAO;
   if (status === 429) return MSG_LIMITE;
+  if (status === 502 || status === 503 || status === 504) return MSG_SERVIDOR_FORA;
   return MSG_GENERICA;
 }
 
@@ -140,6 +165,15 @@ export async function buscarAutenticado(caminho: string, init: RequestInit = {})
 let renovacaoEmVoo: Promise<boolean> | null = null;
 
 async function fazerRenovacao(): Promise<boolean> {
+  // Janela da ilha (desktop): não vê o cofre e não pode renovar (gastaria o token de renovação da
+  // principal). Pede o token de acesso à janela principal, que renova se for preciso.
+  if (noDesktop && janelaAtual === 'ilha') {
+    const token = await pedirSessaoAoPrincipal(tokenAcesso);
+    if (!token) return false;
+    tokenAcesso = token;
+    return true;
+  }
+  if (!noDesktop && !teveSessao()) return false;
   let corpo: string | undefined;
   if (noDesktop) {
     const salvo = await cofreLer().catch(() => null);
@@ -158,6 +192,7 @@ async function fazerRenovacao(): Promise<boolean> {
   }
   if (!resp.ok) {
     if (resp.status === 401 || resp.status === 403) {
+      marcarSessao(false);
       if (noDesktop) await cofreApagar().catch(() => {});
       return false;
     }
@@ -170,7 +205,13 @@ async function fazerRenovacao(): Promise<boolean> {
 /** Guarda os tokens recebidos de entrar/renovar (acesso em memória; renovação no cofre, se desktop). */
 export async function guardarTokens(t: TokensSaida): Promise<void> {
   tokenAcesso = t.token_acesso;
-  if (noDesktop && t.token_renovacao) await cofreGravar(t.token_renovacao);
+  marcarSessao(true);
+  if (noDesktop && t.token_renovacao) {
+    // Falha do cofre é local: a sessão segue na memória e o usuário é avisado.
+    try { await cofreGravar(t.token_renovacao); }
+    catch { for (const cb of [...ouvintesAviso]) cb(MSG_COFRE); }
+  }
+  void emitirSessao(t.token_acesso).catch(() => {}); // a ilha acompanha login e renovações
 }
 
 /** Tenta renovar a sessão (abertura do app ou 401). Várias chamadas juntas dividem o mesmo pedido.
@@ -185,6 +226,8 @@ export function renovarSessao(): Promise<boolean> {
 /** Esquece a sessão localmente (token em memória e cofre do desktop). Não avisa os ouvintes. */
 export async function limparSessaoLocal(): Promise<void> {
   tokenAcesso = null;
+  marcarSessao(false);
+  void emitirSessao(null).catch(() => {});
   if (noDesktop) await cofreApagar().catch(() => {});
 }
 
@@ -252,4 +295,5 @@ export const api = {
 export function _reiniciarClienteParaTestes(): void {
   tokenAcesso = null;
   renovacaoEmVoo = null;
+  marcarSessao(true); // como um navegador que já teve login (cookie de renovação possível)
 }

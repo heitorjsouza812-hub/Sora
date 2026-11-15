@@ -65,7 +65,7 @@ describe('seções de Configurações da etapa 4', () => {
     render(<SecaoNavegador />);
     expect(await screen.findByText('Trabalho')).toBeTruthy();
     expect(screen.getByText('Perfil nomeado')).toBeTruthy();
-    expect(screen.getByText('Compartilhado entre os agentes')).toBeTruthy();
+    expect(screen.getByText('Compartilhado entre os bots')).toBeTruthy();
     expect(screen.getByText('banco.com')).toBeTruthy();
     expect(screen.getByText('Nenhum domínio aprovado ainda.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Revogar loja.com em Trabalho' }));

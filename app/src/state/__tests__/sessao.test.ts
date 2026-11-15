@@ -5,9 +5,12 @@ vi.mock('../../desktop/ponte', () => ({
   cofreLer: vi.fn(async () => null),
   cofreGravar: vi.fn(async () => {}),
   cofreApagar: vi.fn(async () => {}),
+  janelaAtual: 'main',
+  emitirSessao: vi.fn(async () => {}),
+  pedirSessaoAoPrincipal: vi.fn(async () => null),
 }));
 
-import { _reiniciarClienteParaTestes, api } from '../../api/cliente';
+import { _reiniciarClienteParaTestes, api, MSG_SEM_REDE } from '../../api/cliente';
 import { _reiniciarSessaoParaTestes, apagarConta, cadastrar, entrar, iniciarSessao, lerSessao, sair } from '../sessao';
 
 const json = (status: number, corpo?: unknown) =>
@@ -50,7 +53,7 @@ describe('sessão', () => {
   it('servidor fora na abertura → anônimo com aviso', async () => {
     rotas['POST /v1/auth/renovar'] = () => { throw new TypeError('rede'); };
     await iniciarSessao();
-    expect(lerSessao()).toMatchObject({ estado: 'anonimo', erro: 'Não foi possível falar com o servidor da Sora.' });
+    expect(lerSessao()).toMatchObject({ estado: 'anonimo', erro: MSG_SEM_REDE });
   });
 
   it('entrar guarda o token e carrega o usuário', async () => {

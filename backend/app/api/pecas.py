@@ -21,7 +21,12 @@ from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
 from app.eventos.equipe import ContextoAtualizado
 from app.ferramentas.base import ErroFerramenta
-from app.memoria.servico import MAX_CONTEUDO, ArmazemMemoriasSQL, ServicoMemoria
+from app.memoria.servico import (
+    MAX_CONTEUDO,
+    ArmazemMemoriasSQL,
+    RegistroMemoria,
+    ServicoMemoria,
+)
 from app.modelos.tabelas import Agente, Conversa, Memoria
 from app.modelos.tabelas import Pendencia as LinhaPendencia
 from app.pendencias import MAX_NOTAS, MAX_PENDENCIAS_ABERTAS, MAX_TITULO, STATUS_ABERTOS
@@ -51,7 +56,7 @@ class MemoriaEntrada(BaseModel):
     agente_id: UUID | None = None
 
 
-def _memoria(linha: Memoria) -> MemoriaSaida:
+def _memoria(linha: Memoria | RegistroMemoria) -> MemoriaSaida:
     return MemoriaSaida(
         id=linha.id,
         agente_id=linha.agente_id,
@@ -70,7 +75,7 @@ async def _exigir_agente(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID
         )
     )
     if achou is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
 
 
 @roteador.get("/memorias")
@@ -106,6 +111,31 @@ async def criar_memoria(
     linha = await sessao.get(Memoria, registro.id)
     await sessao.commit()
     return _memoria(linha)
+
+
+class MemoriaAlteracao(BaseModel):
+    conteudo: str = Field(min_length=1, max_length=MAX_CONTEUDO)
+
+
+@roteador.patch("/memorias/{memoria_id}")
+async def editar_memoria(
+    memoria_id: UUID, dados: MemoriaAlteracao, usuario_id: Usuario, sessao: Sessao
+) -> MemoriaSaida:
+    """Corrige o texto de uma memória. Memória de outro usuário ou já apagada: 404; texto que
+    pareça senha ou repita outra memória do mesmo bot: 422."""
+    from app.memoria.vetorizador import vetorizador_do_usuario
+
+    servico = ServicoMemoria(
+        ArmazemMemoriasSQL(sessao), await vetorizador_do_usuario(sessao, usuario_id)
+    )
+    try:
+        registro = await servico.editar(usuario_id, memoria_id, dados.conteudo)
+    except ErroFerramenta as erro:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(erro)) from erro
+    if registro is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Memória não encontrada.")
+    await sessao.commit()
+    return _memoria(registro)
 
 
 @roteador.delete("/memorias/{memoria_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -270,7 +300,7 @@ async def compactar_agora(
         .limit(1)
     )
     if conversa_id is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Este agente ainda não tem conversa.")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Este bot ainda não tem conversa.")
     estado = await ler(redis, agente_id, fio) or medir(
         agente_id, fio, janela=None, tokens_informados=0
     )

@@ -37,6 +37,8 @@ _CONVERSA = (
     "apagar_habilidade",
     "propor_instrucoes",
     "enviar_para_agente",
+    "consultar_cliente",
+    "consultar_conhecimento",
 )
 
 # Conjunto enxuto: cada esquema vai em toda chamada, e planos gratuitos limitam os tokens por
@@ -110,6 +112,14 @@ async def blocos_do_turno(contexto: ContextoAgente) -> str:
         bloco_habilidades = instrucao_de_habilidades([(h.nome, h.descricao) for h in habilidades])
         if bloco_habilidades:
             partes.append(bloco_habilidades)
+        try:
+            from app.canais_empresa.ferramentas import bloco_de_conhecimento
+
+            bloco_empresa = await bloco_de_conhecimento(sessao, contexto)
+        except Exception:  # o conhecimento da empresa nunca derruba o turno
+            bloco_empresa = ""
+        if bloco_empresa:
+            partes.append(bloco_empresa)
         colegas = (
             await sessao.execute(
                 select(Agente.id, Agente.nome, Agente.funcao).where(
@@ -191,6 +201,39 @@ def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
     return _catalogo_revisado(conectores, contexto, "conectores", "dos conectores")
 
 
+def catalogo_enxuto(escondidas: list, conectores: list, contexto: ContextoAgente) -> list:
+    """Um só catálogo (``conectores_*``) para o que o turno não manda direto ao modelo: navegador,
+    histórico, pendências, habilidades, colegas… e os conectores MCP. Cada ferramenta ganha o
+    grupo pelo nome; a cláusula de uso dela vai junto do esquema, na primeira carga."""
+    from app.agentes.ferramentas_do_turno import grupo_da_escondida
+    from app.agentes.instrucoes import POR_FERRAMENTA
+    from app.agentes.prompts import carregar_prompt
+
+    if not escondidas:
+        return catalogo_dos_conectores(conectores, contexto)
+    for ferramenta in escondidas:
+        metadados = dict(getattr(ferramenta, "metadata", None) or {})
+        metadados["grupo"] = grupo_da_escondida(ferramenta.name)
+        ferramenta.metadata = metadados
+        if ferramenta.name.startswith("navegador_"):
+            _com_sinonimos(ferramenta)
+    guias = {
+        nome: texto
+        for nome, texto in POR_FERRAMENTA.items()
+        if any(f.name == nome for f in escondidas)
+    }
+    if any(f.name.startswith("navegador_") for f in escondidas):
+        guias["navegador"] = carregar_prompt("navegador_arvore")
+    return _catalogo_revisado(
+        [*escondidas, *conectores],
+        contexto,
+        "conectores",
+        "extras e conectores",
+        limite_direto=0,
+        guias=guias,
+    )
+
+
 def _catalogo_revisado(
     conectores: list,
     contexto: ContextoAgente,
@@ -198,6 +241,7 @@ def _catalogo_revisado(
     rotulo: str,
     limite_direto: int = 20,
     grupo_padrao: str = "outros",
+    guias: dict[str, str] | None = None,
 ) -> list:
     import hashlib
     import json
@@ -238,6 +282,7 @@ def _catalogo_revisado(
         antes_de_executar=antes,
         limite_direto=limite_direto,
         grupo_padrao=grupo_padrao,
+        guias=guias,
     )
 
 

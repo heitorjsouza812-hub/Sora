@@ -28,7 +28,7 @@ Os agentes usam **plugins** (Figma, Canva, Notion, Higgsfield, ChatGPT, Gemini, 
 
 ### Estado atual do repositório
 
-O **app** está em `app/` (veja **§7 Estado do app**) e o **backend** em `backend/` + `infra/` (README na raiz). Desde a etapa 3 (2026-11-02) o app fala com o backend real: login, Modelos de IA, **chats, plano, equipe, painel Trabalho, entregas, cartões de pergunta/aprovação e ilha via REST + SSE**; o worker roda o modo Cadeia de ponta a ponta. Não há modo demonstração (o modelo falso `SORA_MODELO_FALSO=1` serve só para desenvolver). Os vídeos de apresentação continuam como referência visual:
+O **app** está em `app/` (veja **§7 Estado do app**) e o **backend** em `backend/` + `infra/` (README na raiz). Desde as etapas 5 e 6 (2026-11-14 e 2026-11-15) o produto é **a Sora como chefe de equipe de bots e grupos**: o usuário conversa com a Sora, ela cria bots (cartão de rascunho) e propõe grupos de 2 a 5 bots (cartão de proposta); ações que mexem no mundo viram cartão **"Precisa de você"**. Não existem mais "projetos", "plano" nem "Aprovar e publicar" na interface. O app fala com o backend real por REST + SSE (login, modelos de IA, conversas, bots, grupos, Trabalho, memória, rotinas, voz, navegador, computador, Clientes). Não há modo demonstração (o modelo falso `SORA_MODELO_FALSO=1` serve só para as suítes automáticas e para desenvolver). Os testes ao vivo usam **modelo real (Groq)**, com a chave em `backend/.env` (`SORA_QA_GROQ_CHAVE`, nunca copiada para documento). Os vídeos de apresentação continuam como referência visual:
 
 | Arquivo | O que é |
 |---|---|
@@ -69,10 +69,12 @@ Modelo de entrada:
 ### 👤 Heitor
 
 - **Papel:** _(preencher — ex.: produto / design / front-end)_
-- **Onde parou (2026-11-04):** **etapa 4 concluída e validada** no ramo `etapa4-pecas` (worktree `C:\dev\sora-e4`), pronta para ir à `main`: o worker liga o navegador por árvore (perfis, revisão de domínio, rastro e captura), fila e canais de equipe, correio, contexto e compactação, memória, pendências, revisor, habilidades, rotinas, conectores MCP, Telegram, sandbox e voz; o app tem as telas de tudo isso. Teste com modelo real (Groq) feito ao vivo; os 12 defeitos que ele achou foram corrigidos. Plano: `log/etapa4-pecas.md`.
-- **Próximo passo:** (1) Ilha da Sora só fora do app; (2) refazer a interface no estilo OpenBot/Grok. Depois: domínio real da API no CSP do Tauri, instalador assinado. Plugins seguem congelados no app.
+- **Onde parou (2026-11-15):** **etapas 5 e 6 prontas no ramo `etapa5-interface`** (worktree `C:\dev\sora-e5`), com as portas de desenvolvimento de volta ao padrão (Vite 5173, API 8000) e a documentação atualizada, à espera do "sim" do Heitor para entrar na `main`. Interface nova (Sora chefe de equipe, bots, grupos, "Precisa de você", visual novo), conversa completa (Parar, fontes, editar/refazer/avaliar, imagem e visão, voz, busca, memória), painel Trabalho com tela ao vivo, navegador próprio e computador virtual por bot, controle do PC do usuário no desktop (C3), canais da empresa só leitura com aprendizado e Clientes, Ilha só fora do app. Última validação (Prumo-4 + Âncora-8): backend 1409 unitários e 28/28 arquivos de integração verdes, app 382 testes, `test:visual` 22/22, contraste 0 falhas, Clippy e 22 testes Rust. Planos: `log/etapa5-interface.md`, `log/etapa6-acabamento.md`; diário: `log/2026-11-15.md`.
+- **Próximo passo:** (1) o Heitor aprova a junção na `main`; (2) teste real no Tauri (controle do PC com Bloco de Notas e mouse físico, login desktop, Ilha, aviso fora de foco); (3) Slack e WhatsApp Business reais; (4) instalador assinado com o domínio real da API no CSP; (5) decidir PWA e tema claro; (6) itens MÉDIA/BAIXA abertos de `.maestri/relatorios/prumo4.md` e `ancora8.md` (qualidade da proposta de grupo, resposta repetida de modelo pequeno, streaming com Groq, busca com provedor real) e a renovação da sessão (decisão 8 da etapa 5). Plugins seguem escondidos.
 
 **Histórico**
+- **2026-11-15** — **Etapas 5 e 6 concluídas no ramo `etapa5-interface`** (103 commits sobre a `main` `b46518b`; ainda sem push). Etapa 5: Sora persistente como chefe de equipe, bots e grupos (2 a 5 bots), criação por conversa (cartão de rascunho e proposta de grupo), central "Precisa de você" com Permitir uma vez / Sempre permitir / Recusar, Ilha só fora do app. Etapa 6: visual novo (`docs/design/etapa6-visual.md`), conversa com Parar, fontes, editar/refazer/avaliar, imagem e visão, voz contínua, busca e memória; painel Trabalho com tela ao vivo do navegador e do computador; navegador próprio e computador virtual por bot (`docs/computador-por-bot.md`); controle do PC do usuário no desktop com proteções (C3); canais da empresa só leitura com aprendizado e tela Clientes (`docs/canais-da-empresa.md`); rotas antigas removidas e textos sem "agente/projeto/publicar". Time no Maestri com Claude, Codex e Grok; validação final do Prumo-4 e correções da Âncora-8 e do Vitral-10. Teste com modelo real (Groq). Arquivos: `backend/**`, `app/src/**`, `app/src-tauri/**`, `app/qa/**`, `docs/**`, `log/2026-11-15.md`, `log/etapa5-interface.md`, `log/etapa6-acabamento.md`. Pendente: teste real do Tauri (controle do PC, login desktop, Ilha), Slack/Meta reais, instalador assinado com o domínio real da API no CSP, PWA e tema claro (a decidir), MÉDIA/BAIXA abertas em `prumo4.md` e `ancora8.md`.
+- **2026-11-14** — Âncora-3: backend dos itens 1/9/11 da etapa 6 (parar, fontes, editar/refazer/avaliar); migração `0011` aplicada no banco da etapa 5. Arquivos: `backend/app/{api/conversas.py,agentes/middleware/conversa.py,modelos/*}`, `backend/workers/{conversa,cadeia}.py`, testes e contrato `.maestri/contrato-etapa5.md`. Próximo passo: integração no app e validação com modelo real; relatório `.maestri/relatorios/ancora3.md`.
 - **2026-11-04** — **Etapa 4 concluída: peças ligadas no worker + telas no app** (ramo `etapa4-pecas`). Time no Maestri: Leme (navegador), Tear (fila, canais, correio), Âncora (contexto, memória, revisor, habilidades), Relógio (rotinas, Telegram, conectores, sandbox, voz), Vitral E4 (app), Pena (docs); validação do Prumo (Aferidor) em três rodadas. Teste com modelo real (Groq) ao vivo no Chrome achou 12 defeitos que o modelo falso escondia, todos corrigidos; varredura tirou do app o conteúdo de demonstração. Verde: unitários 1097/0, integrações do navegador, equipe, Âncora, rotinas e fase B, app build/oxlint/184 testes, e2e, ilha, etapa4 com Chromium real e visual. Arquivos: `backend/**`, `app/src/**`, `app/qa/**`, `log/etapa4-pecas.md`, `log/2026-11-02.md`, `docs/referencias/*`. Pendente: Ilha só fora do app e nova interface (OpenBot/Grok); decisões do grupo sobre Plugins e "Aprovar e publicar".
 - **2026-11-02** — **Etapa 3 concluída: motor de ponta a ponta + app ligado** (ramo `etapa3-motor` juntado na `main`). Fase A (Cerca): revisão de domínio novo em perfil logado (inclusive clique e redirect, barreira CDP), rotinas com perfil efêmero, Chromium em contêiner `internal` com `proxy-egresso` que recusa IP privado depois do DNS, produção recusa subir sem `NAVEGADOR_CDP_URL` (prova: `infra/scripts/provar-isolamento-navegador.sh`). Fase B (Trilho, Balcão, Molde, Compasso, Prumo, Elo): rotas de conversas/cadeias/eventos/entregas/perguntas/aprovações/agentes/anexos/uso, modo Cadeia no worker (até 3 etapas em paralelo, verificação, orçamento, troca de modelo como passo, erro seguro, cancelamento, batimento do worker, triagem com prazo de 15 s), ferramentas da fase 1, migração 0006. Fase C (Vitral): app por REST + SSE, cartões de pergunta e aprovação, sem planejador/relógio simulados. Revisão final (Lapidário, Cinzel): corrida da resposta antes da pausa, vagas SSE liberadas na desconexão e aviso de limite, cores, contas de QA, sobras de simulação. Validado por Aferidor (duas rodadas) e Faro; no fim: backend 1130 passed / 2 skipped com integração, ruff, build, oxlint, npm test 130, e2e e ilha. Arquivos: `backend/**`, `app/src/**`, `app/qa/**`, `infra/**`, `log/etapa3-motor.md`, `log/2026-11-02.md`. Pendente: teste com chave real, CSP do Tauri, instalador assinado, passo 6 (etapa 4).
 - **2026-11-01** — **Navegador por árvore, adaptado do agent-desktop** (github.com/vercel-labs/agent-desktop, Apache 2.0; sem cópia literal, reescrito em Python + JS para o Chromium da Sora). O agente observa a aba como árvore com refs `@sXXXXXXX:eN`, age numa ref e confere: ref reencontrada e conferida antes de agir (elemento removido não cai no vizinho), checagens com espera (visível, estável, habilitado, quem está por cima), 17 ações com verificação depois, resposta com `entrega`/`repetir`, senha nunca exposta, esperas, lote, rastro e cursor na cor do agente. 7 ferramentas novas, prompt `navegador_arvore.v1`, 32 testes com Chromium real, 969 passando. Arquivos: `backend/app/navegador/arvore/**`, `backend/app/navegador/persistente.py`, `backend/app/ferramentas/{registro,rotulos}.py`, `backend/app/revisor/politica.py`, `backend/prompts/navegador_arvore.v1.md`, `backend/tests/unitarios/test_navegador_arvore.py`, `docs/referencias/agent-desktop*.{md,txt}`, `log/2026-11-01.md`. Pendente: ligar no worker, rastro no painel Trabalho, iframes.
@@ -288,102 +290,107 @@ Status de agente/tarefa: `aguardando` · `trabalhando` · `concluido` · `erro`.
 ```bash
 cd app
 npm install
-npm run dev          # http://localhost:5173
+npm run dev          # http://localhost:5173 (outra porta: PORT=5174 npm run dev)
 npm run build        # checagem de tipos + build
-npx oxlint           # lint
+npx oxlint           # lint (restam só avisos antigos de clientes/comum.tsx e qa/contraste.mjs)
+npm test             # vitest (72 arquivos, 382 testes)
+npm run test:visual  # Playwright, telas em 1440 e 390 px (22 testes)
 npm run desktop      # app de DESKTOP (Tauri) em modo dev — usa o dev server da porta 5173
 npm run desktop:build  # instaladores em src-tauri/target/release/bundle/{nsis,msi}/
 ```
 
-**Desktop (Tauri v2, desde 2026-10-11):** precisa do Rust (MSVC). Duas janelas: `main` (o app; fechar esconde na bandeja) e `ilha` (`index.html?janela=ilha`, transparente, sem borda, sempre no topo, presa no topo central da tela; fora da pílula os cliques atravessam). Bandeja (Abrir a Sora · Mostrar/ocultar a ilha · Sair), atalho global Ctrl+Shift+S, instância única. A ponte JS↔Rust é `src/desktop/ponte.ts` (no navegador vira no-op). Spec: `app/docs/sora-desktop.md`. Para inspecionar as WebViews: iniciar o exe com `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`.
+**Portas padrão:** Vite **5173**, API **8000**. Uma worktree paralela usa outras sem editar arquivos: `PORT` e `SORA_BACKEND_URL` no Vite; `SORA_QA_BASE` e `SORA_QA_API` nos scripts de QA e no Playwright. O `tauri.conf.json` não lê variável de ambiente: `devUrl` e `devCsp` ficam em 5173/8000 (quem usar outra porta troca à mão, sem commitar).
 
-Chats, planejador, Trabalho, Ilha e as peças da etapa 4 vêm do **backend por REST + SSE** (`src/api/eventos.ts`, `src/state/aplicarEvento.ts`, `src/state/equipe.ts`). O app precisa da API e do worker rodando (`backend/README.md`; para desenvolver, `SORA_MODELO_FALSO=1` e `uv run python -m workers`). O worker também executa fila e canais de equipe, contexto e compactação, memória, pendências, revisor, habilidades, rotinas, conectores, Telegram, sandbox, voz e navegador por árvore. `data/planejador.ts` ficou só com utilitários de aparência. `sora.modelos.v1` guarda somente escolhas não secretas; chaves de API nunca ficam no `localStorage`. Nada de conteúdo de demonstração aparece como real: entrega sem imagem ou datas diz isso.
+Tudo vem do **backend por REST + SSE** (`src/api/eventos.ts`, `src/state/aplicarEvento.ts`). O app precisa da API e do worker (`backend/README.md`). Para desenvolver sem gastar cota: `SORA_MODELO_FALSO=1` e `uv run python -m workers`. Para o teste real, a conta de QA cadastra o provedor Groq em `/v1/provedores` lendo `SORA_QA_GROQ_CHAVE` do `backend/.env` (arquivo ignorado pelo git). Limite grátis: ao bater 429, esperar e tentar de novo. `sora.modelos.v1` guarda só escolhas não secretas; chave de API nunca fica no `localStorage`.
+
+**Desktop (Tauri v2):** precisa do Rust (MSVC). Duas janelas: `main` (o app; fechar esconde na bandeja) e `ilha` (`index.html?janela=ilha`, transparente, sem borda, sempre no topo, topo central da tela, cliques atravessam fora da pílula). Bandeja, atalho global Ctrl+Shift+S, instância única. A ponte JS↔Rust é `src/desktop/ponte.ts` (no navegador vira no-op); o controle do PC está em `src-tauri/src/pc/` e `src/desktop/{PontePc,computadorPc}`. Specs: `app/docs/sora-desktop.md`, `app/docs/ilha-da-sora.md`, `docs/computador-por-bot.md`. Para inspecionar as WebViews: iniciar o exe com `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`.
 
 ### 7.2 Estrutura (`app/src`)
 
 | Pasta / arquivo | O que tem |
 |---|---|
-| `components/mascot/` | **Mascote**: `SoraOrb` (canvas de pontos, porte fiel da demo), `SoraThinking`, `orbEngine.ts`. Estados: `arriving · idle · listening · thinking · coordinating · working · done`. |
-| `state/projetos.ts` | **Store principal** (projetos, conversas, agentes, execuções, passos do painel Trabalho), alimentado pelo backend por SSE (sem relógio simulado). |
-| `state/aplicarEvento.ts` | Redutor idempotente dos eventos SSE (plano, agentes, etapas, passos, entregas, `pergunta`, `aprovacao.pedida`, `aprovacao.resolvida`). |
-| `api/` | Cliente HTTP (`cliente.ts`, token só em memória), `eventos.ts` (SSE com `Last-Event-ID`, aviso quando o limite de streams bate), `anexos.ts` e as demais rotas. |
-| `components/pendencias/` | Cartões de pergunta, aprovação e revisão de domínio, usados no chat e na ilha. |
-| `state/equipe.ts` | Estado dos eventos globais da etapa 4: canais, tarefas, fila, contexto, reações e abas do navegador. |
-| `state/pecas.ts` | Memórias, pendências, rotinas, habilidades, conectores, Telegram e perfis do navegador pelas rotas reais do backend. |
-| `components/equipe/` | Canal de equipe, fila, medidor de contexto, pendências e perfil de navegador do agente. |
-| `components/work/RastroNavegador.tsx` | Rastro, URL, captura e Assumir/Devolver aba no painel Trabalho. |
-| `components/settings/` | Além dos modelos, seções reais de memória, rotinas, habilidades, conectores, Telegram e navegador. |
-| `api/voz.ts` + `components/ui/useGravacaoVoz.ts` | Microfone → transcrição autenticada e botão Ouvir nas respostas; usa a chave OpenAI/compatível do usuário. |
-| `state/modelos.ts` | Cache dos provedores/modelos/preferência do backend; persiste localmente apenas modelos padrão e por agente, nunca chaves. |
-| `data/planejador.ts` | Só utilitários de aparência (paleta dos agentes, cor da Sora, movimentos); o plano vem do backend. |
-| `screens/` | `Home` (1º prompt), `SoraChat` (chat do projeto), `AgentChat`, `Projetos`, `Agentes` (galeria), `CriarAgente` (construtor), `Revisao`, `Configuracoes`, `Plugins`, `Mobile` (/celular), `OrbLab` (/lab/orb). |
-| `components/work/` | Painel **Trabalho** (prompt, chamadas de ferramenta, handoffs). |
-| `components/builder/` | Construtor de agente (abas Criar/Configurar + prévia com chat de teste). |
-| `components/settings/` | Cartões de provedores e modelo padrão. |
-| `components/projetos/`, `gestao/` | Tela Projetos; diálogos Renomear/Apagar. |
-| `components/review/`, `overlay/` | Tela de revisão; Modal, BottomSheet, Popover e menus acessíveis. |
-| `components/layout/`, `ui/` | AppShell, barra lateral, composer (BorderBeam + VoiceBeam), cards, peças de campanha. |
-| `components/ilha/` | **Ilha da Sora** (adaptação do Coucou): pílula no topo com a Sora branca + os agentes rodando ("bonecos"), aba para escolher o projeto, detalhe do agente, aprovação, filtro Todos/Trabalhando/Concluídos e "olho" por agente. No desktop, `IlhaDesktop.tsx` é a janela da ilha. Spec: `app/docs/ilha-da-sora.md`. |
-| `desktop/` | `ponte.ts` (comandos/eventos Tauri + sincronização do `localStorage` entre as duas janelas) e `PonteNavegacao.tsx` (a ilha pede "abrir /revisao/…" e a janela principal navega). |
-| `../src-tauri/` | Casca nativa Tauri v2 (`tauri.conf.json`, `src/lib.rs`: janelas, click-through por polling do cursor, bandeja, atalho global). |
-| `components/studio/` | Editor de agente antigo, ainda usado no Modal "Editar agente". O construtor novo fica em `builder/`. |
+| `components/mascot/` | **Mascote**: `SoraOrb`, `SoraThinking`, `orbEngine.ts`. Estados: `arriving · idle · listening · thinking · coordinating · working · done`. Não mudar. |
+| `components/layout/` | `AppShell`, `Sidebar` (260 px), painel lateral e barra superior de 52 px. |
+| `screens/` | `SoraChat` (início e conversa com a Sora), `AgentChat` (bot 1:1), `Agentes` (galeria de bots), `CriarAgente` (editar bot), `Grupos`, `Clientes`, `Configuracoes`, `Entrar`, `Mobile` (/celular), `OrbLab`, `Catalogo` (/lab/ui, só em dev). `Plugins.tsx` fica no código, mas a rota redireciona para `/`. |
+| `components/ui/` | Compositor único (BorderBeam, voz dentro do campo), mensagens, fontes em chips, código e tabela sob demanda, "Ir para o fim", "Pensando" com orb. |
+| `components/builder/` | Cartão de rascunho de bot (seções em linhas) e formulário do bot. |
+| `components/grupos/` | Novo grupo (2 a 5 bots), chat do grupo, membros com estado e Parar, gerir grupo, menções com teclado, tarefas. |
+| `components/pendencias/` | Cartão e central **Precisa de você** (Permitir uma vez · Sempre permitir · Recusar), proposta de grupo, instruções propostas, cartão de domínio do navegador. |
+| `components/work/` | Painel **Trabalho**: "Você pediu", chamadas de ferramenta, rastro, abas **Navegador** e **Computador** com tela ao vivo, Assumir/Devolver. |
+| `components/clientes/`, `settings/` | Tela Clientes (fichas, conhecimento da empresa, sugestões); Configurações (Conta, Modelos de IA, Memória, Rotinas, Habilidades, Conectores, Telegram, Navegador, Canais da empresa, Ilha). |
+| `components/ilha/` | **Ilha da Sora**: pílula com a Sora e os bots trabalhando, aprovação, filtro. `IlhaDesktop.tsx` é a janela. |
+| `components/comandos/` | Paleta **Ctrl/⌘+K** (comandos e busca nas mensagens) e atalhos. |
+| `components/{equipe,memoria,rotinas,anexos,uso,erros,sessao,overlay,gestao}/` | Fila, contexto, memória, rotinas, anexos, "Uso do mês", erros, login, diálogos e menus. |
+| `state/` | `aplicarEvento.ts` (redutor idempotente dos eventos SSE), `projetos.ts` (conversas), `sora.ts`, `bots.ts`, `grupos.ts`, `atencao.ts` ("Precisa de você"), `equipe.ts`, `telas.ts`, `clientes.ts`, `pecas.ts`, `modelos.ts`, `sessao.ts`, `uso.ts`. |
+| `api/` | Cliente HTTP (`cliente.ts`, token só em memória), `eventos.ts` (SSE com `Last-Event-ID`), `bots.ts`, `grupos.ts`, `telas.ts`, `canaisEmpresa.ts`, `anexos.ts`, `voz.ts`. |
+| `desktop/` | Ponte Tauri, aviso do sistema e "(N) Sora" no título fora de foco, controle do PC. |
+| `../src-tauri/` | Casca Tauri v2: janelas, bandeja, atalho, ponte do PC (Rust). |
 
-Rotas: `/` · `/projeto/:id` · `/chat/:agenteId` · `/projetos` · `/agentes` · `/agentes/novo` · `/agentes/:id/editar` · `/canais` · `/revisao/:id` · `/configuracoes` · `/plugins` · `/celular` · `/lab/orb` (laboratório do mascote; `?solo=240&state=thinking&color=%23AC80FF` mostra um orb isolado).
+**Rotas:** `/` (Sora) · `/bots` · `/bots/:agente` · `/bots/:id/editar` · `/grupos` · `/grupos/:grupoId` · `/clientes` · `/configuracoes` · `/celular` · `/lab/orb` · `/lab/ui` (dev). Redirecionam: `/plugins`, `/projetos`, `/projeto/:id`, `/revisao/:id`, `/chat/sora` e `/agentes/novo` para `/`; `/agentes` para `/bots`; `/canais/*` para `/grupos`.
 
-**Configurações da etapa 4:** Memória, Rotinas, Habilidades, Conectores, Telegram e Navegador usam o backend real. Em Navegador, o usuário cria um perfil, abre uma aba assumida para entrar, revoga domínios e escolhe o perfil de cada agente.
+### 7.3 Decisões de produto
 
-**Trabalho em equipe:** `/canais` mostra mensagens, reações e tarefas com Parar, Retomar, Reatribuir e Cancelar. A aba Perfil do agente mostra fila, contexto, pendências e perfil do navegador. O painel Trabalho mostra chamadas por árvore, rastro redigido, captura e estado da aba.
+**Decisões do Heitor, etapa 5 (2026-11-02, 2026-11-04 e 2026-11-08; `log/etapa5-interface.md`):**
+1. A **Sora é sempre a chefe de equipe** dos grupos.
+2. **"Projetos" some e vira grupo.** Pedido grande à Sora → ela propõe um grupo, reaproveita bots que já existem; bot novo só depois do "sim".
+3. **Plugins escondidos** até o grupo decidir (a rota volta para `/`).
+4. **Ilha só fora do app:** no desktop aparece só com a janela principal fora de foco ou minimizada; dentro do app e no navegador não aparece.
+5. **Bots sem limite por usuário; grupo com 2 a 5 bots**, além da Sora. `@todos` vai só para os bots; a Sora coordena.
+6. **Depois da etapa 5:** consertar a renovação da sessão (três F5 seguidos com respostas perdidas derrubam o login; exige migração). Ainda aberto.
+7. **Criar bot conversando:** cartão de rascunho (nome, função, cor, instruções, ferramentas em chips, rotina "Todo dia / Dias úteis / Toda semana + hora"), que o usuário ajusta e confirma. Sem termo técnico.
+8. **Aprovação sem "publicar":** ação que mexe no mundo vira "Precisa de você". Resultado chega como mensagem com arquivos. "Sempre permitir" só aparece quando o servidor manda (nunca para ações perigosas).
 
-**Voz:** o microfone grava no navegador e envia o áudio para `/v1/voz/transcrever`; o texto volta ao compositor. "Ouvir" usa `/v1/voz/falar`. O backend escolhe o modelo de voz pela lista do provedor (OpenAI ou compatível, ex. Groq com whisper) e nunca grava a chave no app.
+**Decisões do Heitor, etapa 6 (2026-11-14 e 2026-11-15; `log/etapa6-acabamento.md`):**
+9. **Meta:** acabamento igual ou melhor que o Grok Bot, só como referência de experiência (nada de texto, código, ícone ou marca de terceiros).
+10. **Visual novo** (`docs/design/etapa6-visual.md`): barra lateral de 260 px com só o mascote e o nome no topo, **Criar novo** (menu Nova conversa / Novo bot / Novo grupo), **Buscar** (Ctrl+K), **Clientes**, **BOTS** e **GRUPOS**; estado do bot só quando trabalha ou precisa de você (sem "Livre"); e-mail só em Configurações → Conta; título do início "Em que posso te ajudar hoje?", sem linha de apoio; coluna de leitura de 760 px; contraste mínimo 4,5:1.
+11. **Conversa:** Parar, fontes em chips, editar a pergunta, refazer a resposta, 👍/👎 guardado, imagem e arquivo na resposta, visão de imagem anexada, voz (ditado no campo; conversa por voz contínua só no bot), busca nas mensagens, memória editável e chip "Guardei isto" com Desfazer. Sem botão que não faz nada.
+12. **Painel Trabalho** com tela ao vivo do **navegador** e do **computador** do bot (≥ 1 imagem por segundo, Assumir clicando na imagem).
+13. **Navegador próprio por bot** (perfil só dele é o padrão de bot novo) e **computador virtual por bot** (contêiner isolado, em paralelo, mesmas regras do sandbox).
+14. **Controle do PC do usuário** (só app de desktop): ponte local com árvore de acessibilidade do Windows, captura, mouse e teclado; **um bot por vez**; desligado por padrão e ligado por bot em Configurações; borda acesa, **Parar** sempre visível, mexer no mouse pausa; primeira ação em cada programa vira cartão; nunca digita senha; bloqueia terminais, gerenciadores de senha e a própria Sora; não controla o servidor.
+15. **Canais da empresa só leitura** (WhatsApp Business pela API oficial e Slack pelo app oficial; nada de WhatsApp pessoal): ficha por cliente, base de conhecimento sem dado pessoal, sugestões de melhoria aprovadas pelo usuário. **Responder e resumo do dia foram removidos:** a Sora nunca envia nada por esses canais. LGPD: máscara de CPF/cartão/senha, retenção configurável, "apagar tudo deste cliente".
+16. **Aviso fora de foco:** notificação do sistema e "(N) Sora" no título quando um bot precisa de você; o clique leva ao cartão exato.
+17. **Teste com modelo real (Groq)** no ambiente de QA; o modelo falso fica só nas suítes automáticas.
+18. **Regra de modelo para o time:** tarefa simples → modelo leve; segurança, arquitetura e bug difícil → modelo forte.
+19. Vocabulário: nada de "agente", "projeto", "canal" ou "publicar" visível ao usuário (bot, grupo, tarefa). O slogan "Seus agentes" da tela Entrar é o oficial.
+20. **Aba Criar do construtor** continua indisponível: o app avisa e leva ao formulário. O usuário cria bots pela conversa com a Sora.
 
-### 7.3 Decisões de produto tomadas (2026-10-10)
-
-1. **Início:** barra lateral vazia + Sora grande na tela do 1º prompt.
-2. **A Sora cria os agentes a partir do pedido.** Se o pedido não exige trabalho ("oi, tudo bem?"), ela só responde. Os agentes aparecem em **CHATS**, embaixo da conversa onde nasceram.
-3. **Projetos** (barra lateral): tela para escrever o prompt de um projeto; a Sora monta a equipe inteira. Os projetos ficam listados com filtro e busca.
-4. **Agentes** (barra lateral): galeria + **construtor no estilo GPT builder** (aba *Criar*, conversando com a Sora; aba *Configurar*, formulário; à direita, a prévia com chat de teste). O usuário troca **nome, cor, movimento, função, instruções, ferramentas e modelo**. Agente novo recebe uma cor livre da paleta, e nunca `#E2ECFF`, que é da Sora.
-5. **Painel Trabalho:** enquanto um agente trabalha, mostra ao vivo o **prompt** recebido, as **chamadas de ferramenta** (ex.: `figma.criar_frame`, com parâmetros e resultado) e as entregas passadas a outro agente.
-6. **Apagar/renomear** chats, projetos e agentes, com confirmação. A Sora não pode ser apagada.
-7. **Configurações → Modelos de IA:** rotas reais do backend para OpenAI, Anthropic, Gemini, Groq, OpenRouter, Ollama e APIs compatíveis com OpenAI (xAI, DeepSeek e Mistral com URL pronta); teto/gasto, final da chave, nível/ativo, prioridade e modelos padrão. Chaves não são persistidas no navegador.
-8. **Revisão:** "Revisar" abre as entregas; o usuário escolhe *Aprovar e publicar* ou *Pedir ajuste* (gera nova versão, com comparação).
-9. **Plugins: congelados de propósito.** A tela existe, mas não mexer até o grupo decidir.
-10. **Ilha da Sora** (2026-10-11, inspirada no Coucou — github.com/Louis-CFM/coucou): pílula preta fixa no topo de todas as telas com projeto. Compacta: Sora branca pequena (olha para o mouse) + "N trabalhando" + os agentes rodando como orbs coloridos. Expandida (hover, clique ou **Ctrl/⌘+Shift+S**): abas Início · **Projeto ▾** (escolhe qual projeto mostrar; padrão "Automático") · Abrir chat; Visão geral (Sora grande + ticker dos passos + pílulas dos agentes), detalhe do agente (passos, ferramenta, mensagem direta), **Aprovação** quando a equipe termina (Pedir ajuste N · Revisar R · Aprovar e publicar Y). Sons via WebAudio, botão "destacar" (janela Picture-in-Picture, Chrome/Edge), Configurações → aba **Ilha**. Preferências em `localStorage['sora.ilha.v1']`. Hoje mostra os agentes da Sora (simulados); ligar agentes externos (Claude Code, Codex, Hermes via hooks, como no Coucou) exige back-end — fica para depois.
-11. **Peças da etapa 4:** fila, canais, contexto, memória, pendências, habilidades, rotinas, conectores, Telegram, voz e navegador por árvore aparecem no app quando o backend as oferece. Rotinas rodam sem supervisão e navegador efêmero; ações que mudam o mundo continuam pedindo revisão.
-12. **Perfis do navegador:** o usuário pode usar perfil compartilhado, sem login ou perfil nomeado por agente. Domínio novo em perfil logado vira cartão. A Sora nunca mostra cookies, senha nem estado cifrado.
-13. **Próximo (2026-11-02, Heitor):** a Ilha só aparece quando o usuário está fora do app (desktop, sobre outras janelas), e a interface será refeita no estilo OpenBot/Grok (só referência de experiência).
-11. **App de desktop** (2026-10-11, autorizado pelo Heitor): a Sora vira programa instalável (Tauri). A ilha sai do navegador e fica no topo da tela do PC, por cima das outras janelas, como o notch do Coucou; dentro do app ela some (opção "Mostrar também dentro do app"). Animações novas na ilha (mola ao abrir, bonecos em cascata, halo nas cores dos agentes, pílula que "respira" no alerta) e **escolha de quais agentes ver** (Todos · Trabalhando · Concluídos + esconder agente pelo olho). Ainda front-end: nada de servidor, os agentes seguem simulados.
-12. **CHATS em pastas + Equipe x Agente independente** (2026-10-11): projeto com equipe aparece em CHATS como **pasta** (começa fechada; abre/fecha pela pasta ou pelo menu "…"; bolinhas nas cores dos agentes e resumo "3 agentes · 1 trabalhando"). Conversa sem agentes continua como linha da Sora. No Novo chat há o seletor **Equipe | Agente independente** (lembrado em `localStorage['sora.modo-envio.v1']`): *Equipe* = comportamento de sempre; *Agente independente* = a Sora cria **um** agente avulso a partir do pedido (`criarAgenteIndependente`), ele aparece **solto** em CHATS e já começa a trabalhar no chat dele.
-13. **Aba Criar do construtor** (2026-11-02): indisponível até haver rota; o app avisa e leva à aba Configurar, sem resposta falsa.
-14. **Capacidades de modelo** (2026-11-02): o usuário marca as capacidades de modelos fora do catálogo em Configurações (só o dono do provedor).
+**Decisões anteriores que continuam valendo:** a Sora não pode ser apagada; apagar e renomear pedem confirmação; chaves de API nunca no navegador; capacidades de modelo fora do catálogo são marcadas pelo dono do provedor; mascote e cores dos agentes intocados; **Ilha** inspirada no Coucou (github.com/Louis-CFM/coucou), com atalho Ctrl/⌘+Shift+S, filtro Todos/Trabalhando/Concluídos e "olho" por bot.
 
 ### 7.4 Ferramentas de QA (`app/qa/`)
 
-- `node qa/shoot.mjs [rotas] [--wait ms]` → screenshots em 1440 e 390 px em `qa/shots/` + erros do console.
-- `node qa/shoot.mjs --flow` → digita um pedido e fotografa o fluxo a cada 3 s.
-- `node qa/e2e.mjs` → ponta a ponta dos fluxos principais (ajuste, resposta direta, recargas SSE). Precisa de API + worker reais com `SORA_MODELO_FALSO=1`; usa conta de QA própria e limpa os agentes que cria, então dá para rodar em sequência.
-- `node qa/ilha.mjs` → ponta a ponta da Ilha da Sora, inclusive o filtro de agentes (screenshots em `qa/shots/ilha/`), também contra o backend real.
-- `node qa/e2e-erro-provedor.mjs` → erro do provedor chamando um provedor HTTP local que falha (`SORA_QA_BASE_ERRO`, API com `SORA_MODELO_FALSO=0` e `PERMITIR_PROVEDOR_REDE_LOCAL=1`).
-- Modelo falso: `[pergunta]`, `[aprovacao]` e `[orcamento]` no pedido disparam os cartões e o orçamento estourado (só com `SORA_MODELO_FALSO=1`).
-- Desktop: `cd src-tauri && cargo clippy -- -D warnings`; `npm run desktop:build`; para testar a janela da ilha de verdade, abrir o exe com a porta de depuração do WebView2 (§7.1) e conectar o Playwright por CDP.
-- `qa/ref/` → quadros da demo para comparar (gerados a partir do vídeo; não versionados).
+Todas leem `SORA_QA_BASE` (Vite, padrão `http://localhost:5173`) e, quando falam com a API direto, `SORA_QA_API` (padrão `http://localhost:8000`); conta de QA própria (`SORA_QA_EMAIL`).
+
+- `node qa/e2e.mjs` → ponta a ponta de bots, grupos, cartões e conversa (SSE real), com `SORA_MODELO_FALSO=1`.
+- `node qa/ilha.mjs` → Ilha da Sora (fotos em `qa/shots/ilha/`); `qa/ilha-tauri.mjs` e `qa/pc-tauri.mjs` → janela da Ilha e controle do PC no **Tauri real**, por CDP (WebView2 com porta de depuração).
+- `node qa/contraste.mjs` → mede o contraste de todos os textos nas rotas (522 textos, 0 falhas); reescreve `qa/contraste.md`.
+- `npm run test:visual` → baselines em 1440 e 390 px; limpa conversas, bots, grupos e perfis do navegador antes de cada teste.
+- `node qa/design.mjs`, `clientes-shots.mjs`, `trabalho-telas.mjs`, `vitral10.mjs`, `conversa-acabamento.mjs`, `conversa-fontes.mjs`, `digitacao.mjs`, `etapa4.mjs` → fotos e conferências específicas.
+- `node qa/shoot.mjs [rotas]` → fotos rápidas em 1440 e 390 px.
+- `node qa/e2e-erro-provedor.mjs` → erro do provedor com servidor HTTP local que falha.
+- Modelo falso: `[pergunta]`, `[aprovacao]` e `[orcamento]` no pedido disparam cartões e orçamento (só com `SORA_MODELO_FALSO=1`).
+- Desktop: `cd src-tauri && cargo clippy -- -D warnings && cargo test` (22 testes); `npm run desktop:build`.
+- Backend: `cd backend && uv run ruff check && uv run pytest tests/unitarios` (1409 passam); integração com Docker (Postgres e Redis), arquivo por arquivo com `SORA_MODELO_FALSO=1` (28 de 28 verdes).
 
 ### 7.5 Pendências / próximos passos
 
-- **Etapa 4 concluída** (2026-11-04: peças ligadas no worker, telas no app, teste com modelo real Groq). Próximo: Ilha só fora do app e interface nova no estilo OpenBot/Grok. Antes do instalador final: domínio real da API no CSP do `tauri.conf.json` e assinatura. Para o grupo decidir: tela Plugins (marca plugins como conectados), botão "Aprovar e publicar", ferramentas do agente no `AgenteSaida`.
-- Bundle principal acima de 500 kB: code-splitting por rota fica para decidir.
-- **Plugins** reais (congelados).
-- Testar o microfone (VoiceBeam com `useMicrophone`) num celular de verdade, via https.
-- Sincronização entre computador e celular.
+- **Junção na `main`:** ramo `etapa5-interface`, à espera do "sim" do Heitor; sem push feito.
+- **Teste real do Tauri:** controle do PC (Bloco de Notas, mouse físico, campo de senha, tarja, processo filho), login desktop, Ilha só fora do app, aviso "(N) Sora". Hoje só há testes de unidade (Rust e Python) e QA por CDP.
+- **Slack e WhatsApp Business reais:** só testados com assinaturas simuladas.
+- **Instalador assinado** e **domínio real da API** no CSP de produção do `tauri.conf.json` (hoje `https://api.seu-dominio.com.br`).
+- **A decidir:** PWA e tema claro.
+- **Abertos MÉDIA/BAIXA** (`.maestri/relatorios/prumo4.md` e `ancora8.md`): qualidade da proposta de grupo com modelo pequeno (M4); resposta repetida de modelo pequeno (M5); streaming só aparece de verdade fora do Groq (M7); busca com provedor real (Tavily/Brave) e `@todos`/"Guardei isto" com modelo grande não vistos ao vivo; "Resumo está escrevendo…" enquanto o cartão espera; texto anterior cru no cartão de instruções (hoje só a diferença); visão com modelo de imagem.
+- **Renovação da sessão** (decisão 6) e **Plugins** (escondidos).
+- Microfone num celular de verdade, via https. Sincronização entre computador e celular.
 
 ### 7.6 Como o app foi feito (time de IA no Maestri)
 
-O front-end foi construído em 2026-10-10 por um time de agentes no Maestri, coordenado por um Claude Code orquestrador, em rodadas: construir → validar com screenshots → corrigir, em loop.
+O front-end da primeira versão foi construído em 2026-10-10 por um time no Maestri, coordenado por um Claude Code orquestrador, em rodadas: construir → validar com screenshots → corrigir.
 
 | Agente | Modelo | Fez |
 |---|---|---|
-| Prisma | Claude Code (Opus) | mascote, thinking orb, store, planejador, integração geral |
-| Forja | Codex (GPT-5.6) | telas da rodada 1–2, overlays, revisão, Configurações, construtor de agente |
-| Brisa | Claude Code | tela Projetos, diálogos Renomear/Apagar |
-| Vigia | Hermes (OpenAI) | validação: ferramentas de QA, auditoria de código/acessibilidade, testes E2E |
+| Prisma | Claude Code (Opus) | mascote, thinking orb, store, integração geral |
+| Forja | Codex (GPT-5.6) | telas da rodada 1–2, overlays, Configurações |
+| Brisa | Claude Code | diálogos Renomear/Apagar |
+| Vigia | Hermes (OpenAI) | validação: ferramentas de QA, auditoria, E2E |
 
-Os papéis ficam salvos no Maestri (workspace "Sora"); o histórico está nos commits do git (`git log`). O Hermes deve usar **só modelos da OpenAI**. Use raciocínio *medium* no Codex para não estourar a cota.
+As etapas 5 e 6 (2026-11-14 e 2026-11-15) usaram um time maior, com Claude, Codex e Grok: Âncora, Motor, Rumo, Ponte e Farol no backend; Leme, Mosaico, Brisa, Vitral, Prisma e Lince no app; Vela no desktop; Cerca na segurança; Prumo e Lince como validadores. Relatórios em `.maestri/relatorios/` (pasta ignorada pelo git). Os papéis ficam salvos no Maestri (workspace "Sora"); o histórico está nos commits. O Hermes deve usar **só modelos da OpenAI**; use raciocínio *medium* no Codex para não estourar a cota.

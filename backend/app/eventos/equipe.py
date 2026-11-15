@@ -14,9 +14,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.atencao import PedidoAtencao
 from app.eventos.tipos import EventoBase
+from app.modelos.esquemas import AgenteSaida
+from app.rascunhos_bot import RascunhoBotSaida, RotinaRascunhoBot
 
 RETENCAO_EQUIPE_SEGUNDOS = 24 * 60 * 60
+MAX_TEXTO_MEMORIA_EVENTO = 160
 
 
 class ContextoAtualizado(EventoBase):
@@ -87,6 +91,57 @@ class CanalAtualizado(EventoBase):
     membros: list[UUID]
     lider_id: UUID | None = None
     arquivado: bool
+    proposito: str = ""
+    instrucoes: str = ""
+    estado: Literal["livre", "trabalhando", "precisa_de_voce"] = "livre"
+
+
+class PrecisaDeVoceAtualizado(EventoBase):
+    evento: ClassVar[Literal["precisa_de_voce.atualizado"]] = "precisa_de_voce.atualizado"
+    agente_id: UUID | None = None
+    grupo_id: UUID | None = None
+    estado: Literal["livre", "trabalhando", "precisa_de_voce"]
+    pedidos: list[PedidoAtencao] = Field(default_factory=list)
+
+
+class BotRascunhoEvento(EventoBase):
+    evento: ClassVar[Literal["bot.rascunho"]] = "bot.rascunho"
+    id: UUID
+    nome: str
+    funcao: str
+    cor: str
+    instrucoes: str
+    ferramentas: list[str]
+    rotina: RotinaRascunhoBot | None
+    status: Literal["rascunho"] = "rascunho"
+
+    @classmethod
+    def de(cls, rascunho: RascunhoBotSaida) -> BotRascunhoEvento:
+        return cls(**rascunho.model_dump())
+
+
+class BotRascunhoResolvido(EventoBase):
+    evento: ClassVar[Literal["bot.rascunho.resolvido"]] = "bot.rascunho.resolvido"
+    rascunho_id: UUID
+    status: Literal["confirmado", "descartado"]
+    agente_id: UUID | None = None
+
+
+class GrupoPropostoEvento(EventoBase):
+    evento: ClassVar[Literal["grupo.proposto"]] = "grupo.proposto"
+    id: UUID
+    nome: str
+    pedido: str
+    bots_reaproveitados: list[AgenteSaida]
+    bots_novos: list[RascunhoBotSaida]
+    status: Literal["proposta"] = "proposta"
+
+
+class GrupoPropostaResolvida(EventoBase):
+    evento: ClassVar[Literal["grupo.proposta.resolvida"]] = "grupo.proposta.resolvida"
+    proposta_id: UUID
+    status: Literal["aceita", "recusada"]
+    grupo_id: UUID | None = None
 
 
 class ReacaoEvento(EventoBase):
@@ -96,6 +151,18 @@ class ReacaoEvento(EventoBase):
     autor: Literal["usuario", "agente"]
     agente_id: UUID | None = None
     ligada: bool
+
+
+class MemoriaCriadaEvento(EventoBase):
+    """O bot guardou algo na memória: o app mostra "Guardei isto" com Desfazer
+    (``DELETE /v1/memorias/{memoria_id}``)."""
+
+    evento: ClassVar[Literal["memoria.criada"]] = "memoria.criada"
+    memoria_id: UUID
+    agente_id: UUID | None = None
+    conversa_id: UUID | None = None
+    texto: str = Field(max_length=MAX_TEXTO_MEMORIA_EVENTO)
+    """Começo do que foi guardado (a memória inteira vem de ``GET /v1/memorias``)."""
 
 
 class AbaNavegadorEvento(EventoBase):
@@ -116,7 +183,13 @@ EventoEquipe = (
     | MensagemCanalEvento
     | TarefaCanalAtualizada
     | CanalAtualizado
+    | PrecisaDeVoceAtualizado
+    | BotRascunhoEvento
+    | BotRascunhoResolvido
+    | GrupoPropostoEvento
+    | GrupoPropostaResolvida
     | ReacaoEvento
+    | MemoriaCriadaEvento
     | AbaNavegadorEvento
 )
 

@@ -1,0 +1,1 @@
+declare const hljs: { registerLanguage(name: string, language: unknown): void; getLanguage(name: string): unknown; highlight(code: string, options: { language: string; ignoreIllegals: boolean }): { value: string } }; export default hljs;

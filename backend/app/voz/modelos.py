@@ -17,6 +17,8 @@ _MARCAS_FALA = ("tts", "speech", "orpheus", "playai")
 
 
 def _limpar(nome: str) -> str:
+    if nome.startswith("groq/"):
+        nome = nome.removeprefix("groq/")
     return nome.split("/", 1)[1] if nome.startswith("openai/") else nome
 
 
@@ -25,6 +27,7 @@ def _escolher(nomes: Iterable[str], marcas: tuple[str, ...]) -> str | None:
         {_limpar(n) for n in nomes if any(m in n.lower() for m in marcas)},
         # "distil" e "guard" ficam por último; entre os demais, a ordem das marcas decide.
         key=lambda n: (
+            "arabic" in n.lower(),
             "distil" in n.lower() or "guard" in n.lower(),
             min(i for i, m in enumerate(marcas) if m in n.lower()),
             n,

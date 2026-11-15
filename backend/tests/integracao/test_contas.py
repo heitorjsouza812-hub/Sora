@@ -143,16 +143,17 @@ async def test_renovacao_tolera_resposta_perdida_e_reuso_tardio_encerra(
     recuperada = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
     assert recuperada.status_code == 200
     t3 = recuperada.json()["token_renovacao"]
-    assert t3 and t3 not in (t1, t2)
+    assert t3 == t2
+    assert recuperada.json() == r2.json()
 
-    # Simula a última rotação fora da tolerância sem esperar 15 segundos no teste.
+    # Simula a última rotação fora da tolerância sem esperar a janela no teste.
     async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
         sessao = await s.scalar(select(Sessao).where(Sessao.token_hash == seguranca.hash_token(t3)))
         assert sessao is not None
-        sessao.expira_em -= contas.JANELA_TOLERANCIA_RENOVACAO + timedelta(seconds=1)
+        sessao.anterior_rotacionado_em -= contas.JANELA_TOLERANCIA_RENOVACAO + timedelta(seconds=1)
         await s.commit()
 
-    reuso = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t2})
+    reuso = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
     assert reuso.status_code == 401
     # A sessão inteira caiu e continua encerrada: nem o token atual funciona mais.
     depois = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t3})
@@ -162,7 +163,7 @@ async def test_renovacao_tolera_resposta_perdida_e_reuso_tardio_encerra(
     assert encerradas is not None
 
 
-async def test_duas_renovacoes_concorrentes_usam_uma_unica_sessao(
+async def test_tres_renovacoes_concorrentes_usam_uma_unica_sessao(
     cliente: AsyncClient,
 ) -> None:
     await _cadastrar(cliente)
@@ -176,21 +177,20 @@ async def test_duas_renovacoes_concorrentes_usam_uma_unica_sessao(
     respostas = await asyncio.gather(
         cliente.post("/v1/auth/renovar", json={"token_renovacao": inicial}),
         cliente.post("/v1/auth/renovar", json={"token_renovacao": inicial}),
+        cliente.post("/v1/auth/renovar", json={"token_renovacao": inicial}),
     )
 
-    assert [resposta.status_code for resposta in respostas] == [200, 200]
+    assert [resposta.status_code for resposta in respostas] == [200, 200, 200]
     devolvidos = {resposta.json()["token_renovacao"] for resposta in respostas}
     assert None not in devolvidos
-    assert len(devolvidos) == 2
+    assert len(devolvidos) == 1
     async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
         sessoes = list((await s.scalars(select(Sessao))).all())
-    # O FOR UPDATE serializa as chamadas: a segunda gira a mesma linha. Um token devolvido fica
-    # atual e o outro fica como anterior por até 15 s; não nascem duas sessões independentes.
     assert len(sessoes) == 1
     assert sessoes[0].encerrada_em is None
-    assert {sessoes[0].token_hash, sessoes[0].anterior_hash} == {
-        seguranca.hash_token(token) for token in devolvidos
-    }
+    assert sessoes[0].token_hash == seguranca.hash_token(next(iter(devolvidos)))
+    assert sessoes[0].anterior_hash == seguranca.hash_token(inicial)
+    assert len({r.json()["token_acesso"] for r in respostas}) == 1
 
 
 async def test_sair_encerra_a_sessao(cliente: AsyncClient) -> None:
@@ -235,3 +235,90 @@ async def test_apagar_conta_confirma_senha_e_remove_tudo(cliente: AsyncClient) -
         assert await s.scalar(select(Usuario.id)) is None
         assert await s.scalar(select(Agente.id)) is None
         assert await s.scalar(select(Sessao.id)) is None
+
+
+async def test_token_duas_geracoes_atras_revoga_familia(cliente: AsyncClient) -> None:
+    await _cadastrar(cliente)
+    login = await cliente.post(
+        "/v1/auth/entrar",
+        json={"email": "ana@exemplo.com", "senha": SENHA},
+        headers={"X-Sora-Cliente": "desktop"},
+    )
+    t0 = login.json()["token_renovacao"]
+    r1 = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t0})
+    t1 = r1.json()["token_renovacao"]
+    r2 = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
+    assert r2.status_code == 200
+    assert (await cliente.post("/v1/auth/renovar", json={"token_renovacao": t0})).status_code == 401
+    assert (
+        await cliente.post(
+            "/v1/auth/renovar", json={"token_renovacao": r2.json()["token_renovacao"]}
+        )
+    ).status_code == 401
+
+
+async def test_par_cifrado_some_quando_a_janela_fecha_e_historico_tem_teto(
+    cliente: AsyncClient,
+) -> None:
+    """Cerca M4: o token vivo não fica guardado no banco depois dos 30 s; o histórico é limitado."""
+    await _cadastrar(cliente)
+    login = await cliente.post(
+        "/v1/auth/entrar",
+        json={"email": "ana@exemplo.com", "senha": SENHA},
+        headers={"X-Sora-Cliente": "desktop"},
+    )
+    t1 = login.json()["token_renovacao"]
+    r2 = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
+    t2 = r2.json()["token_renovacao"]
+    fabrica = cliente.app_state.fabrica  # type: ignore[attr-defined]
+
+    async def sessao_atual(token: str) -> Sessao:
+        async with fabrica() as s:
+            achada = await s.scalar(
+                select(Sessao).where(Sessao.token_hash == seguranca.hash_token(token))
+            )
+            assert achada is not None
+            return achada
+
+    # Dentro da janela o par existe (recuperação de resposta perdida) e a rotina não o toca.
+    assert (await sessao_atual(t2)).par_atual_cifrado is not None
+    async with fabrica() as s:
+        assert await contas.limpar_pares_vencidos(s) == 0
+    assert (await sessao_atual(t2)).par_atual_cifrado is not None
+
+    # Janela fechada: a rotina apaga o par cifrado.
+    async with fabrica() as s:
+        await s.execute(
+            text("update sessoes set anterior_rotacionado_em = now() - interval '31 seconds'")
+        )
+        await s.commit()
+    async with fabrica() as s:
+        assert await contas.limpar_pares_vencidos(s) == 1
+    assert (await sessao_atual(t2)).par_atual_cifrado is None
+    # O token atual continua renovando normalmente (gera par novo, com janela nova).
+    r3 = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t2})
+    assert r3.status_code == 200
+    t3 = r3.json()["token_renovacao"]
+    assert (await sessao_atual(t3)).par_atual_cifrado is not None
+
+    # Histórico com teto: depois de muitas rotações guarda só as últimas.
+    atual = t3
+    for _ in range(contas.MAX_HISTORICO_HASHES + 5):
+        async with fabrica() as s:
+            await s.execute(
+                text("update sessoes set anterior_rotacionado_em = now() - interval '31 seconds'")
+            )
+            await s.commit()
+        r = await cliente.post("/v1/auth/renovar", json={"token_renovacao": atual})
+        assert r.status_code == 200
+        atual = r.json()["token_renovacao"]
+    sessao = await sessao_atual(atual)
+    assert len(sessao.historico_hashes) == contas.MAX_HISTORICO_HASHES
+    assert seguranca.hash_token(t1) not in sessao.historico_hashes  # gerações velhas esquecidas
+    assert sessao.historico_hashes[-1] == sessao.anterior_hash
+
+    # Sair apaga o par também.
+    async with fabrica() as s:
+        await contas.sair(s, atual)
+        await s.commit()
+    assert (await sessao_atual(atual)).par_atual_cifrado is None

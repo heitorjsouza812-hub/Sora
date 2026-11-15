@@ -45,6 +45,10 @@ SEM_MODELO_FALA = (
     "O provedor conectado não oferece voz para falar. Conecte uma chave da OpenAI em "
     "Configurações → Modelos de IA para usar a voz."
 )
+SEM_MODELO_FALA_GROQ = (
+    "O Groq não oferece voz para falar nesta conta. Você ainda pode ditar mensagens; para "
+    "usar Ouvir, conecte uma chave da OpenAI em Configurações → Modelos de IA."
+)
 SEM_MODELO_TRANSCRICAO = (
     "O provedor conectado não oferece transcrição. Conecte uma chave da OpenAI em "
     "Configurações → Modelos de IA para usar a voz."
@@ -67,7 +71,9 @@ async def _voz_do_usuario(
         select(Provedor.id)
         .where(
             Provedor.usuario_id == usuario_id,
-            Provedor.tipo.in_([TipoProvedor.OPENAI, TipoProvedor.COMPATIVEL_OPENAI]),
+            Provedor.tipo.in_(
+                [TipoProvedor.OPENAI, TipoProvedor.COMPATIVEL_OPENAI, TipoProvedor.GROQ]
+            ),
             Provedor.apagado_em.is_(None),
             Provedor.chave_cifrada.is_not(None),
         )
@@ -90,9 +96,11 @@ async def _voz_do_usuario(
     cliente = criar_cliente_listagem(politica)
     cliente.timeout = httpx.Timeout(PRAZO_SEGUNDOS, connect=10.0)
     voz = VozOpenAI(config.api_key.get_secret_value() if config.api_key else "", cliente=cliente)
-    if base:
+    if config.tipo is TipoProvedor.GROQ:
+        voz.api = "https://api.groq.com/openai/v1"
+    elif base:
         voz.api = base
-    if config.tipo is TipoProvedor.COMPATIVEL_OPENAI:
+    if config.tipo in {TipoProvedor.COMPATIVEL_OPENAI, TipoProvedor.GROQ}:
         await _escolher_modelo(voz, config, cliente, politica, uso)
     return voz
 
@@ -113,7 +121,8 @@ async def _escolher_modelo(voz, config, cliente, politica, uso) -> None:  # type
     else:
         modelo = modelo_de_fala(nomes)
         if modelo is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, SEM_MODELO_FALA)
+            aviso = SEM_MODELO_FALA_GROQ if config.tipo is TipoProvedor.GROQ else SEM_MODELO_FALA
+            raise HTTPException(status.HTTP_404_NOT_FOUND, aviso)
         voz.modelo_fala = modelo
 
 
@@ -144,5 +153,6 @@ async def falar_texto(dados: Fala, usuario_id: UsuarioId, sessao: Sessao) -> Res
     try:
         audio = await voz.sintetizar(texto or dados.texto, dados.voz)
     except ErroVoz as erro:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(erro)) from erro
+        # "Ouvir" é opcional: falha do provedor de voz vira aviso claro em PT-BR, não 502.
+        raise HTTPException(status.HTTP_424_FAILED_DEPENDENCY, str(erro)) from erro
     return Response(audio.conteudo, media_type=audio.tipo)

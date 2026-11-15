@@ -4,7 +4,7 @@ import { agentesDoProjeto, estadoAgente, estadoProjeto, pendenciasDa, projetoAti
 /** Estado da Sora (orb + rótulo + pulso) a partir do projeto ativo. */
 export function statusDaSora(e: EstadoProjetos, agora: number): { orb: OrbState; rotulo: string; pulso: number; fase: string | null } {
   const p = projetoAtivo(e);
-  if (!p) return { orb: 'idle', rotulo: 'Agente principal', pulso: 0, fase: null };
+  if (!p) return { orb: 'idle', rotulo: 'Sora', pulso: 0, fase: null };
   const ep = estadoProjeto(e, p, agora);
   const n = agentesDoProjeto(e, p, agora).length;
   if (pendenciasDa(e, p.id).length) return { orb: 'listening', rotulo: 'Aguardando você', pulso: ep.pulso, fase: ep.fase };
@@ -17,6 +17,16 @@ export function statusDaSora(e: EstadoProjetos, agora: number): { orb: OrbState;
     case 'pronto': return { orb: 'done', rotulo: 'Pronto para revisar', pulso: ep.pulso, fase: ep.fase };
     default: return { orb: 'done', rotulo: 'Projeto aprovado', pulso: ep.pulso, fase: ep.fase };
   }
+}
+
+/**
+ * Indicador discreto da marca "Sora" na barra lateral: só aparece quando ela está trabalhando
+ * ou precisa de você; parada, não mostra nada (decisão do dono do produto, 2026-11-14).
+ */
+export function estadoDaMarca(status: { orb: OrbState; rotulo: string }, pedidosDaSora: number): { tipo: 'trabalhando' | 'precisa'; texto: string } | null {
+  if (pedidosDaSora > 0 || status.rotulo === 'Aguardando você') return { tipo: 'precisa', texto: 'Aguardando você' };
+  if (status.orb === 'thinking' || status.orb === 'coordinating') return { tipo: 'trabalhando', texto: status.rotulo.replace(/…$/, '') || 'Trabalhando' };
+  return null;
 }
 
 export const rotuloFase: Record<string, string> = {

@@ -95,7 +95,7 @@ def test_criar_chat_model_nao_usa_rede_e_nao_vaza_a_chave(monkeypatch: pytest.Mo
     monkeypatch.delenv("SORA_MODELO_FALSO", raising=False)
     config = ConfigProvedor(tipo=TipoProvedor.GROQ, api_key="gsk_segredo_de_teste")
     chat = criar_chat_model("groq/openai/gpt-oss-20b", config, papel="sistema1", max_tokens=100)
-    assert type(chat).__name__ == "ChatLiteLLM"
+    assert type(chat).__name__ == "ChatLiteLLMSora"
     assert chat.model == "groq/openai/gpt-oss-20b"
     assert chat.max_retries == 0
     assert "gsk_segredo_de_teste" not in repr(chat)

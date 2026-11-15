@@ -11,4 +11,7 @@ body {
 }
 button { font: inherit; color: inherit; }
 a { color: inherit; text-decoration: none; }
+/* Foco por teclado: contorno cheio de 2 px (11,35:1 contra o fundo; o anel suave dava 2,55:1). */
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { :root { --dur-layout: 0ms; } }
 

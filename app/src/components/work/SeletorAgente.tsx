@@ -7,7 +7,7 @@ export function SeletorAgente({ agentes, estados, atual, onEscolher }: {
   agentes: AgenteSora[]; estados: Record<string, EstadoAgente>; atual?: string; onEscolher: (id: string) => void;
 }) {
   return (
-    <div className="wk-picker" role="tablist" aria-label="Acompanhar agente">
+    <div className="wk-picker" role="tablist" aria-label="Acompanhar bot">
       {agentes.map(a => {
         const st = estados[a.id]?.status ?? 'aguardando';
         return (

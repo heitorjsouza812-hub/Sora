@@ -29,6 +29,7 @@ from app.eventos.tipos import AprovacaoPedida
 from app.ferramentas.ambiente import emitir
 from app.ferramentas.base import ContextoFerramenta
 from app.ferramentas.infra import abrir_sessao
+from app.ferramentas.propor_instrucoes import proposta_do_cartao
 from app.modelos.enumeracoes import AutorMensagem, DecisaoAprovacao, StatusAprovacao
 from app.modelos.tabelas import Aprovacao, Mensagem
 from app.revisor.esquemas import AcaoProposta, DecisaoRevisor
@@ -38,7 +39,7 @@ registro = logging.getLogger(__name__)
 
 VALIDADE_DO_CARTAO = timedelta(minutes=10)
 
-CUIDAM_DO_PROPRIO_CARTAO: set[str] = {"criar_agente"}
+CUIDAM_DO_PROPRIO_CARTAO: set[str] = {"criar_agente", "propor_grupo"}
 """Ferramentas que abrem o próprio cartão. Quem criar outra com cartão próprio acrescenta aqui."""
 
 PREFIXOS_PROPRIOS = (
@@ -104,7 +105,45 @@ async def _preparar_acao(
         return preparar_proposta(
             ProporInstrucoes(**argumentos), contexto, await instrucoes_atuais(contexto.agente_id)
         )
+    if nome == "computador_agir":
+        # alvo explícito: a regra "sempre permitir" fica presa a ele (Cerca M3)
+        argumentos = {**argumentos, "alvo": argumentos.get("alvo") or "virtual"}
     return AcaoProposta(ferramenta=nome, argumentos=argumentos)
+
+
+def _sem_texto_digitado(valor: Any) -> Any:
+    """Troca todo ``texto`` de ações de computador por ``[N caracteres]`` (Cerca B1).
+
+    O cartão fica em ``aprovacoes.acao`` sem prazo; o que o bot quer digitar no computador
+    (inclusive no PC do usuário) não fica guardado nele. A busca do cartão ao retomar continua
+    exata, porque a ``chamada_id`` já identifica a chamada.
+    """
+    if isinstance(valor, dict):
+        return {
+            chave: (
+                f"[{len(item)} caracteres]"
+                if chave == "texto" and isinstance(item, str)
+                else _sem_texto_digitado(item)
+            )
+            for chave, item in valor.items()
+        }
+    if isinstance(valor, list):
+        return [_sem_texto_digitado(item) for item in valor]
+    return valor
+
+
+def acao_do_cartao(
+    nome: str, proposta: AcaoProposta, contexto: ContextoFerramenta, chamada_id: str
+) -> dict[str, Any]:
+    """O que fica gravado no cartão (``aprovacoes.acao``)."""
+    acao = {
+        **proposta.model_dump(mode="json"),
+        "conversa_id": str(contexto.conversa_id),
+        "chamada_id": chamada_id,
+    }
+    if nome.startswith("computador_"):
+        acao["argumentos"] = _sem_texto_digitado(acao.get("argumentos"))
+    return acao
 
 
 async def _cartao_existente(
@@ -139,6 +178,7 @@ async def _abrir_cartao(
             usuario_id=contexto.usuario_id,
             etapa_id=contexto.etapa_id,
             agente_id=contexto.agente_id,
+            grupo_id=contexto.canal_id,
             acao=acao,
             avaliacao=avaliacao,
             status=StatusAprovacao.PENDENTE,
@@ -156,12 +196,37 @@ async def _abrir_cartao(
             quem_recebe=quem_recebe,
             expira_em=expira_em,
             agente_id=contexto.agente_id,
+            conversa_id=contexto.conversa_id,
+            bot_id=contexto.agente_id,
+            grupo_id=contexto.canal_id,
+            proposta=proposta_do_cartao(acao),
         ),
+    )
+    from app.atencao import publicar_estado_atencao_persistido
+
+    await publicar_estado_atencao_persistido(
+        contexto.usuario_id, agente_id=contexto.agente_id, grupo_id=contexto.canal_id
     )
     from app.ferramentas.criar_agente import _agendar_expiracao
 
     await _agendar_expiracao(aprovacao_id, expira_em)
+    await _soltar_vez_do_pc(contexto)
     return aprovacao_id
+
+
+async def _soltar_vez_do_pc(contexto: ContextoFerramenta) -> None:
+    """Esperando o cartão, o bot não mexe no PC do usuário: devolve a vez (Cerca A2).
+
+    Com a vez presa, ``api/aprovacoes.py`` recusa a decisão de qualquer sessão (o bot poderia
+    clicar na Sora web). Solta só se a vez for deste bot; quem segue depois pega de novo.
+    """
+    from app.computador.pc_usuario_canal import CanalPc
+    from app.ferramentas.infra import obter_redis
+
+    try:
+        await CanalPc(obter_redis()).soltar_vez(contexto.usuario_id, contexto.agente_id)
+    except Exception:  # sem Redis o cartão continua valendo; só a vez fica até vencer
+        registro.warning("não consegui soltar a vez do PC ao abrir o cartão", exc_info=True)
 
 
 async def _registrar(
@@ -203,11 +268,7 @@ async def conferir_acao(
         return None
 
     proposta = await _preparar_acao(nome, argumentos, contexto)
-    acao = {
-        **proposta.model_dump(mode="json"),
-        "conversa_id": str(contexto.conversa_id),
-        "chamada_id": chamada_id,
-    }
+    acao = acao_do_cartao(nome, proposta, contexto, chamada_id)
     resumo = rotulo_do_passo(nome, argumentos)
     existente = await _cartao_existente(contexto, acao)
     avaliacao: dict[str, Any] = {"modelo_revisor": False, "dano": "baixo"}

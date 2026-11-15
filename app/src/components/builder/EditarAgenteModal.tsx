@@ -26,7 +26,7 @@ export function EditarAgenteModal({ agenteId, onFechar }: EditarAgenteModalProps
   const sora = agenteId === 'sora';
   const ag = sora ? undefined : e.agentes[agenteId];
   const [r, setR] = useState<RascunhoConstrutor | null>(() => sora
-    ? { nome: e.sora.nome, funcao: 'Agente principal', descricaoCurta: '', cor: e.sora.cor, tipoMovimento: 'gira', ferramentas: [], instrucoes: '', frasesIniciais: [], tom: 'objetivo', modelo: null }
+    ? { nome: e.sora.nome, funcao: 'Sua assistente', descricaoCurta: '', cor: e.sora.cor, tipoMovimento: 'gira', ferramentas: [], instrucoes: '', frasesIniciais: [], tom: 'objetivo', modelo: null }
     : ag ? { id: ag.id, nome: ag.nome, funcao: ag.funcao, descricaoCurta: '', cor: ag.cor, tipoMovimento: ag.tipoMovimento, ferramentas: [...ag.ferramentas], instrucoes: ag.instrucoes, frasesIniciais: [], tom: 'objetivo', modelo: modelos.modelosPorAgente[ag.id] ?? null }
       : null);
   if (!r) return null;
@@ -38,7 +38,7 @@ export function EditarAgenteModal({ agenteId, onFechar }: EditarAgenteModalProps
       atualizarAgente(agenteId, { nome: r.nome.trim(), funcao: r.funcao.trim(), cor: r.cor, tipoMovimento: r.tipoMovimento, ferramentas: r.ferramentas, instrucoes: r.instrucoes });
       if (r.modelo) definirModeloAgente(agenteId, r.modelo.provedor, r.modelo.modelo);
     }
-    toast({ mensagem: sora ? `${r.nome.trim()} atualizada` : 'Agente salvo', tom: 'sucesso' });
+    toast({ mensagem: sora ? `${r.nome.trim()} atualizada` : 'Bot salvo', tom: 'sucesso' });
     onFechar();
   };
   const titulo = sora ? `Personalizar ${e.sora.nome}` : `Editar ${ag?.nome ?? 'agente'}`;

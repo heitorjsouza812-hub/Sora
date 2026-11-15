@@ -1,284 +1,143 @@
-// Chat da Sora: pedido → Sora pensa → plano → agentes nascem um a um → trabalho com handoffs
-// → entregas → Revisar. Funciona para QUALQUER equipe gerada pelo planejador.
-// À direita, UM painel com abas Equipe | Trabalho | Entregas (recolhível; BottomSheet no celular).
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Button } from '../components/base';
+import { mensagemDeErro } from '../api/cliente';
+import { toast } from '../components/base';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { InicioSora, aoDeixarPedidoInicial, consumirPedidoInicial } from '../components/inicio';
+import { animarDescida, fantasma } from '../components/inicio/descida';
 import { AppShell } from '../components/layout/AppShell';
-import { PainelLateral } from '../components/layout/PainelLateral';
-import { usePainelLateral } from '../components/layout/usePainelLateral';
-import { statusDaSora } from '../components/layout/useSoraStatus';
 import { SoraOrb, SoraThinking } from '../components/mascot';
-import { MenuAgente } from '../components/builder';
-import { EntregaCard } from '../components/ui/EntregaCard';
-import { IrParaFim } from '../components/ui/IrParaFim';
-import { MensagemChat } from '../components/ui/MensagemChat';
-import { useRolagemFim } from '../components/ui/useRolagemFim';
-import { ActivityIcon, BoxIcon, TeamIcon } from '../components/ui/Icons';
-import { MessageComposer } from '../components/ui/MessageComposer';
-import { ProgressBar } from '../components/ui/ProgressBar';
-import { PainelTrabalho } from '../components/work';
-import { ZonaSoltar } from '../components/anexos';
+import { CartaoRascunhoBot } from '../components/builder';
+import { CartaoPrecisaDeVoce } from '../components/pendencias/CartaoPrecisaDeVoce';
 import { CartaoPendencia } from '../components/pendencias/Pendencias';
-import { CardErroModelo, definirErroSimulado, useErroSimulado } from '../components/erros';
+import { AvisosMemoria } from '../components/memoria';
+import { CartaoPropostaGrupo } from '../components/pendencias/CartaoPropostaGrupo';
+import { MessageComposer } from '../components/ui/MessageComposer';
+import { HistoricoConversa } from '../components/ui/HistoricoConversa';
+import { IrParaFim } from '../components/ui/IrParaFim';
+import { useRolagemFim } from '../components/ui/useRolagemFim';
+import { useCelular } from '../components/ui/useMedia';
+import { useIrParaMensagemDaConversa } from '../components/ui/useIrParaMensagem';
+import { MensagemChat } from '../components/ui/MensagemChat';
+import { ZonaSoltar } from '../components/anexos';
+import { usePrecisaDeVoce } from '../state/atencao';
+import { useSoraId } from '../state/bots';
+import { carregarPropostasPendentes, carregarRascunhosPendentes, useCartoesSora } from '../state/sora';
 import {
-  abrirProjeto, agentesDoProjeto, pendenciasDa, comparacaoDeVersao, anexarEnvio, conversarComSora, estadoAgente, estadoProjeto, gerandoNa, mensagensDa, pararGeracao, projetoAtivo,
-  podeRefazer, refazerResposta, textoVisivel, useAgora, useProjetos,
-  type AgenteSora, type EstadoProjetos, type ProjetoSora,
+  abrirProjeto, anexarEnvio, conversarComSora, gerandoNa, mensagensDa, pararConversa, pendenciasDa,
+  projetoAtivo, textoVisivel, useAgora, useProjetos,
 } from '../state/projetos';
 
-type Item = { t: number; key: string; node: ReactNode };
-
-
-/** Card Plano: as tarefas surgem uma a uma, junto com o nascimento dos agentes; a próxima aparece como esqueleto. */
-function CartaoPlano({ e, p, agora }: { e: EstadoProjetos; p: ProjetoSora; agora: number }) {
-  const nascidos = p.tarefas.filter(t => { const ag = e.agentes[t.agenteId]; return !!ag && ag.criadoEm <= agora; }).length;
-  const visiveis = Math.min(p.tarefas.length, nascidos + 1);
-  const definindo = nascidos < p.tarefas.length;
-  return (
-    <section className="plan-card card" aria-label={`Plano: ${p.titulo}`} aria-busy={definindo || undefined}>
-      <div className="section-heading">
-        <div><h2>Plano · {p.titulo}</h2><p>{p.tarefas.slice(0, nascidos).map(t => t.titulo).join(' → ')}{definindo ? `${nascidos ? ' → ' : ''}definindo tarefas…` : ''}</p></div>
-        <span>{p.tarefas.length} tarefas</span>
-      </div>
-      <div className={`task-grid cols-${Math.min(p.tarefas.length, 4)}`}>
-        {p.tarefas.slice(0, visiveis).map((tarefa, i) => {
-          const ag = e.agentes[tarefa.agenteId];
-          if (i >= nascidos || !ag) {
-            return (
-              <article key={tarefa.id} className="task-card task-skeleton" aria-label="Definindo a próxima tarefa">
-                <div className="task-title"><span className="sk sk-orb" /><span className="sk-lines"><span className="sk sk-line" /><small className="sk-label">Definindo agente…</small></span></div>
-                <span className="sk sk-bar" />
-                <div className="task-status"><span className="sk sk-line is-tiny" /></div>
-              </article>
-            );
-          }
-          const st = estadoAgente(e, ag.id, agora);
-          return (
-            <article key={tarefa.id} className="task-card is-visible" style={{ '--agent': ag.cor } as CSSProperties}>
-              <div className="task-title">
-                <SoraOrb size={28} color={ag.cor} movimento={ag.tipoMovimento} glow={false} decorative seed={tarefa.ordem}
-                  state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : agora - ag.criadoEm < 1800 ? 'arriving' : 'idle'} />
-                <span><strong>{tarefa.titulo}</strong><small>{ag.nome}</small></span>
-              </div>
-              <ProgressBar value={st.progresso} color={ag.cor} label={ag.nome} status={st.rotulo} />
-              <div className="task-status"><span>{st.rotulo}</span><b>{st.progresso}%</b></div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function AbaEquipe({ e, p, agora, onVerTrabalho }: { e: EstadoProjetos; p: ProjetoSora; agora: number; onVerTrabalho: (id: string) => void }) {
-  const navigate = useNavigate();
-  const ags = agentesDoProjeto(e, p, agora);
-  const ep = estadoProjeto(e, p, agora);
-  const resumoVivo = ags.map(a => `${a.nome}: ${estadoAgente(e, a.id, agora).rotulo}`).join('. ');
-  return (
-    <div className="team-tab">
-      <p className="side-sub">{ags.length ? `${e.sora.nome} coordena ${ags.length} ${ags.length === 1 ? 'agente' : 'agentes'}` : `${e.sora.nome} vai montar a equipe`}</p>
-      <p className="sr-only" role="status" aria-live="polite">{resumoVivo}</p>
-      {!ags.length && (
-        <div className="team-placeholder">
-          <SoraThinking size={48} layout="stacked" color={e.sora.cor} label={ep.fase === 'pensando' ? 'Analisando o pedido…' : 'Montando a equipe…'} />
-        </div>
-      )}
-      {ags.map(a => {
-        const st = estadoAgente(e, a.id, agora);
-        return (
-          <article className={`team-agent ${agora - a.criadoEm < 1800 ? 'is-born' : ''}`} key={a.id} style={{ '--agent': a.cor } as CSSProperties}>
-            <button type="button" className="team-agent-orb" onClick={() => navigate(`/chat/${a.id}`)} aria-label={`Abrir chat de ${a.nome}`}>
-              <SoraOrb size={44} color={a.cor} movimento={a.tipoMovimento} glow={false} decorative seed={a.nome.length + 50}
-                state={st.status === 'trabalhando' ? 'working' : st.status === 'concluido' ? 'done' : agora - a.criadoEm < 1800 ? 'arriving' : 'idle'} />
-            </button>
-            <div><strong>{a.nome}</strong><small>{a.funcao}</small></div>
-            <MenuAgente agenteId={a.id} nome={a.nome} className="team-agent-menu" itens={[
-              { rotulo: 'Ver trabalho', onClick: () => onVerTrabalho(a.id) },
-              { rotulo: 'Conversar', onClick: () => navigate(`/chat/${a.id}`) },
-            ]} />
-            <ProgressBar value={st.progresso} color={a.cor} label={a.nome} status={st.rotulo} />
-            <div className="team-agent-foot">
-              <span className={`agent-status status-${st.status}`}>{st.rotulo}</span>
-              <Button variante="fantasma" tamanho="P" className="see-work" onClick={() => onVerTrabalho(a.id)}>Ver trabalho</Button>
-            </div>
-          </article>
-        );
-      })}
-      {(ep.fase === 'pronto' || ep.fase === 'aprovado') && <div className="all-done" role="status">✓ <strong>Todas as tarefas concluídas</strong></div>}
-    </div>
-  );
-}
-
-function AbaEntregas({ e, p, agora }: { e: EstadoProjetos; p: ProjetoSora; agora: number }) {
-  const navigate = useNavigate();
-  const ags = p.agenteIds.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a);
-  const prontos = ags.filter(a => estadoAgente(e, a.id, agora).status === 'concluido' && p.entregas[a.id]);
-  const fase = estadoProjeto(e, p, agora).fase;
-  return (
-    <div className="deliveries-tab">
-      {!prontos.length && <p className="side-empty">As entregas aparecem aqui conforme cada agente termina.</p>}
-      {prontos.map(a => <EntregaCard key={a.id} entrega={p.entregas[a.id]} agente={a} />)}
-      {ags.filter(a => !prontos.includes(a)).map(a => (
-        <div key={a.id} className="delivery-pending" style={{ '--agent': a.cor } as CSSProperties}><i aria-hidden="true" />{a.nome} · {estadoAgente(e, a.id, agora).rotulo}</div>
-      ))}
-      {(fase === 'pronto' || fase === 'aprovado') && (
-        <div className="review-row">
-          <Button variante="primario" onClick={() => navigate(`/revisao/${p.id}`)}>{p.aprovadoEm ? 'Ver revisão' : 'Revisar'}</Button>
-          <p>Nada é publicado sem a sua aprovação.</p>
-        </div>
-      )}
-    </div>
-  );
-}
+// O mascote "chega" só na primeira abertura da sessão (CLAUDE.md §3.2); depois fica em repouso.
+let jaChegou = false;
 
 export default function SoraChat() {
-  const e = useProjetos();
+  const estado = useProjetos();
+  const celular = useCelular();
+  const [rascunho, setRascunho] = useState('');
+  const [focoLocal, setFocoLocal] = useState(0);
+  const [ouvindo, setOuvindo] = useState(false);
+  const [chegando, setChegando] = useState(!jaChegou);
+  const focoSinal = Math.max(focoLocal, (useLocation().state as { focarCampo?: number } | null)?.focarCampo ?? 0) || undefined;
+  useEffect(() => {
+    const pedido = consumirPedidoInicial();
+    // A galeria deixa o pedido em uma caixa externa ao React; consumir no efeito é seguro no StrictMode.
+    // oxlint-disable-next-line react/set-state-in-effect
+    if (pedido !== null) setRascunho(pedido);
+    // tela já aberta: "Novo bot" do menu Criar novo deixa o pedido e avisa
+    return aoDeixarPedidoInicial(() => { const novo = consumirPedidoInicial(); if (novo !== null) setRascunho(novo); });
+  }, []);
   const agora = useAgora();
-  const navigate = useNavigate();
-  const { projetoId } = useParams();
-  const p = projetoId ? e.projetos.find(x => x.id === projetoId) ?? null : projetoAtivo(e);
-  const ep = p ? estadoProjeto(e, p, agora) : null;
-  const sora = statusDaSora(e, agora);
-  const comEquipe = !!p && (p.agenteIds.length > 0 || p.tarefas.length > 0);
-  useEffect(() => { if (p && e.projetoAtivoId !== p.id) abrirProjeto(p.id); }, [p, e.projetoAtivoId]);
-  const [texto, setTexto] = useState('');
-  const painel = usePainelLateral('sora.painel.projeto', 'equipe');
-  const [folha, setFolha] = useState(false);
-  const [agenteTrabalho, setAgenteTrabalho] = useState<string | undefined>();
+  const cartoes = useCartoesSora();
+  const atencao = usePrecisaDeVoce();
+  const soraId = useSoraId();
+  const projeto = projetoAtivo(estado);
 
-  /** "Ver trabalho": abre a aba Trabalho já com o agente selecionado (e o painel/folha, se fechados). */
-  const verTrabalho = (id: string) => { setAgenteTrabalho(id); painel.setAba('trabalho'); painel.setRecolhido(false); setFolha(true); };
-  const processando = !!ep && ['pensando', 'planejando', 'coordenando'].includes(ep.fase);
+  useEffect(() => {
+    void carregarRascunhosPendentes().catch(() => undefined);
+    void carregarPropostasPendentes().catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (!estado.carregando && !projeto && estado.projetos[0]) abrirProjeto(estado.projetos[0].id);
+  }, [estado.carregando, estado.projetos, projeto]);
 
-  // ---- linha do tempo da conversa (mensagens + cartões), ordenada pelo tempo ----
-  const erroModelo = useErroSimulado() === 'modelo';
-  const itens: Item[] = [];
-  if (p && ep) {
-    const todas = mensagensDa(e, p.id, agora);
-    // erro simulado do modelo: a resposta depois da última pergunta vira o card de erro
-    const pergunta = erroModelo ? todas.filter(m => m.autor === 'usuario').pop() : undefined;
-    const msgs = pergunta ? todas.filter(m => m.autor === 'usuario' || m.criadoEm <= pergunta.criadoEm) : todas;
-    const falhou = pergunta && todas.find(m => m.autor !== 'usuario' && m.criadoEm > pergunta.criadoEm);
-    if (pergunta) itens.push({
-      t: pergunta.criadoEm + 1, key: 'erro-modelo',
-      node: <CardErroModelo cor={e.sora.cor} autor={`A ${e.sora.nome}`}
-        onTentarDeNovo={() => { definirErroSimulado(null); if (falhou && podeRefazer(falhou)) refazerResposta(falhou.id); }} />,
-    });
-    msgs.forEach(m => itens.push({
-      t: m.criadoEm, key: m.id,
-      node: <MensagemChat m={m} agora={agora} avatar={m.autor === 'usuario' ? undefined : <SoraOrb size={30} color={e.sora.cor} state={textoVisivel(m, agora).gerando ? 'thinking' : 'coordinating'} glow={false} decorative seed={31} />} />,
-    }));
-    if (ep.fase === 'pensando') {
-      itens.push({ t: agora, key: 'pensando', node: (
-        <div className="assistant-row thinking-row">
-          <SoraThinking size={56} color={e.sora.cor} label={comEquipe ? 'Analisando o pedido…' : `${e.sora.nome} está pensando…`} />
-        </div>
-      ) });
+  const mensagens = projeto ? mensagensDa(estado, projeto.id, agora) : [];
+  // Pergunta/aprovação da própria Sora chega com agente_id = id dela; fora de grupo, é deste chat.
+  // Cartões da cadeia (aprovação, pergunta, domínio) chegam com `conversa_id` e valem aqui mesmo que o pedido seja de um especialista.
+  const pendencias = projeto ? pendenciasDa(estado, projeto.id) : [];
+  const idsPendencias = new Set(pendencias.map(x => x.id));
+  const pedidosDaSora = atencao.lista.filter(pedido => !pedido.grupoId && (!pedido.botId || pedido.botId === soraId) && !idsPendencias.has(pedido.id));
+  const assinatura = mensagens.map(mensagem => `${mensagem.id}:${textoVisivel(mensagem, agora).texto.length}`).join('|');
+  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(mensagens.map(m => m.id), assinatura + ':' + cartoes.rascunhos.length + ':' + cartoes.propostas.length + ':' + pedidosDaSora.length + ':' + pendencias.length);
+
+  useIrParaMensagemDaConversa(projeto?.id);
+  const gerando = !!projeto && gerandoNa(estado, projeto.id, agora);
+  // esperando o primeiro pedaço da resposta: a linha "pensando" (orb + texto em shimmer)
+  // com cartão esperando o usuário, ninguém está "pensando": o trabalho parou até a decisão
+  const pensando = gerando && !mensagens.some(m => m.gerando) && !pendencias.length && !pedidosDaSora.length;
+  const ultimaRespostaId = [...mensagens].reverse().find(m => m.autor !== 'usuario')?.id;
+
+  // Estado vazio: orb e compositor juntos no centro. Depois do 1º envio o compositor desce (FLIP).
+  const vazio = !estado.carregando && !mensagens.length && !pensando && !cartoes.rascunhos.length && !cartoes.propostas.length && !pedidosDaSora.length && !pendencias.length;
+  const compositor = useRef<HTMLDivElement>(null);
+  const hero = useRef<HTMLElement>(null);
+  const rodapeVazio = useRef<HTMLDivElement>(null);
+  const antes = useRef<{ rect: DOMRect; altura: number } | null>(null);
+  const enviouDoCentro = useRef(false);
+  useLayoutEffect(() => {
+    const el = compositor.current;
+    if (!el) return;
+    if (vazio) return;
+    const de = antes.current; antes.current = null;
+    if (de && enviouDoCentro.current && !celular) animarDescida(el, de.rect, de.altura);
+    enviouDoCentro.current = false;
+  }, [vazio, celular]);
+
+  const enviar = (texto: string, anexos: Parameters<typeof anexarEnvio>[0]) => {
+    if (vazio && !celular && compositor.current) { // o que sai de cena fica como cópia por 120–320 ms
+      antes.current = { rect: compositor.current.getBoundingClientRect(), altura: compositor.current.querySelector('.composer')?.getBoundingClientRect().height ?? 0 };
+      enviouDoCentro.current = true;
+      fantasma(hero.current, { orb: true });
+      fantasma(rodapeVazio.current);
     }
-    if (comEquipe && p.tarefas.length) itens.push({ t: p.criadoEm + 1, key: 'plano', node: <CartaoPlano e={e} p={p} agora={agora} /> });
-    // handoffs (um agente entregou ao próximo)
-    e.execucoes.filter(x => x.projetoId === p.id && x.tarefaId).forEach(x => {
-      const h = x.roteiro.find(r => r.tipo === 'handoff');
-      if (!h) return;
-      const t = h.inicio;
-      const de = e.agentes[x.agenteId], para = h.paraAgenteId ? e.agentes[h.paraAgenteId] : undefined;
-      if (!de) return;
-      itens.push({ t, key: `h-${x.id}`, node: (
-        <div className="handoff-banner" style={{ '--agent': de.cor } as CSSProperties}>
-          <strong>{de.nome}</strong> {h.texto.replace(/^Enviou/, 'enviou').replace(para ? ` para ${para.nome}` : '', '')} <span aria-hidden="true">→</span>
-          {para && <b className="handoff-target" style={{ '--agent': para.cor } as CSSProperties}>{para.nome}</b>}
-        </div>
-      ) });
-    });
-    // entregas (quando a primeira versão fica pronta)
-    const fimOriginal = !comEquipe ? Infinity : Math.max(p.criadoEm, p.marcos.fim, ...e.execucoes.filter(x => x.projetoId === p.id && x.tarefaId).flatMap(x => x.roteiro.map(r => r.fim ?? r.inicio)));
-    if (ep.fase === 'pronto') {
-      const ags = p.agenteIds.map(id => e.agentes[id]).filter((a): a is AgenteSora => !!a);
-      itens.push({ t: fimOriginal + 1, key: 'entregas', node: (
-        <section className="deliveries" aria-label="Entregas">
-          <div className={`delivery-grid cols-${Math.min(ags.length, 3)}`}>
-            {ags.map(a => p.entregas[a.id] && <EntregaCard key={a.id} entrega={p.entregas[a.id]} agente={a} />)}
-          </div>
-          <div className="review-row">
-            <Button variante="primario" onClick={() => navigate(`/revisao/${p.id}`)}>{p.aprovadoEm ? 'Ver revisão' : 'Revisar'}</Button>
-            <p>Nada é publicado sem a sua aprovação.</p>
-          </div>
-        </section>
-      ) });
-    }
-    // comparação de versões após um ajuste concluído
-    const comparacao = ep.fase === 'pronto' || ep.fase === 'aprovado' ? comparacaoDeVersao(e, p) : null;
-    if (comparacao) {
-      const { agente: alvo, antes, depois } = comparacao;
-      itens.push({ t: Math.max(p.criadoEm, p.marcos.fim, ...msgs.map(m => m.criadoEm)) + 2, key: `v-${p.versao}`, node: (
-        <div className="version-compare card" style={{ '--agent': alvo.cor } as CSSProperties}>
-          <div><span>Versão anterior</span><p>{antes.resumo}</p><ul>{antes.itens?.slice(0, 4).map(i => <li key={i}>{i}</li>)}</ul></div>
-          <div><span>Nova versão · {alvo.nome}</span><p>{depois.resumo}</p><ul>{depois.itens?.slice(0, 5).map(i => <li key={i}>{i}</li>)}</ul></div>
-        </div>
-      ) });
-    }
-  }
-  // o que a equipe espera do usuário fica sempre no fim da conversa
-  if (p) pendenciasDa(e, p.id).forEach(x => itens.push({ t: 1e15 + x.desde, key: `pend-${x.id}`, node: <CartaoPendencia p={x} cor={e.sora.cor} /> }));
-  itens.sort((a, b) => a.t - b.t);
-  const conversaId = p ? p.id : '';
-  const gerando = !!p && !erroModelo && gerandoNa(e, conversaId, agora);
-  // cresce enquanto o texto aparece (streaming) — mantém o fim à vista se o usuário estiver no fim
-  const assinatura = p ? mensagensDa(e, conversaId, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0;
-  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
-  useEffect(() => { seguirFim(); }, [p?.id, seguirFim]);
+    seguirFim();
+    void anexarEnvio(anexos, enviados => conversarComSora(texto, undefined, enviados));
+  };
 
-  if (e.carregando) return null;
-  if (projetoId && !p) return <Navigate to="/" replace />;
-  if (!projetoId && p) return <Navigate to={`/projeto/${p.id}`} replace />;
-
-  const trabalhando = p ? agentesDoProjeto(e, p, agora).find(a => estadoAgente(e, a.id, agora).status === 'trabalhando') : undefined;
-  const nEntregas = p ? p.agenteIds.filter(id => e.agentes[id] && estadoAgente(e, id, agora).status === 'concluido' && p.entregas[id]).length : 0;
-
-  return (
-    <AppShell>
-      <div className={`workspace-grid sora-workspace ${comEquipe ? '' : 'is-solo'} ${painel.recolhido ? 'panel-collapsed' : ''}`}>
-        <main className="conversation" aria-label={`Conversa com ${e.sora.nome}`}>
-          <ZonaSoltar className="conversation-drop">
-          <div className="conversation-area">
-          <div className="conversation-scroll" ref={rolagemRef} aria-live="polite" aria-relevant="additions" onScroll={aoRolar}>
-            {!p && (
-              <div className="empty-chat">
-                <SoraOrb size={120} color={e.sora.cor} state="idle" title={e.sora.nome} />
-                <p>Descreva o que você precisa. A {e.sora.nome} monta o plano e cria a equipe.</p>
-              </div>
-            )}
-            {itens.map(i => <div key={i.key} className="chat-item" data-chave={i.key}>{i.node}</div>)}
+  return <AppShell>
+    <main className={`conversation sora-main-chat${vazio ? ' is-vazio' : ''}${estado.carregando ? ' is-carregando' : ''}`} aria-label="Conversa com a Sora">
+      <ZonaSoltar className="conversation-drop">
+        <div className="conversation-area">
+          {vazio && <section className="sora-hero" ref={hero} aria-label="Início da conversa">
+            <div className="sora-hero-orb">
+              <SoraOrb size={celular ? 96 : 120} color="#E2ECFF" state={chegando ? 'arriving' : ouvindo ? 'listening' : 'idle'} onArrived={() => { jaChegou = true; setChegando(false); }} title="Sora" />
+            </div>
+            <h1>Em que posso te ajudar hoje?</h1>
+          </section>}
+          <div className="conversation-scroll" ref={rolagemRef} onScroll={aoRolar} aria-live="polite" aria-relevant="additions">
+            <HistoricoConversa conversaId={projeto?.id} />
+            {estado.carregando && <p role="status" className="sr-only">Carregando conversa…</p>}
+            {mensagens.map(mensagem => <div className="chat-item" data-chave={mensagem.id} key={mensagem.id}>
+              <MensagemChat m={mensagem} agora={agora} ultima={mensagem.id === ultimaRespostaId} respostaDe={{ nome: 'Sora', avatar: <SoraOrb size={24} color="#E2ECFF" state="idle" glow={false} decorative seed={31} /> }} nome={mensagem.autor === 'usuario' ? undefined : 'Sora'} avatar={mensagem.autor === 'usuario' ? undefined : <SoraOrb size={24} color="#E2ECFF" state={textoVisivel(mensagem, agora).gerando ? 'thinking' : 'idle'} glow={false} decorative seed={31} />} />
+            </div>)}
+            {pensando && <div className="pensando-linha"><SoraThinking size={28} color="#E2ECFF" label="Sora está pensando…" /></div>}
+            {cartoes.rascunhos.map(rascunho => <CartaoRascunhoBot key={rascunho.id} rascunho={rascunho} />)}
+            {cartoes.propostas.map(proposta => <CartaoPropostaGrupo key={proposta.id} proposta={proposta} />)}
+            {pendencias.map(pendencia => <CartaoPendencia key={pendencia.id} p={pendencia} cor="#E2ECFF" />)}
+            {pedidosDaSora.map(pedido => <CartaoPrecisaDeVoce key={pedido.id} pedido={pedido} />)}
           </div>
           {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
-          </div>
-          <div className="chat-composer">
-            <MessageComposer placeholder={`Mensagem para ${e.sora.nome}…`} compact value={texto} onValueChange={setTexto}
-              processing={processando} onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => conversarComSora(t, undefined, enviados)); seguirFim(); }}
-              gerando={gerando} onParar={() => pararGeracao(conversaId)} />
-          </div>
-          </ZonaSoltar>
-          <p className="sr-only" role="status">{p ? `${e.sora.nome}: ${sora.rotulo}` : ''}</p>
-        </main>
-        {p && comEquipe && (
-          <PainelLateral
-            rotulo="Painel do projeto"
-            aba={painel.aba} onAba={painel.setAba} recolhido={painel.recolhido} onRecolher={painel.setRecolhido}
-            folhaAberta={folha} onFolha={setFolha}
-            resumo={trabalhando ? `${trabalhando.nome} · ${trabalhando.verbo}…` : sora.rotulo}
-            abas={[
-              { id: 'equipe', rotulo: 'Equipe', icone: <TeamIcon />, contagem: agentesDoProjeto(e, p, agora).length,
-                conteudo: <AbaEquipe e={e} p={p} agora={agora} onVerTrabalho={verTrabalho} /> },
-              { id: 'trabalho', rotulo: 'Trabalho', icone: <ActivityIcon />, vivo: trabalhando?.cor ?? null,
-                conteudo: <PainelTrabalho agenteIds={p.agenteIds} agenteId={agenteTrabalho} onAgenteChange={setAgenteTrabalho} className="side-work" /> },
-              { id: 'entregas', rotulo: 'Entregas', icone: <BoxIcon />, contagem: nEntregas,
-                conteudo: <AbaEntregas e={e} p={p} agora={agora} /> },
-            ]}
-          />
-        )}
-      </div>
-    </AppShell>
-  );
+        </div>
+        <div className="chat-composer" ref={compositor}>
+          {soraId && <AvisosMemoria agenteId={soraId} />}
+          <MessageComposer placeholder="Mensagem para a Sora…" grande={vazio && !celular} focoSinal={focoSinal} value={rascunho} onValueChange={setRascunho}
+            processing={pensando} onActivity={setOuvindo}
+            onSend={enviar}
+            gerando={gerando} onParar={() => { if (projeto) void pararConversa(projeto.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
+        </div>
+        {vazio && <div className="sora-vazio-rodape" ref={rodapeVazio}>
+          <InicioSora onPreencher={texto => { setRascunho(texto); setFocoLocal(Date.now()); }} />
+        </div>}
+      </ZonaSoltar>
+    </main>
+  </AppShell>;
 }

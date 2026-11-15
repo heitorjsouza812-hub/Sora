@@ -109,8 +109,10 @@ class Agente(Base):
     # 0005: fila (app/filas) e navegador persistente (app/navegador/perfis.py)
     fila_pausada: Mapped[bool] = mapped_column(default=False, server_default="false")
     limite_tarefas: Mapped[int] = mapped_column(default=2, server_default="2")
+    # Farol (C1): bot novo nasce com o navegador só dele; os existentes mantêm a escolha. O
+    # padrão do banco não muda (sem migração): toda criação de agente passa pelo ORM.
     perfil_navegador: Mapped[str] = mapped_column(
-        Text, default="compartilhado", server_default="compartilhado"
+        Text, default="agente", server_default="compartilhado"
     )
     perfil_navegador_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("perfis_navegador.id", use_alter=True, name="agentes_perfil_navegador_id_fkey")
@@ -156,6 +158,11 @@ class Mensagem(Base):
     responde_a: Mapped[UUID | None] = mapped_column(ForeignKey("mensagens.id"))
     criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # 0004: salto da corrente de mensagens entre agentes (app/orquestrador/saltos.py)
+    estado: Mapped[str] = mapped_column(Text, default="concluida", server_default="concluida")
+    fontes: Mapped[list[Any]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
+    avaliacao: Mapped[int | None] = mapped_column(Integer)
     salto: Mapped[int] = mapped_column(default=0, server_default="0")
 
 
@@ -331,11 +338,13 @@ class Pergunta(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     conversa_id: Mapped[UUID] = mapped_column(ForeignKey("conversas.id"))
     cadeia_id: Mapped[UUID | None] = mapped_column(ForeignKey("cadeias.id"))
+    grupo_id: Mapped[UUID | None] = mapped_column(ForeignKey("canais_equipe.id", use_alter=True))
     texto: Mapped[str] = mapped_column(Text)
     opcoes: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     resposta_livre: Mapped[bool] = mapped_column(default=False, server_default="false")
     resposta: Mapped[str | None] = mapped_column(Text)
     respondida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Aprovacao(Base):
@@ -344,6 +353,7 @@ class Aprovacao(Base):
     usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
     etapa_id: Mapped[UUID | None] = mapped_column(ForeignKey("etapas.id"))
     agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id"))
+    grupo_id: Mapped[UUID | None] = mapped_column(ForeignKey("canais_equipe.id", use_alter=True))
     acao: Mapped[dict[str, Any]] = mapped_column(JSONB)
     avaliacao: Mapped[dict[str, Any]] = mapped_column(JSONB)
     status: Mapped[StatusAprovacao] = mapped_column(
@@ -353,6 +363,7 @@ class Aprovacao(Base):
     )
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     decidida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class RegraPermissao(Base):
@@ -417,10 +428,14 @@ class Sessao(Base):
     usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
     __table_args__ = (
         Index("ix_sessoes_anterior_hash", "anterior_hash"),
+        Index("ix_sessoes_historico_hashes", "historico_hashes", postgresql_using="gin"),
         Index("ix_sessoes_usuario_id", "usuario_id"),
     )
     token_hash: Mapped[str] = mapped_column(Text, unique=True)
     anterior_hash: Mapped[str | None] = mapped_column(Text)
+    anterior_rotacionado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    par_atual_cifrado: Mapped[bytes | None] = mapped_column(LargeBinary)
+    historico_hashes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     cliente: Mapped[str] = mapped_column(Text, default="web", server_default="web")
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     encerrada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -680,6 +695,37 @@ class TarefaCanalTabela(Base):
     )
 
 
+class RascunhoBot(Base):
+    __tablename__ = "rascunhos_bot"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    conversa_id: Mapped[UUID | None] = mapped_column(ForeignKey("conversas.id"))
+    dados: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(Text, default="rascunho", server_default="rascunho")
+    agente_id: Mapped[UUID | None] = mapped_column(ForeignKey("agentes.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolvido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PropostaGrupo(Base):
+    __tablename__ = "propostas_grupo"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    conversa_id: Mapped[UUID | None] = mapped_column(ForeignKey("conversas.id"))
+    nome: Mapped[str] = mapped_column(Text)
+    pedido: Mapped[str] = mapped_column(Text)
+    bots_reaproveitados: Mapped[list[UUID]] = mapped_column(
+        ARRAY(Uuid(as_uuid=True)), default=list, server_default=text("'{}'")
+    )
+    bots_novos: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
+    status: Mapped[str] = mapped_column(Text, default="proposta", server_default="proposta")
+    grupo_id: Mapped[UUID | None] = mapped_column(ForeignKey("canais_equipe.id"))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolvido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class PerfilNavegador(Base):
     """Perfil nomeado do navegador persistente (``app/navegador/perfis.py``)."""
 
@@ -742,3 +788,7 @@ class RotinaExecucao(Base):
     mensagem_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("mensagens.id", ondelete="SET NULL")
     )
+
+
+# Canais da empresa (Ponte, migração 0012): só registra as tabelas no mesmo metadata.
+from app.canais_empresa import tabelas as _tabelas_canais_empresa  # noqa: E402, F401

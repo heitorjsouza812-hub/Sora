@@ -33,13 +33,13 @@ export function PerfilNavegadorDoAgente({ agenteId }: { agenteId: string }) {
   };
 
   return (
-    <section className="eq-navegador" aria-label="Navegador do agente">
+    <section className="eq-navegador" aria-label="Navegador do bot">
       <label>
         <span className="eyebrow tools-label">Navegador</span>
-        <select value={atual ? valorDe(atual) : COMPARTILHADO} disabled={!atual || salvando} onChange={e => void trocar(e.target.value)} aria-label="Perfil do navegador deste agente">
-          <option value={COMPARTILHADO}>Compartilhado entre os agentes</option>
+        <select value={atual ? valorDe(atual) : COMPARTILHADO} disabled={!atual || salvando} onChange={e => void trocar(e.target.value)} aria-label="Perfil do navegador deste bot">
+          <option value={COMPARTILHADO}>Compartilhado entre os bots</option>
           <option value={SEM_LOGIN}>Sem login (aba descartável)</option>
-          {atual?.tipo === 'agente' && <option value="agente">Exclusivo deste agente</option>}
+          {atual?.tipo === 'agente' && <option value="agente">Exclusivo deste bot</option>}
           {perfis.map(p => <option key={p.perfil_id} value={`perfil:${p.perfil_id}`}>{p.nome}</option>)}
           {atual?.tipo === 'perfil' && atual.perfil_id && !perfis.some(p => p.perfil_id === atual.perfil_id) && <option value={`perfil:${atual.perfil_id}`}>{atual.perfil_nome ?? 'Perfil'}</option>}
         </select>

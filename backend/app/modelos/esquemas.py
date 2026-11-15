@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 from app.modelos.enumeracoes import (
     AutorMensagem,
@@ -99,6 +99,10 @@ class AgenteSaida(EsquemaBase):
     cor: str
     movimento: Movimento
     status: str | None = None
+    ferramentas: list[str] = Field(default_factory=list)
+    estado: Literal["livre", "trabalhando", "precisa_de_voce"] = "livre"
+    perfil_navegador: Literal["efemero", "compartilhado", "agente", "perfil"] | None = None
+    """Navegador que o bot usa (Farol, C1): ``agente`` = só dele (padrão de bot novo)."""
 
 
 class ConversaCriacao(EsquemaBase):
@@ -131,12 +135,23 @@ class MensagemAceita(EsquemaBase):
     mensagem_id: UUID
 
 
+class AvaliacaoEntrada(EsquemaBase):
+    valor: Literal[1, -1] | None
+
+
+class MensagemEdicao(EsquemaBase):
+    texto: str = Field(min_length=1, max_length=TEXTO_MAX)
+
+
 class MensagemSaida(EsquemaBase):
     id: UUID
     conversa_id: UUID
     autor: AutorMensagem
     agente_id: UUID | None = None
     conteudo: str
+    estado: str = "concluida"
+    fontes: list[dict[str, Any]] = Field(default_factory=list)
+    avaliacao: int | None = None
     anexos: list[Any] = Field(default_factory=list)
     responde_a: UUID | None = None
     criada_em: datetime
@@ -157,6 +172,11 @@ class RespostaPerguntaEntrada(EsquemaBase):
 
 class DecisaoAprovacaoEntrada(EsquemaBase):
     decisao: DecisaoAprovacao
+
+    @field_validator("decisao", mode="before")
+    @classmethod
+    def _alias_permitir(cls, valor: object) -> object:
+        return DecisaoAprovacao.PERMITIR_UMA_VEZ if valor == "permitir" else valor
 
 
 class ApagarContaEntrada(EsquemaBase):

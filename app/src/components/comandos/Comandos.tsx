@@ -1,18 +1,16 @@
 // Atalhos globais + paleta (item 46). Monte UMA vez dentro do BrowserRouter (AppShell).
 //   Ctrl/⌘+K       abre/fecha a paleta (funciona até dentro de campos de texto)
-//   Ctrl/⌘+Shift+O novo chat
+//   Ctrl/⌘+Shift+O conversa com a Sora
 //   /              foca o campo de mensagem (fora de campos de texto)
-//   Ctrl/⌘+.       já é do PainelLateral — aqui não é registrado de novo
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { novoChat } from '../../state/projetos';
-import { definirIlhaPrefs, lerIlhaPrefs } from '../ilha/ilhaEstado';
-import { abrirIlha, alternarIlha } from '../ilha/ilhaUi';
 import { alternarPaleta, digitando, fecharPaleta, focarCampoMensagem, usePaletaAberta } from './atalhos';
+import { CentralPrecisaDeVoce } from '../pendencias/CentralPrecisaDeVoce';
 import { PaletaComandos } from './PaletaComandos';
 
 export function Comandos() {
   const aberta = usePaletaAberta();
+  const [central, setCentral] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,14 +19,7 @@ export function Comandos() {
       const mod = ev.ctrlKey || ev.metaKey;
       const k = ev.key.toLowerCase();
       if (mod && !ev.shiftKey && !ev.altKey && k === 'k') { ev.preventDefault(); alternarPaleta(); return; }
-      if (mod && ev.shiftKey && !ev.altKey && k === 'o') { ev.preventDefault(); fecharPaleta(); novoChat(); navigate('/'); return; }
-      if (mod && ev.shiftKey && !ev.altKey && k === 's') {
-        ev.preventDefault();
-        fecharPaleta();
-        if (!lerIlhaPrefs().visivel) { definirIlhaPrefs({ visivel: true }); abrirIlha(); }
-        else alternarIlha();
-        return;
-      }
+      if (mod && ev.shiftKey && !ev.altKey && k === 'o') { ev.preventDefault(); fecharPaleta(); navigate('/'); return; }
       if (ev.key === '/' && !mod && !ev.altKey && !digitando(ev.target) && !document.querySelector('[aria-modal="true"]')) {
         if (focarCampoMensagem()) ev.preventDefault();
       }
@@ -40,5 +31,5 @@ export function Comandos() {
   // sair da rota fecha a paleta (ex.: voltar no navegador com ela aberta)
   useEffect(() => () => fecharPaleta(), []);
 
-  return aberta ? <PaletaComandos /> : null;
+  return <>{aberta && <PaletaComandos onAbrirCentral={() => { fecharPaleta(); setCentral(true); }} />}<CentralPrecisaDeVoce aberta={central} onFechar={() => setCentral(false)} /></>;
 }

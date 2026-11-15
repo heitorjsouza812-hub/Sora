@@ -13,7 +13,18 @@ export const FERRAMENTAS_AGENTE: { id: string; rotulo: string }[] = [
   { id: 'gerar_imagem', rotulo: 'Gerar imagens' },
 ];
 
-const ROTULOS: Record<string, string> = Object.fromEntries(FERRAMENTAS_AGENTE.map(f => [f.id, f.rotulo]));
+/** Computador próprio do bot: vêm desligadas e o formulário liga todas juntas, num só interruptor (não entram na grade acima). */
+export const FERRAMENTAS_COMPUTADOR: { id: string; rotulo: string }[] = [
+  { id: 'computador_observar', rotulo: 'Ver a tela do computador' },
+  { id: 'computador_agir', rotulo: 'Usar o computador' },
+  { id: 'computador_arquivos', rotulo: 'Ver arquivos do computador' },
+  { id: 'computador_escrever_arquivo', rotulo: 'Escrever arquivos no computador' },
+  { id: 'computador_entregar_arquivo', rotulo: 'Entregar arquivos do computador' },
+  { id: 'computador_desligar', rotulo: 'Desligar o computador' },
+];
+export const usaComputador = (ferramentas: readonly string[]) => ferramentas.some(f => f.startsWith('computador_'));
+
+const ROTULOS: Record<string, string> = Object.fromEntries([...FERRAMENTAS_AGENTE, ...FERRAMENTAS_COMPUTADOR].map(f => [f.id, f.rotulo]));
 
 /** Nome amigável; o que não é do catálogo (plugin, conector) aparece como veio. */
 export const rotuloFerramenta = (id: string) => ROTULOS[id] ?? id;

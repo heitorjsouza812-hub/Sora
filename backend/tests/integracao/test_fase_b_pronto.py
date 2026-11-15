@@ -36,8 +36,6 @@ from app.ferramentas import ambiente
 from app.main import criar_aplicacao
 from app.modelos.enumeracoes import (
     AutorMensagem,
-    DecisaoAprovacao,
-    StatusAprovacao,
     StatusCadeia,
     StatusEtapa,
     TipoAgente,
@@ -351,7 +349,8 @@ async def test_cadeia_de_ponta_a_ponta_com_worker_arq_real(
         eventos = await ler_sse(cliente, id_direta, auth, ate=lambda n, d: n == "sugestoes")
         nomes = [n for n, _ in eventos]
         assert "roteamento" in nomes and "cadeia.criada" not in nomes
-        assert nomes.count("mensagem.fim") >= 2  # primeira resposta + a da Sora
+        # desde o 8b66d56 o modo direto não publica a confirmação da triagem: uma bolha só
+        assert nomes.count("mensagem.fim") == 1
         async with fabrica() as sessao:
             falas = (
                 await sessao.scalars(
@@ -360,7 +359,7 @@ async def test_cadeia_de_ponta_a_ponta_com_worker_arq_real(
                     )
                 )
             ).all()
-            assert any("resposta de exemplo" in f for f in falas), falas
+            assert len(falas) == 1 and "resposta de exemplo" in falas[0], falas
 
 
 async def _esperar_aprovacao(
@@ -384,16 +383,16 @@ async def _esperar_aprovacao(
     )
 
 
-async def test_modelo_http_do_seletor_criar_agente_pausa_e_retoma(
+async def test_modelo_http_do_seletor_criar_agente_vira_rascunho_e_confirma(
     servicos_fase_b: tuple[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """O worker usa o modelo HTTP escolhido no banco e retoma ``criar_agente`` pela API."""
+    """Modelo HTTP do banco; ``criar_agente`` só deixa rascunho até a rota confirmar."""
     url_pg, url_redis = servicos_fase_b
     chamadas: list[dict[str, Any]] = []
     api_modelo = FastAPI()
 
     @api_modelo.post("/v1/chat/completions")
-    async def completar(requisicao: Request) -> dict[str, Any]:
+    async def completar(requisicao: Request) -> Any:
         corpo = await requisicao.json()
         chamadas.append(corpo)
         retomou = len(chamadas) > 1
@@ -401,13 +400,49 @@ async def test_modelo_http_do_seletor_criar_agente_pausa_e_retoma(
             nome = "entregar"
             argumentos = {
                 "tipo": "texto",
-                "titulo": "Agente proposto",
-                "resumo": "1 agente criado com aprovação",
-                "conteudo": "A criação foi aprovada e concluída.",
+                "titulo": "Bot proposto",
+                "resumo": "Rascunho de 1 bot",
+                "conteudo": "O rascunho aguarda a confirmação do usuário.",
             }
         else:
             nome = "criar_agente"
             argumentos = {"nome": "Íris", "papel": "Organizar pesquisas"}
+        if corpo.get("stream"):
+            from starlette.responses import StreamingResponse
+
+            async def fluxo():
+                chunk = {
+                    "id": f"local-{len(chamadas)}",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": "modelo-local",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": f"call-{len(chamadas)}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": nome,
+                                            "arguments": json.dumps(argumentos, ensure_ascii=False),
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+                yield "data: " + json.dumps(chunk) + "\n\n"
+                chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+                yield "data: " + json.dumps(chunk) + "\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(fluxo(), media_type="text/event-stream")
         return {
             "id": f"local-{len(chamadas)}",
             "object": "chat.completion",
@@ -592,40 +627,39 @@ async def test_modelo_http_do_seletor_criar_agente_pausa_e_retoma(
             finally:
                 await fila.aclose()
 
-            aprovacao = await _esperar_aprovacao(fabrica, etapa_id)
-            assert aprovacao.status == StatusAprovacao.PENDENTE
-            decisao = await cliente.post(
-                f"/v1/aprovacoes/{aprovacao.id}/decidir",
-                headers=auth,
-                json={"decisao": DecisaoAprovacao.PERMITIR_UMA_VEZ.value},
-            )
-            assert decisao.status_code == 204, decisao.text
-
             for _ in range(20 * 5):
                 async with fabrica() as sessao:
                     final = await sessao.get(Etapa, etapa_id)
-                    iris = await sessao.scalar(
-                        select(Agente).where(
-                            Agente.usuario_id == usuario.id,
-                            Agente.nome == "Íris",
-                        )
-                    )
-                    if final.status == StatusEtapa.CONCLUIDA and iris is not None:
+                    if final.status == StatusEtapa.CONCLUIDA:
                         break
                 await asyncio.sleep(0.2)
             else:
-                async with fabrica() as sessao:
-                    final = await sessao.get(Etapa, etapa_id)
-                    aprovacoes = list(
-                        await sessao.scalars(
-                            select(Aprovacao).where(Aprovacao.etapa_id == etapa_id)
-                        )
-                    )
                 pytest.fail(
-                    "a etapa não retomou e concluiu após a aprovação: "
-                    f"status={final.status}, erro={final.erro!r}, "
-                    f"aprovações={[a.status for a in aprovacoes]}, chamadas={len(chamadas)}"
+                    "a etapa não concluiu depois do rascunho: "
+                    f"status={final.status}, erro={final.erro!r}, chamadas={len(chamadas)}"
                 )
+
+            async with fabrica() as sessao:
+                assert not list(
+                    await sessao.scalars(select(Aprovacao).where(Aprovacao.etapa_id == etapa_id))
+                )
+                assert (
+                    await sessao.scalar(
+                        select(Agente).where(Agente.usuario_id == usuario.id, Agente.nome == "Íris")
+                    )
+                ) is None
+
+            pendentes = await cliente.get("/v1/bots/rascunhos", headers=auth)
+            assert pendentes.status_code == 200, pendentes.text
+            assert [r["nome"] for r in pendentes.json()] == ["Íris"]
+            confirmado = await cliente.post(
+                f"/v1/bots/rascunhos/{pendentes.json()[0]['id']}/confirmar",
+                headers=auth,
+                json={},
+            )
+            assert confirmado.status_code == 201, confirmado.text
+            assert confirmado.json()["nome"] == "Íris"
+            assert (await cliente.get("/v1/bots/rascunhos", headers=auth)).json() == []
 
             assert len(chamadas) >= 2
             assert {c["model"] for c in chamadas} == {"modelo-local"}

@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Porta do Vite (padrão 5173; troque com SORA_QA_BASE). O qa/entrar.mjs lê a mesma variável.
+process.env.SORA_QA_BASE ??= 'http://localhost:5173';
+
 export default defineConfig({
   testDir: './tests/visual',
   timeout: 30_000,
@@ -9,7 +12,7 @@ export default defineConfig({
     },
   },
   use: {
-    baseURL: process.env.SORA_QA_BASE ?? 'http://localhost:5173',
+    baseURL: process.env.SORA_QA_BASE,
     colorScheme: 'dark',
     reducedMotion: 'reduce',
   },

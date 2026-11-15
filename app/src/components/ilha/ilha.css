@@ -101,7 +101,7 @@
   overflow: hidden;
   color: var(--text-2);
   font-size: var(--fs-12);
-  font-weight: 560;
+  font-weight: 500;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -180,7 +180,7 @@
   border-radius: var(--r-pill);
   background: transparent;
   font-size: var(--fs-13);
-  font-weight: 560;
+  font-weight: 500;
   cursor: pointer;
 }
 .ilha-aba-projeto:hover, .ilha-aba-projeto[aria-pressed='true'] { color: var(--text-1); background: var(--white-a06); }
@@ -195,7 +195,7 @@
 .ilha-sora-grande { display: grid; place-items: center; flex: none; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
 .ilha-sora-info { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; gap: var(--sp-2); min-width: 0; }
 .ilha-sora-titulo { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-14); color: var(--text-2); }
-.ilha-sora-titulo strong { min-width: 0; color: var(--text-1); font-weight: 650; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ilha-sora-titulo strong { min-width: 0; color: var(--text-1); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ilha-sora-rotulo { margin: 0; color: var(--text-2); font-size: var(--fs-13); }
 .ilha-ponto { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--ilha-cor, var(--text-1)); box-shadow: 0 0 8px var(--ilha-cor, var(--text-1)); }
 .ilha-ponto--ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
@@ -217,7 +217,7 @@
   border-radius: var(--r-pill);
   background: transparent;
   font-size: var(--fs-12);
-  font-weight: 560;
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
   transition: background var(--dur-base) ease, color var(--dur-base) ease;
@@ -290,7 +290,7 @@
 .ilha-boneco:hover { background: color-mix(in srgb, var(--agente), transparent 78%); border-color: var(--agente); }
 .ilha-boneco canvas { flex: none; }
 .ilha-boneco-texto { display: grid; min-width: 0; }
-.ilha-boneco-texto strong { color: var(--agente); font-size: var(--fs-13); font-weight: 640; }
+.ilha-boneco-texto strong { color: var(--agente); font-size: var(--fs-13); font-weight: 600; }
 .ilha-boneco-texto small { overflow: hidden; color: var(--text-2); font-size: var(--fs-12); white-space: nowrap; text-overflow: ellipsis; }
 .ilha-boneco-barra { position: absolute; left: 18px; right: 18px; bottom: 3px; height: 2px; border-radius: 2px; background: var(--white-a06); }
 .ilha-boneco-barra i { display: block; height: 100%; border-radius: inherit; background: var(--agente); transition: width 700ms var(--ilha-mola, ease); }
@@ -329,7 +329,7 @@
   border-radius: var(--r-pill);
   background: var(--white-a08);
   font-size: var(--fs-14);
-  font-weight: 560;
+  font-weight: 500;
   cursor: pointer;
 }
 .ilha-btn:hover { background: var(--white-a12); }
@@ -381,3 +381,7 @@
   .ilha-anel { display: none; }
   .ilha .shimmer { animation: none; color: var(--text-2); background: none; }
 }
+
+/* com cartões "Precisa de você" no topo, os cards de baixo encolhem para o painel caber na janela de 460 px */
+.ilha-visao:has(> .ilha-pendencias) > .ilha-card { min-height: 0; padding: var(--sp-3); }
+.ilha-visao:has(> .ilha-pendencias) .ilha-bonecos-lista { max-height: 128px; }

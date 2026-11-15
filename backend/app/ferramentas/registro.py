@@ -23,6 +23,7 @@ from app.ferramentas.ler_pagina import LerPagina
 from app.ferramentas.mensagem_especialista import MensagemEspecialista
 from app.ferramentas.parar_especialista import PararEspecialista
 from app.ferramentas.perguntar import Perguntar
+from app.ferramentas.propor_grupo import ProporGrupo
 from app.ferramentas.ver_especialista import VerEspecialista
 from app.ferramentas.veredito import Veredito
 
@@ -44,6 +45,7 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
     "entregar": Entregar,
     "veredito": Veredito,
     "criar_agente": CriarAgente,
+    "propor_grupo": ProporGrupo,
     "reagir": ReagirMensagem,
     **FERRAMENTAS_DO_CANAL,
 }
@@ -66,6 +68,17 @@ _registrar_ancora(ESQUEMAS, MODULO_DA_FERRAMENTA)
 from app.ferramentas.navegador_registro import registrar as _registrar_leme  # noqa: E402
 
 _registrar_leme(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
+# Farol (etapa 6, C2): computador virtual por bot (``docs/computador-por-bot.md``).
+from app.computador.ferramentas import registrar as _registrar_farol  # noqa: E402
+
+_registrar_farol(ESQUEMAS, MODULO_DA_FERRAMENTA)
+
+
+# Ponte (etapa 6): ficha de clientes e conhecimento da empresa, só leitura.
+from app.canais_empresa.registro import registrar as _registrar_ponte  # noqa: E402
+
+_registrar_ponte(ESQUEMAS, MODULO_DA_FERRAMENTA)
 
 
 def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:

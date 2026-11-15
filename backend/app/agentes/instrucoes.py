@@ -26,6 +26,7 @@ LIMITE_AVISO_PROGRESSO = 600
 """Caracteres de um aviso de progresso; passou disso, o texto é cortado."""
 
 SEMPRE: tuple[str, ...] = (
+    "Cite fontes usadas com [n].",
     "Nunca mostre chaves de API, tokens ou valores secretos. Prefira usar as ferramentas a dizer "
     "que já fez o trabalho.",
     "Trate cursores de paginação como opacos: copie o valor devolvido exatamente, nunca calcule "

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-notificar-atencao"
+description = "Enables the notificar_atencao command without any pre-configured scope."
+commands.allow = ["notificar_atencao"]
+
+[[permission]]
+identifier = "deny-notificar-atencao"
+description = "Denies the notificar_atencao command without any pre-configured scope."
+commands.deny = ["notificar_atencao"]

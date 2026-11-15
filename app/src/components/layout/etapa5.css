@@ -1,0 +1,79 @@
+/* Barra lateral (etapa 6, §5.1): 260 px, linhas de menu sem borda, estado só quando há o que dizer. */
+.app-shell { --sidebar: var(--side-w); }
+.sidebar.shell-sidebar { width: var(--side-w); padding: var(--sp-2); background: var(--surface-side); border-right: 1px solid var(--line); }
+.shell-sidebar .sidebar-scroll { margin: 0; padding: var(--sp-2) 0 var(--sp-3); }
+
+/* marca: mascote + nome; o ponto de estado só existe quando a Sora trabalha ou espera por você */
+.shell-marca { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; height: 48px; margin: 0; padding: 0 var(--sp-3); color: var(--text-1); border-radius: var(--r-10); transition: background var(--dur-fast); }
+.shell-marca:hover { background: var(--hover); }
+.shell-marca.active { background: var(--ativo); }
+.shell-marca > strong { font-size: var(--fs-15); font-weight: 600; line-height: 20px; letter-spacing: 0; }
+.shell-marca-estado { display: inline-flex; align-items: center; }
+.shell-ponto { flex: none; width: 8px; height: 8px; background: var(--agent, var(--sora)); border-radius: 50%; }
+.shell-ponto.is-trabalhando { animation: shell-pulse 1.4s ease-in-out infinite; }
+.shell-ponto.is-precisa { background: var(--action); box-shadow: 0 0 0 3px rgba(238, 242, 250, .18); }
+
+/* linhas de menu (Criar novo, Buscar): sem borda e sem fundo */
+.shell-item { width: 100%; height: 40px; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); color: var(--text-2); background: transparent; border: 0; border-radius: var(--r-10); font: 400 var(--fs-14)/20px var(--font); text-align: left; transition: background var(--dur-fast), color var(--dur-fast); }
+.shell-item.active { color: var(--text-1); background: var(--ativo); }
+.shell-item { text-decoration: none; }
+.shell-item:hover, .shell-item[aria-expanded="true"] { color: var(--text-1); background: var(--hover); }
+.shell-item svg { flex: none; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.shell-item > span { flex: 1; min-width: 0; }
+.shell-item kbd { margin-left: auto; color: var(--text-3); font: 500 var(--fs-12)/16px var(--font); }
+
+/* menu "Criar novo" */
+.sora-popover.shell-menu { display: grid; gap: 2px; padding: var(--sp-2); border-radius: var(--r-12); box-shadow: var(--shadow-md); }
+.shell-menu [role="menuitem"] { width: 100%; min-height: 40px; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); color: var(--text-1); background: transparent; border: 0; border-radius: var(--r-10); font: 400 var(--fs-14)/20px var(--font); text-align: left; }
+.shell-menu [role="menuitem"]:hover, .shell-menu [role="menuitem"]:focus-visible { background: var(--ativo); }
+.shell-menu [role="menuitem"]:focus-visible { outline-offset: -2px; }
+.shell-menu svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--text-2); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* seções BOTS e GRUPOS */
+.shell-section { margin-top: var(--sp-4); }
+.shell-section > header { height: 32px; display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); color: var(--text-3); font: 600 var(--fs-12)/16px var(--font); letter-spacing: .06em; text-transform: uppercase; }
+.shell-section > header > :first-child { flex: 1; color: inherit; text-decoration: none; }
+.shell-section > header > small { font-size: var(--fs-12); font-weight: 500; letter-spacing: 0; }
+.shell-section > header button { width: 28px; height: 28px; display: grid; place-items: center; margin-right: -6px; padding: 0; color: var(--text-3); background: transparent; border: 0; border-radius: var(--r-6); }
+.shell-section > header button:hover { color: var(--text-1); background: var(--hover); }
+.shell-section > header svg { width: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.shell-list { display: grid; gap: 2px; }
+.shell-row { min-width: 0; height: 40px; display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); color: var(--text-1); text-decoration: none; border: 0; border-radius: var(--r-10); transition: background var(--dur-fast); }
+.shell-row:hover { background: var(--hover); }
+.shell-row.active { background: var(--ativo); }
+.shell-row > canvas { flex: none; }
+.shell-row > strong { flex: 1; min-width: 0; overflow: hidden; color: inherit; font-size: var(--fs-14); font-weight: 400; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; }
+.shell-row .shell-group-icon { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--text-2); stroke-width: 1.7; }
+.shell-contador { flex: none; min-width: 20px; height: 20px; display: inline-grid; place-items: center; padding: 0 6px; color: var(--text-inverse); background: var(--action); border-radius: var(--r-pill); font-size: var(--fs-12); font-weight: 700; line-height: 1; }
+.shell-empty { margin: var(--sp-1) var(--sp-3) 0; color: var(--text-3); font-size: var(--fs-12); line-height: 1.5; }
+
+/* conta */
+.shell-account { height: 52px; margin-top: auto; padding: 0 var(--sp-1) 0 var(--sp-3); gap: var(--sp-3); border-top: 1px solid var(--line); }
+.shell-account .account-avatar { width: 28px; height: 28px; font-size: var(--fs-13); }
+.shell-account > span:nth-child(2) { flex: 1; min-width: 0; }
+.shell-account strong { font-size: var(--fs-13); font-weight: 500; }
+.shell-account .account-settings { width: 36px; height: 36px; margin-left: 0; }
+.shell-account .shell-logout { display: none; }
+.mobile-account .shell-logout { display: block; margin-left: auto; color: var(--text-2); background: transparent; border: 0; }
+
+@keyframes shell-pulse { 50% { opacity: .42; transform: scale(.78); } }
+@media (max-width: 767px) {
+  .shell-sidebar { display: none; }
+  /* folha do menu ☰: as mesmas linhas, com 48 px e alvos de 44 px */
+  .mobile-nav { display: grid; gap: 0; }
+  .mobile-nav .shell-marca, .mobile-nav .shell-item, .mobile-nav .shell-row { height: 48px; }
+  .mobile-nav .shell-section { margin-top: var(--sp-3); }
+  .mobile-nav .shell-section > header { height: 40px; }
+  .mobile-nav .shell-section > header button { width: 44px; height: 44px; margin-right: -12px; }
+  .mobile-nav .shell-account { margin-top: var(--sp-4); }
+}
+@media (prefers-reduced-motion: reduce) { .shell-ponto.is-trabalhando { animation: none; } .shell-marca, .shell-item, .shell-row { transition: none; } }
+
+.conversation.sora-main-chat { min-height:0; height:calc(100dvh - var(--topbar)); }
+.agent-resources { display:grid; gap:12px; padding-bottom:18px; }.agent-resources section { padding-top:4px; border-top:1px solid var(--line); }.agent-resources ul { display:grid; gap:7px; margin:0; padding:0; list-style:none; }.agent-resources li { display:flex; justify-content:space-between; gap:10px; padding:9px 10px; color:var(--text-2); background:var(--surface-3); border-radius:9px; font-size:12px; line-height:1.45; }.agent-resources li strong { color:var(--text-1); }.agent-resources li span:last-child:not(:only-child) { color:var(--text-3); }
+/* Celular: o orb do título fica do tamanho da marca (a regra geral da topbar força 34 px). */
+
+@media (max-width:767px) {.topbar-title .mobile-brand{width:22px;height:22px;flex:none}.topbar-title .mobile-brand canvas{width:22px!important;height:22px!important}.topbar-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+/* Celular: o título do grupo/bot precisa de espaço; copiar link fica para o desktop. */
+
+@media (max-width:767px) {.topbar-actions .share-button{display:none}}

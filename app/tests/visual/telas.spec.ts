@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test';
-// Login da conta de QA antes de cada teste (backend local precisa estar rodando).
+// Login da conta de QA antes de cada teste (API, worker e Vite desta etapa precisam estar rodando).
 import { entrarNoContexto } from '../../qa/entrar.mjs';
-
-const pedido = 'Crie uma campanha para lançar minha cafeteria';
 
 async function aguardarSessao(page: import('@playwright/test').Page) {
   await page.waitForLoadState('load');
@@ -30,68 +28,41 @@ async function captura(page: import('@playwright/test').Page, nome: string) {
   });
 }
 
-// Contas fixas (o cadastro tem limite de 5 por hora por IP): as telas usam a conta que nunca cria projeto;
-// o "projeto pronto" usa uma conta por tamanho de tela (especialista não pode ser apagado pela API, então o
-// teste exige a conta sem projetos: para regenerar as baselines, zere o banco de QA antes).
-const contaDoProjeto = () => `qa-projeto-${test.info().project.name}@sora.local`;
+// Conta fixa (o cadastro tem limite de 5 por hora por IP). O login limpa conversas e bots; os grupos
+// de rodadas anteriores são arquivados aqui para a barra lateral começar vazia.
 test.beforeEach(async ({ page }) => {
-  await entrarNoContexto(page.context(), {
-    ...(test.info().title.startsWith('projeto pronto') ? { email: contaDoProjeto() } : {}),
-    limparConversas: true,
-  });
+  const sessao = await entrarNoContexto(page.context(), { limparConversas: true });
+  const base = process.env.SORA_QA_BASE ?? 'http://localhost:5173';
+  const headers = { Authorization: `Bearer ${sessao.token_acesso}` };
+  const grupos = await (await page.context().request.get(`${base}/v1/grupos`, { headers })).json() as { id: string }[];
+  for (const grupo of grupos) await page.context().request.post(`${base}/v1/canais-equipe/${grupo.id}/arquivar`, { headers, failOnStatusCode: false });
+  // Perfis do navegador sobram de outras sessões de QA: a baseline parte sempre da lista vazia.
+  const perfis = await page.context().request.get(`${base}/v1/navegador/perfis`, { headers, failOnStatusCode: false });
+  if (perfis.status() === 200) for (const perfil of await perfis.json() as { perfil_id: string }[]) await page.context().request.delete(`${base}/v1/navegador/perfis/${perfil.perfil_id}`, { headers, failOnStatusCode: false });
   await limparEstado(page);
 });
 
-test('home vazia', async ({ page }) => {
-  await captura(page, 'home.png');
-});
-
-for (const [rota, titulo] of [
-  ['/projetos', 'Seus projetos'],
-  ['/agentes', 'Seus agentes'],
-  ['/agentes/novo', 'Criar agente'],
-  ['/configuracoes', 'Configurações'],
-  ['/canais', 'Canais de equipe'],
-  ['/configuracoes?secao=memoria', 'Nada guardado ainda.'],
-  ['/configuracoes?secao=rotinas', 'Nenhuma rotina ainda.'],
-  ['/configuracoes?secao=habilidades', 'Nenhuma habilidade ainda.'],
-  ['/configuracoes?secao=conectores', 'Nenhum conector ainda.'],
-  ['/configuracoes?secao=navegador', 'Nenhum perfil com login salvo ainda'],
-  ['/configuracoes?secao=telegram', 'não está ligado'],
-  ['/lab/ui', 'Componentes base'],
+// Etapa 5: Sora · Bots · Grupos · Configurações. Rotas antigas (projetos, revisão, canais) só redirecionam
+// e são conferidas no qa/e2e.mjs.
+for (const [rota, titulo, nome] of [
+  ['/', 'Em que posso te ajudar hoje?', 'sora'],
+  ['/bots', 'Nenhum bot ainda', 'bots'],
+  ['/grupos', 'Grupos reúnem seus bots', 'grupos'],
+  ['/configuracoes', 'Configurações', 'configuracoes'],
+  ['/configuracoes?secao=memoria', 'Nada guardado ainda.', 'configuracoes-secao-memoria'],
+  ['/configuracoes?secao=rotinas', 'Nenhuma rotina ainda.', 'configuracoes-secao-rotinas'],
+  ['/configuracoes?secao=habilidades', 'Nenhuma habilidade ainda.', 'configuracoes-secao-habilidades'],
+  ['/configuracoes?secao=conectores', 'Nenhum conector ainda.', 'configuracoes-secao-conectores'],
+  ['/configuracoes?secao=navegador', 'Perfis com login salvo', 'configuracoes-secao-navegador'],
+  ['/configuracoes?secao=telegram', 'não está ligado', 'configuracoes-secao-telegram'],
+  ['/lab/ui', 'Componentes base', 'lab-ui'],
 ] as const) {
   test(`tela ${rota}`, async ({ page }) => {
     await page.goto(rota);
     await expect(page.getByText(titulo, { exact: false }).first()).toBeVisible();
-    await captura(page, `${rota.slice(1).replace(/[^a-z0-9]+/gi, '-')}.png`);
+    // A foto só sai com a lista pronta: "Carregando provedores e modelos…" sobreposto deixava a captura intermitente.
+    await expect(page.getByText(/^Carregando/)).toHaveCount(0);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await captura(page, `${nome}.png`);
   });
 }
-
-test('projeto pronto', async ({ page }) => {
-  // Backend real (modelo falso): cria o projeto pela própria interface e espera a equipe terminar.
-  test.setTimeout(120_000);
-  expect(await page.evaluate(() => window.__sora.lerEstado().projetos.length), 'o harness deve limpar os projetos antes do teste').toBe(0);
-  await page.getByRole('textbox', { name: /Peça qualquer coisa à Sora/i }).fill(pedido);
-  await page.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
-  await page.waitForURL(/\/projeto\//);
-  await expect(page.getByRole('button', { name: 'Revisar', exact: true })).toBeVisible({ timeout: 90_000 });
-  // A equipe acabou de terminar: a ilha abre sozinha (alerta). Dispensa, como o usuário faria.
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Ilha da Sora', exact: true })).toHaveCount(0);
-  // Tira o foco do campo: com foco o beam (canvas) aparece e a máscara esconderia o campo inteiro.
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  await page.waitForTimeout(500);
-  await captura(page, 'projeto-pronto.png');
-
-  // V1: projeto pronto de antes + armazenamento limpo (navegador novo) NÃO abre a ilha sobre a tela.
-  // O app só trata como "acabou de terminar" o que concluiu há menos de 60 s; aqui o relógio da página
-  // anda 2 min para simular um projeto pronto de antes.
-  await page.evaluate(() => localStorage.clear());
-  await page.addInitScript(() => { const real = Date.now.bind(Date); Date.now = () => real() + 120_000; });
-  await page.goto('/');
-  await aguardarSessao(page);
-  await page.waitForTimeout(1_500);
-  await expect(page.getByRole('dialog', { name: 'Ilha da Sora', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /^Ilha da Sora:/i })).toBeVisible();
-
-});

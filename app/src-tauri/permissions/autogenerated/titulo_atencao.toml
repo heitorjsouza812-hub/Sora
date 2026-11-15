@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-titulo-atencao"
+description = "Enables the titulo_atencao command without any pre-configured scope."
+commands.allow = ["titulo_atencao"]
+
+[[permission]]
+identifier = "deny-titulo-atencao"
+description = "Denies the titulo_atencao command without any pre-configured scope."
+commands.deny = ["titulo_atencao"]

@@ -78,7 +78,7 @@ def preparar_envio(
     if args.agente_id == contexto.agente_id:
         raise ErroFerramenta("Você não pode mandar mensagem para si mesmo.")
     if args.agente_id not in colegas:
-        raise ErroFerramenta("Esse agente não está na sua lista de colegas.")
+        raise ErroFerramenta("Esse bot não está na sua lista de colegas.")
     texto = args.texto.strip()
     if not texto:
         raise ErroFerramenta("A mensagem está vazia.")
@@ -107,7 +107,7 @@ def diretorio_de_colegas(
     for agente_id, nome, funcao in colegas:
         linha = f"- {nome} ({funcao.strip() or 'sem função'}): {agente_id}"
         if total + len(linha) > limite_caracteres:
-            linhas.append(f"- … e mais {len(colegas) - len(linhas)} agentes")
+            linhas.append(f"- … e mais {len(colegas) - len(linhas)} bots")
             break
         linhas.append(linha)
         total += len(linha)

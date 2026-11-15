@@ -8,6 +8,7 @@ import { SoraOrb } from '../mascot';
 import { ProgressBar } from '../ui/ProgressBar';
 import { BlocoPrompt, LinhaDoTempo } from './LinhaDoTempo';
 import { SeletorAgente } from './SeletorAgente';
+import { TelasDoBot } from './TelasDoBot';
 import './work.css';
 
 export interface PainelTrabalhoProps {
@@ -58,16 +59,16 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
   const escolher = (id: string) => { setEscolhido(id); onAgenteChange?.(id); };
 
   return (
-    <section className={`wk-panel ${className}`} style={agente ? { '--agent': agente.cor } as CSSProperties : undefined} aria-label="Trabalho dos agentes">
+    <section className={`wk-panel ${className}`} style={agente ? { '--agent': agente.cor } as CSSProperties : undefined} aria-label="Trabalho dos bots">
       {!semSeletor && visiveis.length > 1 && <SeletorAgente agentes={visiveis.map(id => e.agentes[id])} estados={ests} atual={atual} onEscolher={escolher} />}
       {!agente ? (
         <div className="wk-empty">
           <SoraOrb size={72} color={e.sora.cor} state="idle" title={e.sora.nome} />
-          <p>Quando um agente começar a trabalhar, os passos aparecem aqui ao vivo.</p>
+          <p>Quando um bot começar a trabalhar, os passos aparecem aqui ao vivo.</p>
         </div>
       ) : (
         <>
-          <header className="wk-head">
+          {!semSeletor && <header className="wk-head">
             <SoraOrb size={40} color={agente.cor} movimento={agente.tipoMovimento} glow={false} title={agente.nome}
               state={est?.status === 'trabalhando' ? 'working' : est?.status === 'concluido' ? 'done' : 'idle'} />
             <span>
@@ -75,8 +76,9 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
               <small className={est?.status === 'trabalhando' ? 'wk-live' : ''}>{est?.status === 'trabalhando' ? `${agente.verbo}…` : est?.rotulo || agente.funcao}</small>
             </span>
             {est && est.status !== 'aguardando' && <b className="wk-pct">{est.progresso}%</b>}
-          </header>
-          {est && est.status !== 'aguardando' && <ProgressBar value={est.progresso} color={agente.cor} />}
+          </header>}
+          {est?.status === 'trabalhando' && <ProgressBar value={est.progresso} color={agente.cor} />}
+          <TelasDoBot agenteId={agente.id} cor={agente.cor} usaComputador={agente.ferramentas.some(f => f.startsWith('computador_'))} />
           <div className="wk-scroll" ref={scroll}
             onScroll={ev => { const el = ev.currentTarget; colado.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; }}>
             {anteriores.length > 0 && (
@@ -88,8 +90,7 @@ export function PainelTrabalho({ agenteIds, agenteId, onAgenteChange, semSeletor
             {prompt && <BlocoPrompt passo={prompt} nomeSora={e.sora.nome} corSora={e.sora.cor} />}
             {!execAtual && (
               <div className="wk-empty wk-empty-inline">
-                <SoraOrb size={56} color={agente.cor} movimento={agente.tipoMovimento} state="idle" glow={false} title={agente.nome} />
-                <p>{est?.rotulo && est.rotulo !== 'Disponível' ? `${est.rotulo}.` : `${agente.nome} está disponível.`} Os passos aparecem aqui quando o trabalho começar.</p>
+                <p>{est?.status === 'trabalhando' ? `${agente.nome} está trabalhando. As ferramentas que usar aparecem aqui assim que o primeiro passo for registrado.` : `${est?.rotulo && est.rotulo !== 'Disponível' ? `${est.rotulo}.` : `${agente.nome} está disponível.`} Os passos aparecem aqui quando o trabalho começar.`}</p>
               </div>
             )}
             <LinhaDoTempo passos={resto} agente={agente} agora={agora} sora={e.sora} agentes={e.agentes} />

@@ -161,6 +161,15 @@ describe('markdownSeguro — allowlist (rodada 6)', () => {
     for (const fonte of ataquesExtra) {
       const raiz = montar(fonte);
       expect(perigosos(raiz), fonte).toEqual([]);
+      // Moldura criada pelo app depois de sanitizar; nenhum atributo da fonte sobrevive nela.
+      raiz.querySelectorAll('.md-table').forEach(caixa => {
+        expect(caixa.getAttribute('role')).toBe('region');
+        expect(caixa.getAttribute('tabindex')).toBe('0');
+        expect(caixa.getAttribute('aria-label')).toBe('Tabela com rolagem horizontal');
+        expect(caixa.children.length).toBe(1);
+        expect(caixa.firstElementChild?.tagName).toBe('TABLE');
+        caixa.replaceWith(...caixa.childNodes);
+      });
       for (const a of todosOsAtributos(raiz)) expect(permitidos.has(a) || a.endsWith('@title'), `${a} em ${fonte}`).toBe(true);
       raiz.querySelectorAll('a[href]').forEach(a => expect(a.getAttribute('href')).toMatch(/^(https?:\/\/|mailto:)/i));
     }

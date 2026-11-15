@@ -48,6 +48,18 @@ describe('aplicarEvento', () => {
     expect(muitoDepois.execucoes[0]).toMatchObject({ status: 'executando', progresso: 45 });
   });
 
+  it('guarda quem pediu o prompt do passo (usuário, Sora ou sem campo)', () => {
+    const prompt = (id: string, extra: Record<string, unknown>) =>
+      evento('passo', { passo_id: id, etapa_id: etapaId, agente_id: agenteId, tipo: 'prompt', texto: 'Resuma', status: 'concluido', ...extra });
+    let e = aplicarEvento(estado(), prompt('p-usuario', { origem: 'usuario' }));
+    e = aplicarEvento(e, prompt('p-sora', { origem: 'sora' }));
+    e = aplicarEvento(e, prompt('p-sem', {}));
+    const roteiro = e.execucoes[0]?.roteiro ?? [];
+    expect(roteiro.find(p => p.id === 'p-usuario')?.origem).toBe('usuario');
+    expect(roteiro.find(p => p.id === 'p-sora')?.origem).toBe('sora');
+    expect(roteiro.find(p => p.id === 'p-sem')?.origem).toBeUndefined();
+  });
+
   it('concatena deltas SSE e encerra a mensagem pelo evento fim', () => {
     let e = aplicarEvento(estado(), evento('mensagem.inicio', { mensagem_id: 'msg-1', autor: 'sora', agente_id: agenteId }));
     e = aplicarEvento(e, evento('mensagem.delta', { mensagem_id: 'msg-1', texto: 'Tudo ' }, 1));

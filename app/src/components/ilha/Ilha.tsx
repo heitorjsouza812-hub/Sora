@@ -1,41 +1,25 @@
-// Ilha da Sora (adaptação do Coucou): pílula preta no topo com a Sora e os agentes rodando.
-// FSM: oculta → espiando → compacta → expandida · alerta (equipe pronta abre sozinha na Aprovação).
-// Aberta/vista/agente vêm do store ilhaUi (comandos e atalhos de fora também abrem a ilha).
+// Ilha da Sora (adaptação do Coucou): pílula preta no topo com a Sora e os bots trabalhando.
+// Etapa 5 — "Ilha só fora do app": esta janela React só existe dentro da janela dedicada "ilha" do
+// app de desktop (Tauri mostra/oculta essa janela nativa pelo foco da "main", ver src-tauri/src/lib.rs).
+// Dentro do app principal e no navegador este componente nunca desenha nada (`desktop` não vem true).
+// FSM: oculta → espiando → compacta → expandida. Aberta/vista vêm do store ilhaUi (comandos e atalhos
+// de fora também abrem a ilha).
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as KE, type PointerEvent as PE, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { SoraOrb } from '../mascot';
-import { useProjetos } from '../../state/projetos';
-import { definirIlhaPrefs, filtrarAgentes, useIlha, useIlhaPrefs, type AgenteIlha, type VisaoIlha } from './ilhaEstado';
+import { definirIlhaPrefs, filtrarBonecos, useIlha, useIlhaPrefs, type BonecoIlha, type VisaoIlha } from './ilhaEstado';
 import { abrirIlha, fecharIlha, useIlhaUi } from './ilhaUi';
 import { VisaoGeral } from './VisaoGeral';
-import { Aprovacao } from './Aprovacao';
-import { SeletorProjeto } from './SeletorProjeto';
 import { DetalheAgente } from './DetalheAgente';
 import { tocar } from './som';
-import { useJanelaDestacada } from './useJanelaDestacada';
-import { AnelConclusao } from './animacao';
 import { usePresenca } from './usePresenca';
-import { aoMouseIlha, janelaAtual, noDesktop, type Retangulo } from '../../desktop/ponte';
+import { aoMouseIlha, abrirNoApp, type Retangulo } from '../../desktop/ponte';
 import './ilha.css';
 
-export type ModoIlha = 'oculta' | 'espiando' | 'compacta' | 'expandida' | 'alerta';
+export type ModoIlha = 'oculta' | 'espiando' | 'compacta' | 'expandida';
 
 const HOVER_ABRIR = 250;
 const HOVER_FECHAR = 400;
 const MAX_BONECOS = 5;
-const CHAVE_ALERTAS = 'sora.ilha.alertas.v1';
-const JANELA_ALERTA_MS = 60_000;
-
-/** Alertas já mostrados (uma vez por projeto/versão), lembrados entre recargas. */
-function alertasVistos(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(CHAVE_ALERTAS) ?? '[]') as string[]); } catch { return new Set(); }
-}
-function marcarAlerta(chave: string) {
-  const s = alertasVistos();
-  s.add(chave);
-  try { localStorage.setItem(CHAVE_ALERTAS, JSON.stringify([...s].slice(-50))); } catch { /* ignora */ }
-}
 
 const mouseFino = () => typeof window !== 'undefined' && window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
 
@@ -43,28 +27,27 @@ function Icone({ d }: { d: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg>;
 }
 
-/** Pílula compacta: Sora pequena + texto curto + bonecos (já filtrados pelas preferências). */
-function Compacta({ v, bonecos, trabalhando, pulsoExtra, olhar }: {
-  v: VisaoIlha; bonecos: AgenteIlha[]; trabalhando: number; pulsoExtra: number; olhar: { x: number; y: number } | null;
+/** Pílula compacta: Sora pequena + texto curto + bonecos (bots ativos, já filtrados pelos ocultos). */
+function Compacta({ v, ativos, trabalhando, pulsoExtra, olhar }: {
+  v: VisaoIlha; ativos: BonecoIlha[]; trabalhando: number; pulsoExtra: number; olhar: { x: number; y: number } | null;
 }) {
-  const presentes = usePresenca(bonecos.slice(0, MAX_BONECOS));
-  const extras = bonecos.length - MAX_BONECOS;
+  const presentes = usePresenca(ativos.slice(0, MAX_BONECOS));
+  const extras = ativos.length - MAX_BONECOS;
+  const orbDaSora = v.precisaDeVoce.length > 0 ? 'listening' : trabalhando > 0 ? 'coordinating' : 'idle';
+  const texto = v.precisaDeVoce.length > 0 ? `${v.precisaDeVoce.length} precisa${v.precisaDeVoce.length === 1 ? '' : 'm'} de você`
+    : trabalhando > 0 ? <><span key={trabalhando} className="ilha-num">{trabalhando}</span> trabalhando</>
+    : 'Tudo tranquilo';
   return (
     <>
       <span className="ilha-compacta-sora">
-        <SoraOrb size={24} color={v.sora.cor} state={v.sora.orb} pulseKey={v.sora.pulso + pulsoExtra} lookAt={olhar} glow={false} decorative seed={11} />
+        <SoraOrb size={24} color={v.sora.cor} state={orbDaSora} pulseKey={pulsoExtra} lookAt={olhar} glow={false} decorative seed={11} />
       </span>
-      <span className="ilha-compacta-texto">
-        {trabalhando > 0 && v.sora.orb !== 'thinking'
-          ? <><span key={trabalhando} className="ilha-num">{trabalhando}</span> trabalhando</>
-          : v.sora.rotulo}
-      </span>
+      <span className="ilha-compacta-texto">{texto}</span>
       {presentes.length > 0 && (
         <span className="ilha-bonecos" aria-hidden="true">
           {presentes.map(({ item: a, saindo }, i) => (
             <span key={a.id} className={`ilha-boneco-mini${saindo ? ' ilha-saindo' : ''}`} style={{ '--i': i, '--agente': a.cor } as CSSProperties}>
-              <SoraOrb size={18} color={a.cor} state={a.orb} movimento={a.movimento} glow={false} decorative seed={20 + i} />
-              <AnelConclusao agente={a} />
+              <SoraOrb size={18} color={a.cor} state={a.orb} glow={false} decorative seed={20 + i} />
             </span>
           ))}
           {extras > 0 && <span className="ilha-bonecos-mais">+{extras}</span>}
@@ -75,30 +58,20 @@ function Compacta({ v, bonecos, trabalhando, pulsoExtra, olhar }: {
 }
 
 interface CabecalhoProps {
-  v: VisaoIlha;
   trabalhando: number;
-  vista: string;
   som: boolean;
-  podeDestacar: boolean;
-  destacada: boolean;
-  onDestacar: () => void;
   onFechar: () => void;
-  onAbrirChat: () => void;
+  onAbrirSora: () => void;
 }
 
-function Cabecalho({ v, trabalhando, vista, som, podeDestacar, destacada, onDestacar, onFechar, onAbrirChat }: CabecalhoProps) {
+function Cabecalho({ trabalhando, som, onFechar, onAbrirSora }: CabecalhoProps) {
   return (
     <div className="ilha-cabecalho">
       <div className="ilha-abas" role="toolbar" aria-label="Navegação da ilha">
-        <button type="button" className="ilha-icone" aria-label="Início" aria-pressed={vista === 'inicio'} title="Início" onClick={() => abrirIlha('inicio')}>
+        <button type="button" className="ilha-icone" aria-label="Início" aria-pressed title="Início" onClick={() => abrirIlha('inicio')}>
           <Icone d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" />
         </button>
-        <button type="button" className="ilha-aba-projeto" aria-pressed={vista === 'projeto'} aria-haspopup="listbox"
-          onClick={() => abrirIlha(vista === 'projeto' ? 'inicio' : 'projeto')}>
-          <span className="ilha-aba-projeto-titulo">{v.projeto?.titulo ?? 'Projeto'}</span>
-          <Icone d="m7 10 5 5 5-5" />
-        </button>
-        <button type="button" className="ilha-icone" aria-label="Abrir chat do projeto" title="Abrir chat" disabled={!v.projeto} onClick={onAbrirChat}>
+        <button type="button" className="ilha-icone" aria-label="Abrir a Sora" title="Abrir a Sora" onClick={onAbrirSora}>
           <Icone d="M5 5h14v10H9l-4 4z" />
         </button>
       </div>
@@ -108,12 +81,6 @@ function Cabecalho({ v, trabalhando, vista, som, podeDestacar, destacada, onDest
           onClick={() => definirIlhaPrefs({ som: !som })}>
           {som ? <Icone d="M4 9v6h4l5 4V5L8 9zm12 0a4 4 0 0 1 0 6m2-9a8 8 0 0 1 0 12" /> : <Icone d="M4 9v6h4l5 4V5L8 9zm12 1 4 4m0-4-4 4" />}
         </button>
-        {podeDestacar && (
-          <button type="button" className="ilha-icone" aria-label={destacada ? 'Voltar a ilha para o app' : 'Destacar em janela'} aria-pressed={destacada}
-            title={destacada ? 'Voltar para o app' : 'Destacar'} onClick={onDestacar}>
-            <Icone d="M9 5H5v14h14v-4M13 5h6v6m0-6-8 8" />
-          </button>
-        )}
         <button type="button" className="ilha-icone" aria-label="Fechar ilha" title="Fechar (Esc)" onClick={onFechar}>
           <Icone d="m6 6 12 12M18 6 6 18" />
         </button>
@@ -123,9 +90,10 @@ function Cabecalho({ v, trabalhando, vista, som, podeDestacar, destacada, onDest
 }
 
 export interface IlhaProps {
-  /** janela própria do app de desktop: pílula colada no topo da tela e mouse vindo do Rust (click-through) */
+  /** só true na janela dedicada "ilha" do app de desktop (ver IlhaDesktop.tsx). Fora dela (app
+   *  principal ou navegador) o componente não desenha nada — a ilha é "só fora do app" (etapa 5). */
   desktop?: boolean;
-  /** desktop: recebe o retângulo desenhado (px relativos à janela) para os cliques atravessarem fora dele */
+  /** recebe o retângulo desenhado (px relativos à janela) para os cliques atravessarem fora dele */
   onRetangulo?: (r: Retangulo) => void;
 }
 
@@ -153,7 +121,7 @@ function useTamanho() {
   return [ref, tam] as const;
 }
 
-/** Brilho que corre na borda, nas cores dos agentes trabalhando. */
+/** Brilho que corre na borda, nas cores dos bots trabalhando. */
 function gradienteHalo(cores: string[]) {
   if (!cores.length) return undefined;
   const passo = 360 / cores.length;
@@ -165,10 +133,6 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
   const v = useIlha();
   const prefs = useIlhaPrefs();
   const ui = useIlhaUi();
-  const e = useProjetos();
-  const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const janela = useJanelaDestacada();
 
   const raiz = useRef<HTMLDivElement>(null);
   const timerAbrir = useRef<number | undefined>(undefined);
@@ -181,35 +145,23 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
   const [olhar, setOlhar] = useState<{ x: number; y: number } | null>(null);
   const [medir, tamanho] = useTamanho();
 
-  /** mouse vem do Rust (com click-through o DOM nem sempre recebe pointerleave) */
-  const usarPonte = desktop && noDesktop;
-  /** na janela principal do desktop a ilha de verdade está no topo da tela; sons só tocam lá */
-  const naJanelaMain = !desktop && janelaAtual === 'main';
-  const tocaSom = prefs.som && !naJanelaMain;
-
-  // filtro (Todos · Trabalhando · Concluídos) e bonecos escondidos; a Sora sempre aparece
-  const bonecos = filtrarAgentes(v.agentes, prefs);
-  const trabalhando = Math.max(0, v.trabalhando - v.agentes.filter(a => a.status === 'trabalhando' && prefs.ocultos.includes(a.id)).length);
-  const coresTrabalhando = bonecos.filter(a => a.status === 'trabalhando').map(a => a.cor);
+  // bots ativos (trabalhando ou precisando de você), sem os escondidos pelo botão "olho"
+  const ativos = v.bonecos.filter(a => a.estado !== 'livre' && !prefs.ocultos.includes(a.id));
+  const bonecosDoInicio = filtrarBonecos(v.bonecos, prefs);
+  const trabalhando = ativos.filter(a => a.estado === 'trabalhando').length;
+  const coresTrabalhando = ativos.filter(a => a.estado === 'trabalhando').map(a => a.cor);
 
   // ---------- FSM ----------
-  const semProjetoNaHome = !desktop && pathname === '/' && !e.projetoAtivoId && v.rodando === 0;
-  const oculta = (naJanelaMain && !prefs.ilhaNoApp) || !prefs.visivel || v.projetos.length === 0 || semProjetoNaHome;
-  const destacada = janela.aberta && !!janela.container;
+  // Etapa 5: a ilha só existe mesmo na janela dedicada do desktop; fora dela não há nada a desenhar
+  // (o app principal e o navegador nunca recebem `desktop=true`). `prefs.visivel` ainda controla se
+  // o usuário quer a ilha ligada — a janela nativa mesmo assim só aparece fora do app (ver lib.rs).
+  const oculta = !desktop || !prefs.visivel;
   const aberta = ui.aberta && !oculta;
-  // A pílula pendura ~44 px abaixo da barra do topo no celular; telas com algo colado na barra (as abas de
-  // Configurações) usam este sinal para abrir espaço em vez de ficar escondidas atrás dela.
-  useEffect(() => {
-    const raiz = document.documentElement;
-    if (oculta || destacada || desktop) { delete raiz.dataset.ilhaPilula; return; }
-    raiz.dataset.ilhaPilula = '1';
-    return () => { delete raiz.dataset.ilhaPilula; };
-  }, [oculta, destacada, desktop]);
   const modo: ModoIlha = oculta ? 'oculta'
-    : aberta && !destacada ? (ui.vista === 'aprovacao' && v.alerta ? 'alerta' : 'expandida')
-    : prefs.esconderOciosa && v.rodando === 0 && !espiandoHover ? 'espiando'
+    : aberta ? 'expandida'
+    : prefs.esconderOciosa && ativos.length === 0 && !espiandoHover ? 'espiando'
     : 'compacta';
-  const painelVisivel = modo === 'expandida' || modo === 'alerta';
+  const painelVisivel = modo === 'expandida';
 
   const limparTimers = () => { window.clearTimeout(timerAbrir.current); window.clearTimeout(timerFechar.current); };
   useEffect(() => limparTimers, []);
@@ -220,12 +172,11 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
     fecharIlha();
   }, []);
 
-  const vistaParaAbrir = ui.vista === 'aprovacao' && !v.alerta ? 'inicio' : ui.vista;
   const abrirFixada = useCallback(() => {
     limparTimers();
     porHover.current = false;
-    if (!ui.aberta) abrirIlha(vistaParaAbrir, ui.agenteId ?? undefined);
-  }, [ui.aberta, vistaParaAbrir, ui.agenteId]);
+    if (!ui.aberta) abrirIlha(ui.vista, ui.agenteId ?? undefined);
+  }, [ui.aberta, ui.vista, ui.agenteId]);
 
   // pedidos externos (comando, atalho Ctrl/⌘+Shift+S) fixam a ilha aberta
   const ultimoPedido = useRef(ui.pedido);
@@ -235,57 +186,37 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
     porHover.current = false;
   }, [ui.pedido]);
 
-  // vista Aprovação sem alerta (ex.: aprovou em outra tela) volta ao Início
+  // ---------- pedido novo "precisa de você": abre sozinha no Início, uma vez por pedido ----------
+  const pedidosVistos = useRef(new Set<string>());
+  const primeiraLista = useRef(true);
   useEffect(() => {
-    if (ui.aberta && ui.vista === 'aprovacao' && !v.alerta) abrirIlha('inicio');
-  }, [ui.aberta, ui.vista, v.alerta]);
-
-  // ---------- alerta: equipe pronta → abre sozinha na Aprovação (uma vez por projeto/versão) ----------
-  const alertaChave = v.alerta ? `${v.alerta.projetoId}:${e.projetos.find(p => p.id === v.alerta!.projetoId)?.versao ?? 1}` : null;
-  const alertaFim = e.projetos.find(p => p.id === v.alerta?.projetoId)?.marcos.fim ?? 0;
-  useEffect(() => {
-    if (!alertaChave || oculta) return;
-    if (alertasVistos().has(alertaChave)) return;
-    // Só abre sozinha para uma equipe que acabou de terminar. Projeto pronto de antes (navegador novo,
-    // armazenamento limpo, projeto reaberto) não é alerta: a ilha começa compacta, sem cobrir a tela.
-    if (Date.now() - alertaFim > JANELA_ALERTA_MS) return;
-    marcarAlerta(alertaChave);
-    porHover.current = false;
-    abrirIlha('aprovacao');
-    if (tocaSom) tocar('pronto');
-  }, [alertaChave, alertaFim, oculta, tocaSom]);
-
-  // ---------- pendência nova (pergunta/aprovação): abre sozinha no Início, uma vez por pedido ----------
-  const pendenciasVistas = useRef(new Set<string>());
-  useEffect(() => {
-    if (oculta) return;
-    const nova = v.pendencias.find(x => !pendenciasVistas.current.has(x.id));
-    v.pendencias.forEach(x => pendenciasVistas.current.add(x.id));
-    // só pedido que acabou de chegar; pedido antigo (reabrir o app) fica no chat e na pílula
-    if (!nova || Date.now() - nova.desde > JANELA_ALERTA_MS) return;
+    const novo = v.precisaDeVoce.find(p => !pedidosVistos.current.has(p.id));
+    v.precisaDeVoce.forEach(p => pedidosVistos.current.add(p.id));
+    // a primeira lista carregada (ex.: app recém-aberto) não é "nova": só pedidos que chegam depois
+    if (primeiraLista.current) { primeiraLista.current = false; return; }
+    if (oculta || !novo) return;
     porHover.current = false;
     abrirIlha('inicio');
-    if (tocaSom) tocar('pronto');
-  }, [v.pendencias, oculta, tocaSom]);
+    if (prefs.som) tocar('pronto');
+  }, [v.precisaDeVoce, oculta, prefs.som]);
 
-  // ---------- pulso + som quando um agente conclui ----------
-  const concluidos = v.agentes.filter(a => a.status === 'concluido').length;
-  const projetoMostrado = v.projeto?.id ?? null;
-  const anterior = useRef({ projeto: projetoMostrado, n: concluidos });
+  // ---------- pulso + som quando um bot termina de trabalhar ----------
+  const idsTrabalhando = new Set(v.bonecos.filter(a => a.estado === 'trabalhando').map(a => a.id));
+  const anterior = useRef(idsTrabalhando);
   useEffect(() => {
-    const a = anterior.current;
-    if (a.projeto === projetoMostrado && concluidos > a.n) {
+    const terminou = [...anterior.current].some(id => !idsTrabalhando.has(id));
+    if (terminou) {
       setPulsoExtra(p => p + 1);
-      if (tocaSom) tocar('concluiu');
+      if (prefs.som) tocar('concluiu');
     }
-    anterior.current = { projeto: projetoMostrado, n: concluidos };
-  }, [concluidos, projetoMostrado, tocaSom]);
+    anterior.current = idsTrabalhando;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.bonecos.map(a => `${a.id}:${a.estado}`).join(',')]);
 
   // ---------- Esc, clique fora, janela perdeu o foco (desktop) ----------
   useEffect(() => {
     const tecla = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape' && ui.aberta && !destacada) {
-        // não fecha se um diálogo (modal) estiver por cima
+      if (ev.key === 'Escape' && ui.aberta) {
         if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
         focarPilula.current = true;
         fechar();
@@ -293,22 +224,21 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
     };
     window.addEventListener('keydown', tecla);
     return () => window.removeEventListener('keydown', tecla);
-  }, [ui.aberta, destacada, fechar]);
+  }, [ui.aberta, fechar]);
 
   useEffect(() => {
-    if (!aberta || destacada) return;
+    if (!aberta) return;
     const fora = (ev: PointerEvent) => {
       const alvo = ev.target as Node | null;
       if (alvo && raiz.current?.contains(alvo)) return;
-      // menus/popovers que a ilha abre em portal ficam fora da raiz; não fechar por eles
       if (alvo instanceof Element && alvo.closest('[data-ilha-portal]')) return;
       fechar();
     };
     document.addEventListener('pointerdown', fora);
     // no desktop o clique fora vai para outro programa: a janela da ilha só perde o foco
-    if (desktop) window.addEventListener('blur', fechar);
+    window.addEventListener('blur', fechar);
     return () => { document.removeEventListener('pointerdown', fora); window.removeEventListener('blur', fechar); };
-  }, [aberta, destacada, fechar, desktop]);
+  }, [aberta, fechar]);
 
   // ---------- olhar: a Sora da pílula segue o mouse perto do topo ----------
   const olharPara = useCallback((cx: number, cy: number) => {
@@ -321,7 +251,7 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
   }, []);
 
   useEffect(() => {
-    if (usarPonte || modo !== 'compacta' || !mouseFino()) return;
+    if (modo !== 'compacta' || !mouseFino()) return;
     let quadro = 0;
     const mover = (ev: PointerEvent) => {
       cancelAnimationFrame(quadro);
@@ -329,7 +259,7 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
     };
     window.addEventListener('pointermove', mover);
     return () => { window.removeEventListener('pointermove', mover); cancelAnimationFrame(quadro); };
-  }, [modo, usarPonte, olharPara]);
+  }, [modo, olharPara]);
 
   // ---------- hover ----------
   const entrarMouse = () => {
@@ -339,25 +269,23 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
     window.clearTimeout(timerAbrir.current);
     timerAbrir.current = window.setTimeout(() => {
       porHover.current = true;
-      abrirIlha(vistaParaAbrir, ui.agenteId ?? undefined, { porHover: true });
+      abrirIlha(ui.vista, ui.agenteId ?? undefined, { porHover: true });
     }, HOVER_ABRIR);
   };
   const sairMouse = () => {
     window.clearTimeout(timerAbrir.current);
     timerFechar.current = window.setTimeout(() => {
       setEspiandoHover(false);
-      // não fecha se o foco está dentro (ex.: digitando para um agente)
       if (porHover.current && !raiz.current?.contains(document.activeElement)) fechar();
     }, HOVER_FECHAR);
   };
-  const entrar = (ev: PE) => { if (ev.pointerType === 'mouse' && !usarPonte) entrarMouse(); };
-  const sair = (ev: PE) => { if (ev.pointerType === 'mouse' && !usarPonte) sairMouse(); };
+  const entrar = (ev: PE) => { if (ev.pointerType === 'mouse') entrarMouse(); };
+  const sair = (ev: PE) => { if (ev.pointerType === 'mouse') sairMouse(); };
 
-  // desktop: o Rust manda {dentro,x,y} ~30×/s; os handlers mais recentes ficam num ref
+  // o Rust manda {dentro,x,y} ~30×/s (click-through); os handlers mais recentes ficam num ref
   const maos = useRef({ entrarMouse, sairMouse, olharPara, modo });
   useEffect(() => { maos.current = { entrarMouse, sairMouse, olharPara, modo }; });
   useEffect(() => {
-    if (!usarPonte) return;
     let dentro = false;
     return aoMouseIlha(m => {
       if (m.dentro !== dentro) {
@@ -366,10 +294,10 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
       }
       if (maos.current.modo === 'compacta') maos.current.olharPara(m.x, m.y);
     });
-  }, [usarPonte]);
+  }, []);
 
-  // ---------- desktop: retângulo visível para o click-through ----------
-  const alvo = modo === 'oculta' && !destacada ? { w: 0, h: 0 }
+  // ---------- retângulo visível para o click-through ----------
+  const alvo = modo === 'oculta' ? { w: 0, h: 0 }
     : modo === 'espiando' ? ESPIANDO
     : tamanho ?? (painelVisivel ? PADRAO_PAINEL : PADRAO_COMPACTA);
   const ultimoRet = useRef(0);
@@ -398,40 +326,13 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
     if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); abrirFixada(); }
   };
 
-  const abrirChat = () => {
-    if (!v.projeto) return;
-    navigate(`/projeto/${v.projeto.id}`);
-    fechar();
-  };
+  const abrirSora = () => { void abrirNoApp('/'); fechar(); };
 
-  const destacar = async () => {
-    if (destacada) { janela.fechar(); return; }
-    try {
-      await janela.abrir();
-      porHover.current = false;
-      if (!ui.aberta) abrirIlha(ui.vista, ui.agenteId ?? undefined);
-    } catch { /* sem suporte ou bloqueado: segue no app */ }
-  };
+  if (modo === 'oculta') return null;
 
-  if (modo === 'oculta' && !destacada) return null;
-
-  const vista = ui.vista === 'aprovacao' && !v.alerta ? 'inicio' : ui.vista;
   const conteudo: ReactNode = (
-    vista === 'projeto' ? <SeletorProjeto onEscolhido={() => abrirIlha('inicio')} />
-    : vista === 'agente' && ui.agenteId ? <DetalheAgente agenteId={ui.agenteId} onVoltar={() => abrirIlha('inicio')} />
-    : vista === 'aprovacao' && v.alerta ? <Aprovacao alerta={v.alerta} onFeito={fechar} />
-    : <VisaoGeral v={v} onAgente={id => abrirIlha('agente', id)} />
-  );
-
-  const painel = (medido: boolean) => (
-    <div ref={medido ? medir : undefined} className={`ilha-painel${modo === 'alerta' ? ' ilha-painel--alerta' : ''}`}
-      role="dialog" aria-modal="false" aria-label="Ilha da Sora"
-      // qualquer interação com o painel aberto por hover o fixa (não fecha mais ao sair o mouse)
-      onPointerDown={() => { porHover.current = false; }}>
-      <Cabecalho v={v} trabalhando={trabalhando} vista={vista} som={prefs.som} podeDestacar={janela.suportado && !desktop} destacada={destacada}
-        onDestacar={() => { void destacar(); }} onFechar={destacada ? () => janela.fechar() : fechar} onAbrirChat={abrirChat} />
-      <div key={vista} className="ilha-corpo">{conteudo}</div>
-    </div>
+    ui.vista === 'agente' && ui.agenteId ? <DetalheAgente agenteId={ui.agenteId} onVoltar={() => abrirIlha('inicio')} />
+    : <VisaoGeral v={{ ...v, bonecos: bonecosDoInicio }} onAgente={id => abrirIlha('agente', id)} />
   );
 
   const estilo = {
@@ -440,30 +341,31 @@ export function Ilha({ desktop = false, onRetangulo }: IlhaProps) {
   } as CSSProperties;
 
   return (
-    <>
-      {modo !== 'oculta' && (
-        <div className="ilha-ancora" data-modo={modo} data-desktop={desktop || undefined}>
-          <div ref={raiz} className="ilha" data-modo={modo} onPointerEnter={entrar} onPointerLeave={sair} style={estilo}
-            data-trabalhando={coresTrabalhando.length > 0 || undefined}
-            data-respira={(!!v.alerta && modo === 'compacta') || undefined}>
-            {modo === 'espiando' ? (
-              <button type="button" className="ilha-espiando" aria-label="Mostrar a Ilha da Sora" onClick={() => setEspiandoHover(true)} onFocus={() => setEspiandoHover(true)} />
+    <div className="ilha-ancora" data-modo={modo} data-desktop={desktop || undefined}>
+      <div ref={raiz} className="ilha" data-modo={modo} onPointerEnter={entrar} onPointerLeave={sair} style={estilo}
+        data-trabalhando={coresTrabalhando.length > 0 || undefined}
+        data-respira={(v.precisaDeVoce.length > 0 && modo === 'compacta') || undefined}>
+        {modo === 'espiando' ? (
+          <button type="button" className="ilha-espiando" aria-label="Mostrar a Ilha da Sora" onClick={() => setEspiandoHover(true)} onFocus={() => setEspiandoHover(true)} />
+        ) : (
+          <div className="ilha-casca" style={{ width: alvo.w, height: alvo.h }}>
+            {painelVisivel ? (
+              <div ref={medir} className="ilha-painel" role="dialog" aria-modal="false" aria-label="Ilha da Sora"
+                onPointerDown={() => { porHover.current = false; }}>
+                <Cabecalho trabalhando={trabalhando} som={prefs.som} onFechar={fechar} onAbrirSora={abrirSora} />
+                <div key={ui.vista} className="ilha-corpo">{conteudo}</div>
+              </div>
             ) : (
-              <div className="ilha-casca" style={{ width: alvo.w, height: alvo.h }}>
-                {painelVisivel ? painel(true) : (
-                  <div ref={refPilula} key="pilula" className="ilha-pilula" role="button" tabIndex={0} aria-expanded={false}
-                    aria-label={`Ilha da Sora: ${v.projeto?.titulo ?? 'sem projeto'}. ${v.sora.rotulo}. Abrir`}
-                    onClick={abrirFixada} onKeyDown={teclaPilula}>
-                    <Compacta v={v} bonecos={bonecos} trabalhando={trabalhando} pulsoExtra={pulsoExtra} olhar={modo === 'compacta' ? olhar : null} />
-                  </div>
-                )}
+              <div ref={refPilula} key="pilula" className="ilha-pilula" role="button" tabIndex={0} aria-expanded={false}
+                aria-label={`Ilha da Sora: ${v.precisaDeVoce.length > 0 ? `${v.precisaDeVoce.length} pedidos esperando você` : `${trabalhando} trabalhando`}. Abrir`}
+                onClick={abrirFixada} onKeyDown={teclaPilula}>
+                <Compacta v={v} ativos={ativos} trabalhando={trabalhando} pulsoExtra={pulsoExtra} olhar={modo === 'compacta' ? olhar : null} />
               </div>
             )}
           </div>
-        </div>
-      )}
-      {destacada && janela.container && createPortal(<div className="ilha-destacada">{painel(false)}</div>, janela.container)}
-    </>
+        )}
+      </div>
+    </div>
   );
 }
 

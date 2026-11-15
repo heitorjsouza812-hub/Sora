@@ -16,6 +16,7 @@ from app.eventos.streams import publicar_evento
 from app.eventos.tipos import MensagemDelta, MensagemFim, MensagemInicio
 from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
 from app.ferramentas.infra import abrir_sessao, obter_redis
+from app.ferramentas.saidas_do_turno import recolher
 from app.modelos.enumeracoes import AutorMensagem, TipoAgente
 from app.modelos.tabelas import Agente, Anexo, Mensagem
 
@@ -32,14 +33,20 @@ class Falar(BaseModel):
     responde_a: UUID | None = None
 
 
-async def falar(args: Falar, contexto: ContextoFerramenta) -> str:
+async def falar(args: Falar, contexto: ContextoFerramenta, *, estado: str = "concluida") -> str:
     """Grava a mensagem visível e emite os eventos de mensagem."""
+    from app.agentes.middleware.conversa import fontes_do_turno
+
+    fontes = list(fontes_do_turno.get() or [])
     texto = args.texto.strip()
     if not texto:
         raise ErroFerramenta("A mensagem está vazia.")
     anexos = list(dict.fromkeys(args.anexos or []))
     if len(anexos) > MAX_ANEXOS:
         raise ErroFerramenta(f"No máximo {MAX_ANEXOS} anexos por mensagem.")
+    # Imagens e arquivos que o próprio agente produziu neste turno vão junto, mesmo que o modelo
+    # tenha esquecido de copiar o ``anexo_id`` (item 10 da etapa 6).
+    anexos = await recolher(contexto.usuario_id, contexto.agente_id, anexos, limite=MAX_ANEXOS)
 
     mensagem_id = uuid4()
     async with abrir_sessao() as sessao:
@@ -49,7 +56,7 @@ async def falar(args: Falar, contexto: ContextoFerramenta) -> str:
             )
         )
         if tipo is None:
-            raise ErroFerramenta("Agente não encontrado.")
+            raise ErroFerramenta("Bot não encontrado.")
         if anexos:
             achados = set(
                 (
@@ -78,6 +85,8 @@ async def falar(args: Falar, contexto: ContextoFerramenta) -> str:
                 autor=autor,
                 agente_id=contexto.agente_id,
                 conteudo=texto,
+                estado=estado,
+                fontes=fontes,
                 anexos=[str(a) for a in anexos],
                 visivel=True,
                 responde_a=args.responde_a,
@@ -97,5 +106,9 @@ async def falar(args: Falar, contexto: ContextoFerramenta) -> str:
             MensagemDelta(mensagem_id=mensagem_id, texto=texto[inicio : inicio + TAMANHO_DELTA]),
             *cabecalho,
         )
-    await publicar_evento(redis, MensagemFim(mensagem_id=mensagem_id, anexos=anexos), *cabecalho)
+    await publicar_evento(
+        redis,
+        MensagemFim(mensagem_id=mensagem_id, anexos=anexos, estado=estado, fontes=fontes),
+        *cabecalho,
+    )
     return "Mensagem enviada ao usuário."

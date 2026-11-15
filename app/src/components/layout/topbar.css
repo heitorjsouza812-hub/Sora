@@ -1,0 +1,38 @@
+/* Cabeçalho da tela (etapa 6, §5.2): 52 px, sem borda; a divisória só aparece quando o conteúdo rola por baixo. */
+.app-shell { --topbar: var(--top-h); }
+.app-shell .topbar { height: var(--topbar); padding: 0 var(--sp-6); gap: var(--sp-3); border-bottom: 1px solid transparent; transition: border-color var(--dur-fast); }
+.app-shell .topbar[data-rolou] { border-bottom-color: var(--line); }
+
+/* identidade: orb + nome + estado na mesma linha */
+.app-shell .topbar-identity { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.topbar-linha { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.topbar-nome { overflow: hidden; color: var(--text-1); font-size: var(--fs-15); font-weight: 600; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; }
+.topbar-estado, .topbar-sub { flex: none; color: var(--header-accent, var(--text-2)); font-size: var(--fs-13); line-height: 18px; white-space: nowrap; }
+.topbar-sub { color: var(--text-2); }
+.topbar-estado:empty { display: none; }
+/* a Sora em "/" não repete a identidade no desktop: ela já está na barra lateral */
+.app-shell .topbar-identity.is-sora { display: none; }
+.app-shell .topbar-title .mobile-brand { display: none; }
+
+.app-shell .topbar-actions { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
+.app-shell .topbar-actions:empty { display: none; }
+.app-shell .topbar-actions .gestao-menu-btn { width: 36px; height: 36px; }
+
+.app-shell .mobile-menu-button { display: none; }
+
+@media (max-width: 767px) {
+  .app-shell { --topbar: calc(var(--top-h) + env(safe-area-inset-top, 0px)); }
+  .app-shell .topbar { padding: env(safe-area-inset-top, 0px) var(--sp-2) 0; }
+  /* ☰ à esquerda, identidade ao lado, ações de 44 px à direita */
+  .app-shell .mobile-menu-button { display: grid; place-items: center; flex: none; width: 44px; height: 44px; color: var(--text-1); background: transparent; border: 0; border-radius: 50%; }
+  .app-shell .mobile-menu-button:hover { background: var(--hover); }
+  .app-shell .topbar-identity canvas { width: 22px !important; height: 22px !important; }
+  .app-shell .topbar-identity:not(.is-sora):not(.topbar-title) canvas { width: 28px !important; height: 28px !important; }
+  .app-shell .topbar-identity.is-sora { display: flex; }
+  .app-shell .topbar-title .mobile-brand { display: inline-grid; width: 22px; height: 22px; flex: none; }
+  .app-shell .topbar-actions .gestao-menu-btn { width: 44px; height: 44px; }
+  .app-shell .topbar-actions .b-btn { --b-alt: 44px; }
+  /* o "Compartilhar" e textos longos não disputam espaço com o nome */
+  .app-shell .topbar-actions .share-button { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .app-shell .topbar { transition: none; } }

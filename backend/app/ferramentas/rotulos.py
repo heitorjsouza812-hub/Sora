@@ -15,6 +15,7 @@ import json
 import re
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from app.busca.provedor import dominio
 from app.core.redacao import limpar_texto_sensivel, ocultar_argumentos_sensiveis
@@ -35,7 +36,7 @@ NOME_EXIBIDO: dict[str, str] = {
     "esquecer_memoria": "Memória",
     "buscar_historico": "Histórico",
     "ler_historico": "Histórico",
-    "enviar_para_agente": "Mensagem a agente",
+    "enviar_para_agente": "Mensagem a outro bot",
     "chamar_conector": "Conector",
     "executar_comando": "Terminal",
     "gerar_grafico": "Gráfico",
@@ -54,6 +55,14 @@ NOME_EXIBIDO: dict[str, str] = {
     "canal_delegar": "Canal",
     "canal_transferir": "Canal",
     "canal_resultado": "Canal",
+    "computador_observar": "Computador",
+    "consultar_cliente": "Ficha do cliente",
+    "consultar_conhecimento": "Conhecimento da empresa",
+    "computador_agir": "Computador",
+    "computador_arquivos": "Computador",
+    "computador_escrever_arquivo": "Computador",
+    "computador_entregar_arquivo": "Computador",
+    "computador_desligar": "Computador",
 }
 """Nome técnico (``acao``) → nome mostrado (``ferramenta``) no evento ``passo``."""
 
@@ -90,13 +99,13 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "ver_especialista": lambda _: "Olhando o especialista",
     "mensagem_especialista": lambda _: "Corrigindo a rota do especialista",
     "parar_especialista": lambda _: "Parando o especialista",
-    "criar_agente": lambda a: f"Criando agente: {_detalhe(a.get('nome'))}",
+    "criar_agente": lambda a: f"Criando bot: {_detalhe(a.get('nome'))}",
     "buscar_memoria": lambda a: f"Lembrando: {_detalhe(a.get('consulta'))}",
     "lembrar": lambda _: "Guardando na memória",
     "esquecer_memoria": lambda _: "Apagando uma memória",
     "buscar_historico": lambda a: f"Procurando na conversa: {_detalhe(a.get('consulta'))}",
     "ler_historico": lambda _: "Relendo a conversa",
-    "enviar_para_agente": lambda _: "Mandando mensagem a outro agente",
+    "enviar_para_agente": lambda _: "Mandando mensagem a outro bot",
     "catalogo_tarefas": lambda _: "Conferindo o que sei fazer",
     "propor_instrucoes": lambda _: "Propondo novas instruções",
     "agendar": lambda a: f"Agendando: {_detalhe(a.get('titulo'))}",
@@ -113,6 +122,25 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "apagar_habilidade": lambda a: f"Apagando a habilidade: {_detalhe(a.get('nome'))}",
     "adicionar_servidor_mcp": lambda a: f"Conectando servidor MCP: {_detalhe(a.get('nome'))}",
     "executar_comando": lambda a: f"Rodando: {_detalhe(a.get('comando'))}",
+    # computador virtual do bot (docs/computador-por-bot.md); o texto digitado nunca aparece
+    "computador_observar": lambda _: "Olhando a tela do computador",
+    "consultar_cliente": lambda _: "Consultando a ficha do cliente",
+    "consultar_conhecimento": lambda a: (
+        f"Consultando o conhecimento: {str(a.get('consulta', ''))[:60]}"
+    ),
+    "computador_agir": lambda _: "Usando o computador",
+    "computador_arquivos": lambda a: (
+        f"Lendo no computador: {_detalhe(a.get('caminho'))}"
+        if a.get("operacao") == "ler"
+        else "Olhando os arquivos do computador"
+    ),
+    "computador_escrever_arquivo": lambda a: (
+        f"Gravando no computador: {_detalhe(a.get('caminho'))}"
+    ),
+    "computador_entregar_arquivo": lambda a: (
+        f"Enviando para a conversa: {_detalhe(a.get('caminho'))}"
+    ),
+    "computador_desligar": lambda _: "Desligando o computador",
     "gerar_grafico": lambda a: f"Desenhando gráfico: {_detalhe(a.get('titulo') or a.get('tipo'))}",
     "navegador_abrir": lambda a: f"Abrindo: {_site(a.get('url'))}",
     "navegador_ler": lambda _: "Lendo a página",
@@ -181,13 +209,39 @@ def rotulo_do_passo(acao: str, argumentos: dict[str, Any]) -> str:
     return f"Usando {_detalhe(acao)}"
 
 
-def parametros_sem_segredos(argumentos: dict[str, Any]) -> dict[str, Any]:
-    """Cópia dos argumentos sem nada que pareça chave, token ou senha."""
-    return ocultar_argumentos_sensiveis(argumentos if isinstance(argumentos, dict) else {})
+def parametros_sem_segredos(
+    argumentos: dict[str, Any], ferramenta: str | None = None
+) -> dict[str, Any]:
+    """Cópia dos argumentos sem nada que pareça chave, token ou senha.
+
+    Em ``computador_agir`` (Vela-6, C3) o texto digitado nunca fica no passo: vira só a contagem
+    de caracteres, como no evento ``computador.tela``."""
+    limpos = ocultar_argumentos_sensiveis(argumentos if isinstance(argumentos, dict) else {})
+    if ferramenta == "computador_agir" and isinstance(limpos.get("acoes"), list):
+        limpos["acoes"] = [
+            {**a, "texto": f"[{len(str(argumentos['acoes'][i].get('texto') or ''))} caracteres]"}
+            if isinstance(a, dict) and a.get("texto") not in (None, "")
+            else a
+            for i, a in enumerate(limpos["acoes"])
+        ]
+    return limpos
+
+
+def url_publica(url: str) -> str | None:
+    """URL http(s) segura para o app abrir: sem usuário/senha, sem fragmento, sem segredo."""
+    try:
+        partes = urlsplit(url.strip())
+    except ValueError:
+        return None
+    if partes.scheme not in ("http", "https") or not partes.hostname or len(url) > 2000:
+        return None
+    host = partes.hostname + (f":{partes.port}" if partes.port else "")
+    limpa = urlunsplit((partes.scheme, host, partes.path, partes.query, ""))
+    return limpa if limpar_texto_sensivel(limpa) == limpa else None
 
 
 def resumir_resultado(acao: str, resultado: Any) -> dict[str, Any]:
-    """Resultado resumido para o passo: ``{resumo, links[{titulo, dominio}], itens[]}``."""
+    """Resultado resumido para o passo: ``{resumo, links[{titulo, dominio, url?}], itens[]}``."""
     texto = limpar_texto_sensivel(
         resultado if isinstance(resultado, str) else _como_texto(resultado)
     )
@@ -206,6 +260,7 @@ def resumir_resultado(acao: str, resultado: Any) -> dict[str, Any]:
                     {
                         "titulo": _detalhe(item.get("titulo") or item.get("title") or item["url"]),
                         "dominio": dominio(item["url"]),
+                        **({"url": url} if (url := url_publica(item["url"])) else {}),
                     }
                 )
             else:

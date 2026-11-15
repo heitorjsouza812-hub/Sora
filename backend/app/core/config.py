@@ -140,6 +140,13 @@ class Configuracao(BaseSettings):
     sandbox_provedor: Literal["nenhum", "docker"] = "nenhum"
     """Onde roda ``executar_comando`` (``app/computador``). ``nenhum`` desliga a ferramenta."""
     sandbox_imagem: str = "python:3.12-slim"
+    computador_imagem: str = "sora-computador:1"
+    """Imagem do computador virtual de cada bot (``infra/computador``). Liga junto com o sandbox
+    (``SANDBOX_PROVEDOR=docker``) e roda no mesmo host (``SANDBOX_DOCKER_HOST`` em produção)."""
+    computador_proxy_imagem: str = "sora-proxy-egresso:1"
+    """Saída de rede dos computadores virtuais (``infra/proxy-egresso``)."""
+    computador_ocioso_segundos: int = 15 * 60
+    """Computador virtual sem uso por este tempo é desligado (a área de arquivos some)."""
     navegador_cdp_url: str | None = None
     """CDP remoto do Chromium isolado. Em produção não há fallback para navegador local."""
 

@@ -1,74 +1,59 @@
-// Galeria de agentes (item "Agentes" da barra lateral). "Criar agente" → /agentes/novo (construtor).
-// Vazio (item 48): modelos prontos que abrem o construtor pré-preenchido (/agentes/novo?modelo=<id>).
-import type { CSSProperties } from 'react';
+// Galeria opcional de bots. A criação começa sempre na conversa com a Sora.
+import { useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../components/base';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb } from '../components/mascot';
 import { pedirApagar, pedirRenomear } from '../components/gestao';
 import { MenuAgente } from '../components/builder';
-import { MODELOS_AGENTE } from '../components/projetos';
+import { deixarPedidoInicial } from '../components/inicio';
 import { estadoAgente, todosAgentes, useAgora, useProjetos } from '../state/projetos';
-import '../components/projetos/projetos.css';
+import './agentes.css';
 
 const Mais = () => <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>;
 
 export default function Agentes() {
   const e = useProjetos();
+  const [sobre, setSobre] = useState<string | null>(null);
   const agora = useAgora();
   const navigate = useNavigate();
-  const ags = todosAgentes(e, agora);
+  // Só bots persistentes (tipo individual); especialistas internos das conversas ficam fora.
+  const ags = todosAgentes(e, agora).filter(a => a.avulso);
   const criar = (tamanho: 'P' | 'M') => (
-    <Button asChild variante="primario" tamanho={tamanho} iconeEsquerda={<Mais />}><Link to="/agentes/novo">Criar agente</Link></Button>
+    <Button asChild variante="primario" tamanho={tamanho} iconeEsquerda={<Mais />}><Link to="/">Criar com a Sora</Link></Button>
   );
+  const primeiroBot = () => { deixarPedidoInicial('Quero um bot que '); navigate('/'); };
   return (
-    <AppShell titulo="Agentes" acoes={criar('P')}>
+    <AppShell titulo="Bots" acoes={ags.length ? criar('P') : <span />}>
       <main className="gallery-screen">
         <header className="gallery-head">
-          <div><h1>Seus agentes</h1><p>Agentes criados pela {e.sora.nome} nas suas conversas e projetos, e os que você montou.</p></div>
+          <div><p>Bots persistentes criados em conversa com a {e.sora.nome}.</p></div>
         </header>
         {!ags.length && (
           <div className="pj-vazio">
-            <SoraOrb size={110} color={e.sora.cor} state="idle" decorative />
-            <h3>Nenhum agente ainda</h3>
-            <p>Comece por um modelo pronto — ele abre no construtor já preenchido — ou peça um trabalho à {e.sora.nome}, que ela monta a equipe.</p>
-            <ul className="pj-modelos" aria-label="Modelos de agente">
-              {MODELOS_AGENTE.map((m, i) => (
-                <li key={m.id}>
-                  <Link className="pj-modelo pj-modelo--orb" to={`/agentes/novo?modelo=${m.id}`}>
-                    <SoraOrb size={36} color={e.sora.cor} movimento={m.rascunho.tipoMovimento} glow={false} decorative seed={i + 20} />
-                    <span className="pj-modelo__texto"><strong>{m.rotulo}</strong><span>{m.descricao}</span></span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <div className="pj-vazio__acao">{criar('M')}</div>
+            <SoraOrb size={96} color={e.sora.cor} state="idle" decorative />
+            <h3>Nenhum bot ainda</h3>
+            <p>Converse com a {e.sora.nome}. Ela prepara um rascunho para você ajustar antes de criar.</p>
+            <div className="pj-vazio__acao"><Button variante="primario" tamanho="M" iconeEsquerda={<Mais />} onClick={primeiroBot}>Criar meu primeiro bot</Button></div>
           </div>
         )}
         <div className="gallery-grid">
           {ags.map(a => {
             const st = estadoAgente(e, a.id, agora);
-            const projeto = a.projetoId ? e.projetos.find(p => p.id === a.projetoId) : undefined;
             return (
-              <article key={a.id} className="gallery-card agent-card card" style={{ '--agent': a.cor } as CSSProperties}>
+              <article key={a.id} className="gallery-card" onMouseEnter={() => setSobre(a.id)} onMouseLeave={() => setSobre(null)} style={{ '--agent': a.cor } as CSSProperties}>
                 <MenuAgente agenteId={a.id} nome={a.nome} className="gallery-menu" semEditar itens={[
-                  { rotulo: 'Conversar', onClick: () => navigate(`/chat/${a.id}`) },
-                  { rotulo: 'Editar', onClick: () => navigate(`/agentes/${a.id}/editar`) },
+                  { rotulo: 'Editar bot', onClick: () => navigate(`/bots/${a.id}/editar`) },
                   { rotulo: 'Renomear', onClick: () => pedirRenomear({ tipo: 'agente', id: a.id }) },
                   { rotulo: 'Apagar', perigo: true, onClick: () => pedirApagar({ tipo: 'agente', id: a.id }) },
                 ]} />
-                <Link to={`/chat/${a.id}`} className="gallery-orb" aria-label={`Conversar com ${a.nome}`}>
-                  <SoraOrb size={92} color={a.cor} movimento={a.tipoMovimento} decorative seed={a.nome.length}
-                    state={st.status === 'trabalhando' ? 'working' : 'idle'} />
+                <Link to={`/bots/${a.id}`} className="gallery-open" aria-label={`Conversar com ${a.nome}`}>
+                  <SoraOrb size={48} color={a.cor} movimento={a.tipoMovimento} decorative seed={a.nome.length}
+                    state={st.status === 'trabalhando' ? 'working' : sobre === a.id ? 'listening' : 'idle'} />
+                  <span className="gallery-info"><strong>{a.nome}</strong><small>{a.funcao}</small>
+                    {st.rotulo !== 'Disponível' && st.rotulo !== 'Livre' && st.rotulo && <span className="gallery-status">{st.rotulo}</span>}
+                  </span>
                 </Link>
-                <strong>{a.nome}</strong>
-                <small>{a.funcao}</small>
-                <span className="gallery-tag">{projeto ? projeto.titulo : 'Avulso'}</span>
-                <span className={`gallery-status status-${st.status}`}>{st.rotulo || 'Disponível'}</span>
-                <div className="gallery-actions">
-                  <Button asChild tamanho="P"><Link to={`/chat/${a.id}`}>Conversar</Link></Button>
-                  <Button asChild tamanho="P" variante="fantasma"><Link to={`/agentes/${a.id}/editar`}>Editar</Link></Button>
-                </div>
               </article>
             );
           })}

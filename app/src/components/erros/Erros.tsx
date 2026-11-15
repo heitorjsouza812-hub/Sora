@@ -18,7 +18,7 @@ export function FaixaSemConexao() {
   return (
     <div className="err-faixa" role="alert">
       <span className="err-faixa__ponto" aria-hidden="true" />
-      <p><strong>Sem conexão.</strong> Seus agentes pausaram; nada se perde. Assim que a internet voltar, a Sora continua.</p>
+      <p><strong>Sem conexão.</strong> Seus bots pausaram; nada se perde. Assim que a internet voltar, a Sora continua.</p>
       <Button tamanho="P" variante="secundario" onClick={tentarDeNovo}>Tentar de novo</Button>
     </div>
   );
@@ -67,7 +67,7 @@ export function AvisoPluginDesconectado({ plugin }: { plugin: string }) {
   return (
     <div className="err-aviso" role="alert">
       <IconeAlerta />
-      <p><strong>{plugin} desconectado.</strong> O agente parou neste passo até você reconectar.</p>
+      <p><strong>{plugin} desconectado.</strong> O bot parou neste passo até você reconectar.</p>
       <Button tamanho="P" asChild><Link to="/plugins">Reconectar</Link></Button>
     </div>
   );

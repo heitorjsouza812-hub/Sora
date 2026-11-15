@@ -27,6 +27,7 @@ NomeJob = Literal[
     "despachar_equipe",
     "executar_item_fila",
     "executar_tarefa_canal",
+    "retomar_tarefa_canal",
     "expirar_aprovacao",
     # adaptados do Rakazo (docs/referencias/rakazo.md)
     "executar_rotina",
@@ -34,6 +35,9 @@ NomeJob = Literal[
     "responder_canal",
     "reconciliar_travados",
     "abrir_aba_de_perfil",
+    # Ponte: canais da empresa (só leitura)
+    "processar_canais_empresa",
+    "analisar_aprendizado_empresa",
 ]
 
 _fila: ArqRedis | None = None

@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from app.ferramentas.arquivos import pasta_da_cadeia
 from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
 from app.ferramentas.infra import abrir_sessao, raiz_dos_arquivos
+from app.ferramentas.saidas_do_turno import registrar
 from app.llm.custo import CustoChamada, gravar_chamada
 from app.llm.imagem import gerar_imagens
 from app.llm.provedores import ErroProvedor
@@ -103,5 +104,10 @@ async def gerar_imagem(args: GerarImagem, contexto: ContextoFerramenta) -> str:
                 cadeia_id=contexto.cadeia_id,
                 etapa_id=contexto.etapa_id,
             )
+    for anexo_id in ids:
+        await registrar(contexto.usuario_id, contexto.agente_id, anexo_id)
     lista = ", ".join(str(i) for i in ids)
-    return f"{len(ids)} imagem(ns) gerada(s). anexo_ids: {lista}"
+    return (
+        f"{len(ids)} imagem(ns) gerada(s). anexo_ids: {lista}. "
+        "Elas vão junto com a sua próxima mensagem ao usuário."
+    )

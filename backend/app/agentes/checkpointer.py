@@ -36,6 +36,12 @@ def thread_da_etapa(etapa_id: UUID) -> str:
     return f"etapa:{etapa_id}"
 
 
+def thread_da_tarefa_canal(tarefa_id: UUID, turno_seq: int) -> str:
+    """Thread de um turno de tarefa de grupo: cada turno começa limpo (o pacote do canal já traz
+    o histórico) e a retomada de um cartão volta exatamente ao turno que pausou."""
+    return f"canal-tarefa:{tarefa_id}:{turno_seq}"
+
+
 def thread_da_conversa(conversa_id: UUID) -> str:
     """Thread da Sora ou de um agente individual numa conversa: ``"conversa:{id}"``."""
     return f"conversa:{conversa_id}"

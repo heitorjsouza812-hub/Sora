@@ -1,0 +1,23 @@
+"""Rotina de higiene das sessões de login (Cerca M4, etapa 5)."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+registro = logging.getLogger(__name__)
+
+
+async def limpar_pares_de_renovacao(ctx: dict[str, Any]) -> int:
+    """Zera o par de tokens cifrado das sessões cuja janela de recuperação (30 s) já fechou."""
+    from app.core import contas
+
+    try:
+        async with ctx["sessoes"]() as sessao:
+            limpas = await contas.limpar_pares_vencidos(sessao)
+    except Exception:
+        registro.warning("não consegui limpar os pares de renovação vencidos", exc_info=True)
+        return 0
+    if limpas:
+        registro.info("%d par(es) de renovação vencidos apagados", limpas)
+    return limpas

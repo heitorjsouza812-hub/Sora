@@ -114,7 +114,7 @@ async def listar_perfis(usuario_id: Usuario, sessao: Sessao) -> list[PerfilNaveg
             agente = agentes.get(particao.rsplit("-", 1)[-1])
             if agente is None:
                 continue
-            nome, tipo = f"Agente {agente.nome}", "agente"
+            nome, tipo = f"Bot {agente.nome}", "agente"
         else:
             nome, tipo = "Compartilhado", "compartilhado"
         saida.append(
@@ -256,7 +256,7 @@ async def abrir_aba_no_perfil(
     )
     agente_id = await sessao.scalar(consulta.limit(1))
     if agente_id is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
     fila = await obter_fila()
     job = await fila.enqueue_job(
         "abrir_aba_de_perfil", str(usuario_id), str(agente_id), str(perfil.id), dados.url
@@ -286,7 +286,7 @@ roteador_agente = APIRouter(tags=["navegador"])
 
 
 class EscolhaPerfilEntrada(BaseModel):
-    tipo: Literal["efemero", "compartilhado", "perfil"]
+    tipo: Literal["efemero", "compartilhado", "agente", "perfil"]
     perfil_id: UUID | None = None
 
 
@@ -297,7 +297,12 @@ class EscolhaPerfilSaida(BaseModel):
     perfil_nome: str | None = None
 
 
-_TIPO_NO_BANCO = {"efemero": "efemero", "compartilhado": "compartilhado", "perfil": "nomeado"}
+_TIPO_NO_BANCO = {
+    "efemero": "efemero",
+    "compartilhado": "compartilhado",
+    "agente": "agente",
+    "perfil": "nomeado",
+}
 
 
 async def _agente_da_conta(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID) -> Agente:
@@ -307,7 +312,7 @@ async def _agente_da_conta(sessao: AsyncSession, usuario_id: UUID, agente_id: UU
         )
     )
     if agente is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
     return agente
 
 

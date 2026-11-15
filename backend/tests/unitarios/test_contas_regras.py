@@ -21,6 +21,7 @@ def _sessao(**campos: object) -> Sessao:
         "usuario_id": uuid4(),
         "token_hash": "atual",
         "anterior_hash": "antigo",
+        "anterior_rotacionado_em": AGORA - timedelta(days=1),
         "expira_em": AGORA + timedelta(days=1),
         "encerrada_em": None,
     }
@@ -36,15 +37,15 @@ def test_token_anterior_e_reuso() -> None:
 
 
 def test_token_anterior_dentro_da_janela_e_tolerado() -> None:
-    sessao = _sessao(expira_em=AGORA + seguranca.RENOVACAO_VALIDADE - timedelta(seconds=10))
+    sessao = _sessao(anterior_rotacionado_em=AGORA - timedelta(seconds=10))
     assert contas.classificar_token(sessao, "antigo", AGORA) == "tolerado"
 
 
-def test_tolerancia_inclui_15_segundos_mas_nao_um_instante_a_mais() -> None:
-    no_limite = _sessao(
-        expira_em=AGORA + seguranca.RENOVACAO_VALIDADE - contas.JANELA_TOLERANCIA_RENOVACAO
+def test_tolerancia_inclui_30_segundos_mas_nao_um_instante_a_mais() -> None:
+    no_limite = _sessao(anterior_rotacionado_em=AGORA - contas.JANELA_TOLERANCIA_RENOVACAO)
+    fora = _sessao(
+        anterior_rotacionado_em=no_limite.anterior_rotacionado_em - timedelta(microseconds=1)
     )
-    fora = _sessao(expira_em=no_limite.expira_em - timedelta(microseconds=1))
     assert contas.classificar_token(no_limite, "antigo", AGORA) == "tolerado"
     assert contas.classificar_token(fora, "antigo", AGORA) == "reutilizado"
 
@@ -154,3 +155,108 @@ def test_rotas_protegidas_exigem_bearer_valido(aplicacao_sem_infra: FastAPI) -> 
         expirado = seguranca.criar_token_acesso({"sub": str(uuid4())}, timedelta(seconds=-1))
         resposta = c.get("/v1/eu", headers={"Authorization": f"Bearer {expirado}"})
         assert resposta.status_code == 401
+
+
+def test_token_de_duas_geracoes_atras_e_reuso_mesmo_dentro_da_janela() -> None:
+    sessao = _sessao(anterior_rotacionado_em=AGORA, historico_hashes=["mais-antigo"])
+    assert contas.classificar_token(sessao, "mais-antigo", AGORA) == "reutilizado"
+
+
+def test_validade_estendida_nao_prolonga_janela_original() -> None:
+    sessao = _sessao(expira_em=AGORA + timedelta(days=90))
+    assert contas.classificar_token(sessao, "antigo", AGORA) == "reutilizado"
+
+
+async def test_tres_recuperacoes_devolvem_par_atual_sem_estender_rotacao(monkeypatch) -> None:
+    from datetime import datetime
+    from unittest.mock import AsyncMock
+
+    token, token_hash = seguranca.gerar_token_renovacao()
+    registro = _sessao(
+        id=uuid4(),
+        token_hash=token_hash,
+        historico_hashes=[],
+        expira_em=datetime.now(UTC) + timedelta(days=30),
+    )
+    banco = AsyncMock()
+    consulta = AsyncMock(return_value=registro)
+    monkeypatch.setattr(contas, "_sessao_do_token", consulta)
+    primeiro = await contas.renovar(banco, token)
+    rotacao = registro.anterior_rotacionado_em
+    for _ in range(3):
+        assert await contas.renovar(banco, token) == primeiro
+        assert registro.anterior_rotacionado_em == rotacao
+        assert registro.anterior_hash == token_hash
+    assert registro.par_atual_cifrado and primeiro[0].encode() not in registro.par_atual_cifrado
+    assert registro.historico_hashes == [token_hash]
+
+
+async def test_reuso_antigo_encerra_e_persiste_familia(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    registro = _sessao(historico_hashes=[seguranca.hash_token("duas-geracoes")])
+    registro.expira_em = datetime.now(UTC) + timedelta(days=1)
+    banco = AsyncMock()
+    monkeypatch.setattr(contas, "_sessao_do_token", AsyncMock(return_value=registro))
+    with pytest.raises(contas.ErroCredenciais):
+        await contas.renovar(banco, "duas-geracoes")
+    assert registro.encerrada_em is not None
+    banco.commit.assert_awaited_once()
+
+
+async def test_historico_de_hashes_tem_teto_e_mantem_as_geracoes_mais_novas(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    token, token_hash = seguranca.gerar_token_renovacao()
+    antigos = [f"g{i}" for i in range(contas.MAX_HISTORICO_HASHES)]
+    registro = _sessao(
+        id=uuid4(),
+        token_hash=token_hash,
+        historico_hashes=antigos,
+        expira_em=datetime.now(UTC) + timedelta(days=30),
+    )
+    monkeypatch.setattr(contas, "_sessao_do_token", AsyncMock(return_value=registro))
+    await contas.renovar(AsyncMock(), token)
+    assert len(registro.historico_hashes) == contas.MAX_HISTORICO_HASHES
+    assert registro.historico_hashes[-1] == token_hash
+    assert "g0" not in registro.historico_hashes and "g1" in registro.historico_hashes
+
+
+async def test_renovar_fora_da_janela_nao_devolve_o_par_e_o_apaga(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    token, token_hash = seguranca.gerar_token_renovacao()
+    agora = datetime.now(UTC)
+    registro = _sessao(
+        id=uuid4(),
+        token_hash="outro-atual",
+        anterior_hash=token_hash,
+        anterior_rotacionado_em=agora - contas.JANELA_TOLERANCIA_RENOVACAO - timedelta(seconds=1),
+        historico_hashes=[],
+        par_atual_cifrado=b"segredo",
+        expira_em=agora + timedelta(days=30),
+    )
+    banco = AsyncMock()
+    monkeypatch.setattr(contas, "_sessao_do_token", AsyncMock(return_value=registro))
+    with pytest.raises(contas.ErroCredenciais):
+        await contas.renovar(banco, token)
+    assert registro.par_atual_cifrado is None and registro.encerrada_em is not None
+
+
+async def test_sair_apaga_o_par_cifrado(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    registro = _sessao(id=uuid4(), par_atual_cifrado=b"segredo")
+    monkeypatch.setattr(contas, "_sessao_do_token", AsyncMock(return_value=registro))
+    await contas.sair(AsyncMock(), "qualquer")
+    assert registro.par_atual_cifrado is None and registro.encerrada_em is not None
+
+
+def test_par_vencido_so_depois_da_janela() -> None:
+    dentro = _sessao(anterior_rotacionado_em=AGORA - contas.JANELA_TOLERANCIA_RENOVACAO)
+    fora = _sessao(
+        anterior_rotacionado_em=AGORA - contas.JANELA_TOLERANCIA_RENOVACAO - timedelta(seconds=1)
+    )
+    assert not contas.par_vencido(dentro, AGORA)
+    assert contas.par_vencido(fora, AGORA)
+    assert contas.par_vencido(_sessao(anterior_rotacionado_em=None), AGORA)

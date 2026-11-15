@@ -616,19 +616,20 @@ async def test_acao_do_navegador_vai_para_o_juiz_e_vira_cartao(
 async def test_passo_do_cartao_nao_aparece_como_erro(
     ambiente_fase_b_arq: tuple[str, async_sessionmaker],
 ) -> None:
-    """E4F2-M1: a pausa para o cartão (GraphInterrupt) não pode gravar o passo como erro."""
+    """E4F2-M1: a pausa para o cartão (GraphInterrupt) não pode gravar o passo como erro.
+
+    Etapa 5: ``[aprovacao]`` não pausa mais etapa de cadeia (``criar_agente`` virou rascunho);
+    a pausa da etapa é provada com ``[pergunta]``, que interrompe do mesmo jeito."""
     url, fabrica = ambiente_fase_b_arq
     async with httpx.AsyncClient(base_url=url, timeout=30) as cliente:
         auth = await entrar(cliente, fabrica, "ancora-passo@exemplo.com")
         resposta = await cliente.post(
             "/v1/conversas",
             headers=auth,
-            json={"texto": "crie uma campanha para minha cafeteria [aprovacao]", "anexos": []},
+            json={"texto": "crie uma campanha para minha cafeteria [pergunta]", "anexos": []},
         )
         assert resposta.status_code == 201, resposta.text
-        await ler_sse(
-            cliente, resposta.json()["id"], auth, ate=lambda nome, _: nome == "aprovacao.pedida"
-        )
+        await ler_sse(cliente, resposta.json()["id"], auth, ate=lambda nome, _: nome == "pergunta")
         passos: list = []
         for _ in range(40):  # o evento do cartão sai antes de a pausa fechar o passo
             async with fabrica() as sessao:
@@ -636,7 +637,7 @@ async def test_passo_do_cartao_nao_aparece_como_erro(
                     (
                         await sessao.execute(
                             select(Passo.status, Passo.resultado).where(
-                                Passo.ferramenta == "criar_agente"
+                                Passo.ferramenta == "perguntar"
                             )
                         )
                     ).all()

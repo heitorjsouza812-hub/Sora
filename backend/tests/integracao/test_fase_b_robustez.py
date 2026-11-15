@@ -29,7 +29,7 @@ from alembic.config import Config
 from arq.connections import RedisSettings, create_pool
 from arq.worker import create_worker
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -201,6 +201,32 @@ def completar_ferramenta(nome: str, argumentos: dict[str, Any]) -> dict[str, Any
     return _completacao(mensagem, "tool_calls")
 
 
+async def _fluxo_sse(completacao: dict[str, Any]) -> AsyncIterator[str]:
+    """Converte uma ``chat.completion`` inteira nos pedaços SSE de ``stream=true``."""
+    escolha = completacao["choices"][0]
+    mensagem = escolha["message"]
+    base = {
+        "id": completacao["id"],
+        "object": "chat.completion.chunk",
+        "created": completacao["created"],
+        "model": completacao["model"],
+    }
+    delta: dict[str, Any] = {"role": "assistant"}
+    if mensagem.get("content"):
+        delta["content"] = mensagem["content"]
+    if mensagem.get("tool_calls"):
+        delta["tool_calls"] = [{"index": i, **c} for i, c in enumerate(mensagem["tool_calls"])]
+    primeiro = {**base, "choices": [{"index": 0, "delta": delta, "finish_reason": None}]}
+    yield "data: " + json.dumps(primeiro) + "\n\n"
+    ultimo = {
+        **base,
+        "choices": [{"index": 0, "delta": {}, "finish_reason": escolha["finish_reason"]}],
+        "usage": completacao["usage"],
+    }
+    yield "data: " + json.dumps(ultimo) + "\n\n"
+    yield "data: [DONE]" + "\n\n"
+
+
 def _completacao(mensagem: dict[str, Any], motivo: str) -> dict[str, Any]:
     return {
         "id": "local",
@@ -239,6 +265,10 @@ async def ambiente_http(
             resultado = await resultado
         if isinstance(resultado, tuple):
             return JSONResponse(resultado[1], status_code=resultado[0])
+        if corpo.get("stream"):
+            # Como os provedores reais: quem pede ``stream`` recebe SSE. O turno da conversa
+            # (``MiddlewareConversa``) sempre pede; JSON puro viraria uma resposta vazia.
+            return StreamingResponse(_fluxo_sse(resultado), media_type="text/event-stream")
         return JSONResponse(resultado)
 
     @api_modelo.get("/v1/models")
@@ -305,7 +335,13 @@ async def ambiente_http(
             f"http://127.0.0.1:{porta_modelo}/v1",
         )
     finally:
-        await worker.close()
+        # ``close`` cancela os jobs ainda em andamento (ex.: a cadeia que segue depois de uma
+        # etapa); o ``gather`` do ARQ então levanta ``CancelledError`` do job, não deste teste.
+        try:
+            await worker.close()
+        except asyncio.CancelledError:
+            worker.tasks.clear()
+            await worker.close()
         tarefa_worker.cancel()
         servidor_api.should_exit = True
         await tarefa_api
@@ -458,15 +494,20 @@ async def test_erro_do_provedor_na_triagem_nao_perde_o_texto(ambiente_http: Ambi
     """B3: provedor com 500/401/429/lixo -> 201, mensagem guardada e aviso em PT-BR (não 500)."""
     amb = ambiente_http
     respostas: list[Any] = [
-        (500, {"error": {"message": "sk-VAZOU-123 quebrou"}}),
-        (401, {"error": {"message": "chave inválida"}}),
-        (429, {"error": {"message": "limite"}}),
-        (200, {"lixo": "isto não é uma completação"}),
+        (500, {"error": {"message": "sk-VAZOU-123 quebrou"}}, "fora do ar"),
+        (401, {"error": {"message": "chave inválida"}}, "recusou a chave"),
+        (429, {"error": {"message": "limite"}}, "limite por minuto"),
+        (
+            429,
+            {"error": {"message": "Limit reached on tokens per day (TPD). Try again in 3m2s."}},
+            "cota diária",
+        ),
+        (200, {"lixo": "isto não é uma completação"}, "fora do ar"),  # o litellm vê um 5xx
     ]
     async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
         auth, _ = await usuario_com_modelo_http(amb, cliente, "triagem-erro@exemplo.com")
-        for i, resposta_do_provedor in enumerate(respostas):
-            amb.provedor.responder = lambda corpo, n, r=resposta_do_provedor: r
+        for i, (status_http, corpo_do_provedor, esperado) in enumerate(respostas):
+            amb.provedor.responder = lambda corpo, n, r=(status_http, corpo_do_provedor): r
             texto = f"crie uma campanha para a cafeteria {i}"
             resposta = await cliente.post(
                 "/v1/conversas", headers=auth, json={"texto": texto, "anexos": []}
@@ -476,8 +517,66 @@ async def test_erro_do_provedor_na_triagem_nao_perde_o_texto(ambiente_http: Ambi
             mensagens = await cliente.get(f"/v1/conversas/{conversa_id}/mensagens", headers=auth)
             conteudos = [m["conteudo"] for m in mensagens.json()]
             assert texto in conteudos
-            assert any("Não consegui falar com o seu modelo" in c for c in conteudos), conteudos
+            assert any(esperado in c for c in conteudos), (i, conteudos)
+            if esperado != "limite por minuto":
+                assert not any("por minuto" in c for c in conteudos), (i, conteudos)
             assert "sk-VAZOU-123" not in resposta.text + mensagens.text
+
+
+COTA_DO_DIA = (
+    429,
+    {"error": {"message": "Rate limit on tokens per day (TPD). Please try again in 9m10s."}},
+)
+
+
+async def test_cota_do_dia_na_conversa_nao_vira_limite_por_minuto(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    """A3 (Prumo-4): no worker da conversa, a cota diária diz "cota diária", não "por minuto"."""
+    amb = ambiente_http
+    amb.provedor.responder = lambda corpo, n: COTA_DO_DIA
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        _, usuario_id = await usuario_com_modelo_http(amb, cliente, "cota-conversa@exemplo.com")
+        conversa_id, mensagem_id = await _conversa_com_pedido(amb, usuario_id, "Oi")
+        await _enfileirar(amb.url_redis, "responder_direto", str(mensagem_id))
+
+        async def avisou() -> list[str]:
+            async with amb.fabrica() as sessao:
+                textos = (
+                    await sessao.scalars(
+                        select(Mensagem.conteudo).where(
+                            Mensagem.conversa_id == conversa_id, Mensagem.autor == "sora"
+                        )
+                    )
+                ).all()
+            return [t for t in textos if "cota diária" in t]
+
+        achados = await esperar(avisou, "a conversa não explicou que a cota do dia acabou")
+        assert "por minuto" not in achados[0]
+        assert "551 segundos" in achados[0]
+
+
+async def test_cota_do_dia_na_etapa_da_cadeia_diz_cota_diaria(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    amb = ambiente_http
+    amb.provedor.responder = lambda corpo, n: COTA_DO_DIA
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, usuario_id = await usuario_com_modelo_http(amb, cliente, "cota-etapa@exemplo.com")
+        conversa_id, _, etapa_id = await _cadeia_e_etapa(
+            amb.fabrica, usuario_id, StatusCadeia.EXECUTANDO
+        )
+        await _enfileirar(amb.url_redis, "executar_etapa", str(etapa_id))
+        await ler_sse(
+            cliente,
+            str(conversa_id),
+            auth,
+            ate=lambda n, d: n == "cadeia.atualizada" and d["status"] == "falhou",
+        )
+    async with amb.fabrica() as sessao:
+        etapa = await sessao.get(Etapa, etapa_id)
+        assert etapa.status == StatusEtapa.FALHOU
+        assert "cota diária" in etapa.erro and "por minuto" not in etapa.erro
 
 
 async def test_planejador_com_erro_vira_falhou_com_evento(ambiente_http: AmbienteHttp) -> None:
@@ -497,7 +596,11 @@ async def test_planejador_com_erro_vira_falhou_com_evento(ambiente_http: Ambient
             ate=lambda n, d: n == "cadeia.atualizada" and d["status"] == "falhou",
             limite_s=LIMITE_S,
         )
-        assert eventos
+        assert any(n == "mensagem.fim" for n, _ in eventos)
+        mensagens = (
+            await cliente.get(f"/v1/conversas/{conversa_id}/mensagens", headers=auth)
+        ).json()
+        assert any("Não consegui concluir" in m["conteudo"] for m in mensagens)
     async with amb.fabrica() as sessao:
         assert (await sessao.get(Cadeia, cadeia_id)).status == StatusCadeia.FALHOU
 
@@ -584,14 +687,44 @@ async def test_pergunta_fora_de_cadeia_retoma_a_conversa(ambiente_http: Ambiente
         assert any("leve" in str(m.get("content")) for m in amb.provedor.chamadas[-1]["messages"])
 
 
+async def test_modelo_que_responde_vazio_nao_deixa_a_conversa_muda(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    """A1 (Prumo-2): sem texto e sem ferramenta (ex.: provedor que ignora ``stream`` e devolve
+    vazio) o usuário recebe o aviso em PT-BR, em vez de ficar sem resposta."""
+    amb = ambiente_http
+    amb.provedor.responder = lambda corpo, n: completar_texto("")
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        _, usuario_id = await usuario_com_modelo_http(amb, cliente, "vazio-sora@exemplo.com")
+        conversa_id, mensagem_id = await _conversa_com_pedido(amb, usuario_id, "Oi")
+        await _enfileirar(amb.url_redis, "responder_direto", str(mensagem_id))
+
+        async def avisou() -> bool:
+            async with amb.fabrica() as sessao:
+                textos = (
+                    await sessao.scalars(
+                        select(Mensagem.conteudo).where(
+                            Mensagem.conversa_id == conversa_id, Mensagem.autor == "sora"
+                        )
+                    )
+                ).all()
+            return any("Não consegui terminar essa resposta" in t for t in textos)
+
+        await esperar(avisou, "a conversa ficou muda com a resposta vazia do modelo")
+
+
 async def _aprovacao_da_sora(amb: AmbienteHttp, usuario_id: UUID) -> Aprovacao:
     def roteiro(corpo: dict[str, Any], n: int) -> Any:
         if n == 1:
-            return completar_ferramenta("criar_agente", {"nome": "Íris", "papel": "Organizar"})
+            # Etapa 5: criar_agente virou rascunho; o cartão fixo vem de propor_instrucoes.
+            return completar_ferramenta(
+                "propor_instrucoes",
+                {"instrucoes": "Responder em tom formal.", "motivo": "Pedido do usuário."},
+            )
         return completar_texto("Entendi, sigo sem criar.")
 
     amb.provedor.responder = roteiro
-    conversa_id, mensagem_id = await _conversa_com_pedido(amb, usuario_id, "Crie a Íris")
+    conversa_id, mensagem_id = await _conversa_com_pedido(amb, usuario_id, "Fale formal")
     await _enfileirar(amb.url_redis, "responder_direto", str(mensagem_id))
 
     async def cartao() -> Aprovacao | None:
@@ -627,17 +760,17 @@ async def test_aprovacao_fora_de_cadeia_retoma_a_conversa(ambiente_http: Ambient
         )
         assert resposta.status_code == 204, resposta.text
 
-        async def criou() -> bool:
+        async def mudou() -> bool:
             async with amb.fabrica() as sessao:
                 return (
                     await sessao.scalar(
-                        select(Agente.id).where(
-                            Agente.usuario_id == usuario_id, Agente.nome == "Íris"
+                        select(Agente.instrucoes).where(
+                            Agente.usuario_id == usuario_id, Agente.tipo == TipoAgente.SORA
                         )
                     )
-                ) is not None
+                ) == "Responder em tom formal."
 
-        await esperar(criou, "a conversa não retomou e não criou o agente")
+        await esperar(mudou, "a conversa não retomou e não aplicou as instruções")
 
 
 async def test_aprovacao_expirada_nega_e_retoma(ambiente_http: AmbienteHttp) -> None:
@@ -671,9 +804,11 @@ async def test_aprovacao_expirada_nega_e_retoma(ambiente_http: AmbienteHttp) -> 
         async with amb.fabrica() as sessao:
             assert (
                 await sessao.scalar(
-                    select(Agente.id).where(Agente.usuario_id == usuario_id, Agente.nome == "Íris")
+                    select(Agente.instrucoes).where(
+                        Agente.usuario_id == usuario_id, Agente.tipo == TipoAgente.SORA
+                    )
                 )
-            ) is None
+            ) != "Responder em tom formal."
 
 
 # ---------------------------------------------------------------- worker morto de verdade
@@ -1480,7 +1615,8 @@ async def test_provedor_mudo_nao_segura_o_post_da_conversa(
         )
         conteudos = [m["conteudo"] for m in mensagens.json()]
         assert "crie uma campanha para a cafeteria" in conteudos
-        assert any("Não consegui falar com o seu modelo" in c for c in conteudos)
+        # provedor mudo = prazo estourado: o texto diz "fora do ar ou demorou demais"
+        assert any("demorou demais" in c for c in conteudos), conteudos
 
 
 # ---------------------------------------- gatilhos de teste do modelo falso ([pergunta] etc.)
@@ -1569,21 +1705,60 @@ async def test_gatilho_pergunta_leva_a_cadeia_ate_o_fim(
         assert pergunta.resposta == "formal" and pergunta.respondida_em is not None
 
 
-async def test_gatilho_aprovacao_leva_a_cadeia_ate_o_fim(
+async def test_gatilho_aprovacao_abre_cartao_fixo_e_retoma_a_conversa(
     ambiente_fase_b_arq: tuple[str, async_sessionmaker],
 ) -> None:
-    _, respondidos = await _cadeia_com_gatilho(
-        ambiente_fase_b_arq, "gatilho-aprovacao@exemplo.com", "[aprovacao]"
-    )
-    assert respondidos == {"pergunta": 0, "aprovacao": 1}
-    async with ambiente_fase_b_arq[1]() as sessao:
-        usuario = await sessao.scalar(
-            select(Usuario).where(Usuario.email == "gatilho-aprovacao@exemplo.com")
+    """Etapa 5: ``[aprovacao]`` não passa mais por cadeia nem por ``criar_agente`` (rascunho);
+    a Sora abre o cartão fixo de ``propor_instrucoes`` e a decisão retoma a conversa."""
+    url, fabrica = ambiente_fase_b_arq
+    email = "gatilho-aprovacao@exemplo.com"
+    async with httpx.AsyncClient(base_url=url, timeout=30) as cliente:
+        auth = await entrar(cliente, fabrica, email)
+        criada = await cliente.post(
+            "/v1/conversas",
+            headers=auth,
+            json={"texto": "mude o seu jeito de falar [aprovacao]", "anexos": []},
         )
-        iris = await sessao.scalar(
-            select(Agente).where(Agente.usuario_id == usuario.id, Agente.nome == "Organizadora")
+        assert criada.status_code == 201, criada.text
+        conversa_id = criada.json()["id"]
+        cartao = None
+        for _ in range(240):
+            async with fabrica() as sessao:
+                usuario = await sessao.scalar(select(Usuario).where(Usuario.email == email))
+                cartao = await sessao.scalar(
+                    select(Aprovacao).where(
+                        Aprovacao.usuario_id == usuario.id,
+                        Aprovacao.status == StatusAprovacao.PENDENTE,
+                    )
+                )
+                pausou = await sessao.scalar(
+                    text("select count(*) from checkpoint_writes where channel = '__interrupt__'")
+                )
+            if cartao is not None and pausou:
+                break
+            await asyncio.sleep(0.25)
+        assert cartao is not None, "o cartão de aprovação não apareceu"
+        assert cartao.acao["ferramenta"] == "propor_instrucoes"
+        assert cartao.acao["conversa_id"] == conversa_id
+        async with fabrica() as sessao:
+            assert (
+                await sessao.scalar(select(Cadeia).where(Cadeia.conversa_id == conversa_id)) is None
+            )
+        decidiu = await cliente.post(
+            f"/v1/aprovacoes/{cartao.id}/decidir", headers=auth, json={"decisao": "permitir"}
         )
-        assert iris is not None and iris.tipo == TipoAgente.INDIVIDUAL
+        assert decidiu.status_code == 204, decidiu.text
+        for _ in range(240):
+            async with fabrica() as sessao:
+                instrucoes = await sessao.scalar(
+                    select(Agente.instrucoes).where(
+                        Agente.usuario_id == usuario.id, Agente.tipo == TipoAgente.SORA
+                    )
+                )
+            if instrucoes == "Responder sempre em tom formal e objetivo.":
+                break
+            await asyncio.sleep(0.25)
+        assert instrucoes == "Responder sempre em tom formal e objetivo."
 
 
 async def test_gatilho_orcamento_leva_a_cadeia_ate_o_fim(
@@ -1598,3 +1773,235 @@ async def test_gatilho_orcamento_leva_a_cadeia_ate_o_fim(
         assert cadeia.orcamento_tokens > 100  # "continuar" subiu o teto
         pergunta = await sessao.scalar(select(Pergunta).where(Pergunta.cadeia_id == cadeia.id))
         assert "orçamento" in pergunta.texto and pergunta.resposta == "continuar"
+
+
+@pytest.mark.parametrize(
+    ("frase", "ferramenta", "args"),
+    [
+        (
+            "Crie um bot chamado Resumo que resume textos.",
+            "criar_agente",
+            {"nome": "Resumo", "papel": "Resume textos"},
+        ),
+        (
+            "Quero criar um bot de atendimento.",
+            "criar_agente",
+            {"nome": "Atendimento", "papel": "Atende clientes"},
+        ),
+        ("Crie um bot para mim.", "criar_agente", {"nome": "Ajuda", "papel": "Ajuda pessoal"}),
+        (
+            "Preciso de uma equipe de bots para lançar minha cafeteria.",
+            "propor_grupo",
+            {"pedido": "Lançar cafeteria"},
+        ),
+        ("Monte um grupo com bots.", "propor_grupo", {"pedido": "Montar grupo"}),
+        (
+            "Use a sua ferramenta criar_agente para criar um bot.",
+            "criar_agente",
+            {"nome": "Ajuda", "papel": "Ajuda pessoal"},
+        ),
+    ],
+)
+async def test_rumo_seis_frases_cartao_real_por_sse(ambiente_http, frase, ferramenta, args):
+    from uuid import uuid4
+
+    amb = ambiente_http
+    triagem = {
+        "primeira_resposta": "Vou preparar.",
+        "modo": "cadeia",
+        "dificuldade": 2,
+        "especialistas": ["pesquisador", "redator"],
+        "idioma": "pt-BR",
+        "confianca": 0.99,
+    }
+
+    def responder(corpo, n):
+        if not corpo.get("tools"):
+            return completar_texto(json.dumps(triagem))
+        if any(m.get("role") == "tool" and m.get("name") == ferramenta for m in corpo["messages"]):
+            return completar_texto("Confira o cartão para confirmar.")
+        return completar_ferramenta(ferramenta, args)
+
+    amb.provedor.responder = responder
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, uid = await usuario_com_modelo_http(amb, cliente, f"rumo-{uuid4()}@exemplo.com")
+        r = await cliente.post("/v1/conversas", headers=auth, json={"texto": frase})
+        assert r.status_code == 201, r.text
+        cid = r.json()["id"]
+        eventos = await ler_sse(
+            cliente, cid, auth, ate=lambda n, d: n == "mensagem.fim", limite_s=LIMITE_S
+        )
+        assert eventos
+        rota = "/v1/bots/rascunhos" if ferramenta == "criar_agente" else "/v1/grupos/propostas"
+
+        async def cartao():
+            return (await cliente.get(rota, headers=auth)).json()
+
+        assert await esperar(cartao, "cartão real da Sora")
+        async with amb.fabrica() as sessao:
+            assert (
+                await sessao.scalar(select(Cadeia.id).where(Cadeia.conversa_id == UUID(cid)))
+                is None
+            )
+            assert not (
+                await sessao.scalars(
+                    select(Agente).where(
+                        Agente.usuario_id == uid, Agente.tipo == TipoAgente.ESPECIALISTA
+                    )
+                )
+            ).all()
+
+
+async def test_rumo_parar_expira_cartao_da_cadeia(ambiente_http):
+    from uuid import uuid4
+
+    from app.eventos.streams import canal_conversa
+
+    amb = ambiente_http
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, uid = await usuario_com_modelo_http(
+            amb, cliente, f"parar-cartao-{uuid4()}@exemplo.com"
+        )
+        cid, cadeia_id, etapa_id = await _cadeia_e_etapa(
+            amb.fabrica, uid, StatusCadeia.AGUARDANDO_USUARIO
+        )
+        async with amb.fabrica() as sessao:
+            etapa = await sessao.get(Etapa, etapa_id)
+            etapa.status = StatusEtapa.AGUARDANDO_APROVACAO
+            cartao = Aprovacao(
+                usuario_id=uid,
+                etapa_id=etapa_id,
+                agente_id=etapa.agente_id,
+                acao={"ferramenta": "enviar_email"},
+                avaliacao={},
+                expira_em=datetime.now(UTC) + timedelta(minutes=10),
+            )
+            sessao.add(cartao)
+            await sessao.commit()
+            cartao_id = cartao.id
+        assert (await cliente.post(f"/v1/conversas/{cid}/parar", headers=auth)).status_code == 202
+        assert (await cliente.post(f"/v1/conversas/{cid}/parar", headers=auth)).status_code == 202
+        async with amb.fabrica() as sessao:
+            assert (await sessao.get(Aprovacao, cartao_id)).status == StatusAprovacao.EXPIRADA
+            assert (await sessao.get(Cadeia, cadeia_id)).status == StatusCadeia.CANCELADA
+        eventos = await amb.redis.xrange(canal_conversa(cid))
+        resolvidos = [
+            json.loads(c["data"]) for _, c in eventos if c["event"] == "aprovacao.resolvida"
+        ]
+        assert len(resolvidos) == 1 and resolvidos[0]["status"] == "expirada"
+
+
+async def test_rumo_resultado_da_cadeia_inclui_texto_e_anexos(ambiente_http):
+    from uuid import uuid4
+
+    from app.modelos.tabelas import Anexo
+    from workers.cadeia import entregar_resultado
+
+    amb = ambiente_http
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        _, uid = await usuario_com_modelo_http(amb, cliente, f"entrega-rumo-{uuid4()}@exemplo.com")
+    cid, cadeia_id, etapa_id = await _cadeia_e_etapa(amb.fabrica, uid, StatusCadeia.VERIFICANDO)
+    async with amb.fabrica() as sessao:
+        etapa = await sessao.get(Etapa, etapa_id)
+        anexo = Anexo(
+            usuario_id=uid,
+            nome="resultado.txt",
+            tipo="text/plain",
+            tamanho=3,
+            caminho="qa-rumo",
+            origem="agente",
+        )
+        sessao.add(anexo)
+        await sessao.flush()
+        aid = anexo.id
+        sessao.add(
+            Entrega(
+                usuario_id=uid,
+                conversa_id=cid,
+                cadeia_id=cadeia_id,
+                etapa_id=etapa_id,
+                agente_id=etapa.agente_id,
+                versao=1,
+                tipo="arquivo",
+                titulo="Resultado",
+                resumo="Conclusão",
+                conteudo={"texto": "O café está pronto", "anexo_id": str(aid)},
+            )
+        )
+        await sessao.commit()
+    ctx = {"sessoes": amb.fabrica, "redis_eventos": amb.redis}
+    await entregar_resultado(ctx, str(cadeia_id))
+    await entregar_resultado(ctx, str(cadeia_id))
+    async with amb.fabrica() as sessao:
+        mensagens = (
+            await sessao.scalars(
+                select(Mensagem).where(
+                    Mensagem.conversa_id == cid, Mensagem.autor == AutorMensagem.SORA
+                )
+            )
+        ).all()
+        assert len(mensagens) == 1
+        assert "O café está pronto" in mensagens[0].conteudo
+        assert mensagens[0].anexos == [str(aid)]
+
+
+@pytest.mark.parametrize(
+    ("frase", "rota"),
+    [
+        ("Crie um bot chamado Resumo que resume textos.", "/v1/bots/rascunhos"),
+        ("Monte um grupo com bots.", "/v1/grupos/propostas"),
+    ],
+)
+async def test_rumo_modelo_pequeno_que_nao_chama_a_ferramenta_ainda_gera_o_cartao(
+    ambiente_http, frase, rota
+):
+    """O modelo promete o cartão em texto e não chama a ferramenta: a rede de segurança prepara."""
+    from uuid import uuid4
+
+    amb = ambiente_http
+    triagem = {
+        "primeira_resposta": "Vou preparar.",
+        "modo": "direto",
+        "dificuldade": 1,
+        "especialistas": [],
+        "idioma": "pt-BR",
+        "confianca": 0.99,
+    }
+
+    def responder(corpo, n):
+        if not corpo.get("tools"):
+            return completar_texto(json.dumps(triagem))
+        return completar_texto("Boa! Já te mando o cartão para revisar.")
+
+    amb.provedor.responder = responder
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, _ = await usuario_com_modelo_http(amb, cliente, f"rede-{uuid4()}@exemplo.com")
+        r = await cliente.post("/v1/conversas", headers=auth, json={"texto": frase})
+        assert r.status_code == 201, r.text
+
+        async def cartao():
+            return (await cliente.get(rota, headers=auth)).json()
+
+        assert await esperar(cartao, "cartão da rede de segurança")
+        assert len(await cartao()) == 1
+
+
+async def test_rumo_provedor_fora_do_ar_nao_impede_o_cartao_de_grupo(ambiente_http):
+    from uuid import uuid4
+
+    amb = ambiente_http
+    amb.provedor.responder = lambda corpo, n: (401, {"error": {"message": "chave inválida"}})
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, _ = await usuario_com_modelo_http(amb, cliente, f"fora-{uuid4()}@exemplo.com")
+        r = await cliente.post(
+            "/v1/conversas", headers=auth, json={"texto": "Monte um grupo com bots."}
+        )
+        assert r.status_code == 201, r.text
+        cid = r.json()["id"]
+
+        async def cartao():
+            return (await cliente.get("/v1/grupos/propostas", headers=auth)).json()
+
+        assert await esperar(cartao, "proposta mesmo sem modelo")
+        mensagens = (await cliente.get(f"/v1/conversas/{cid}/mensagens", headers=auth)).json()
+        assert any("proposta do grupo" in m["conteudo"] for m in mensagens)

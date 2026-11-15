@@ -1,6 +1,6 @@
 // Rolagem inteligente do chat: acompanha o fim SÓ se o usuário já estiver no fim. Se ele estiver
 // lendo mais acima, nada pula; o botão "ir para o fim" aparece com o número de mensagens novas.
-import { useCallback, useLayoutEffect, useRef, useState, type UIEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from 'react';
 
 const PERTO = 80; // px do fim que ainda contam como "no fim"
 
@@ -14,11 +14,26 @@ export function useRolagemFim(chaves: string[], assinatura: string | number) {
   const [noFim, setNoFim] = useState(true);
   const [vistas, setVistas] = useState<Set<string>>(() => new Set(chaves));
 
+  const primeiro = useRef(chaves[0]);
+  const altura = useRef(0);
   // no fim: acompanha o conteúdo novo (sem animação, para não "brigar" com o streaming)
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el && noFimRef.current) el.scrollTop = el.scrollHeight;
-  }, [chaves.length, assinatura]);
+    if (!el) return;
+    if (primeiro.current && chaves[0] !== primeiro.current && chaves.includes(primeiro.current)) {
+      el.scrollTop += el.scrollHeight - altura.current;
+    } else if (noFimRef.current) el.scrollTop = el.scrollHeight;
+    primeiro.current = chaves[0]; altura.current = el.scrollHeight;
+  }, [chaves, assinatura]);
+
+  // Markdown e imagens podem crescer depois do commit do texto (RAF / carregamento).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => { if (noFimRef.current) el.scrollTop = el.scrollHeight; altura.current = el.scrollHeight; });
+    for (const filho of Array.from(el.children)) observer.observe(filho);
+    return () => observer.disconnect();
+  }, [chaves.length]);
 
   const onScroll = useCallback((ev: UIEvent<HTMLElement>) => {
     const el = ev.currentTarget;

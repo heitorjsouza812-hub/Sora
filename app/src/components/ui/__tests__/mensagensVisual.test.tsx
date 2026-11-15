@@ -1,0 +1,152 @@
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const rede = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn(), buscar: vi.fn() }));
+vi.mock('../../../api/cliente', async original => ({ ...await original<typeof import('../../../api/cliente')>(), api: rede, buscarAutenticado: rede.buscar }));
+vi.mock('../../../api/eventos', () => ({ acompanharEventos: vi.fn(() => new Promise(() => {})) }));
+import { _definirEstadoParaTestes, _reiniciarProjetosParaTestes, lerEstado, type MensagemChat as Mensagem } from '../../../state/projetos';
+import { MensagemChat } from '../MensagemChat';
+import { AnexoResposta } from '../AnexosResposta';
+import { IrParaFim } from '../IrParaFim';
+
+const pergunta: Mensagem = { id: 'p', conversaId: 'c', autor: 'usuario', texto: 'Oi @todos, resumam isto', criadoEm: 1 };
+const resposta: Mensagem = { id: 'r', conversaId: 'c', autor: 'sora', texto: 'Resposta parcial', criadoEm: 2 };
+function preparar(...ms: Mensagem[]) { _definirEstadoParaTestes({ ...lerEstado(), mensagens: ms }); }
+afterEach(() => { cleanup(); _reiniciarProjetosParaTestes(); vi.clearAllMocks(); });
+
+describe('mensagens (etapa 6)', () => {
+  it('a pergunta é bolha à direita, com as ações na mesma linha, à esquerda, e menção destacada', () => {
+    preparar(pergunta, resposta);
+    const { container } = render(<MensagemChat m={pergunta} agora={0} />);
+    const linha = container.querySelector('.user-linha') as HTMLElement;
+    expect(linha.firstElementChild).toHaveClass('msg-acoes'); // ações antes da bolha: ficam à esquerda dela
+    expect(linha.querySelector('.user-message')).toHaveTextContent('Oi @todos, resumam isto');
+    expect(linha.querySelector('.user-message .mencao')).toHaveTextContent('@todos');
+    expect(container.querySelector('.chat-msg.is-user .msg-barra')).toBeNull(); // não ocupa altura embaixo
+  });
+
+  it('a resposta tem cabeçalho de uma linha (avatar + nome) e texto sem coluna de avatar', () => {
+    preparar(pergunta, resposta);
+    const { container } = render(<MensagemChat m={resposta} agora={0} nome="Sora" avatar={<span data-testid="orb" />} rotulo="entregou" />);
+    const cabeca = container.querySelector('.msg-cabeca') as HTMLElement;
+    expect(within(cabeca).getByTestId('orb')).toBeInTheDocument();
+    expect(cabeca).toHaveTextContent('Sora');
+    expect(cabeca.querySelector('.msg-rotulo')).toHaveTextContent('entregou');
+    expect(container.querySelector('.assistant-row')).toBeNull();
+    expect(container.querySelector('.msg-corpo .md')).toHaveTextContent('Resposta parcial');
+  });
+
+  it('"Resposta interrompida" pertence à resposta, com Refazer resposta; nunca dentro da pergunta', () => {
+    preparar(pergunta, { ...resposta, estado: 'interrompida' });
+    const { container } = render(<><MensagemChat m={{ ...pergunta, estado: 'interrompida' }} agora={0} /><MensagemChat m={{ ...resposta, estado: 'interrompida' }} agora={0} nome="Sora" /></>);
+    expect(container.querySelector('.chat-msg.is-user .msg-interrompida')).toBeNull();
+    const aviso = container.querySelector('.chat-msg.is-assistant .msg-interrompida') as HTMLElement;
+    expect(aviso).toHaveTextContent('Resposta interrompida');
+    expect(within(aviso).getByRole('button', { name: 'Refazer resposta' })).toBeInTheDocument();
+    expect(aviso).toHaveAttribute('role', 'status');
+    expect(container.querySelector('.chat-msg.is-assistant .md')).toHaveTextContent('Resposta parcial'); // texto parcial continua
+    expect(screen.getAllByRole('button', { name: 'Refazer resposta' })).toHaveLength(1); // a barra não repete o botão
+  });
+
+  it('pergunta interrompida antes de qualquer resposta: o aviso vira bloco de resposta, com cabeçalho do autor, fora da bolha', () => {
+    const interrompida = { ...pergunta, estado: 'interrompida' as const };
+    preparar(interrompida);
+    const { container } = render(<MensagemChat m={interrompida} agora={0} respostaDe={{ nome: 'Sora', avatar: <span data-testid="orb" /> }} />);
+    expect(container.querySelector('.chat-msg.is-user .msg-interrompida')).toBeNull();
+    const bloco = container.querySelector('.chat-msg.is-assistant.is-sem-resposta') as HTMLElement;
+    expect(bloco.querySelector('.msg-cabeca')).toHaveTextContent('Sora');
+    expect(within(bloco).getByText('Resposta interrompida', { exact: true })).toBeInTheDocument();
+    expect(bloco.querySelector('.msg-interrompida')).toHaveAttribute('role', 'status');
+  });
+
+  it('parou antes do 1º caractere: o aviso ocupa o lugar da resposta, com o cabeçalho do autor', () => {
+    const vazia = { ...resposta, texto: 'Resposta interrompida.', estado: 'interrompida' as const };
+    preparar(pergunta, vazia);
+    const { container } = render(<MensagemChat m={vazia} agora={0} nome="Sora" avatar={<span data-testid="orb" />} />);
+    expect(container.querySelector('.msg-cabeca')).toHaveTextContent('Sora');
+    expect(container.querySelector('.md')).toBeNull();
+    expect(container.querySelector('.msg-interrompida')).toHaveTextContent('Resposta interrompida');
+  });
+
+  it('a última resposta marca as ações como sempre visíveis; a barra reserva o espaço desde o início', () => {
+    preparar(pergunta, resposta);
+    const { container, rerender } = render(<MensagemChat m={resposta} agora={0} ultima />);
+    expect(container.querySelector('.chat-msg')).toHaveClass('is-ultima');
+    expect(container.querySelector('.msg-barra')).not.toBeNull();
+    rerender(<MensagemChat m={{ ...resposta, gerando: true }} agora={0} ultima />);
+    expect(container.querySelector('.msg-barra')).not.toBeNull(); // gerando: vazia, mas o espaço continua reservado
+    expect(container.querySelector('.msg-acoes')).toBeNull();
+  });
+
+  it('as ações formam um toolbar com ← → entre os botões e Copiar vira ✓ por 1,2 s', async () => {
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+    preparar(pergunta, resposta);
+    const { container } = render(<MensagemChat m={resposta} agora={0} ultima />);
+    const barra = screen.getByRole('toolbar', { name: 'Ações da mensagem' });
+    const botoes = within(barra).getAllByRole('button');
+    botoes[0].focus();
+    fireEvent.keyDown(botoes[0], { key: 'ArrowRight' });
+    expect(botoes[1]).toHaveFocus();
+    fireEvent.keyDown(botoes[1], { key: 'ArrowLeft' });
+    expect(botoes[0]).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: 'Copiar' }));
+    expect(container.querySelector('.msg-acao.is-ok')).not.toBeNull();
+  });
+
+  it('só a mensagem recém-criada anima; histórico não', () => {
+    preparar(pergunta, resposta);
+    const { container, unmount } = render(<MensagemChat m={{ ...pergunta, criadoEm: Date.now() }} agora={0} />);
+    expect(container.querySelector('.chat-msg')).toHaveClass('is-nova');
+    unmount();
+    const velho = render(<MensagemChat m={pergunta} agora={0} />);
+    expect(velho.container.querySelector('.chat-msg')).not.toHaveClass('is-nova');
+  });
+});
+
+describe('fontes e imagem na resposta (etapa 6)', () => {
+  const fonte = { n: 1, titulo: 'Levantamento do setor', dominio: 'example.com', url: 'https://example.com/levantamento' };
+
+  it('as fontes ficam abaixo do texto: chips com número e domínio, título no title, id e href preservados', async () => {
+    preparar(pergunta, resposta);
+    const { container } = render(<MensagemChat m={{ ...resposta, texto: 'Veja [1].', fontes: [fonte] }} agora={0} />);
+    const corpo = container.querySelector('.msg-corpo') as HTMLElement;
+    const filhos = Array.from(corpo.children);
+    expect(filhos.indexOf(corpo.querySelector('.md') as Element)).toBeLessThan(filhos.indexOf(corpo.querySelector('.msg-fontes') as Element));
+    const chip = corpo.querySelector('.msg-fontes a') as HTMLAnchorElement;
+    expect(chip.id).toBe('fonte-r-1');
+    expect(chip.getAttribute('href')).toBe('https://example.com/levantamento');
+    expect(chip.getAttribute('title')).toBe('Levantamento do setor');
+    expect(chip.textContent).toBe('1example.com');
+    expect(chip.querySelector('.fonte-n')).toHaveTextContent('1');
+    expect(chip).toHaveAccessibleName(/Levantamento do setor/);
+    // a marca [1] do texto vira pílula com o número e continua apontando para o chip
+    const marca = await within(corpo).findByRole('link', { name: 'Fonte 1' });
+    expect(marca).toHaveClass('fonte-marca');
+    expect(marca).toHaveTextContent(/^1$/);
+    expect(marca.getAttribute('href')).toBe('#fonte-r-1');
+  });
+
+  it('imagem sem moldura, com botão de ícone para baixar e legenda com nome e tamanho', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:imagem'); vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    rede.buscar.mockResolvedValue({ blob: async () => new Blob(['imagem'], { type: 'image/png' }), headers: new Headers({ 'content-disposition': 'inline; filename="foto.png"' }) });
+    const { container } = render(<AnexoResposta anexo={{ id: 'a', nome: 'Arquivo' }} />);
+    await screen.findByRole('button', { name: 'Ampliar foto.png' });
+    expect(container.querySelector('.msg-arquivo')).toBeNull(); // sem a caixa com borda de antes
+    const baixar = screen.getByRole('link', { name: 'Baixar foto.png' });
+    expect(baixar).toHaveClass('msg-baixar');
+    expect(baixar.textContent).toBe(''); // botão só de ícone
+    expect(container.querySelector('figcaption')).toHaveTextContent('foto.png · 1 KB');
+  });
+});
+
+describe("\"Ir para o fim\" (etapa 6)", () => {
+  it('"Ir para o fim" é um botão redondo só com a seta; com mensagens novas ganha um ponto', () => {
+    const { container, rerender } = render(<IrParaFim novas={0} onClick={() => {}} />);
+    const botao = screen.getByRole('button', { name: 'Ir para o fim' });
+    expect(botao.textContent).toBe(''); // sem texto: não cobre a resposta
+    expect(container.querySelector('.ir-fim-novas')).toBeNull();
+    rerender(<IrParaFim novas={2} onClick={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Ir para o fim: 2 mensagens novas' })).toBeInTheDocument();
+    expect(container.querySelector('.ir-fim-novas')).not.toBeNull();
+  });
+});

@@ -18,7 +18,7 @@ costuma acertar o nome sem buscar.
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -140,7 +140,14 @@ def _pontuacao(entrada: Entrada, consulta: str) -> int:
 class CatalogoFerramentas:
     """Índice das ferramentas escondidas atrás das três meta-ferramentas."""
 
-    def __init__(self, ferramentas: Sequence[BaseTool], grupo_padrao: str = GRUPO_PADRAO) -> None:
+    def __init__(
+        self,
+        ferramentas: Sequence[BaseTool],
+        grupo_padrao: str = GRUPO_PADRAO,
+        guias: Mapping[str, str] | None = None,
+    ) -> None:
+        self.guias = dict(guias or {})
+        self._guias_entregues: set[str] = set()
         vistos: set[str] = set()
         entradas: list[Entrada] = []
         for ferramenta in ferramentas:
@@ -220,7 +227,7 @@ class CatalogoFerramentas:
         candidatas = [e for e in self.entradas if nome_curto(e.ferramenta) == identificador]
         if len(candidatas) == 1:
             return self._conferir_tamanho(candidatas[0])
-        raise ErroFerramenta("Ferramenta desconhecida ou não autorizada para este agente.")
+        raise ErroFerramenta("Ferramenta desconhecida ou não autorizada para este bot.")
 
     @staticmethod
     def _conferir_tamanho(entrada: Entrada) -> Entrada:
@@ -230,13 +237,31 @@ class CatalogoFerramentas:
 
     def carregar(self, identificador: str) -> dict[str, Any]:
         entrada = self.encontrar(identificador)
-        return {
+        carregada: dict[str, Any] = {
             "id": entrada.id,
             "nome": nome_curto(entrada.ferramenta),
             "descricao": (entrada.ferramenta.description or "")[:MAX_DESCRICAO],
             "esquema": esquema_json(entrada.ferramenta),
             "somente_leitura": somente_leitura(entrada.ferramenta),
         }
+        regras = self._regras_de(entrada)
+        if regras:
+            carregada["regras_de_uso"] = regras
+        return carregada
+
+    def _regras_de(self, entrada: Entrada) -> str:
+        """Regras de uso da ferramenta e do grupo dela, uma vez só por catálogo.
+
+        O prompt de sistema não carrega a cláusula de uma ferramenta que está escondida: ela vem
+        junto do esquema, na primeira vez que o modelo a carrega.
+        """
+        partes: list[str] = []
+        for chave in (entrada.id, entrada.grupo):
+            texto = self.guias.get(chave)
+            if texto and chave not in self._guias_entregues:
+                self._guias_entregues.add(chave)
+                partes.append(texto)
+        return "\n\n".join(partes)
 
     async def executar(
         self,
@@ -347,8 +372,13 @@ def montar_catalogo(
     antes_de_executar: AntesDeExecutar | None = None,
     limite_direto: int = LIMITE_DIRETO,
     grupo_padrao: str = GRUPO_PADRAO,
+    guias: Mapping[str, str] | None = None,
 ) -> list[BaseTool]:
-    """Devolve as ferramentas direto (até ``limite_direto``, 20) ou as três meta-ferramentas."""
+    """Devolve as ferramentas direto (até ``limite_direto``, 20) ou as três meta-ferramentas.
+
+    ``guias`` (id da ferramenta ou nome do grupo → texto) vai junto da primeira carga da
+    ferramenta, em vez de ficar no prompt de sistema de todo turno.
+    """
     from langchain_core.tools import StructuredTool
 
     if prefixo.startswith("mcp_"):
@@ -357,7 +387,7 @@ def montar_catalogo(
     if len(ferramentas) <= limite_direto:
         return list(ferramentas)
 
-    catalogo = CatalogoFerramentas(ferramentas, grupo_padrao)
+    catalogo = CatalogoFerramentas(ferramentas, grupo_padrao, guias)
     agrupado = catalogo.grupos()
     if indice_cabe(agrupado):
         descricao_busca = (

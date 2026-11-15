@@ -17,17 +17,21 @@
 .b-btn__icone svg { width: 1.15em; height: 1.15em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .b-btn__icone canvas { display: block; }
 .b-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.b-btn:disabled, .b-btn[aria-disabled="true"] { cursor: default; opacity: .4; pointer-events: none; }
+.b-btn:disabled, .b-btn[aria-disabled="true"] { cursor: default; color: var(--off-fg); background: var(--off-bg); border-color: transparent; pointer-events: none; }
 .b-btn[aria-busy="true"] { opacity: .85; }
 
 .b-btn--primario { color: var(--btn-text); background: var(--btn-bg); }
-.b-btn--primario:hover { background: color-mix(in srgb, var(--action), white 60%); }
-.b-btn--secundario { color: var(--text-1); background: var(--surface-2); border-color: var(--line-strong); }
-.b-btn--secundario:hover { background: var(--surface-3); border-color: var(--white-a22); }
+.b-btn--primario:hover { background: var(--action-hover); }
+.b-btn--secundario { color: var(--text-1); background: transparent; border-color: var(--line-strong); }
+.b-btn--secundario:hover { background: var(--hover); }
 .b-btn--fantasma { color: var(--text-2); background: transparent; }
-.b-btn--fantasma:hover { color: var(--text-1); background: var(--white-a06); }
-.b-btn--perigo { color: var(--text-1); background: var(--danger-strong); }
-.b-btn--perigo:hover { background: color-mix(in srgb, var(--danger-strong), var(--text-1) 10%); }
+.b-btn--fantasma:hover { color: var(--text-1); background: var(--hover); }
+/* Perigo: texto vermelho sem fundo; vermelho cheio só no diálogo de confirmação (modal e folha). */
+.b-btn--perigo { color: var(--danger); background: transparent; }
+.b-btn--perigo:hover { background: var(--danger-hover); }
+.sora-modal__footer .b-btn--perigo, .sora-sheet__footer .b-btn--perigo { color: var(--text-1); background: var(--danger-strong); }
+.sora-modal__footer .b-btn--perigo:hover, .sora-sheet__footer .b-btn--perigo:hover { background: color-mix(in srgb, var(--danger-strong), var(--text-1) 10%); }
+.sora-modal__footer .b-btn--perigo:disabled, .sora-sheet__footer .b-btn--perigo:disabled { color: var(--off-fg); background: var(--off-bg); }
 
 .b-icon { width: var(--b-alt); padding: 0; }
 
@@ -40,14 +44,14 @@
   width: 100%; min-height: 40px; padding: 0 var(--sp-3); box-sizing: border-box;
   color: var(--text-1); background: var(--surface-2);
   border: 1px solid var(--line-strong); border-radius: var(--r-10);
-  font: inherit; font-size: var(--fs-14); outline: 0; transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  font: inherit; font-size: var(--fs-14); outline: 0; transition: border-color var(--dur-fast);
 }
 .b-input::placeholder { color: var(--text-3); opacity: 1; }
 .b-input:hover { border-color: var(--white-a22); }
-.b-input:focus-visible, .b-input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px var(--focus-soft); }
+.b-input:focus-visible, .b-input:focus { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 2px; }
 .b-input:disabled { opacity: .5; cursor: not-allowed; }
 .b-campo.is-erro .b-input { border-color: var(--danger); }
-.b-campo.is-erro .b-input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger), transparent 80%); }
+.b-campo.is-erro .b-input:focus { outline-color: var(--danger); }
 .b-textarea { min-height: 96px; padding: var(--sp-3); line-height: 1.5; resize: vertical; }
 .b-select { position: relative; display: block; }
 .b-select select { padding-right: var(--sp-10); appearance: none; cursor: pointer; }

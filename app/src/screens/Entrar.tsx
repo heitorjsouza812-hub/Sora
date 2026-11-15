@@ -72,7 +72,7 @@ export default function Entrar() {
           </Button>
         </form>
       </div>
-      <p className="sessao-nota">Nada é publicado sem a sua aprovação.</p>
+      <p className="sessao-nota">Nada é enviado sem a sua aprovação.</p>
     </main>
   );
 }

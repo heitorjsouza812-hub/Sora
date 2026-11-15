@@ -12,6 +12,7 @@ sozinho, e instrução vinda de conteúdo externo nunca vira proposta. A políti
 from __future__ import annotations
 
 import difflib
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -56,6 +57,22 @@ def diferenca(atuais: str, novas: str) -> str:
             f"… mais {len(linhas) - MAX_LINHAS_DIFERENCA} linhas",
         ]
     return "\n".join(linhas)
+
+
+def proposta_do_cartao(acao: dict[str, Any] | None) -> dict[str, str] | None:
+    """O que o app mostra antes de aprovar: o texto novo, o motivo e a diferença em relação às
+    instruções atuais (``diferenca`` já traz o trecho anterior). ``None`` para qualquer outra
+    ação, para o campo ``proposta`` só existir no cartão de instruções."""
+    if not isinstance(acao, dict) or acao.get("ferramenta") != "propor_instrucoes":
+        return None
+    argumentos = acao.get("argumentos")
+    if not isinstance(argumentos, dict) or not isinstance(argumentos.get("instrucoes"), str):
+        return None
+    proposta = {"instrucoes": argumentos["instrucoes"]}
+    for campo in ("diferenca", "motivo"):
+        if isinstance(argumentos.get(campo), str) and argumentos[campo]:
+            proposta[campo] = argumentos[campo]
+    return proposta
 
 
 def preparar_proposta(

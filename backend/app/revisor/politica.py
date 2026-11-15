@@ -90,6 +90,16 @@ LIVRES: frozenset[str] = frozenset(
         # meta-ferramentas do catálogo: a execução decide pela ferramenta de verdade
         "conectores_buscar_ferramentas",
         "conectores_carregar_ferramenta",
+        # computador virtual do bot (docs/computador-por-bot.md): olhar, mexer na própria área
+        # de arquivos e desligar não saem do computador; computador_agir vai para o revisor
+        "computador_observar",
+        "computador_arquivos",
+        "computador_escrever_arquivo",
+        "computador_entregar_arquivo",  # só leva o que é do bot para a conversa do próprio dono
+        "computador_desligar",
+        # canais da empresa (Ponte): só leitura, e só para bots autorizados
+        "consultar_cliente",
+        "consultar_conhecimento",
     }
 )
 
@@ -104,7 +114,13 @@ CARTAO_FIXO: frozenset[str] = frozenset(
 )
 
 REVISADAS: frozenset[str] = frozenset(
-    {"chamar_conector", "executar_comando", "navegador_agir", "conectores_executar_ferramenta"}
+    {
+        "chamar_conector",
+        "executar_comando",
+        "navegador_agir",
+        "conectores_executar_ferramenta",
+        "computador_agir",
+    }
 )
 
 SEGURAS_SEM_SUPERVISAO: frozenset[str] = frozenset(
@@ -132,6 +148,8 @@ SEGURAS_SEM_SUPERVISAO: frozenset[str] = frozenset(
         "gerar_grafico",
         "conectores_buscar_ferramentas",
         "conectores_carregar_ferramenta",
+        "consultar_cliente",
+        "consultar_conhecimento",
     }
 )
 """O que uma rotina agendada pode usar quando ninguém está olhando. O resto pausa."""

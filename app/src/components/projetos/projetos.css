@@ -6,7 +6,7 @@
 .pj-novo { width: min(880px, 100%); margin: 0 auto var(--sp-14); scroll-margin-top: var(--sp-6); }
 .pj-novo-cabeca { display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-5); }
 .pj-novo-cabeca canvas { flex: none; }
-.pj-novo h2 { margin: 0 0 var(--sp-1); color: var(--text-1); font-size: var(--fs-24); font-weight: 450; letter-spacing: -.02em; }
+.pj-novo h2 { margin: 0 0 var(--sp-1); color: var(--text-1); font-size: var(--fs-24); font-weight: 400; letter-spacing: -.02em; }
 .pj-novo p { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.45; }
 .pj-sugestoes { justify-content: flex-start; }
 .pj-sugestoes button:disabled { opacity: .4; cursor: default; }

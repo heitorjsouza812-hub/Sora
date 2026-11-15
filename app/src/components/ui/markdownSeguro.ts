@@ -100,6 +100,11 @@ export function markdownSeguro(fonte: string) {
       const indice = Number(id.slice(marca.length));
       if (Number.isInteger(indice) && indice >= 0 && indice < linguagens.length) emoldurar(el, linguagens[indice]);
     }
+    for (const tabela of Array.from(fragmento.querySelectorAll('table'))) {
+      const caixa = document.createElement('div'); caixa.className = 'md-table';
+      caixa.tabIndex = 0; caixa.setAttribute('role', 'region'); caixa.setAttribute('aria-label', 'Tabela com rolagem horizontal');
+      tabela.replaceWith(caixa); caixa.append(tabela);
+    }
     const saida = document.createElement('div');
     saida.append(fragmento);
     return saida.innerHTML;

@@ -26,7 +26,7 @@ describe('cartão de revisão de domínio', () => {
     expect(screen.getByText('banco.com')).toBeTruthy();
     expect(screen.getByText(/Trabalho/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Aprovar domínio' }));
-    expect(post).toHaveBeenCalledWith('/v1/aprovacoes/d1/decidir', { decisao: 'sempre_permitir' });
+    expect(post).toHaveBeenCalledWith('/v1/aprovacoes/d1/decidir', { decisao: 'permitir_uma_vez' });
   });
   it('Negar manda negar', () => {
     post.mockResolvedValue(undefined);

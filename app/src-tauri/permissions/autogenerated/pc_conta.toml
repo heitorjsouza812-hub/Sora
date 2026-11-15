@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pc-conta"
+description = "Enables the pc_conta command without any pre-configured scope."
+commands.allow = ["pc_conta"]
+
+[[permission]]
+identifier = "deny-pc-conta"
+description = "Denies the pc_conta command without any pre-configured scope."
+commands.deny = ["pc_conta"]

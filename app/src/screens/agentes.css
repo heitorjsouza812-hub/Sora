@@ -1,0 +1,29 @@
+/* Etapa 6, §6.11: galeria de bots. O prefixo .gallery-screen vence as regras antigas de ui/sora.css sem editá-las. */
+.gallery-screen { width: 100%; max-width: 1088px; margin: 0 auto; padding: 24px; box-sizing: border-box; }
+.gallery-screen .gallery-head { display: block; margin-bottom: 24px; }
+.gallery-screen .gallery-head p { margin: 0; color: var(--text-2); font-size: 14px; line-height: 22px; }
+.gallery-screen .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.gallery-screen .gallery-card { position: relative; display: block; min-width: 0; height: 96px; padding: 0; text-align: left; background: var(--surface-2); border: 1px solid var(--line); border-radius: 16px; transform: none; transition: border-color 120ms var(--ease, ease); }
+.gallery-screen .gallery-card:hover, .gallery-screen .gallery-card:focus-within { border-color: var(--line-strong); transform: none; }
+.gallery-screen .gallery-open { display: flex; align-items: center; gap: 16px; height: 100%; padding: 16px 52px 16px 16px; box-sizing: border-box; text-decoration: none; color: var(--text-1); border-radius: inherit; }
+.gallery-screen .gallery-open > :first-child { flex-shrink: 0; }
+.gallery-screen .gallery-info { display: grid; min-width: 0; gap: 4px; justify-items: start; text-align: left; }
+.gallery-screen .gallery-info strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 600; line-height: 20px; }
+.gallery-screen .gallery-info small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.gallery-screen .gallery-status { font-size: 12px; line-height: 16px; color: var(--agent); }
+.gallery-screen .gallery-menu { position: absolute; z-index: 1; top: 8px; right: 8px; }
+.gallery-screen .gallery-menu button { width: 32px; height: 32px; }
+.gallery-screen .gallery-open:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.gallery-screen .pj-vazio { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 64px 0; }
+.gallery-screen .pj-vazio h3 { margin: 16px 0 8px; font-size: 20px; line-height: 28px; font-weight: 600; }
+.gallery-screen .pj-vazio p { max-width: 420px; margin: 0 0 24px; color: var(--text-2); font-size: 14px; line-height: 22px; }
+@media (max-width: 767px) {
+  .gallery-screen { padding: 24px 16px; }
+  .gallery-screen .gallery-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .gallery-screen .gallery-card { height: 80px; }
+  .gallery-screen .gallery-open { padding: 8px 56px 8px 12px; gap: 12px; }
+  .gallery-screen .gallery-menu { top: 4px; right: 4px; }
+  .gallery-screen .gallery-menu button { width: 44px; height: 44px; }
+  .gallery-screen .gallery-info:has(.gallery-status) small { -webkit-line-clamp: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .gallery-screen .gallery-card { transition: none; } }

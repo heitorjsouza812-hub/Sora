@@ -43,6 +43,7 @@ from app.eventos.equipe import (
 from app.ferramentas.base import ErroFerramenta
 from app.filas import LIMITE_TAREFAS_MAXIMO, ErroFila, FilaAgente
 from app.filas.sql import ArmazemFilaSQL
+from app.modelos.enumeracoes import TipoAgente
 from app.modelos.tabelas import (
     AbaNavegador,
     Agente,
@@ -164,7 +165,7 @@ async def _exigir_agente(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID
         )
     )
     if existe is None:
-        raise HTTPException(404, "Agente nao encontrado.")
+        raise HTTPException(404, "Bot não encontrado.")
 
 
 async def _publicar_mudancas(redis: Redis, usuario_id: UUID, mudancas: Mudancas) -> None:
@@ -294,6 +295,22 @@ async def enviar_ao_canal(
     sessao: Sessao,
     redis: RedisDep,
 ) -> MensagemCanalEvento:
+    canal = await ServicoCanais(ArmazemCanaisSQL(sessao)).canal(canal_id)
+    if canal is not None and canal.usuario_id == usuario_id and canal.lider_id is not None:
+        lider = await sessao.get(Agente, canal.lider_id)
+        if lider is not None and lider.tipo == TipoAgente.SORA:
+            bots = await sessao.scalars(
+                select(Agente.id).where(
+                    Agente.id.in_(canal.membros),
+                    Agente.tipo == TipoAgente.INDIVIDUAL,
+                    Agente.apagado_em.is_(None),
+                    Agente.usuario_id == usuario_id,
+                )
+            )
+            if len(list(bots)) < 2:
+                raise HTTPException(
+                    409, "Este grupo precisa de pelo menos 2 bots. Adicione bots para continuar."
+                )
     if dados.anexos:
         encontrados = set(
             (

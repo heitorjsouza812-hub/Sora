@@ -7,7 +7,6 @@ const buscarAutenticado = vi.hoisted(() => vi.fn());
 vi.mock('../../../api/cliente', async (importar) => ({ ...(await importar<typeof import('../../../api/cliente')>()), buscarAutenticado }));
 
 import type { AgenteSora, EntregaGerada } from '../../../state/projetos';
-import { DeliveryContent } from '../../review/Entregas';
 import { Miniaturas } from '../../work/ChamadaFerramenta';
 import { EntregaCard } from '../EntregaCard';
 
@@ -48,13 +47,13 @@ describe('imagens das entregas', () => {
   it('revisão e painel Trabalho também não inventam', async () => {
     buscarAutenticado.mockResolvedValue({ blob: async () => new Blob(['x'], { type: 'image/png' }) });
     URL.createObjectURL = vi.fn(() => 'blob:cap'); URL.revokeObjectURL = vi.fn();
-    const { unmount } = render(<DeliveryContent entrega={{ tipo: 'imagem', titulo: 'Peças', resumo: '3 peças' }} color="#AC80FF" />);
+    const { unmount } = render(<EntregaCard agente={agente} entrega={{ tipo: 'imagem', titulo: 'Peças', resumo: '3 peças' }} />);
     semPecaInventada();
     expect(screen.queryAllByRole('img')).toHaveLength(0);
     unmount();
     const { container } = render(<Miniaturas resultado={{ resumo: '3 imagens geradas' }} cor="#AC80FF" />);
     expect(container.innerHTML).toBe('');
-    render(<DeliveryContent entrega={navegacao} color="#56A8FF" />);
+    render(<EntregaCard agente={agente} entrega={navegacao} />);
     await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(1));
     semPecaInventada();
   });

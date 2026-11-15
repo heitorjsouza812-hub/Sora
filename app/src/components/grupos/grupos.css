@@ -1,0 +1,48 @@
+/* Cabeçalho e título (compartilhado com a tela de Grupos) */
+.grp-topo, .grp-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.grp-cabecalho h2 { margin: 3px 0 0; color: var(--text-1); font-size: 20px; }
+.grp-sobretitulo { color: var(--text-3); font-size: 12px; font-weight: 600; }
+.grp-fechar, .grp-icone { border: 0; background: transparent; color: var(--text-2); cursor: pointer; font: inherit; }
+.grp-orb { width: 11px; height: 11px; flex: 0 0 auto; border-radius: 50%; box-shadow: 0 0 12px currentColor; }
+.grp-orb-sora { background: #E2ECFF; color: #E2ECFF; }
+.grp-nota, .grp-erro { margin: 0; color: var(--text-2); font-size: 13px; line-height: 1.5; }
+.grp-erro { color: var(--danger, #ff9b9b); }
+.grp-dica { margin-right: auto; color: var(--text-2); font-size: 13px; }
+
+/* Novo grupo (etapa 6, §6.6): 520 px, raio 20; no celular, folha de altura total com rodapé fixo. */
+.grp-modal-novo.sora-modal { width: min(100%, 520px); border-radius: var(--r-20, 20px); }
+.grp-modal-novo .sora-modal__footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.grp-form-novo { display: grid; gap: 16px; }
+.grp-chefe { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--text-2); font-size: 13px; }
+.grp-chefe b { color: var(--text-1); font-weight: 600; }
+.grp-chefe span::before { content: '· '; }
+.grp-chefe > canvas, .grp-escolha label > canvas { flex: 0 0 auto; }
+.grp-escolha { display: grid; gap: 0; padding: 0; margin: 0; border: 0; min-width: 0; }
+.grp-escolha legend { display: flex; justify-content: space-between; width: 100%; margin-bottom: 4px; padding: 0; color: var(--text-2); font-size: 13px; font-weight: 600; }
+.grp-contador { color: var(--text-3); font-weight: 400; }
+.grp-escolha label { position: relative; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 8px; border-top: 1px solid var(--line-soft, rgba(255, 255, 255, .05)); border-radius: 12px; cursor: pointer; }
+.grp-escolha legend + label { border-top: 0; }
+.grp-escolha label:hover { background: var(--hover, rgba(255, 255, 255, .06)); }
+.grp-escolha label[data-marcado='true'] { background: var(--hover, rgba(255, 255, 255, .06)); }
+.grp-escolha label[data-desativado='true'] { opacity: .5; cursor: default; }
+.grp-escolha input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.grp-escolha label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.grp-bot-texto { display: grid; flex: 1; gap: 1px; min-width: 0; }
+.grp-bot-texto b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); font-size: 15px; font-weight: 600; }
+.grp-bot-texto small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 13px; }
+.grp-escolha em { flex: none; color: var(--text-2); font-size: 12px; font-style: normal; }
+.grp-marca { display: grid; flex: none; place-items: center; width: 24px; height: 24px; border: 1.5px solid var(--line-strong); border-radius: 50%; }
+.grp-marca svg { width: 14px; height: 14px; fill: none; stroke: var(--action, #EEF2FA); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.grp-escolha label[data-marcado='true'] .grp-marca { border-color: transparent; }
+.grp-escolha label[data-marcado='true'] .grp-marca svg { opacity: 1; }
+.grp-sem-bots { display: grid; justify-items: start; gap: 10px; padding: 14px; border: 1px dashed var(--line-strong, var(--line)); border-radius: 14px; }
+.grp-sem-bots p { margin: 0; }
+@media (max-width: 760px) {
+  .sora-overlay-backdrop:has(> .grp-modal-novo) { padding: 0; }
+  .grp-modal-novo.sora-modal { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
+  .grp-modal-novo .sora-modal__footer .b-btn { flex: 1 1 0; min-height: 44px; }
+  .grp-modal-novo .grp-dica { flex: 1 1 100%; margin: 0 0 4px; }
+  .grp-modal-novo .sora-modal__footer { flex-wrap: wrap; }
+}
+.grp-erro { color: var(--danger, #ff9b9b); }
+

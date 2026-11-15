@@ -1,5 +1,17 @@
 # Onde paramos
 
+## Etapas 5 e 6 — interface nova e acabamento (2026-11-14 e 2026-11-15)
+
+- **Estado:** prontas no ramo `etapa5-interface` (`C:\dev\sora-e5`), à espera do "sim" do Heitor para a `main`; sem push. Portas de desenvolvimento no padrão (Vite 5173, API 8000).
+- **O que existe:** Sora como chefe de equipe, bots e grupos (2 a 5 bots), criação por conversa (cartão de rascunho e proposta de grupo), central "Precisa de você" (Permitir uma vez · Sempre permitir · Recusar), barra lateral nova (Criar novo, Buscar, Clientes, BOTS, GRUPOS), visual novo (`docs/design/etapa6-visual.md`), conversa com Parar, fontes, editar/refazer/avaliar, imagem e visão, voz, busca e memória; painel Trabalho com tela ao vivo do navegador e do computador; navegador próprio e computador virtual por bot (`docs/computador-por-bot.md`); controle do PC do usuário no desktop com proteções; canais da empresa só leitura com aprendizado e tela Clientes (`docs/canais-da-empresa.md`); Ilha só fora do app e aviso fora de foco.
+- **Verde (Prumo-4, Âncora-8):** backend 1409 unitários e 28/28 arquivos de integração; app 382 testes, `test:visual` 22/22, contraste 0 falhas; Clippy e 22 testes Rust. Ao vivo com Groq: conversa, cartões, aprovação, Parar e voz. Detalhes em `log/2026-11-15.md`.
+- **Próximo passo:** (1) aprovação da junção; (2) teste real do Tauri (controle do PC, login desktop, Ilha); (3) Slack e WhatsApp Business reais; (4) instalador assinado com o domínio real da API no CSP; (5) decidir PWA e tema claro; (6) MÉDIA/BAIXA abertas em `.maestri/relatorios/prumo4.md` e `ancora8.md` e a renovação da sessão. Planos: `log/etapa5-interface.md`, `log/etapa6-acabamento.md`.
+
+## Etapa 6 — Âncora-3 (2026-11-14)
+
+- Backend: interrupção de conversa, fontes persistidas, edição/refação da última pergunta/resposta e avaliação. Migração `0011` aplicada no PostgreSQL da etapa 5 (46432). Contrato: `.maestri/contrato-etapa5.md`, seção Âncora-3. Relatório: `.maestri/relatorios/ancora3.md`.
+- Próximo passo: ligar os controles no app e validar com modelo real; esta rodada usa worker/API reais com modelo controlado nos testes de interrupção. Demais frentes da etapa 6 continuam com seus donos.
+
 ## Etapa 4 — peças ligadas ao worker (concluída em 2026-11-04)
 
 - O worker real usa navegador por árvore com perfis e revisão de domínio, fila persistente, canais de equipe e correio, contexto e compactação, memória, pendências, revisor, habilidades, rotinas, conectores MCP, Telegram, sandbox e voz. O app mostra canais, fila, contexto, memória, rotinas, habilidades, conectores, Telegram, pendências, voz, perfis do navegador, cartão de domínio e rastro da aba. Plano: `log/etapa4-pecas.md`. Diário: `log/2026-11-02.md`.
@@ -131,3 +143,13 @@ _Atualizado em 2026-11-01 — **navegador por árvore adaptado do agent-desktop*
 - Repositório em `C:\dev\sora`. Esqueleto do backend e da infra (`8d7b2ed`) validado pelo Vigia.
 - Etapa 3 (fundação) **concluída**: Alicerce (segurança, migrações 0001–0003, contas, infra), Trama (eventos/SSE, ler_pagina com SSRF, busca, estados da cadeia, arquivos sem path traversal, checkpointer) e Bússola (modelo falso, seletor, Sistema 1, custo e fábrica de modelos). Vigia: rodadas 1 a 3. Depois, a revisão de segurança do time do Clausecurity (acima).
 - **Próximo:** backend de ponta a ponta (conexão das APIs, prompt da Sora, worker com o modo Cadeia, especialistas em LangChain, middlewares, entregas com versões, passos, cartões de pergunta, agente independente, anexos, dados de treino do Laya); depois ligar o app (inclui tratar o erro `recarregar` do contrato em `tests/contrato/retomada/`).
+
+## Vela-4 — C3 (2026-11-14)
+
+- Onde parou: recuperou o WIP da Vela-3 e completou backend, canal autenticado, cartões, ponte Tauri/Windows e Configurações → Computador. Documentação: `docs/computador-por-bot.md` § C3 e contrato § Vela-4. Relatório: `.maestri/relatorios/vela4.md`.
+- Próximo passo: teste interativo no desktop (Bloco de Notas, entrada física e campo real de senha), antes de marcar C3 NO AR. Sem push; WIP dos outros integrantes preservado.
+
+## Heitor / Vela-7 — C3 (2026-11-15)
+
+- Onde parou: backend recuperado, revisado e commitado em `1dcf0ad`; 1239 unitários passaram / 2 pulados, integração C3 real passou. App build/lint/347 testes e Rust Clippy/12 testes C3 passaram. Rastro do PC sem título de documento, pausa no primeiro movimento físico e leitura de senha conservadora. Relatório: `.maestri/relatorios/vela7.md`.
+- Próximo passo: resolver o erro de login desktop no ambiente local e testar Bloco de Notas, mouse físico e campo real IsPassword. C3 ainda não marcado NO AR; sem push/instalador. Outros donos preservados.

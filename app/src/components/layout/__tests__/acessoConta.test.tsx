@@ -30,11 +30,11 @@ vi.mock('../../mascot', () => ({ SoraOrb: () => <span data-testid="sora-orb" /> 
 vi.mock('../../settings', () => ({ ProviderCard: ({ provedor }: { provedor: { nome: string } }) => <div>{provedor.nome}</div> }));
 vi.mock('../../uso', () => ({ IndicadorUso: () => null }));
 vi.mock('../../gestao', () => ({ GestaoHost: () => null, pedirApagar: vi.fn(), pedirRenomear: vi.fn() }));
-vi.mock('../../comandos', () => ({ Comandos: () => null }));
+vi.mock('../../comandos', () => ({ Comandos: () => null, abrirPaleta: vi.fn(), MOD: 'Ctrl' }));
 vi.mock('../../ilha', () => ({ Ilha: () => null }));
 vi.mock('../../erros', () => ({ FaixaErroEventos: () => null, FaixaSemConexao: () => null }));
 vi.mock('../../builder', () => ({ EditorAgenteHost: () => null, MenuAgente: () => null }));
-vi.mock('../useSoraStatus', () => ({ statusDaSora: () => ({ orb: 'idle', pulso: 0, rotulo: 'Disponível' }), statusCurto: vi.fn() }));
+vi.mock('../useSoraStatus', () => ({ statusDaSora: () => ({ orb: 'idle', pulso: 0, rotulo: 'Disponível' }), estadoDaMarca: () => null, statusCurto: vi.fn() }));
 
 import { AppShell } from '../AppShell';
 import { Onboarding } from '../../sessao/Onboarding';
@@ -50,7 +50,7 @@ describe('acesso à conta', () => {
     const menu = screen.getByRole('dialog', { name: 'Menu' });
 
     expect(within(menu).getByText('Ana Souza')).toBeInTheDocument();
-    expect(within(menu).getByText('ana@sora.local')).toBeInTheDocument();
+    expect(within(menu).queryByText('ana@sora.local')).toBeNull(); // o e-mail fica em Configurações → Conta
     expect(within(menu).getByRole('link', { name: 'Configurações' })).toHaveAttribute('href', '/configuracoes');
 
     const botaoSair = within(menu).getByRole('button', { name: 'Sair' });

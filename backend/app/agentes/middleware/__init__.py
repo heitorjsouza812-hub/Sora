@@ -40,7 +40,25 @@ def montar_middleware(
     from app.agentes.middleware.limite_provedor import MiddlewareLimiteDoProvedor
 
     # Por dentro da nova tentativa e da troca: espera o limite do plano em vez de trocar de modelo.
-    itens.append(MiddlewareLimiteDoProvedor(ao_esperar=contexto.dependencias.ao_esperar_limite))
+    itens.append(
+        MiddlewareLimiteDoProvedor(
+            ao_esperar=contexto.dependencias.ao_esperar_limite,
+            tratar_limite=contexto.canal_id is None,
+        )
+    )
+    from app.agentes.middleware.custo import MiddlewareCustoDasChamadas
+    from app.llm.custo import gravar_chamada_do_agente
+
+    async def _gravar_custo(custo: object) -> None:
+        await gravar_chamada_do_agente(
+            contexto.usuario_id,
+            custo,  # type: ignore[arg-type]
+            cadeia_id=contexto.cadeia_id,
+            etapa_id=contexto.etapa_id,
+        )
+
+    # Por dentro da troca de modelo: a linha é do modelo que de fato respondeu.
+    itens.append(MiddlewareCustoDasChamadas(_gravar_custo))
     from app.agentes.middleware.limites import limites_do_agente
 
     chamadas_modelo, chamadas_ferramenta = limites_do_agente(contexto)
@@ -93,6 +111,27 @@ def montar_middleware(
                 finalizar=deps.finalizar_passo,
             )
         )
+    elif (
+        contexto.etapa_id is None
+        and contexto.papel in {"sora", "individual"}
+        and not contexto.sem_supervisao
+        and deps.iniciar_passo is not None
+        and deps.finalizar_passo is not None
+    ):
+        # Conversa direta (bot 1:1, Sora, grupo): sem etapa de verdade, o painel Trabalho recebe os
+        # mesmos eventos ``passo`` sob um id sintético estável por turno (não vai para o banco).
+        from app.agentes.middleware.passos import PASSOS_DA_CONVERSA_IGNORADOS, id_do_turno
+
+        itens.append(
+            MiddlewarePassos(
+                id_do_turno(contexto),
+                contexto.agente_id,
+                iniciar=deps.iniciar_passo,
+                finalizar=deps.finalizar_passo,
+                anunciar_prompt=deps.anunciar_prompt,
+                ignorar=PASSOS_DA_CONVERSA_IGNORADOS,
+            )
+        )
     # Âncora (etapa 4): aprovação por ferramenta e medidor/compactação do contexto.
     from app.agentes.middleware.contexto import MiddlewareContexto
     from app.agentes.middleware.revisor import MiddlewareRevisor
@@ -112,7 +151,9 @@ def montar_middleware(
             )
         )
     )
-    if contexto.etapa_id is None and contexto.thread_proprio is None:
+    if contexto.etapa_id is None and (
+        contexto.thread_proprio is None or ":pedido:" in contexto.thread_proprio
+    ):
         itens.append(
             MiddlewareContexto(
                 PortaContexto(
@@ -131,4 +172,22 @@ def montar_middleware(
         )
     if deps.salvar_saida is not None:
         itens.append(MiddlewareSaidaGrande(contexto.cadeia_id, salvar=deps.salvar_saida))
+    if contexto.modelo_enxerga is not None:
+        # Farol-2: o bot com computador vê a última captura (ou é avisado de que o modelo não vê).
+        from app.computador.ferramentas import obter_servico
+        from app.computador.visao import MiddlewareVisaoTela
+
+        itens.append(
+            MiddlewareVisaoTela(
+                contexto.agente_id, servico=obter_servico, tem_visao=contexto.modelo_enxerga
+            )
+        )
+    from app.agentes.middleware.conversa import MiddlewareConversa
+
+    if contexto.canal_id is not None:
+        from app.agentes.middleware.conversa import MiddlewareStreamingCanal
+
+        itens.insert(0, MiddlewareStreamingCanal(contexto))
+    elif contexto.dependencias.iniciar_passo is not None:
+        itens.insert(0, MiddlewareConversa(contexto))
     return itens

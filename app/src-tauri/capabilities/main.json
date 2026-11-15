@@ -1,15 +1,23 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Janela principal: ouve sora-navegar e a ponte de armazenamento (sora-armazenamento, que ela também emite) e liga/desliga a ilha (ilha_visivel).",
+  "description": "Janela principal: ouve sora-navegar e a ponte de armazenamento (sora-armazenamento, que ela também emite) e liga/desliga a ilha (ilha_visivel) e executa o controle do PC por bot (pc_*, C3).",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:event:allow-emit",
     "allow-ilha-visivel",
+    "allow-notificar-atencao",
+    "allow-titulo-atencao",
     "allow-cofre-ler",
     "allow-cofre-gravar",
-    "allow-cofre-apagar"
+    "allow-cofre-apagar",
+    "allow-pc-conta",
+    "allow-pc-autorizar",
+    "allow-pc-estado",
+    "allow-pc-executar",
+    "allow-pc-parar",
+    "allow-pc-sair"
   ]
 }

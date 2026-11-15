@@ -1,40 +1,38 @@
-// Ilha da Sora — CONTRATO de dados (adaptação do Coucou: https://github.com/Louis-CFM/coucou).
-// A ilha mostra, no topo da tela, a Sora (branca, principal) e os agentes que estão rodando
-// no projeto escolhido. Tudo é derivado do store de projetos + relógio (nada novo é simulado aqui).
-// As peças visuais (Ilha, VisaoGeral, SeletorProjeto, DetalheAgente…) usam SÓ o que este arquivo exporta.
+// Ilha da Sora — CONTRATO de dados (etapa 5: bots e grupos).
+// A ilha só existe na janela dedicada do app de desktop (ver Ilha.tsx: fora dela, nunca renderiza).
+// Mostra a Sora (sempre branca, `#E2ECFF` — nunca mudar) e os bots que estão trabalhando, mais o que
+// a equipe espera do usuário. Tudo vem de hooks reais: `useBots` (Leme), `useGrupos`/`usePrecisaDeVoce`
+// (Mosaico). Nada aqui é simulado — não há mais projetos/agentes de cadeia, que saíram do app nesta etapa.
 import { useSyncExternalStore } from 'react';
-import type { Movimento, PassoTrabalho, Status } from '../../types';
+import { useBots, type BotResumo, type EstadoBot } from '../../state/bots';
+import { useGrupos } from '../../state/grupos';
+import { usePrecisaDeVoce } from '../../state/atencao';
+import type { PedidoAtencao } from '../pendencias/tipos';
 import type { OrbState } from '../mascot';
-import {
-  agentesDoProjeto, estadoAgente, estadoProjeto, passosDoAgente, useAgora, useProjetos,
-  type EstadoProjetos, type FaseProjeto, type Pendencia, type ProjetoSora,
-} from '../../state/projetos';
-import { statusDaSora } from '../layout/useSoraStatus';
 
 // ---------- preferências (localStorage 'sora.ilha.v1') ----------
 
 export interface IlhaPrefs {
-  /** mostrar a ilha no app */
+  /** mostrar a ilha fora do app; a janela nativa some de qualquer forma quando a main está em foco */
   visivel: boolean;
-  /** sons curtos (agente concluiu, equipe pronta, abrir) */
+  /** sons curtos (abrir, bot concluiu, pedido novo) */
   som: boolean;
   /** como no Coucou: sem nada rodando, a ilha se recolhe e só "espia" ao passar o mouse no topo */
   esconderOciosa: boolean;
-  /** projeto escolhido na aba de projetos; null = automático (o projeto aberto ou o que está rodando) */
-  projetoId: string | null;
-  /** quais bonecos mostrar: todos, só os que estão trabalhando, ou só os concluídos */
-  filtro: FiltroAgentes;
-  /** ids de agentes que o usuário escondeu da ilha (botão "olho" em cada boneco) */
+  /** quais bonecos mostrar: todos, só os que estão trabalhando, ou só os que precisam de você */
+  filtro: FiltroBots;
+  /** ids de bots que o usuário escondeu da ilha (botão "olho" em cada boneco) */
   ocultos: string[];
-  /** no app de desktop (Tauri) a ilha vive numa janela própria no topo da tela; true = também mostrar dentro do app */
+  /** @deprecated etapa 5: a ilha nunca renderiza dentro do app (Tauri mostra/oculta a janela pelo
+   *  foco da "main"); campo mantido só para não quebrar preferências salvas antes desta etapa. */
   ilhaNoApp: boolean;
 }
 
-export type FiltroAgentes = 'todos' | 'trabalhando' | 'concluidos';
+export type FiltroBots = 'todos' | 'trabalhando' | 'precisa_de_voce';
 
 const CHAVE = 'sora.ilha.v1';
 const PADRAO: IlhaPrefs = {
-  visivel: true, som: true, esconderOciosa: false, projetoId: null, filtro: 'todos', ocultos: [], ilhaNoApp: false,
+  visivel: true, som: true, esconderOciosa: false, filtro: 'todos', ocultos: [], ilhaNoApp: false,
 };
 
 function carregar(): IlhaPrefs {
@@ -69,129 +67,57 @@ export function alternarAgenteOculto(id: string) {
 }
 
 /** Aplica o filtro e os ocultos das preferências (função pura). A ordem é preservada. */
-export function filtrarAgentes(agentes: AgenteIlha[], p: Pick<IlhaPrefs, 'filtro' | 'ocultos'>): AgenteIlha[] {
-  return agentes.filter(a =>
-    !p.ocultos.includes(a.id) &&
-    (p.filtro === 'todos' || (p.filtro === 'trabalhando' ? a.status === 'trabalhando' : a.status === 'concluido')));
+export function filtrarBonecos(bonecos: BonecoIlha[], p: Pick<IlhaPrefs, 'filtro' | 'ocultos'>): BonecoIlha[] {
+  return bonecos.filter(a => !p.ocultos.includes(a.id) && (p.filtro === 'todos' || a.estado === p.filtro));
 }
 
 // ---------- visão derivada ----------
 
-export interface ResumoProjetoIlha {
-  id: string;
-  titulo: string;
-  fase: FaseProjeto;
-  /** pensando · planejando · coordenando · pronto (esperando revisão) */
-  rodando: boolean;
-  trabalhando: number;          // agentes com status 'trabalhando' agora
-  total: number;                // agentes da equipe já nascidos
-  progresso: number;            // 0..100
-  cores: string[];              // cores dos agentes (para as mini-bolinhas da aba)
-}
-
-export interface AgenteIlha {
+/** Um "boneco" da ilha: o corpo de pontos de um bot, pequeno e na cor dele. */
+export interface BonecoIlha {
   id: string;
   nome: string;
   funcao: string;
   cor: string;
-  movimento: Movimento;
-  status: Status;
-  rotulo: string;               // "Pesquisando", "Aguardando referências", "Concluído"…
-  progresso: number;            // 0..100
-  orb: OrbState;                // estado pronto para o <SoraOrb>
-  passoAtual: PassoTrabalho | null; // o que está fazendo agora (último passo iniciado)
-}
-
-export interface AlertaIlha {
-  tipo: 'revisar';              // equipe terminou: o usuário aprova ou pede ajuste (nada é publicado sem aprovação)
-  projetoId: string;
-  titulo: string;
-  entregas: string[];           // ex.: ["Pesquisa · 4 referências", "Peças · 3 peças"]
+  estado: EstadoBot;
+  orb: OrbState;
 }
 
 export interface VisaoIlha {
-  projetos: ResumoProjetoIlha[];      // todos (rodando primeiro, depois os mais recentes)
-  projeto: ResumoProjetoIlha | null;  // o projeto mostrado
-  automatico: boolean;                // true quando a escolha veio do modo automático
-  agentes: AgenteIlha[];              // os "bonecos": agentes do projeto mostrado
-  sora: { nome: string; cor: string; orb: OrbState; rotulo: string; pulso: number };
-  ticker: PassoTrabalho[];            // últimos passos (mais recente por último), no máx. 6
-  trabalhando: number;                // agentes trabalhando em TODOS os projetos
-  rodando: number;                    // projetos rodando
-  alerta: AlertaIlha | null;
-  pendencias: Pendencia[];            // o que a equipe do projeto mostrado espera do usuário
+  sora: { nome: string; cor: string };
+  bonecos: BonecoIlha[];          // todos os bots da conta (sem filtro de preferência)
+  trabalhando: number;            // bots com estado 'trabalhando'
+  gruposTrabalhando: number;      // grupos com alguma tarefa em andamento
+  precisaDeVoce: PedidoAtencao[]; // cartões "Precisa de você" (Mosaico) de todos os bots/grupos
 }
 
-const RODANDO: FaseProjeto[] = ['pensando', 'planejando', 'coordenando', 'pronto'];
+/** A Sora é sempre branca e sempre "Sora" (§3.1 do AGENTS.md) — identidade fixa, não vem de dados. */
+const SORA_IDENTIDADE = { nome: 'Sora', cor: '#E2ECFF' } as const;
 
-function resumir(e: EstadoProjetos, p: ProjetoSora, agora: number): ResumoProjetoIlha {
-  const ep = estadoProjeto(e, p, agora);
-  const ags = agentesDoProjeto(e, p, agora);
+const orbDoEstado = (estado: EstadoBot): OrbState =>
+  estado === 'trabalhando' ? 'working' : estado === 'precisa_de_voce' ? 'listening' : 'idle';
+
+function bonecoDoBot(bot: BotResumo): BonecoIlha {
+  return { id: bot.id, nome: bot.nome, funcao: bot.funcao, cor: bot.cor, estado: bot.estado, orb: orbDoEstado(bot.estado) };
+}
+
+/** Função pura (testável): monta a visão da ilha a partir dos três hooks reais. */
+export function visaoIlha(bots: BotResumo[], gruposTrabalhando: number, precisaDeVoce: PedidoAtencao[]): VisaoIlha {
+  const bonecos = bots.map(bonecoDoBot);
   return {
-    id: p.id, titulo: p.titulo, fase: ep.fase, rodando: RODANDO.includes(ep.fase),
-    trabalhando: ags.filter(a => estadoAgente(e, a.id, agora).status === 'trabalhando').length,
-    total: ags.length, progresso: ep.progresso, cores: ags.map(a => a.cor),
+    sora: SORA_IDENTIDADE,
+    bonecos,
+    trabalhando: bonecos.filter(b => b.estado === 'trabalhando').length,
+    gruposTrabalhando,
+    precisaDeVoce,
   };
 }
 
-const orbDoStatus = (s: Status): OrbState => s === 'trabalhando' ? 'working' : s === 'concluido' ? 'done' : 'idle';
-
-/** Pendências de todos os projetos (o usuário não pode perder um pedido de outro projeto); as do mostrado vão primeiro. */
-function pendenciasDaIlha(e: EstadoProjetos, projetoId: string | null): Pendencia[] {
-  const ids = new Set(e.projetos.map(p => p.id));
-  const todas = (e.pendencias ?? []).filter(x => ids.has(x.conversaId));
-  return [...todas.filter(x => x.conversaId === projetoId), ...todas.filter(x => x.conversaId !== projetoId)];
-}
-
-/** Função pura (testável): monta a visão da ilha. */
-export function visaoIlha(e: EstadoProjetos, agora: number, escolhido: string | null): VisaoIlha {
-  const resumos = e.projetos.map(p => resumir(e, p, agora));
-  const projetos = [...resumos.filter(r => r.rodando), ...resumos.filter(r => !r.rodando)];
-
-  // escolha: manual (se ainda existe) → projeto aberto → primeiro rodando → mais recente
-  const manual = escolhido ? resumos.find(r => r.id === escolhido) ?? null : null;
-  const auto = resumos.find(r => r.id === e.projetoAtivoId) ?? projetos.find(r => r.rodando) ?? resumos[0] ?? null;
-  const projeto = manual ?? auto;
-  const p = projeto ? e.projetos.find(x => x.id === projeto.id) ?? null : null;
-
-  const agentes: AgenteIlha[] = agentesDoProjeto(e, p, agora).map(a => {
-    const st = estadoAgente(e, a.id, agora);
-    const passos = passosDoAgente(e, a.id, agora);
-    return {
-      id: a.id, nome: a.nome, funcao: a.funcao, cor: a.cor, movimento: a.tipoMovimento,
-      status: st.status, rotulo: st.rotulo || a.funcao, progresso: st.progresso, orb: orbDoStatus(st.status),
-      passoAtual: st.status === 'trabalhando' ? passos[passos.length - 1] ?? null : null,
-    };
-  });
-
-  const ticker = p
-    ? agentes.flatMap(a => passosDoAgente(e, a.id, agora)).sort((a, b) => a.inicio - b.inicio).slice(-6)
-    : [];
-
-  // a Sora reflete o projeto mostrado (statusDaSora lê o projeto ativo; aqui trocamos pelo escolhido)
-  const s = statusDaSora(p ? { ...e, projetoAtivoId: p.id } : { ...e, projetoAtivoId: null }, agora);
-
-  const pronto = p && projeto?.fase === 'pronto' ? p : e.projetos.find(x => estadoProjeto(e, x, agora).fase === 'pronto') ?? null;
-  const alerta: AlertaIlha | null = pronto ? {
-    tipo: 'revisar', projetoId: pronto.id, titulo: pronto.titulo,
-    entregas: Object.values(pronto.entregas).map(en => `${en.titulo} · ${en.resumo}`),
-  } : null;
-
-  return {
-    projetos, projeto, automatico: !manual, agentes,
-    sora: { nome: e.sora.nome, cor: e.sora.cor, orb: s.orb, rotulo: s.rotulo, pulso: s.pulso },
-    ticker,
-    trabalhando: Object.keys(e.agentes).filter(id => estadoAgente(e, id, agora).status === 'trabalhando').length,
-    rodando: projetos.filter(r => r.rodando).length,
-    alerta,
-    pendencias: pendenciasDaIlha(e, p?.id ?? null),
-  };
-}
-
-/** Hook usado pelos componentes da ilha. */
+/** Hook usado pelos componentes da ilha: combina os bots (Leme), os grupos e os pedidos de atenção
+ *  (Mosaico) num único retrato do que está acontecendo agora. */
 export function useIlha(): VisaoIlha {
-  const e = useProjetos();
-  const agora = useAgora();
-  const { projetoId } = useIlhaPrefs();
-  return visaoIlha(e, agora, projetoId);
+  const bots = useBots();
+  const grupos = useGrupos();
+  const atencao = usePrecisaDeVoce();
+  return visaoIlha(bots, grupos.lista.filter(g => g.trabalhando).length, atencao.lista);
 }

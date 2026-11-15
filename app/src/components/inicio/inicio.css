@@ -1,0 +1,35 @@
+/* Estado vazio da Sora (etapa 6, §6.1): orb, título e compositor juntos no centro; sugestões e aviso embaixo. */
+.conversation.is-carregando > .conversation-drop { visibility: hidden; }
+
+/* desktop: grade 1,1fr · compositor · 1fr; o compositor fica um pouco abaixo do meio */
+.conversation.is-vazio > .conversation-drop { grid-template-rows: minmax(0, 1.1fr) auto minmax(0, 1fr); }
+.conversation.is-vazio .conversation-area { grid-row: 1; }
+.conversation.is-vazio .chat-composer { grid-row: 2; padding-bottom: 0; }
+.conversation.is-vazio .chat-composer::before { display: none; }
+.sora-vazio-rodape { grid-row: 3; min-width: 0; padding: var(--sp-3) var(--gut) 0; }
+
+.sora-hero { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: var(--sp-5); padding: 0 var(--sp-6) var(--sp-7); text-align: center; pointer-events: none; }
+.sora-hero-orb { display: grid; place-items: center; width: 120px; height: 120px; }
+.sora-hero h1 { margin: 0; color: var(--text-1); font: 600 var(--fs-32)/40px var(--font); letter-spacing: -.02em; }
+
+.inicio-sora { display: flex; flex-direction: column; align-items: center; gap: var(--sp-5); width: 100%; margin: 0 auto; }
+.inicio-sora .aviso-provedor { display: block; max-width: none; margin: 0; padding: 0; color: var(--text-2); background: none; border: 0; border-radius: 0; font-size: var(--fs-13); font-weight: 400; line-height: 18px; text-align: center; }
+.inicio-sora .aviso-provedor a { color: var(--text-1); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+.inicio-sugestoes { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.inicio-sugestoes button { height: 36px; padding: 0 var(--sp-4); color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: var(--r-pill); font: 400 var(--fs-13)/18px var(--font); cursor: pointer; transition: color var(--dur-fast), border-color var(--dur-fast); }
+.inicio-sugestoes button:hover { color: var(--text-1); border-color: var(--line-strong); }
+
+@media (max-width: 767px) {
+  /* celular: o orb inteiro no espaço livre, as sugestões em lista e o compositor embaixo (sem descida) */
+  .conversation.is-vazio > .conversation-drop { grid-template-rows: minmax(0, 1fr) auto auto; }
+  .sora-vazio-rodape { grid-row: 2; padding: 0 var(--gut) var(--sp-3); }
+  .conversation.is-vazio .chat-composer { grid-row: 3; padding-bottom: max(var(--sp-3), env(safe-area-inset-bottom, 0px)); }
+  .sora-hero { justify-content: center; padding: 0 var(--sp-4); gap: var(--sp-4); }
+  .sora-hero-orb { width: 96px; height: 96px; }
+  .sora-hero h1 { font-size: var(--fs-24); line-height: 30px; }
+  .inicio-sora { gap: var(--sp-3); }
+  .inicio-sugestoes { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 0; width: 100%; }
+  .inicio-sugestoes li { border-bottom: 1px solid var(--line-soft); }
+  .inicio-sugestoes li:nth-child(n + 4) { display: none; }
+  .inicio-sugestoes button { width: 100%; height: 44px; padding: 0 var(--sp-1); border: 0; border-radius: 0; text-align: left; }
+}

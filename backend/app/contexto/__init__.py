@@ -162,10 +162,10 @@ def pedir_compactacao_manual(
     if estado.compactacao is SituacaoCompactacao.COMPACTANDO:
         return DecisaoCompactacao("recusar", "Já estou compactando esta conversa.")
     if turno_rodando:
-        return DecisaoCompactacao("recusar", "Espere o agente terminar o que está fazendo.")
+        return DecisaoCompactacao("recusar", "Espere o bot terminar o que está fazendo.")
     if itens_na_fila:
         return DecisaoCompactacao(
-            "recusar", "Há mensagens na fila deste agente; compacte depois que elas rodarem."
+            "recusar", "Há mensagens na fila deste bot; compacte depois que elas rodarem."
         )
     return DecisaoCompactacao("compactar_antes", "Pedido do usuário.")
 

@@ -44,14 +44,14 @@ export function SecaoMemoria() {
   const acao = useAcao(recarregar);
   const [texto, setTexto] = useState('');
   const salvar = async (ev: FormEvent) => { ev.preventDefault(); if (texto.trim() && await acao.rodar(() => pecas.criarMemoria(texto.trim()))) setTexto(''); };
-  return <Secao titulo="Memória" texto="O que a Sora e os agentes lembram sobre você entre conversas. Você pode acrescentar ou apagar qualquer item; senhas e chaves não são aceitas.">
+  return <Secao titulo="Memória" texto="O que a Sora e os bots lembram sobre você entre conversas. Você pode acrescentar ou apagar qualquer item; senhas e chaves não são aceitas.">
     <form className="pc-form" onSubmit={ev => void salvar(ev)}>
-      <Input rotulo="Nova lembrança" value={texto} onChange={e => setTexto(e.target.value)} maxLength={500} placeholder="Ex.: Minha cafeteria fica em Curitiba e fecha às segundas." />
-      <Button type="submit" variante="primario" tamanho="M" disabled={!texto.trim() || acao.ocupado}>Guardar</Button>
+      <Input rotulo="Nova lembrança" value={texto} onChange={e => setTexto(e.target.value)} maxLength={500} placeholder="Ex.: Prefiro respostas curtas e em tópicos." />
+      <Button type="submit" variante="primario" tamanho="M" disabled={!texto.trim() || acao.ocupado}>Guardar</Button>{(!texto.trim()) && <p className="pc-form-hint">Escreva uma lembrança para guardar.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando memórias…</p> : !itens.length ? <p className="pc-vazio">Nada guardado ainda.</p> :
-      <ul className="pc-lista">{itens.map(m => <li key={m.id}><span><p>{m.conteudo}</p><small>{m.origem === 'agente' ? 'Guardada por um agente' : 'Você'} · {quando(m.criada_em)}</small></span>
+      <ul className="pc-lista">{itens.map(m => <li key={m.id}><span><p>{m.conteudo}</p><small>{m.origem === 'agente' ? 'Guardada por um bot' : 'Você'} · {quando(m.criada_em)}</small></span>
         <Button tamanho="M" variante="perigo" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.apagarMemoria(m.id))}>Esquecer</Button></li>)}</ul>}
   </Secao>;
 }
@@ -97,7 +97,7 @@ export function SecaoRotinas() {
           : <><label>Quantidade<input type="number" min={1} value={aCada} onChange={e => setACada(Math.max(1, Number(e.target.value) || 1))} /></label>
             <label>Unidade<select value={unidade} onChange={e => setUnidade(e.target.value as 'minutos' | 'horas' | 'dias')}><option value="minutos">minutos</option><option value="horas">horas</option><option value="dias">dias</option></select></label></>}
       </div>
-      <Button type="submit" variante="primario" tamanho="M" disabled={!titulo.trim() || !pedido.trim() || acao.ocupado}>Criar rotina</Button>
+      <Button type="submit" variante="primario" tamanho="M" disabled={!titulo.trim() || !pedido.trim() || acao.ocupado}>Criar rotina</Button>{(!titulo.trim() || !pedido.trim()) && <p className="pc-form-hint">Preencha o título e o que a rotina deve fazer.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando rotinas…</p> : !itens.length ? <p className="pc-vazio">Nenhuma rotina ainda.</p> :
@@ -127,13 +127,13 @@ export function SecaoConectores() {
     const r = await pecas.testarConector(id);
     setTeste(t => ({ ...t, [id]: r.ok ? `Funcionou: ${r.ferramentas.length} ferramenta(s).` : `Falhou: ${r.erro ?? 'sem detalhe'}` }));
   });
-  return <Secao titulo="Conectores" texto="Servidores MCP externos que dão mais ferramentas aos agentes. Só endereços https públicos; os cabeçalhos (chaves de acesso) ficam guardados no servidor e nunca voltam para esta tela.">
+  return <Secao titulo="Conectores" texto="Servidores MCP externos que dão mais ferramentas aos bots. Só endereços https públicos; os cabeçalhos (chaves de acesso) ficam guardados no servidor e nunca voltam para esta tela.">
     <form className="pc-form pc-form-coluna" onSubmit={ev => void criar(ev)}>
       <Input rotulo="Nome" value={nome} onChange={e => setNome(e.target.value)} maxLength={60} />
       <Input rotulo="Endereço (https)" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://servidor.exemplo.com/mcp" />
       <div className="pc-linha"><label>Cabeçalho (opcional)<input value={chave} onChange={e => setChave(e.target.value)} placeholder="Authorization" /></label>
         <label>Valor<input type="password" value={valor} onChange={e => setValor(e.target.value)} autoComplete="off" /></label></div>
-      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim() || !url.trim() || acao.ocupado}>Adicionar conector</Button>
+      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim() || !url.trim() || acao.ocupado}>Adicionar conector</Button>{(!nome.trim() || !url.trim()) && <p className="pc-form-hint">Preencha o nome e o endereço do conector.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando conectores…</p> : !itens.length ? <p className="pc-vazio">Nenhum conector ainda.</p> :
@@ -158,7 +158,7 @@ export function SecaoHabilidades() {
       <Input rotulo="Nome" value={nome} onChange={e => setNome(e.target.value)} maxLength={40} />
       <Input rotulo="Para que serve" value={descricao} onChange={e => setDescricao(e.target.value)} maxLength={200} />
       <Textarea rotulo="Instruções" value={conteudo} onChange={e => setConteudo(e.target.value)} rows={5} />
-      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim() || !descricao.trim() || !conteudo.trim() || acao.ocupado}>Criar habilidade</Button>
+      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim() || !descricao.trim() || !conteudo.trim() || acao.ocupado}>Criar habilidade</Button>{(!nome.trim() || !descricao.trim() || !conteudo.trim()) && <p className="pc-form-hint">Preencha o nome, a descrição e as instruções.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando habilidades…</p> : !itens.length ? <p className="pc-vazio">Nenhuma habilidade ainda.</p> :
@@ -184,7 +184,7 @@ export function SecaoTelegram() {
   </Secao>;
 }
 
-const ROTULO_PERFIL: Record<pecas.TipoPerfil, string> = { compartilhado: 'Compartilhado entre os agentes', agente: 'Exclusivo de um agente', nomeado: 'Perfil nomeado' };
+const ROTULO_PERFIL: Record<pecas.TipoPerfil, string> = { compartilhado: 'Compartilhado entre os bots', agente: 'Exclusivo de um bot', nomeado: 'Perfil nomeado' };
 
 /** Aba aberta para o usuário entrar na conta: já assumida por ele; o login é salvo sozinho a cada 15 s. */
 function AbaDeLogin({ abaId, aoEncerrar }: { abaId: string; aoEncerrar: () => void }) {
@@ -194,10 +194,10 @@ function AbaDeLogin({ abaId, aoEncerrar }: { abaId: string; aoEncerrar: () => vo
   const agir = async (f: () => Promise<void>) => { setOcupado(true); setErro(''); try { await f(); aoEncerrar(); } catch (e) { setErro(mensagemDeErro(e)); } finally { setOcupado(false); } };
   return <div className="pc-aba" role="status" aria-label="Aba aberta para entrar">
     <p><strong>Aba aberta para você entrar</strong>{aba ? ` — ${aba.titulo || aba.url}` : ''}</p>
-    <small>Entre na sua conta no navegador da Sora. O login é salvo sozinho a cada 15 segundos e nenhum agente mexe nessa aba enquanto ela é sua.</small>
+    <small>Entre na sua conta no navegador da Sora. O login é salvo sozinho a cada 15 segundos e nenhum bot mexe nessa aba enquanto ela é sua.</small>
     <span className="pc-acoes">
       <Button tamanho="M" variante="primario" disabled={ocupado} onClick={() => void agir(() => fecharAba(abaId))}>Concluir e fechar</Button>
-      <Button tamanho="M" variante="secundario" disabled={ocupado} onClick={() => void agir(() => devolverAba(abaId))}>Devolver aos agentes</Button>
+      <Button tamanho="M" variante="secundario" disabled={ocupado} onClick={() => void agir(() => devolverAba(abaId))}>Devolver aos bots</Button>
     </span>
     <Erro texto={erro} />
   </div>;
@@ -237,13 +237,13 @@ export function SecaoNavegador() {
     ev.preventDefault(); setErroCriar('');
     try { await pecas.criarPerfilNavegador(nome.trim()); setNome(''); await recarregar(); } catch (e) { setErroCriar(pecas.mensagemPerfil(e, true)); }
   };
-  return <Secao titulo="Navegador" texto="Perfis com login salvo para os agentes usarem sites em seu nome. Crie um perfil, abra um site para entrar na sua conta e escolha qual agente usa qual perfil. Um agente só abre um site novo num perfil com login depois da sua aprovação; aqui você vê o que já aprovou e pode revogar. Senhas e cookies nunca aparecem nesta tela.">
+  return <Secao titulo="Navegador" texto="Perfis com login salvo para os bots usarem sites em seu nome. Crie um perfil, abra um site para entrar na sua conta e escolha qual bot usa qual perfil. Um bot só abre um site novo num perfil com login depois da sua aprovação; aqui você vê o que já aprovou e pode revogar. Senhas e cookies nunca aparecem nesta tela.">
     <form className="pc-form" onSubmit={ev => void criar(ev)} aria-label="Criar perfil">
       <Input rotulo="Novo perfil" value={nome} onChange={e => setNome(e.target.value)} maxLength={60} placeholder="Ex.: Trabalho" />
       <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim()}>Criar perfil</Button>
     </form>
     <Erro texto={erroCriar || acao.erro || erro} />
-    {itens === null ? <p role="status">Carregando perfis…</p> : !itens.length ? <p className="pc-vazio">Nenhum perfil com login salvo ainda. Crie um perfil acima, abra um site para entrar na conta e ele passa a ser usado pelos agentes que você escolher.</p> :
+    {itens === null ? <p role="status">Carregando perfis…</p> : !itens.length ? <p className="pc-vazio">Nenhum perfil com login salvo ainda. Crie um perfil acima, abra um site para entrar na conta e ele passa a ser usado pelos bots que você escolher.</p> :
       <ul className="pc-lista">{itens.map(p => <li key={p.perfil_id}>
         <span><strong>{p.nome}</strong><small>{ROTULO_PERFIL[p.tipo]}</small>
           {p.dominios_aprovados.length === 0 ? <small>Nenhum domínio aprovado ainda.</small> :
@@ -256,7 +256,7 @@ export function SecaoNavegador() {
         <span className="pc-acoes"><Button tamanho="M" variante="perigo" disabled={acao.ocupado} onClick={() => setApagando(p)}>Apagar perfil</Button></span></li>)}</ul>}
     <Modal open={!!apagando} onClose={() => { if (!acao.ocupado) setApagando(null); }} title="Apagar este perfil?" description="O login e os domínios aprovados serão apagados." size="sm"
       footer={<div className="cfg-modal-actions"><Button disabled={acao.ocupado} onClick={() => setApagando(null)}>Cancelar</Button><Button variante="perigo" carregando={acao.ocupado} onClick={() => void apagar()}>Apagar perfil</Button></div>}>
-      <p className="cfg-modal-copy">{apagando?.tipo === 'nomeado' ? `Os agentes que usavam “${apagando.nome}” voltam ao perfil compartilhado. ` : ''}Para usar esse login de novo, será preciso entrar na conta outra vez.</p>
+      <p className="cfg-modal-copy">{apagando?.tipo === 'nomeado' ? `Os bots que usavam “${apagando.nome}” voltam ao perfil compartilhado. ` : ''}Para usar esse login de novo, será preciso entrar na conta outra vez.</p>
       <Erro texto={acao.erro} />
     </Modal>
   </Secao>;

@@ -1,11 +1,31 @@
 // Rotas de Configurações da etapa 4 (contrato em .maestri/contrato-etapa4.md): memória (Âncora),
 // rotinas, conectores MCP, habilidades e Telegram (Relógio). Sem estado global: cada seção carrega e recarrega a sua lista.
+import { useSyncExternalStore } from 'react';
 import { api, ehErroApi, mensagemDeErro } from '../api/cliente';
 
 export interface Memoria { id: string; agente_id: string | null; conteudo: string; tipo: string; origem: string; travada: boolean; criada_em: string }
 export const listarMemorias = () => api.get<Memoria[]>('/v1/memorias');
 export const criarMemoria = (conteudo: string, agenteId?: string) => api.post<Memoria>('/v1/memorias', { conteudo, ...(agenteId ? { agente_id: agenteId } : {}) });
 export const apagarMemoria = (id: string) => api.delete<void>(`/v1/memorias/${id}`);
+export const editarMemoria = (id: string, conteudo: string) => api.patch<Memoria>(`/v1/memorias/${id}`, { conteudo });
+export const listarMemoriasDoAgente = (agenteId: string) => api.get<Memoria[]>('/v1/memorias').then(l => l.filter(m => m.agente_id === agenteId));
+
+// ── Avisos "Guardei isto" (evento SSE memoria.criada): ficam até o usuário dispensar ou desfazer ──
+export interface AvisoMemoria { memoriaId: string; agenteId: string; conversaId: string | null; texto: string }
+let avisos: AvisoMemoria[] = [];
+const ouvintesAvisos = new Set<() => void>();
+const definirAvisos = (p: AvisoMemoria[]) => { avisos = p; ouvintesAvisos.forEach(f => f()); };
+export function receberMemoriaCriada(d: Record<string, unknown>): void {
+  const memoriaId = typeof d.memoria_id === 'string' ? d.memoria_id : '', agenteId = typeof d.agente_id === 'string' ? d.agente_id : '';
+  if (!memoriaId || !agenteId || avisos.some(a => a.memoriaId === memoriaId)) return;
+  definirAvisos([...avisos, { memoriaId, agenteId, conversaId: typeof d.conversa_id === 'string' ? d.conversa_id : null, texto: typeof d.texto === 'string' ? d.texto : '' }].slice(-5));
+}
+export const dispensarAvisoMemoria = (memoriaId: string) => definirAvisos(avisos.filter(a => a.memoriaId !== memoriaId));
+export const reiniciarAvisosMemoria = () => definirAvisos([]);
+export function useAvisosMemoria(agenteId?: string): AvisoMemoria[] {
+  const todos = useSyncExternalStore(fn => { ouvintesAvisos.add(fn); return () => { ouvintesAvisos.delete(fn); }; }, () => avisos, () => avisos);
+  return agenteId ? todos.filter(a => a.agenteId === agenteId) : todos;
+}
 
 export interface Rotina {
   id: string; agente_id: string | null; conversa_id: string | null; titulo: string; pedido: string; tipo: 'unico' | 'cron' | 'intervalo'; expressao: string | null; fuso: string | null;
@@ -14,6 +34,8 @@ export interface Rotina {
 export interface ExecucaoRotina { id: string; rotina_id: string; iniciada_em: string; concluida_em: string | null; status: 'executando' | 'enviada' | 'silenciosa' | 'falhou'; resumo: string | null; erro: string | null; mensagem_id: string | null }
 export interface NovaRotina { agente_id?: string; titulo: string; pedido: string; silencioso?: boolean; fuso?: string; cron?: string; a_cada?: number; unidade?: 'minutos' | 'horas' | 'dias'; daqui_minutos?: number }
 export const listarRotinas = () => api.get<Rotina[]>('/v1/rotinas');
+export const listarRotinasDoAgente = (agenteId: string) => api.get<Rotina[]>(`/v1/rotinas?agente_id=${encodeURIComponent(agenteId)}`);
+export const ultimasExecucoes = (id: string) => api.get<ExecucaoRotina[]>(`/v1/rotinas/${id}/execucoes?limite=5`);
 export const criarRotina = (r: NovaRotina) => api.post<Rotina>('/v1/rotinas', r);
 export const alterarRotina = (id: string, patch: Partial<Pick<Rotina, 'titulo' | 'pedido' | 'silencioso' | 'ativa'>>) => api.patch<Rotina>(`/v1/rotinas/${id}`, patch);
 export const apagarRotina = (id: string) => api.delete<void>(`/v1/rotinas/${id}`);
@@ -75,3 +97,14 @@ export function mensagemPerfil(e: unknown, aoCriar = false): string {
   if (ehErroApi(e) && e.status === 503) return 'O navegador da Sora não respondeu agora. Tente de novo em instantes.';
   return mensagemDeErro(e);
 }
+
+// ── Busca nas mensagens (Ctrl+K): GET /v1/busca ──────────────────────────────────────────
+export interface ResultadoBusca {
+  tipo: 'conversa' | 'grupo'; mensagem_id: string; conversa_id: string | null; grupo_id: string | null; seq: number | null; agente_id: string | null;
+  titulo: string; arquivado: boolean; autor: 'usuario' | 'sora' | 'agente' | 'sistema'; autor_nome: string; trecho: string; destaques: [number, number][]; criada_em: string;
+}
+export const buscarMensagens = (q: string, limite = 8, sinal?: AbortSignal) =>
+  api.get<{ consulta: string; resultados: ResultadoBusca[] }>(`/v1/busca?q=${encodeURIComponent(q)}&limite=${limite}`, sinal ? { signal: sinal } : undefined).then(r => r.resultados);
+/** Rota onde a mensagem mora; o hash #msg-ID é a dica para rolar até ela (quando a tela suportar). */
+export const rotaDoResultado = (r: ResultadoBusca): string =>
+  `${r.tipo === 'grupo' && r.grupo_id ? `/grupos/${r.grupo_id}` : r.agente_id ? `/bots/${r.agente_id}` : '/'}#msg-${r.mensagem_id}`;

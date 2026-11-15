@@ -11,6 +11,7 @@ no banco (como as ferramentas da fase 1). Nada aqui decide aprovação: o cartã
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -38,8 +39,40 @@ async def _servico_memoria(sessao: Any, usuario_id: UUID) -> Any:
 async def lembrar(args: Any, contexto: ContextoFerramenta) -> str:
     async with abrir_sessao() as sessao:
         servico = await _servico_memoria(sessao, contexto.usuario_id)
+        antes = {
+            r.id for r in await servico.armazem.listar(contexto.usuario_id, contexto.agente_id)
+        }
         registro = await servico.lembrar(contexto.usuario_id, contexto.agente_id, args.conteudo)
+    if registro.id not in antes:
+        await _avisar_memoria_criada(registro, contexto)
     return f"Memória guardada (id: {registro.id})."
+
+
+async def _avisar_memoria_criada(registro: Any, contexto: ContextoFerramenta) -> None:
+    """Evento ``memoria.criada`` para o chip "Guardei isto". Falha do Redis não desfaz a memória."""
+    from app.eventos.equipe import (
+        MAX_TEXTO_MEMORIA_EVENTO,
+        MemoriaCriadaEvento,
+        publicar_evento_equipe,
+    )
+    from app.ferramentas.infra import obter_redis
+
+    texto = registro.conteudo
+    if len(texto) > MAX_TEXTO_MEMORIA_EVENTO:
+        texto = texto[: MAX_TEXTO_MEMORIA_EVENTO - 1].rstrip() + "…"
+    try:
+        await publicar_evento_equipe(
+            obter_redis(),
+            MemoriaCriadaEvento(
+                memoria_id=registro.id,
+                agente_id=contexto.agente_id,
+                conversa_id=contexto.conversa_id,
+                texto=texto,
+            ),
+            contexto.usuario_id,
+        )
+    except Exception:
+        logging.getLogger(__name__).warning("não consegui avisar a memória criada", exc_info=True)
 
 
 async def buscar_memoria(args: Any, contexto: ContextoFerramenta) -> str:
@@ -145,7 +178,7 @@ async def propor_instrucoes(args: Any, contexto: ContextoFerramenta) -> str:
     async with abrir_sessao() as sessao:
         agente = await sessao.get(Agente, contexto.agente_id)
         if agente is None or agente.usuario_id != contexto.usuario_id:
-            raise ErroFerramenta("Agente não encontrado.")
+            raise ErroFerramenta("Bot não encontrado.")
         await sessao.execute(
             text("UPDATE agentes SET instrucoes = :t WHERE id = :id").bindparams(
                 t=args.instrucoes, id=contexto.agente_id
@@ -374,7 +407,7 @@ async def enviar_para_agente(args: Any, contexto: ContextoFerramenta) -> str:
             .limit(1)
         )
         if conversa_destino is None:
-            raise ErroFerramenta("Esse agente ainda não tem uma conversa para receber a mensagem.")
+            raise ErroFerramenta("Esse bot ainda não tem uma conversa para receber a mensagem.")
         mensagem = Mensagem(
             id=uuid4(),
             conversa_id=conversa_destino.id,

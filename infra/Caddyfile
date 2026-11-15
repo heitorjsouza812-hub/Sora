@@ -24,6 +24,15 @@
         }
     }
 
+    # Webhooks dos canais da empresa: sem login (a segurança é a assinatura), então o corpo tem
+    # teto no proxy. A API também recusa mais de 1 MB sozinha (413); isto barra antes dela.
+    handle /v1/canais-empresa/webhooks/* {
+        request_body {
+            max_size 1MB
+        }
+        reverse_proxy api:8000
+    }
+
     handle /v1/* {
         encode zstd gzip
         reverse_proxy api:8000

@@ -38,10 +38,12 @@ from app.modelos.enumeracoes import (
 from app.modelos.esquemas import (
     AjusteEntrada,
     AprovacaoVersaoEntrada,
+    AvaliacaoEntrada,
     ConversaCriacao,
     ConversaSaida,
     MensagemAceita,
     MensagemCriacao,
+    MensagemEdicao,
     MensagemSaida,
     RenomearConversaEntrada,
 )
@@ -152,6 +154,16 @@ MENSAGEM_FALHA_DO_PROVEDOR = (
 )
 
 
+def _texto_da_falha_da_triagem(erro: BaseException) -> str:
+    """Limite, cota, chave recusada e provedor fora do ar têm cada um o seu texto."""
+    from app.llm.limite import mensagem_da_falha_do_provedor
+
+    especifica = mensagem_da_falha_do_provedor(erro, "")
+    if not especifica:
+        return MENSAGEM_FALHA_DO_PROVEDOR
+    return f"{especifica} Sua mensagem foi guardada; envie o pedido de novo depois."
+
+
 async def _publicar_primeira_resposta(
     redis: Redis,
     sessao: AsyncSession,
@@ -255,12 +267,21 @@ async def _encaminhar(
         # do usuário não se perde. A conversa é criada e a Sora explica o que houve.
         registro.warning("triagem falhou (%s): %s", type(erro).__name__, str(erro)[:200])
         await sessao.commit()
+        from app.sistema1.atalhos_equipe import intencao_de_equipe
+
+        if intencao_de_equipe(mensagem.conteudo) is not None:
+            # Pedido de bot ou de grupo: o cartão sai mesmo sem a triagem (a Sora, ou a rede de
+            # segurança do worker, prepara o rascunho ou a proposta; nada nasce sem o aceite).
+            await fila.enqueue_job(
+                "responder_direto", str(mensagem.id), _job_id=f"responder:{mensagem.id}"
+            )
+            return
         await _publicar_primeira_resposta(
             redis,
             sessao,
             usuario_id=usuario_id,
             conversa_id=conversa.id,
-            texto=MENSAGEM_FALHA_DO_PROVEDOR,
+            texto=_texto_da_falha_da_triagem(erro),
             agente_id=agente.id,
         )
         return
@@ -297,14 +318,17 @@ async def _encaminhar(
         conversa.id,
         usuario_id,
     )
-    await _publicar_primeira_resposta(
-        redis,
-        sessao,
-        usuario_id=usuario_id,
-        conversa_id=conversa.id,
-        texto=resultado.saida.primeira_resposta,
-        agente_id=agente.id,
-    )
+    if resultado.saida.modo == ModoTriagem.CADEIA:
+        # Só a cadeia precisa do aviso de que o trabalho começou; no modo direto a própria
+        # resposta chega logo em seguida, e o aviso viraria uma segunda bolha (Vitral-9).
+        await _publicar_primeira_resposta(
+            redis,
+            sessao,
+            usuario_id=usuario_id,
+            conversa_id=conversa.id,
+            texto=resultado.saida.primeira_resposta,
+            agente_id=agente.id,
+        )
 
     if resultado.saida.modo == ModoTriagem.CADEIA:
         versao = (
@@ -348,7 +372,7 @@ async def criar_conversa(
     await _conferir_entrada(sessao, usuario_id, dados.texto, dados.anexos)
     agente = await repositorio.obter_agente(sessao, usuario_id, dados.agente_id)
     if agente is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
     conversa, mensagem = await repositorio.criar(
         sessao,
         usuario_id=usuario_id,
@@ -381,10 +405,24 @@ async def renomear_conversa(
 
 @roteador.delete("/{conversa_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def apagar_conversa(
-    conversa_id: UUID, usuario_id: Usuario, sessao: Sessao, manter_agentes: bool = False
+    conversa_id: UUID,
+    usuario_id: Usuario,
+    sessao: Sessao,
+    redis: RedisDep,
+    manter_agentes: bool = False,
 ) -> None:
+    from app.atencao import encerrar_pendentes, publicar_encerrados
+
+    conversa = await repositorio.obter(sessao, usuario_id, conversa_id)
+    if conversa is None:
+        raise _nao_encontrada()
+    dono = conversa.agente_id
+    # Pedidos "Precisa de você" da conversa fecham junto (as perguntas o repositório apaga).
+    afetados = await encerrar_pendentes(sessao, usuario_id, conversa_id=conversa_id)
     if not await repositorio.apagar(sessao, usuario_id, conversa_id, manter_agentes=manter_agentes):
         raise _nao_encontrada()
+    await sessao.commit()
+    await publicar_encerrados(redis, sessao, usuario_id, afetados | {(dono, None)})
 
 
 @roteador.get("/{conversa_id}/mensagens")
@@ -469,7 +507,6 @@ async def enviar_mensagem(
     return MensagemAceita(mensagem_id=mensagem.id)
 
 
-@roteador.post("/{conversa_id}/aprovar", status_code=status.HTTP_204_NO_CONTENT)
 async def aprovar_versao(
     conversa_id: UUID,
     dados: AprovacaoVersaoEntrada,
@@ -520,7 +557,7 @@ async def pedir_ajuste(
     if dados.agente_id is not None:
         agente = await repositorio.obter_agente(sessao, usuario_id, dados.agente_id)
         if agente is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
     await sessao.commit()
     await fila.enqueue_job(
         "ajustar",
@@ -529,3 +566,218 @@ async def pedir_ajuste(
         str(dados.agente_id) if dados.agente_id else None,
         _job_id=f"ajustar:{conversa_id}:{uuid4().hex}",
     )
+
+
+@roteador.post("/{conversa_id}/parar", status_code=202)
+async def parar_conversa(
+    conversa_id: UUID, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
+) -> None:
+    cadeias = await _pedir_parada(conversa_id, usuario_id, sessao, redis)
+    await sessao.commit()
+    await _publicar_parada(cadeias, redis, usuario_id)
+
+
+async def _pedir_parada(conversa_id, usuario_id, sessao, redis):
+    from app.agentes.middleware.conversa import chave_parar
+    from app.orquestrador.cadeia import chave_de_cancelamento
+    from app.repositorios.cadeias import STATUS_FINAIS, cancelar
+
+    conversa = await repositorio.obter(sessao, usuario_id, conversa_id)
+    if conversa is None:
+        raise _nao_encontrada()
+    await redis.incr(chave_parar(conversa_id))
+    pedidos = (
+        await sessao.scalars(
+            select(Mensagem)
+            .where(
+                Mensagem.conversa_id == conversa_id,
+                Mensagem.autor == AutorMensagem.USUARIO,
+                Mensagem.visivel.is_(True),
+            )
+            .order_by(Mensagem.criada_em.desc(), Mensagem.id.desc())
+            .limit(1)
+        )
+    ).all()
+    for pedido in pedidos:
+        pedido.estado = "interrompida"
+    cadeias = (
+        await sessao.scalars(
+            select(Cadeia).where(
+                Cadeia.conversa_id == conversa_id, Cadeia.status.not_in(STATUS_FINAIS)
+            )
+        )
+    ).all()
+    for cadeia in cadeias:
+        await cancelar(sessao, usuario_id, cadeia.id)
+        await redis.set(chave_de_cancelamento(cadeia.id), "1", ex=86400)
+    from datetime import UTC, datetime
+
+    from app.atencao import publicar_estado_atencao
+    from app.eventos.tipos import AprovacaoResolvida
+    from app.modelos.enumeracoes import StatusAprovacao
+    from app.modelos.tabelas import Aprovacao, Etapa, Pergunta
+
+    ids = [c.id for c in cadeias]
+    cartoes = (
+        list(
+            (
+                await sessao.scalars(
+                    select(Aprovacao)
+                    .where(
+                        Aprovacao.usuario_id == usuario_id,
+                        Aprovacao.status == StatusAprovacao.PENDENTE,
+                        Aprovacao.etapa_id.in_(select(Etapa.id).where(Etapa.cadeia_id.in_(ids))),
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+        if ids
+        else []
+    )
+    for cartao in cartoes:
+        cartao.status = StatusAprovacao.EXPIRADA
+        cartao.decidida_em = datetime.now(UTC)
+    if ids:
+        perguntas = (
+            await sessao.scalars(
+                select(Pergunta).where(
+                    Pergunta.cadeia_id.in_(ids), Pergunta.respondida_em.is_(None)
+                )
+            )
+        ).all()
+        for pergunta in perguntas:
+            pergunta.respondida_em = datetime.now(UTC)
+            pergunta.resposta = "parar"
+    await sessao.commit()
+    for cartao in cartoes:
+        await publicar_evento(
+            redis,
+            AprovacaoResolvida(aprovacao_id=cartao.id, status=cartao.status),
+            conversa_id,
+            usuario_id,
+        )
+    for agente_id, grupo_id in {(c.agente_id, c.grupo_id) for c in cartoes}:
+        await publicar_estado_atencao(
+            redis, sessao, usuario_id, agente_id=agente_id, grupo_id=grupo_id
+        )
+    return cadeias
+
+
+async def _publicar_parada(cadeias, redis, usuario_id):
+    from app.eventos.tipos import CadeiaAtualizada
+
+    for cadeia in cadeias:
+        await publicar_evento(
+            redis,
+            CadeiaAtualizada(
+                cadeia_id=cadeia.id,
+                status=cadeia.status,
+                tokens_usados=cadeia.tokens_usados,
+                custo_usd=float(cadeia.custo_usd),
+            ),
+            cadeia.conversa_id,
+            usuario_id,
+        )
+
+
+async def _mensagem_do_dono(sessao, usuario_id, conversa_id, mensagem_id):
+    conversa = await sessao.scalar(
+        select(Conversa)
+        .where(Conversa.id == conversa_id, Conversa.usuario_id == usuario_id)
+        .with_for_update()
+    )
+    if conversa is None:
+        raise _nao_encontrada()
+    mensagem = await sessao.scalar(
+        select(Mensagem).where(
+            Mensagem.id == mensagem_id,
+            Mensagem.conversa_id == conversa_id,
+            Mensagem.visivel.is_(True),
+        )
+    )
+    if mensagem is None:
+        raise HTTPException(404, "Mensagem não encontrada.")
+    return conversa, mensagem
+
+
+@roteador.put("/{conversa_id}/mensagens/{mensagem_id}/avaliacao")
+async def avaliar_mensagem(
+    conversa_id: UUID,
+    mensagem_id: UUID,
+    dados: AvaliacaoEntrada,
+    usuario_id: Usuario,
+    sessao: Sessao,
+) -> MensagemSaida:
+    _, mensagem = await _mensagem_do_dono(sessao, usuario_id, conversa_id, mensagem_id)
+    if mensagem.autor == AutorMensagem.USUARIO:
+        raise HTTPException(409, "Avalie uma resposta da Sora ou do bot.")
+    mensagem.avaliacao = dados.valor
+    await sessao.commit()
+    return MensagemSaida.model_validate(mensagem)
+
+
+async def _regenerar(sessao, redis, fila, usuario_id, conversa_id, mensagem_id, texto=None):
+    conversa, alvo = await _mensagem_do_dono(sessao, usuario_id, conversa_id, mensagem_id)
+    mensagens = list(
+        (
+            await sessao.scalars(
+                select(Mensagem)
+                .where(Mensagem.conversa_id == conversa_id, Mensagem.visivel.is_(True))
+                .order_by(Mensagem.criada_em, Mensagem.id)
+            )
+        ).all()
+    )
+    perguntas = [m for m in mensagens if m.autor == AutorMensagem.USUARIO]
+    if not perguntas:
+        raise HTTPException(409, "Não há pergunta para refazer.")
+    pedido = perguntas[-1]
+    if texto is not None:
+        if alvo.id != pedido.id or not texto.strip():
+            raise HTTPException(409, "Só é possível editar a última pergunta.")
+    elif alvo.id != mensagens[-1].id or alvo.autor == AutorMensagem.USUARIO:
+        raise HTTPException(409, "Só é possível refazer a última resposta.")
+    agente = await repositorio.obter_agente(sessao, usuario_id, conversa.agente_id)
+    if agente is None:
+        raise HTTPException(409, "O bot não está disponível.")
+    cadeias = await _pedir_parada(conversa_id, usuario_id, sessao, redis)
+    # Oculta a versão anterior sem quebrar referências de auditoria e de cadeias.
+    for mensagem in mensagens[mensagens.index(pedido) :]:
+        mensagem.visivel = False
+    nova = await repositorio.criar_mensagem(
+        sessao,
+        conversa=conversa,
+        texto=texto if texto is not None else pedido.conteudo,
+        anexos=[UUID(a) for a in pedido.anexos],
+    )
+    await sessao.commit()
+    await _publicar_parada(cadeias, redis, usuario_id)
+    await _encaminhar(
+        sessao, redis, fila, usuario_id=usuario_id, conversa=conversa, mensagem=nova, agente=agente
+    )
+    return MensagemAceita(mensagem_id=nova.id)
+
+
+@roteador.post("/{conversa_id}/mensagens/{mensagem_id}/refazer", status_code=202)
+async def refazer_mensagem(
+    conversa_id: UUID,
+    mensagem_id: UUID,
+    usuario_id: UsuarioComProvedor,
+    sessao: Sessao,
+    redis: RedisDep,
+    fila: Fila,
+) -> MensagemAceita:
+    return await _regenerar(sessao, redis, fila, usuario_id, conversa_id, mensagem_id)
+
+
+@roteador.patch("/{conversa_id}/mensagens/{mensagem_id}", status_code=202)
+async def editar_mensagem(
+    conversa_id: UUID,
+    mensagem_id: UUID,
+    dados: MensagemEdicao,
+    usuario_id: UsuarioComProvedor,
+    sessao: Sessao,
+    redis: RedisDep,
+    fila: Fila,
+) -> MensagemAceita:
+    return await _regenerar(sessao, redis, fila, usuario_id, conversa_id, mensagem_id, dados.texto)

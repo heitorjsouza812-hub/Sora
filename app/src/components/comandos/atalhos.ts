@@ -7,9 +7,7 @@ export const MOD = ehMac ? '⌘' : 'Ctrl';
 /** Lista exibida na paleta (e reaproveitável em Configurações > Conta). */
 export const ATALHOS: { teclas: string[]; acao: string }[] = [
   { teclas: [MOD, 'K'], acao: 'Paleta de comandos' },
-  { teclas: [MOD, 'Shift', 'O'], acao: 'Novo chat' },
-  { teclas: [MOD, 'Shift', 'S'], acao: 'Ilha da Sora' },
-  { teclas: [MOD, '.'], acao: 'Painel do projeto' },
+  { teclas: [MOD, 'Shift', 'O'], acao: 'Conversar com a Sora' },
   { teclas: ['/'], acao: 'Campo de mensagem' },
   { teclas: ['↑', '↓'], acao: 'Navegar' },
   { teclas: ['Enter'], acao: 'Abrir' },
@@ -39,9 +37,4 @@ export function focarCampoMensagem() {
   campo.focus();
   campo.setSelectionRange(campo.value.length, campo.value.length);
   return true;
-}
-
-/** "Alternar painel" reaproveita o atalho Ctrl+. que o PainelLateral já escuta (sem duplicar a lógica). */
-export function alternarPainel() {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key: '.', ctrlKey: !ehMac, metaKey: ehMac, bubbles: true }));
 }

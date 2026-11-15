@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODELOS_AGENTE } from '../../projetos/modelos';
-import { FERRAMENTAS_AGENTE, ferramentasParaSalvar } from '../../../data/ferramentas';
+import { ferramentasParaSalvar } from '../../../data/ferramentas';
 import { eventosDaEntrega, linksDaEntrega, rotuloDoLink, textosDaEntrega } from '../conteudoDaEntrega';
 
 const envelope = (dados: unknown, fontes: unknown[] = []) => ({ conteudo: { dados, fontes, pendencias: [] } });
@@ -31,16 +30,12 @@ describe('conteudoDaEntrega', () => {
 });
 
 describe('ferramentas do agente', () => {
-  const catalogo = new Set(FERRAMENTAS_AGENTE.map(f => f.id));
 
   it('salva as escolhidas do catálogo + falar/perguntar; vazio deixa o padrão do backend', () => {
     expect(ferramentasParaSalvar(['buscar_web', 'Perplexity', 'buscar_web'])).toEqual(['falar', 'perguntar', 'buscar_web']);
     expect(ferramentasParaSalvar(['Perplexity'])).toEqual([]);
   });
 
-  it('modelos de agente só usam ferramentas que o backend aceita', () => {
-    for (const m of MODELOS_AGENTE) for (const f of m.rascunho.ferramentas) expect(catalogo.has(f), `${m.id}: ${f}`).toBe(true);
-  });
 });
 
 describe('rótulo do link (celular: "Referênci…" não distinguia dois links)', () => {

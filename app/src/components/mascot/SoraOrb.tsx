@@ -61,6 +61,8 @@ export function SoraOrb({
       className={`sora-orb${className ? ` ${className}` : ''}`}
       width={Math.round(size)}
       height={Math.round(size)}
+      // o motor redimensiona o bitmap por devicePixelRatio; o tamanho na tela é sempre `size` (senão dobra em telas 2x)
+      style={{ width: size, height: size }}
     />
   );
 }

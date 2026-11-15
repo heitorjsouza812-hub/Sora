@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import update
 
@@ -77,6 +77,10 @@ def construir_dependencias(
                 )
                 await sessao.commit()
 
+    # Sem etapa de verdade (conversa direta, grupo) o passo só vai ao painel Trabalho: ``passos``
+    # tem FK para ``etapas``, e o app lê esses passos pelo fluxo de eventos, não pelo banco.
+    persistir = etapa_id is not None
+
     async def iniciar_passo(etapa_id: UUID, agente_id: UUID, chamada: dict[str, Any]) -> dict:
         nome = str(chamada.get("name", "ferramenta"))
         argumentos = chamada.get("args") if isinstance(chamada.get("args"), dict) else {}
@@ -88,13 +92,14 @@ def construir_dependencias(
             texto=rotulo_do_passo(nome, argumentos),
             ferramenta=nome,
             acao=nome,
-            parametros=parametros_sem_segredos(argumentos),
+            parametros=parametros_sem_segredos(argumentos, nome),
             status=StatusPasso.EXECUTANDO.value,
             iniciado_em=datetime.now(UTC),
         )
-        async with fabrica_sessoes()() as sessao:
-            sessao.add(passo)
-            await sessao.commit()
+        if persistir:
+            async with fabrica_sessoes()() as sessao:
+                sessao.add(passo)
+                await sessao.commit()
         estado = {
             "id": passo.id,
             "etapa_id": etapa_id,
@@ -122,14 +127,31 @@ def construir_dependencias(
             if erro is not None
             else resumir_resultado(passo["acao"], conteudo)
         )
-        async with fabrica_sessoes()() as sessao:
-            await sessao.execute(
-                update(Passo)
-                .where(Passo.id == passo["id"])
-                .values(status=status.value, resultado=resumo, concluido_em=datetime.now(UTC))
-            )
-            await sessao.commit()
+        if persistir:
+            async with fabrica_sessoes()() as sessao:
+                await sessao.execute(
+                    update(Passo)
+                    .where(Passo.id == passo["id"])
+                    .values(status=status.value, resultado=resumo, concluido_em=datetime.now(UTC))
+                )
+                await sessao.commit()
         await _emitir(redis, passo, status, resumo, usuario_id, conversa_id)
+
+    async def anunciar_prompt(etapa_id: UUID, agente_id: UUID, texto: str) -> None:
+        """Conversa direta: o pedido recebido é o primeiro item do painel Trabalho."""
+        estado = {
+            # o mesmo id na retomada do turno: o app atualiza o passo em vez de duplicar
+            "id": uuid5(etapa_id, "prompt"),
+            "etapa_id": etapa_id,
+            "agente_id": agente_id,
+            "tipo": TipoPasso.PROMPT,
+            "texto": texto,
+            "ferramenta": None,
+            "acao": None,
+            "parametros": None,
+            "origem": "usuario",
+        }
+        await _emitir(redis, estado, StatusPasso.CONCLUIDO, None, usuario_id, conversa_id)
 
     async def salvar_saida(cadeia: UUID | None, texto: str) -> str:
         from app.ferramentas.arquivos import gravar_na_cadeia
@@ -197,6 +219,7 @@ def construir_dependencias(
         corrigir_tokens=corrigir_tokens if com_cadeia and orcamento_tokens else None,
         iniciar_passo=iniciar_passo,
         finalizar_passo=finalizar_passo,
+        anunciar_prompt=None if com_cadeia or com_passo else anunciar_prompt,
         salvar_saida=salvar_saida,
         ler_mensagens_pendentes=ambiente.ler_mensagens_pendentes,
         ao_trocar_modelo=ao_trocar_modelo if com_passo else None,
@@ -225,6 +248,7 @@ async def _emitir(
             parametros=passo["parametros"],
             resultado=resultado,
             status=status,
+            origem=passo.get("origem"),
         ),
         conversa_id,
         usuario_id,

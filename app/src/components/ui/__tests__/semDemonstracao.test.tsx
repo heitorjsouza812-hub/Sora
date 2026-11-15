@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../mascot', () => ({ SoraOrb: () => <span data-testid="sora-orb" /> }));
 import { AgentConfigForm } from '../../builder/AgentConfigForm';
-import { DeliveryContent } from '../../review/Entregas';
 import type { AgenteSora, EntregaGerada } from '../../../state/projetos';
 import { EntregaCard } from '../EntregaCard';
 
@@ -48,13 +47,13 @@ describe('cards de entrega sem demonstração', () => {
   });
 
   it('revisão usa o mesmo conteúdo real', () => {
-    const { unmount } = render(<DeliveryContent entrega={comConteudo('links', [{ titulo: 'Referência A', url: 'https://example.com/a' }])} color="#56A8FF" />);
+    const { unmount } = render(<EntregaCard agente={agente} entrega={comConteudo('links', [{ titulo: 'Referência A', url: 'https://example.com/a' }])} />);
     expect(screen.getByRole('link', { name: /Referência A/ })).toBeTruthy();
     unmount();
-    const { unmount: fechar } = render(<DeliveryContent entrega={comConteudo('calendario', [{ data: '10/11', titulo: 'Abertura da loja' }])} color="#56A8FF" />);
+    const { unmount: fechar } = render(<EntregaCard agente={agente} entrega={comConteudo('calendario', [{ data: '10/11', titulo: 'Abertura da loja' }])} />);
     expect(screen.getByText('Abertura da loja')).toBeTruthy();
     fechar();
-    render(<DeliveryContent entrega={comConteudo('texto', { texto: 'Legenda final' })} color="#56A8FF" />);
+    render(<EntregaCard agente={agente} entrega={comConteudo('texto', { texto: 'Legenda final' })} />);
     expect(screen.getByText('Legenda final')).toBeTruthy();
   });
 

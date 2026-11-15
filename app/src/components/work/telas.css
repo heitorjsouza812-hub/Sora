@@ -1,0 +1,41 @@
+/* Telas ao vivo do bot no painel Trabalho (navegador e computador). Prefixo .wk-tela */
+.wk-telas { display: grid; gap: 10px; padding: 0 0 8px; }
+.wk-telas:empty { display: none; }
+.wk-tela { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 12px; background: var(--panel-2, #14161B); min-width: 0; }
+.wk-tela.is-controle { border-color: var(--agent, #56A8FF); box-shadow: 0 0 0 1px var(--agent, #56A8FF), 0 0 18px color-mix(in srgb, var(--agent, #56A8FF) 35%, transparent); }
+.wk-tela-cab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; min-width: 0; }
+.wk-tela-url { display: grid; flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-tela-url small, .wk-tela-idade { color: var(--text-3, #8B93A3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.wk-tela-aviso { margin: 0; padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-1, #F2F5FB); background: color-mix(in srgb, var(--agent, #56A8FF) 22%, transparent); }
+.wk-tela-atencao { background: rgba(255, 190, 90, .14); font-weight: 500; }
+.wk-tela-caixa { display: grid; gap: 4px; outline: none; border-radius: 8px; }
+.wk-tela-caixa[data-ativo]:focus-visible { outline: 2px solid var(--agent, #56A8FF); outline-offset: 2px; }
+.wk-tela-img { display: block; width: 100%; height: auto; max-width: 100%; border-radius: 8px; border: 1px solid var(--line, rgba(255,255,255,.08)); background: #000; user-select: none; }
+.wk-tela-vazio { padding: 18px 12px; border: 1px dashed var(--line, rgba(255,255,255,.14)); border-radius: 8px; font-size: 13px; color: var(--text-2, #8B93A3); text-align: center; }
+.wk-tela-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.wk-tela-acoes > * { min-height: 44px; min-width: 44px; }
+.wk-tela-nota { color: var(--text-2, #8B93A3); font-size: 12px; }
+.wk-tela-cheia { display: grid; gap: 8px; }
+@media (max-width: 640px) { .wk-tela-acoes > * { flex: 1 1 140px; } }
+.wk-panel > .wk-telas { flex: none; max-height: 62%; overflow-y: auto; }
+.wk-cfg-nota { margin: 0; font-size: 12px; color: var(--text-2, #8B93A3); }
+.sora-modal.wk-tela-modal[data-size="lg"] { width: calc(100vw - 48px); max-width: none; height: calc(100dvh - 48px); max-height: none; }
+.wk-tela-cheia.is-controle { border: 2px solid var(--agent); border-radius: 10px; padding: 8px; }
+.wk-tela-modal .wk-tela-img { max-height: calc(100dvh - 260px); width: auto; max-width: 100%; margin: auto; }
+.wk-tela-modal button, .wk-tela-digitacao input { min-height: 44px; min-width: 44px; }
+.wk-tela-digitacao { display: grid; gap: 4px; font-size: 12px; }
+.wk-tela-digitacao input { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+
+.wk-telas { gap: var(--sp-2); }
+.wk-telas-abas { display: flex; gap: var(--sp-4); border-bottom: 1px solid var(--line); }
+.wk-telas-abas button { min-height: 40px; padding: 0; color: var(--text-2); background: none; border: 0; border-bottom: 2px solid transparent; font: 600 13px/18px var(--font); }
+.wk-telas-abas button[aria-selected="true"] { color: var(--text-1); border-bottom-color: var(--text-1); }
+.wk-tela { padding: 0; border: 0; background: none; border-radius: 0; }
+.wk-tela.is-controle { padding: var(--sp-2); border: 1px solid var(--agent); border-radius: var(--r-12); box-shadow: none; }
+.wk-tela-vazio { border: 0; padding: var(--sp-3) 0; text-align: left; }
+.wk-panel > .wk-telas { max-height: none; overflow: visible; }
+.wk-panel:has(> .wk-telas) { overflow-y: auto; }
+.wk-panel:has(> .wk-telas) > .wk-scroll { flex: none; overflow: visible; }
+.wk-tela-img { max-height: 240px; object-fit: contain; }
+.wk-tela-acoes > * { min-height: 32px; }
+@media (max-width: 767px) { .wk-telas-abas button, .wk-tela-acoes > * { min-height: 44px; } }

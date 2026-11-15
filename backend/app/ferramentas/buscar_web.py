@@ -49,5 +49,9 @@ async def buscar_web(args: BuscarWeb, contexto: ContextoFerramenta) -> str:
             limite=args.max_resultados,
         )
     except ErroBusca as erro:
-        raise ErroFerramenta(str(erro)) from erro
+        raise ErroFerramenta(
+            f"{erro} Avise o usuário que não foi possível pesquisar na web agora e não invente "
+            "fontes, versões ou datas: responda só com o que já sabe, dizendo que pode estar "
+            "desatualizado."
+        ) from erro
     return formatar_resultados(resultados[: args.max_resultados])

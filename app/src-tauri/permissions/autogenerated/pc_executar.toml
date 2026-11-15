@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pc-executar"
+description = "Enables the pc_executar command without any pre-configured scope."
+commands.allow = ["pc_executar"]
+
+[[permission]]
+identifier = "deny-pc-executar"
+description = "Denies the pc_executar command without any pre-configured scope."
+commands.deny = ["pc_executar"]

@@ -12,6 +12,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.atencao import publicar_estado_atencao
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
 from app.modelos.enumeracoes import StatusEtapa
@@ -39,6 +40,7 @@ async def responder_pergunta(
     dados: RespostaPerguntaEntrada,
     usuario_id: Usuario,
     sessao: Sessao,
+    redis: RedisDep,
     fila: Fila,
 ) -> None:
     """Registra a resposta e retoma a etapa que esperava (a mais antiga da cadeia)."""
@@ -82,6 +84,16 @@ async def responder_pergunta(
     pergunta.resposta = valor
     pergunta.respondida_em = datetime.now(UTC)
     await sessao.commit()
+    agente_id = await sessao.scalar(
+        select(Conversa.agente_id).where(Conversa.id == pergunta.conversa_id)
+    )
+    await publicar_estado_atencao(
+        redis,
+        sessao,
+        usuario_id,
+        agente_id=agente_id,
+        grupo_id=pergunta.grupo_id,
+    )
     if etapa_id is not None:
         # Só depois do commit: o worker relê a resposta no banco.
         await fila.enqueue_job(

@@ -307,7 +307,7 @@ async def _aprovacao(api: Ambiente, uid: UUID, cena: Cena, expira: timedelta) ->
             usuario_id=uid,
             etapa_id=cena.etapa_id,
             agente_id=cena.agente_id,
-            acao={"ferramenta": "enviar_email", "condicao": {"dominio": "x.com"}},
+            acao={"ferramenta": "mcp__notion__criar_pagina", "condicao": {"pasta": "x"}},
             avaliacao={"dano": "baixo"},
             expira_em=datetime.now(UTC) + expira,
         )
@@ -330,7 +330,7 @@ async def test_aprovacao_sempre_permitir_cria_regra_publica_evento_e_retoma(api:
         regras = list(await sessao.scalars(select(RegraPermissao)))
     assert aprovacao is not None and aprovacao.status == StatusAprovacao.PERMITIDA
     assert [(r.ferramenta, r.agente_id, r.condicao) for r in regras] == [
-        ("enviar_email", cena.agente_id, {"dominio": "x.com"})
+        ("mcp__notion__criar_pagina", cena.agente_id, {"pasta": "x"})
     ]
     assert api.fila.jobs[0][0:2] == (
         "executar_etapa",
@@ -390,11 +390,12 @@ async def test_agentes_limite_promocao_edicao_e_exclusao(api: Ambiente) -> None:
         assert (
             await api.cliente.post("/v1/agentes", json={"descricao": f"Agente {i}"}, headers=auth)
         ).status_code == 201
-    cheio = await api.cliente.post("/v1/agentes", json={"descricao": "mais um"}, headers=auth)
-    assert cheio.status_code == 409
+    # Decisão 6 do Heitor (2026-11-08): sem teto de bots por usuário.
+    sexto = await api.cliente.post("/v1/agentes", json={"descricao": "mais um"}, headers=auth)
+    assert sexto.status_code == 201, sexto.text
 
     lista = await api.cliente.get("/v1/agentes", params={"tipo": "individual"}, headers=auth)
-    assert len(lista.json()) == 5
+    assert len(lista.json()) == 6
     assert (await api.cliente.get("/v1/agentes", headers=outro)).json()[0]["tipo"] == "sora"
     sora = next(
         a
@@ -421,18 +422,18 @@ async def test_agentes_limite_promocao_edicao_e_exclusao(api: Ambiente) -> None:
 
     cena = await _cena(api, uid, StatusEtapa.EXECUTANDO)
     assert (
-        await api.cliente.post(f"/v1/agentes/{cena.agente_id}/promover", headers=auth)
-    ).status_code == 409
-    assert (
         await api.cliente.delete(f"/v1/agentes/{agente['id']}", headers=outro)
     ).status_code == 404
     assert (
         await api.cliente.delete(f"/v1/agentes/{agente['id']}", headers=auth)
     ).status_code == 204
+    # Sem teto de bots: promover não depende de vaga.
     promovido = await api.cliente.post(f"/v1/agentes/{cena.agente_id}/promover", headers=auth)
     assert promovido.status_code == 200 and promovido.json()["tipo"] == "individual"
+    repetido = await api.cliente.post(f"/v1/agentes/{cena.agente_id}/promover", headers=auth)
+    assert repetido.status_code == 409  # já é bot
     ativos = await api.cliente.get("/v1/agentes", params={"tipo": "individual"}, headers=auth)
-    assert len(ativos.json()) == 5
+    assert len(ativos.json()) == 6
     assert (
         await api.cliente.delete(f"/v1/agentes/{agente['id']}", headers=auth)
     ).status_code == 404

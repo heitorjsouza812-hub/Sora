@@ -1,0 +1,5 @@
+/* Grupo "Computador e navegador" do formulário do bot. Prefixo .wk-opcao */
+.wk-opcao { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 4px 10px; min-height: 44px; cursor: pointer; }
+.wk-opcao input[type="checkbox"] { width: 20px; height: 20px; margin: 2px 0 0; padding: 0; accent-color: var(--accent, #EEF2FA); flex: none; }
+.wk-opcao > span { font-weight: 600; color: var(--text-1, #F2F5FB); }
+.wk-opcao > small { grid-column: 2; color: var(--text-2, #8B93A3); font-size: 12px; line-height: 1.45; }

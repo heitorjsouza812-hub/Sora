@@ -1,21 +1,20 @@
-// Vista Início da ilha: Sora branca grande + ticker à esquerda; pílulas dos bonecos (agentes) à direita.
+// Vista Início da ilha: Sora branca grande + o que a equipe espera de você (cartões do Mosaico)
+// + pílulas dos bonecos (bots) com filtro Todos · Trabalhando · Precisa de você.
 import { useRef, useState, type CSSProperties } from 'react';
 import { SoraOrb } from '../mascot';
-import { alternarAgenteOculto, definirIlhaPrefs, filtrarAgentes, useIlhaPrefs, type FiltroAgentes, type VisaoIlha } from './ilhaEstado';
-import { Ticker } from './Ticker';
-import { ListaPendencias } from '../pendencias/Pendencias';
-import { AnelConclusao } from './animacao';
+import { CartaoPrecisaDeVoce } from '../pendencias/CartaoPrecisaDeVoce';
+import { alternarAgenteOculto, definirIlhaPrefs, filtrarBonecos, useIlhaPrefs, type FiltroBots, type VisaoIlha } from './ilhaEstado';
 import { usePresenca } from './usePresenca';
 
-const FILTROS: { id: FiltroAgentes; rotulo: string }[] = [
+const FILTROS: { id: FiltroBots; rotulo: string }[] = [
   { id: 'todos', rotulo: 'Todos' },
   { id: 'trabalhando', rotulo: 'Trabalhando' },
-  { id: 'concluidos', rotulo: 'Concluídos' },
+  { id: 'precisa_de_voce', rotulo: 'Precisa de você' },
 ];
-const VAZIO_FILTRO: Record<FiltroAgentes, string> = {
-  todos: 'Todos os agentes deste projeto estão escondidos',
-  trabalhando: 'Nenhum agente trabalhando agora',
-  concluidos: 'Nenhum agente concluiu ainda',
+const VAZIO_FILTRO: Record<FiltroBots, string> = {
+  todos: 'Nenhum bot criado ainda',
+  trabalhando: 'Nenhum bot trabalhando agora',
+  precisa_de_voce: 'Nenhum bot precisa de você agora',
 };
 
 function Olho({ aberto }: { aberto: boolean }) {
@@ -51,42 +50,50 @@ export function VisaoGeral({ v, onAgente }: VisaoGeralProps) {
       window.setTimeout(() => setTontaAte(0), DURACAO_TONTA);
     }
   };
-  const rotulo = tontaAte ? 'Ei! 😵‍💫' : v.sora.rotulo;
+  const rotulo = tontaAte ? 'Ei! 😵‍💫'
+    : v.precisaDeVoce.length > 0 ? `${v.precisaDeVoce.length} ${v.precisaDeVoce.length === 1 ? 'pedido' : 'pedidos'} esperando você`
+    : v.trabalhando > 0 ? `${v.trabalhando} trabalhando`
+    : 'Tudo tranquilo';
+  const orbDaSora = v.precisaDeVoce.length > 0 ? 'listening' : v.trabalhando > 0 ? 'coordinating' : 'idle';
 
-  // filtro Todos · Trabalhando · Concluídos + bonecos escondidos (botão olho)
+  // filtro Todos · Trabalhando · Precisa de você + bonecos escondidos (botão olho)
   const prefs = useIlhaPrefs();
-  const visiveis = v.agentes.filter(a => !prefs.ocultos.includes(a.id));
-  const escondidos = v.agentes.filter(a => prefs.ocultos.includes(a.id));
-  const contagem: Record<FiltroAgentes, number> = {
+  const visiveis = v.bonecos.filter(a => !prefs.ocultos.includes(a.id));
+  const escondidos = v.bonecos.filter(a => prefs.ocultos.includes(a.id));
+  const contagem: Record<FiltroBots, number> = {
     todos: visiveis.length,
-    trabalhando: visiveis.filter(a => a.status === 'trabalhando').length,
-    concluidos: visiveis.filter(a => a.status === 'concluido').length,
+    trabalhando: visiveis.filter(a => a.estado === 'trabalhando').length,
+    precisa_de_voce: visiveis.filter(a => a.estado === 'precisa_de_voce').length,
   };
-  const presentes = usePresenca(filtrarAgentes(v.agentes, prefs));
+  const presentes = usePresenca(filtrarBonecos(v.bonecos, prefs));
 
   return (
     <div className="ilha-visao">
-      {v.pendencias.length > 0 && <ListaPendencias pendencias={v.pendencias} cor={v.sora.cor} className="ilha-pendencias" />}
+      {v.precisaDeVoce.length > 0 && (
+        <div className="ilha-pendencias pend-lista" aria-label="Precisa de você">
+          {v.precisaDeVoce.map(pedido => <CartaoPrecisaDeVoce key={pedido.id} pedido={pedido} compacto />)}
+        </div>
+      )}
       <section className="ilha-card ilha-card-sora" aria-label="Sora">
         <button type="button" className="ilha-sora-grande" onClick={cutucar} aria-label="Sora">
-          <SoraOrb size={96} color={v.sora.cor} state={v.sora.orb} pulseKey={v.sora.pulso + tonta} glow decorative seed={5} />
+          <SoraOrb size={96} color={v.sora.cor} state={orbDaSora} pulseKey={tonta} glow decorative seed={5} />
         </button>
         <div className="ilha-sora-info">
           <p className="ilha-sora-titulo">
             <span className="ilha-ponto" aria-hidden="true" />
-            <strong>{v.projeto?.titulo ?? v.sora.nome}</strong>
+            <strong>{v.sora.nome}</strong>
           </p>
           <p className="ilha-sora-rotulo" role="status">{rotulo}</p>
-          {v.ticker.length > 0 && <Ticker passos={v.ticker} compacto />}
+          {v.gruposTrabalhando > 0 && <p className="ilha-sora-rotulo">{v.gruposTrabalhando} {v.gruposTrabalhando === 1 ? 'grupo' : 'grupos'} em andamento</p>}
         </div>
       </section>
 
-      <section className="ilha-card ilha-card-bonecos" aria-label="Agentes rodando">
-        {v.agentes.length === 0 ? (
-          <p className="ilha-vazio">Sem agentes rodando neste projeto</p>
+      <section className="ilha-card ilha-card-bonecos" aria-label="Bots">
+        {v.bonecos.length === 0 ? (
+          <p className="ilha-vazio">Nenhum bot criado ainda</p>
         ) : (
           <>
-            <div className="ilha-filtro" role="radiogroup" aria-label="Filtrar agentes">
+            <div className="ilha-filtro" role="radiogroup" aria-label="Filtrar bots">
               {FILTROS.map(f => (
                 <button key={f.id} type="button" role="radio" aria-checked={prefs.filtro === f.id} className="ilha-filtro-opcao"
                   onClick={() => definirIlhaPrefs({ filtro: f.id })}>
@@ -98,17 +105,17 @@ export function VisaoGeral({ v, onAgente }: VisaoGeralProps) {
               <ul className="ilha-bonecos-lista">
                 {presentes.map(({ item: a, saindo }, i) => (
                   <li key={a.id} className={saindo ? 'ilha-saindo' : undefined} style={{ '--i': i, '--agente': a.cor } as CSSProperties}>
-                    <button type="button" className="ilha-boneco" data-status={a.status} tabIndex={saindo ? -1 : undefined}
-                      onClick={() => onAgente(a.id)} aria-label={`${a.nome}: ${a.rotulo}, ${a.progresso}%. Ver detalhes`}>
+                    <button type="button" className="ilha-boneco" data-status={a.estado} tabIndex={saindo ? -1 : undefined}
+                      onClick={() => onAgente(a.id)} aria-label={`${a.nome}: ${a.funcao}. Ver detalhes`}>
                       <span className="ilha-boneco-orb">
-                        <SoraOrb size={28} color={a.cor} state={a.orb} movimento={a.movimento} glow={false} decorative seed={30 + i} />
-                        <AnelConclusao agente={a} />
+                        <SoraOrb size={28} color={a.cor} state={a.orb} glow={false} decorative seed={30 + i} />
                       </span>
                       <span className="ilha-boneco-texto">
                         <strong>{a.nome}</strong>
-                        <small className={a.status === 'trabalhando' ? 'shimmer' : undefined}>{a.rotulo}</small>
+                        <small className={a.estado === 'trabalhando' ? 'shimmer' : undefined}>
+                          {a.estado === 'trabalhando' ? 'Trabalhando' : a.estado === 'precisa_de_voce' ? 'Precisa de você' : a.funcao}
+                        </small>
                       </span>
-                      <span className="ilha-boneco-barra" aria-hidden="true"><i style={{ width: `${a.progresso}%` }} /></span>
                     </button>
                     <button type="button" className="ilha-olho" aria-label={`Esconder ${a.nome}`} title={`Esconder ${a.nome}`}
                       tabIndex={saindo ? -1 : undefined} onClick={() => alternarAgenteOculto(a.id)}>

@@ -11,8 +11,10 @@ coordenação é a cadeia do orquestrador.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
@@ -22,6 +24,8 @@ if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
     from app.llm.troca import EventoTroca
+
+registro = logging.getLogger(__name__)
 
 PapelAgente = Literal[
     "sora", "pesquisador", "redator", "designer", "verificador", "individual", "canal"
@@ -48,6 +52,7 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "falar",
         "perguntar",
         "criar_agente",
+        "propor_grupo",
         "disparar_especialista",
         "ver_especialista",
         "mensagem_especialista",
@@ -85,6 +90,8 @@ class DependenciasAgente:
     finalizar_passo: Callable[[Any, Any | None, BaseException | None], Awaitable[None]] | None = (
         None
     )
+    anunciar_prompt: Callable[[UUID, UUID, str], Awaitable[None]] | None = None
+    """Conversa direta: publica o passo ``prompt`` (o pedido recebido) no painel Trabalho."""
     salvar_saida: Callable[[UUID | None, str], Awaitable[str]] | None = None
     ler_mensagens_pendentes: Callable[[UUID], Awaitable[list[str]]] | None = None
 
@@ -109,16 +116,27 @@ class ContextoAgente:
     """Rotina sem ninguém olhando (Relógio): só ferramentas seguras, navegador efêmero."""
     thread_proprio: str | None = None
     """Thread do checkpointer só desta execução (rotina); senão vale a da conversa/etapa."""
+    ferramentas_do_bot: list[str] | None = None
+    """``agentes.ferramentas`` do bot de conversa 1:1: só elas (e o essencial) vão direto no
+    pedido ao modelo; o resto fica no catálogo (``ferramentas_do_turno.py``)."""
+    modelo_enxerga: Callable[[Any], bool] | None = None
+    """Só para bots com ``computador_*`` (``app/computador/visao.py``): diz se o modelo de uma
+    chamada tem visão. Com ele o middleware anexa a última captura da tela à chamada."""
 
 
 def nomes_das_ferramentas(contexto: ContextoAgente) -> list[str]:
     """Ferramentas do papel seguidas das extras, sem repetição."""
     from app.agentes.ancora import ferramentas_do_papel
 
+    base = FERRAMENTAS_POR_PAPEL[contexto.papel]
+    if contexto.papel == "individual" and contexto.ferramentas_do_bot is not None:
+        from app.ferramentas.permissoes import ferramentas_do_agente
+
+        base = tuple(ferramentas_do_agente("individual", contexto.ferramentas_do_bot))
     return list(
         dict.fromkeys(
             (
-                *FERRAMENTAS_POR_PAPEL[contexto.papel],
+                *base,
                 *ferramentas_do_papel(contexto.papel),
                 *contexto.ferramentas_extras,
             )
@@ -158,11 +176,52 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     else:
         trecho = carregar_prompt(f"especialista_{contexto.papel}")
         prompt = preencher(carregar_prompt("especialista_comum"), trecho_do_papel=trecho, **valores)
-    nomes = nomes_das_ferramentas(contexto)
+    from app.agentes.ferramentas_do_turno import nomes_diretos, nomes_escondidos
+
+    todos = nomes_das_ferramentas(contexto)
+    nomes = nomes_diretos(todos, contexto)
     instrucoes = montar_instrucoes(nomes)
     if any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes):
         instrucoes += "\n\n" + carregar_prompt("navegador_arvore")
+    elif any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes_escondidos(todos, contexto)):
+        instrucoes += "\n\nNavegador no catalogo conectores: carregue o esquema antes de usar."
     return f"{prompt}\n\n{instrucoes}"
+
+
+PRAZO_CHECAGEM_IMAGEM_S = 3.0
+
+
+async def _com_ferramenta_de_imagem(contexto: ContextoAgente) -> ContextoAgente:
+    """Dá ``gerar_imagem`` à Sora, aos bots e ao bot de grupo quando o usuário conectou um modelo
+    com a capacidade ``imagem``. A imagem sai como anexo da próxima mensagem (``saidas_do_turno``).
+    Sem modelo de imagem a ferramenta nem aparece, então o bot não promete o que não faz."""
+    from app.llm.falso import modelo_falso_ativo
+
+    if (
+        contexto.papel not in {"sora", "individual", "canal"}
+        or contexto.sem_supervisao
+        or "gerar_imagem" in contexto.ferramentas_extras
+        or "gerar_imagem" in nomes_das_ferramentas(contexto)
+        or modelo_falso_ativo()
+    ):
+        return contexto
+
+    async def _tem() -> bool:
+        from app.core.banco import fabrica_sessoes
+        from app.seletor.repositorio import contexto_do_usuario
+        from app.seletor.seletor import tem_modelo_de_imagem
+
+        async with fabrica_sessoes()() as sessao:
+            return tem_modelo_de_imagem(await contexto_do_usuario(sessao, contexto.usuario_id))
+
+    try:
+        tem = await asyncio.wait_for(_tem(), PRAZO_CHECAGEM_IMAGEM_S)
+    except Exception:
+        registro.warning("não consegui conferir o modelo de imagem do usuário", exc_info=True)
+        return contexto
+    if not tem:
+        return contexto
+    return replace(contexto, ferramentas_extras=[*contexto.ferramentas_extras, "gerar_imagem"])
 
 
 async def _prompt_do_turno(contexto: ContextoAgente) -> str:
@@ -185,6 +244,11 @@ async def montar_agente(
         raise ValueError("A lista de modelos do seletor está vazia.")
 
     from langchain.agents import create_agent
+
+    contexto = await _com_ferramenta_de_imagem(contexto)
+    from app.computador.visao import com_visao_do_computador
+
+    contexto = await com_visao_do_computador(contexto)
 
     from app.agentes.middleware import montar_middleware
     from app.ferramentas.base import ContextoFerramenta
@@ -209,17 +273,25 @@ async def montar_agente(
             sem_supervisao=contexto.sem_supervisao,
         ),
     )
-    from app.agentes.ancora import catalogo_dos_conectores, navegador_preguicoso
+    from app.agentes.ancora import (
+        catalogo_dos_conectores,
+        catalogo_enxuto,
+        navegador_preguicoso,
+    )
+    from app.agentes.ferramentas_do_turno import PAPEIS_ENXUTOS, nomes_diretos
     from app.conectores.carregar import ferramentas_dos_conectores
 
-    ferramentas = navegador_preguicoso(ferramentas, contexto)
-
-    ferramentas += catalogo_dos_conectores(
-        await ferramentas_dos_conectores(
-            contexto.usuario_id, sem_supervisao=contexto.sem_supervisao
-        ),
-        contexto,
+    conectores = await ferramentas_dos_conectores(
+        contexto.usuario_id, sem_supervisao=contexto.sem_supervisao
     )
+    if contexto.papel in PAPEIS_ENXUTOS:
+        diretas = set(nomes_diretos([f.name for f in ferramentas], contexto))
+        escondidas = [f for f in ferramentas if f.name not in diretas]
+        ferramentas = [f for f in ferramentas if f.name in diretas]
+        ferramentas += catalogo_enxuto(escondidas, conectores, contexto)
+    else:
+        ferramentas = navegador_preguicoso(ferramentas, contexto)
+        ferramentas += catalogo_dos_conectores(conectores, contexto)
     return create_agent(
         model=modelos[0],
         tools=ferramentas,
