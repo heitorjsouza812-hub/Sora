@@ -1,7 +1,7 @@
 // Cartões do que a equipe espera do usuário: pergunta (opções e/ou resposta livre; o orçamento estourado
 // chega como pergunta com Continuar/Parar) e aprovação (Aprovar, Sempre permitir, Recusar).
 // Mesmo cartão no chat e na ilha; só a densidade muda.
-import { useState, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { Button, Input } from '../base';
 import { decidirAprovacao, responderPergunta, type Pendencia } from '../../state/projetos';
 import { BotoesAprovacao, CabecaPedido } from './decisao';
@@ -14,8 +14,8 @@ function CartaoPergunta({ p, cor }: { p: PerguntaP; cor: string }) {
   const [texto, setTexto] = useState('');
   const enviarLivre = (ev: FormEvent) => { ev.preventDefault(); const v = texto.trim(); if (v && !p.enviando) void responderPergunta(p.id, v); };
   return (
-    <section className="pend-card" aria-label="Pergunta da equipe" data-pendencia="pergunta">
-      <CabecaPedido cor={cor} />
+    <section className="pend-card" style={{ "--cor": cor } as CSSProperties} aria-label="Pergunta da equipe" data-pendencia="pergunta">
+      <CabecaPedido />
       <p className="pend-texto">{p.texto}</p>
       {p.opcoes.length > 0 && (
         <div className="pend-acoes" role="group" aria-label="Opções">
@@ -42,8 +42,8 @@ function CartaoDominio({ p, cor }: { p: AprovacaoP; cor: string }) {
   const r = p.revisaoDominio!;
   const perfil = `${PERFIL_ROTULO[r.perfil.tipo] ?? 'perfil'}${r.perfil.nome ? ` “${r.perfil.nome}”` : ''}`;
   return (
-    <section className="pend-card" aria-label="Revisão de domínio" data-pendencia="dominio">
-      <CabecaPedido cor={cor} origem="Abrir um site novo" />
+    <section className="pend-card" style={{ "--cor": cor } as CSSProperties} aria-label="Revisão de domínio" data-pendencia="dominio">
+      <CabecaPedido origem="Abrir um site novo" />
       <p className="pend-texto">{p.resumo || `Abrir ${r.dominio} no ${perfil}.`}</p>
       <p className="pend-dano"><b>Domínio:</b> <code>{r.dominio}</code></p>
       <p className="pend-dano"><b>Endereço:</b> <code className="pend-url">{r.url}</code></p>
@@ -63,8 +63,8 @@ function CartaoDominio({ p, cor }: { p: AprovacaoP; cor: string }) {
 function CartaoAprovacao({ p, cor }: { p: AprovacaoP; cor: string }) {
   if (p.revisaoDominio) return <CartaoDominio p={p} cor={cor} />;
   return (
-    <section className="pend-card" aria-label="Pedido de aprovação" data-pendencia="aprovacao">
-      <CabecaPedido cor={cor} />
+    <section className="pend-card" style={{ "--cor": cor } as CSSProperties} aria-label="Pedido de aprovação" data-pendencia="aprovacao">
+      <CabecaPedido />
       <p className="pend-texto">{p.resumo}</p>
       {p.dano && <p className="pend-dano"><b>O que pode acontecer:</b> {p.dano}</p>}
       {p.quemRecebe && <p className="pend-dano"><b>Quem recebe:</b> {p.quemRecebe}</p>}

@@ -20,6 +20,8 @@ export interface PedidoAtencao {
   opcoes?: OpcaoAtencao[];
   aceitaRespostaLivre?: boolean;
   expiraEm?: string | null;
+  /** Quando o pedido nasceu (ms desde 1970); vazio quando o servidor não informa. */
+  criadoEm?: number | null;
   enviando?: boolean;
   erro?: string | null;
 }

@@ -1,18 +1,18 @@
-// Peças comuns dos cartões "Precisa de você": o mesmo cabeçalho e as mesmas opções em todo lugar
+// Peças comuns dos cartões "Precisa de você": a mesma cabeça e as mesmas opções em todo lugar
 // (chat do bot, grupo, Ilha e a central da barra lateral).
 import type { ReactNode } from 'react';
 import { Button } from '../base';
-import { SoraOrb } from '../mascot';
-import type { Movimento } from '../../types';
-import { COR_SORA_PEDIDO, ROTULOS_DECISAO } from './rotulos';
+import { ROTULOS_DECISAO } from './rotulos';
 import './pendencias.css';
 
-export function CabecaPedido({ cor = COR_SORA_PEDIDO, movimento, origem }: { cor?: string; movimento?: Movimento; origem?: ReactNode }) {
+/** Cabeça do cartão: ponto, "Precisa de você", origem (quando não é óbvia) e a hora à direita. */
+export function CabecaPedido({ origem, hora }: { origem?: ReactNode; hora?: string }) {
   return (
     <header className="pend-cabeca">
-      <SoraOrb size={28} color={cor} movimento={movimento} state="listening" glow={false} decorative seed={11} />
+      <span className="pend-sinal" aria-hidden="true" />
       <strong>Precisa de você</strong>
       {origem && <span className="pend-origem">{origem}</span>}
+      {hora && <time className="pend-hora">{hora}</time>}
     </header>
   );
 }
@@ -27,4 +27,3 @@ export function BotoesAprovacao({ desabilitado, onPermitir, onSempre, onRecusar 
     </div>
   );
 }
-

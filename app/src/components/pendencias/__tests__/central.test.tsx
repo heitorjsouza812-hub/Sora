@@ -48,7 +48,8 @@ describe('central Precisa de você', () => {
     const dialogo = await screen.findByRole('dialog', { name: 'Precisa de você' });
     const cartoes = within(dialogo).getAllByRole('region', { name: 'Precisa de você' });
     expect(cartoes).toHaveLength(3);
-    expect(within(cartoes[0]).getByText(/Atlas · grupo Lançamento/)).toBeTruthy();
+    expect(within(cartoes[0]).getByText('Atlas')).toBeTruthy();
+    expect(cartoes[0].textContent).toContain('grupo Lançamento');
     expect(within(cartoes[1]).getByText('Luna')).toBeTruthy();
     expect(within(cartoes[2]).getByText('Sora')).toBeTruthy();
     // ferramenta real: as três opções; domínio novo: só Permitir uma vez e Recusar.

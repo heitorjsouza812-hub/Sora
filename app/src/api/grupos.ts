@@ -173,6 +173,7 @@ export function pedidoDaApi(d: Dados): PedidoAtencao {
       return { rotulo: texto(opcao.rotulo), valor: texto(opcao.valor), tom: opcao.valor === 'negar' ? 'perigo' as const : 'principal' as const };
     }),
     aceitaRespostaLivre: tipo === 'pergunta' && lista(d.opcoes).length === 0,
+    criadoEm: typeof d.criado_em === 'string' && Number.isFinite(Date.parse(d.criado_em)) ? Date.parse(d.criado_em) : null,
   };
 }
 

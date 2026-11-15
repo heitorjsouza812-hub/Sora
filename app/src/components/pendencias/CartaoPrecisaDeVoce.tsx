@@ -1,26 +1,47 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { Button, Input } from '../base';
+import { SoraOrb } from '../mascot';
 import { decidirPedidoAtencao } from '../../state/atencao';
 import { BotoesAprovacao, CabecaPedido } from './decisao';
-import { ROTULOS_DECISAO, aceitaSempreLiberar } from './rotulos';
+import { ROTULOS_DECISAO, aceitaSempreLiberar, tempoRelativo } from './rotulos';
+import { registrarDecisao } from './registro';
 import { useOrigemDoPedido } from './useOrigemDoPedido';
 import type { PedidoAtencao } from './tipos';
 import './pendencias.css';
 
-export function CartaoPrecisaDeVoce({ pedido, compacto = false, semGrupo = false }: { pedido: PedidoAtencao; compacto?: boolean; semGrupo?: boolean }) {
+interface Props {
+  pedido: PedidoAtencao;
+  compacto?: boolean;
+  semGrupo?: boolean;
+  /** Faixa da central: sem caixa, com a origem (orb, nome, hora) no lugar do rótulo "Precisa de você". */
+  faixa?: boolean;
+  /** Atalho à direita da linha de origem (só na faixa). */
+  atalho?: ReactNode;
+}
+
+export function CartaoPrecisaDeVoce({ pedido, compacto = false, semGrupo = false, faixa = false, atalho }: Props) {
   const [resposta, setResposta] = useState('');
   const origem = useOrigemDoPedido(pedido);
-  const agir = (acao: string, valor?: string) => void decidirPedidoAtencao(pedido.id, acao, valor).catch(() => undefined);
+  const agir = (acao: string, valor?: string) => { registrarDecisao(pedido.id, acao); void decidirPedidoAtencao(pedido.id, acao, valor).catch(() => undefined); };
   const responder = (evento: FormEvent) => {
     evento.preventDefault();
     const valor = resposta.trim();
     if (valor && !pedido.enviando) agir('responder', valor);
   };
-  const textoOrigem = origem.nome ? <>{origem.nome}{origem.grupo && !semGrupo ? ` · grupo ${origem.grupo}` : ''}</> : undefined;
+  const hora = tempoRelativo(pedido.criadoEm);
+  const grupo = origem.grupo && !semGrupo ? ` · grupo ${origem.grupo}` : '';
+  const estilo = { '--cor': origem.cor } as CSSProperties;
 
   return (
-    <section className={`pend-card pend-precisa${compacto ? ' pend-compacto' : ''}`} aria-label="Precisa de você" data-pendencia={pedido.tipo} data-pedido-id={pedido.id} tabIndex={-1}>
-      <CabecaPedido cor={origem.cor} movimento={origem.movimento} origem={textoOrigem} />
+    <section className={`pend-card pend-precisa${compacto ? ' pend-compacto' : ''}${faixa ? ' pend-faixa' : ''}`} style={estilo} aria-label="Precisa de você" aria-busy={pedido.enviando || undefined} data-pendencia={pedido.tipo} data-pedido-id={pedido.id} tabIndex={-1}>
+      {faixa
+        ? <header className="pend-origem-linha">
+            <span className="pend-orb"><SoraOrb size={24} color={origem.cor} movimento={origem.movimento} state={pedido.enviando ? 'thinking' : 'idle'} glow={false} decorative seed={11} /></span>
+            {origem.nome && <b className="pend-quem">{origem.nome}</b>}
+            {(grupo || hora) && <span className="pend-quando">{grupo}{hora ? ` · ${hora}` : ''}</span>}
+            {atalho}
+          </header>
+        : <CabecaPedido origem={compacto || grupo ? <>{origem.nome}{grupo}</> : undefined} hora={hora} />}
       <div className="pend-conteudo">
         <h3>{pedido.titulo}</h3>
         <p className="pend-texto">{pedido.resumo}</p>
