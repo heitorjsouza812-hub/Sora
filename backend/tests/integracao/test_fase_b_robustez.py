@@ -1615,7 +1615,8 @@ async def test_provedor_mudo_nao_segura_o_post_da_conversa(
         )
         conteudos = [m["conteudo"] for m in mensagens.json()]
         assert "crie uma campanha para a cafeteria" in conteudos
-        assert any("Não consegui falar com o seu modelo" in c for c in conteudos)
+        # provedor mudo = prazo estourado: o texto diz "fora do ar ou demorou demais"
+        assert any("demorou demais" in c for c in conteudos), conteudos
 
 
 # ---------------------------------------- gatilhos de teste do modelo falso ([pergunta] etc.)
