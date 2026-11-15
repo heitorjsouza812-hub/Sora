@@ -6,7 +6,7 @@ import { toast } from '../components/base';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
-import { SoraOrb } from '../components/mascot';
+import { SoraOrb, SoraThinking } from '../components/mascot';
 import { abrirEditorAgente } from '../components/builder';
 import { EntregaCard } from '../components/ui/EntregaCard';
 import { MedidorContexto } from '../components/equipe/MedidorContexto';
@@ -125,10 +125,10 @@ export default function AgentChat() {
       if (x.status === 'executando') {
         const atual = [...x.roteiro].reverse().find(r => r.tipo !== 'prompt');
         itens.push({ t: agora, key: `w-${x.id}`, node: (
-          <div className="assistant-row agent-copy">
-            <SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="working" glow={false} decorative seed={3} />
-            <span><ShimmerText>{atual?.tipo === 'ferramenta' ? `${atual.texto}… (${atual.acao})` : atual?.texto ?? `${a.verbo}…`}</ShimmerText>
-              {!celular && <button type="button" className="see-work inline" onClick={verTrabalho}>Ver passos</button>}</span>
+          <div className="pensando-linha" role="status">
+            <SoraOrb size={28} color={a.cor} movimento={a.tipoMovimento} state="working" glow={false} decorative seed={3} />
+            <ShimmerText>{atual?.tipo === 'ferramenta' ? `${atual.texto}… (${atual.acao})` : atual?.texto ?? `${a.verbo}…`}</ShimmerText>
+            {!celular && <button type="button" className="ver-passos" onClick={verTrabalho}>Ver passos</button>}
           </div>
         ) });
       } else if (x.tarefaId) {
@@ -153,6 +153,10 @@ export default function AgentChat() {
       t: pergunta.criadoEm + 1, key: 'erro-modelo',
       node: <CardErroModelo cor={a.cor} autor={a.nome} onTentarDeNovo={() => definirErroSimulado(null)} />,
     });
+    // esperando o primeiro pedaço da resposta: o orb do bot com o texto em shimmer (nada de spinner)
+    if (!erroModelo && gerandoNa(e, a.id, agora) && !todas.some(m => m.gerando) && !itens.some(i => i.key.startsWith('w-'))) {
+      itens.push({ t: 1e15 - 1, key: 'pensando', node: <div className="pensando-linha"><SoraThinking size={28} color={a.cor} label={`${a.nome} está escrevendo…`} /></div> });
+    }
     const ultimaRespostaId = [...todas].reverse().find(m => m.autor !== 'usuario')?.id;
     (pergunta ? todas.filter(m => m.autor === 'usuario' || m.criadoEm <= pergunta.criadoEm) : todas).forEach(m => itens.push({
       t: m.criadoEm, key: m.id,

@@ -62,8 +62,11 @@ export async function conferirFontesEAnexos({ page, contexto, base, auth, bot, f
   assert.equal(await chips.count(), 2, 'dois chips de fonte');
   assert.equal(await chips.first().getAttribute('target'), '_blank');
   assert.equal(await chips.first().getAttribute('href'), 'https://example.com/guia-cafes');
-  assert.match(await chips.first().innerText(), /\[1\][\s\S]*Guia de cafés especiais[\s\S]*example\.com/);
-  const marca = page.locator('.msg-corpo a', { hasText: '[1]' }).first();
+  // chip da etapa 6: número em círculo + domínio; o título da página vai no title e no nome acessível
+  assert.match(await chips.first().innerText(), /^1\s*example\.com$/);
+  assert.equal(await chips.first().getAttribute('title'), 'Guia de cafés especiais');
+  assert.match(await chips.first().getAttribute('aria-label'), /Guia de cafés especiais/);
+  const marca = page.locator('.msg-corpo a.fonte-marca', { hasText: /^1$/ }).first();
   await marca.waitFor({ timeout: 10_000 });
   assert.match(await marca.getAttribute('href'), /^#fonte-/, '[1] vira link para a fonte');
   const imagem = page.locator('.msg-imagem img').first();

@@ -61,7 +61,7 @@ describe('contrato da conversa', () => {
   });
   it('chips são links seguros e citações apontam para chips, preservando código', async () => {
     render(<MensagemChat m={{ ...resposta, texto: 'Veja [1]. Código `[1]`.', fontes: [fonte, { ...fonte, n: 2, url: 'javascript:alert(1)' }] }} agora={0} />);
-    await waitFor(() => expect(screen.getByRole('link', { name: '[1]' }).getAttribute('href')).toBe('#fonte-r-1'));
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Fonte 1' }).getAttribute('href')).toBe('#fonte-r-1'));
     const chip = screen.getByRole('link', { name: /Pesquisa/ }); expect(chip.getAttribute('rel')).toBe('noopener noreferrer'); expect(chip.getAttribute('target')).toBe('_blank');
     expect(document.querySelector('code')?.textContent).toBe('[1]'); expect(document.querySelectorAll('.msg-fontes a')).toHaveLength(1);
   });

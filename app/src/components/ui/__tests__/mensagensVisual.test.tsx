@@ -6,6 +6,8 @@ vi.mock('../../../api/cliente', async original => ({ ...await original<typeof im
 vi.mock('../../../api/eventos', () => ({ acompanharEventos: vi.fn(() => new Promise(() => {})) }));
 import { _definirEstadoParaTestes, _reiniciarProjetosParaTestes, lerEstado, type MensagemChat as Mensagem } from '../../../state/projetos';
 import { MensagemChat } from '../MensagemChat';
+import { AnexoResposta } from '../AnexosResposta';
+import { IrParaFim } from '../IrParaFim';
 
 const pergunta: Mensagem = { id: 'p', conversaId: 'c', autor: 'usuario', texto: 'Oi @todos, resumam isto', criadoEm: 1 };
 const resposta: Mensagem = { id: 'r', conversaId: 'c', autor: 'sora', texto: 'Resposta parcial', criadoEm: 2 };
@@ -87,5 +89,53 @@ describe('mensagens (etapa 6)', () => {
     unmount();
     const velho = render(<MensagemChat m={pergunta} agora={0} />);
     expect(velho.container.querySelector('.chat-msg')).not.toHaveClass('is-nova');
+  });
+});
+
+describe('fontes e imagem na resposta (etapa 6)', () => {
+  const fonte = { n: 1, titulo: 'Levantamento do setor', dominio: 'example.com', url: 'https://example.com/levantamento' };
+
+  it('as fontes ficam abaixo do texto: chips com número e domínio, título no title, id e href preservados', async () => {
+    preparar(pergunta, resposta);
+    const { container } = render(<MensagemChat m={{ ...resposta, texto: 'Veja [1].', fontes: [fonte] }} agora={0} />);
+    const corpo = container.querySelector('.msg-corpo') as HTMLElement;
+    const filhos = Array.from(corpo.children);
+    expect(filhos.indexOf(corpo.querySelector('.md') as Element)).toBeLessThan(filhos.indexOf(corpo.querySelector('.msg-fontes') as Element));
+    const chip = corpo.querySelector('.msg-fontes a') as HTMLAnchorElement;
+    expect(chip.id).toBe('fonte-r-1');
+    expect(chip.getAttribute('href')).toBe('https://example.com/levantamento');
+    expect(chip.getAttribute('title')).toBe('Levantamento do setor');
+    expect(chip.textContent).toBe('1example.com');
+    expect(chip.querySelector('.fonte-n')).toHaveTextContent('1');
+    expect(chip).toHaveAccessibleName(/Levantamento do setor/);
+    // a marca [1] do texto vira pílula com o número e continua apontando para o chip
+    const marca = await within(corpo).findByRole('link', { name: 'Fonte 1' });
+    expect(marca).toHaveClass('fonte-marca');
+    expect(marca).toHaveTextContent(/^1$/);
+    expect(marca.getAttribute('href')).toBe('#fonte-r-1');
+  });
+
+  it('imagem sem moldura, com botão de ícone para baixar e legenda com nome e tamanho', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:imagem'); vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    rede.buscar.mockResolvedValue({ blob: async () => new Blob(['imagem'], { type: 'image/png' }), headers: new Headers({ 'content-disposition': 'inline; filename="foto.png"' }) });
+    const { container } = render(<AnexoResposta anexo={{ id: 'a', nome: 'Arquivo' }} />);
+    await screen.findByRole('button', { name: 'Ampliar foto.png' });
+    expect(container.querySelector('.msg-arquivo')).toBeNull(); // sem a caixa com borda de antes
+    const baixar = screen.getByRole('link', { name: 'Baixar foto.png' });
+    expect(baixar).toHaveClass('msg-baixar');
+    expect(baixar.textContent).toBe(''); // botão só de ícone
+    expect(container.querySelector('figcaption')).toHaveTextContent('foto.png · 1 KB');
+  });
+});
+
+describe("\"Ir para o fim\" (etapa 6)", () => {
+  it('"Ir para o fim" é um botão redondo só com a seta; com mensagens novas ganha um ponto', () => {
+    const { container, rerender } = render(<IrParaFim novas={0} onClick={() => {}} />);
+    const botao = screen.getByRole('button', { name: 'Ir para o fim' });
+    expect(botao.textContent).toBe(''); // sem texto: não cobre a resposta
+    expect(container.querySelector('.ir-fim-novas')).toBeNull();
+    rerender(<IrParaFim novas={2} onClick={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Ir para o fim: 2 mensagens novas' })).toBeInTheDocument();
+    expect(container.querySelector('.ir-fim-novas')).not.toBeNull();
   });
 });

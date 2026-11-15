@@ -53,7 +53,7 @@ export function Markdown({ texto, gerando = false, className = '', fontes, mensa
       for (const parte of partes) {
         const n = /^\[(\d+)\]$/.exec(parte)?.[1];
         const fonte = fontes.find(f => f.n === Number(n) && urlPublica(f.url));
-        if (n && fonte) { const a = document.createElement('a'); a.href = '#' + idFonte(mensagemId, fonte.n); a.textContent = parte; a.title = fonte.titulo; frag.append(a); }
+        if (n && fonte) { const a = document.createElement('a'); a.href = '#' + idFonte(mensagemId, fonte.n); a.className = 'fonte-marca'; a.textContent = String(fonte.n); a.title = fonte.titulo; a.setAttribute('aria-label', `Fonte ${fonte.n}`); frag.append(a); }
         else frag.append(document.createTextNode(parte));
       }
       no.replaceWith(frag);
