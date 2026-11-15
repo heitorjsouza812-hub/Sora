@@ -1,8 +1,9 @@
 // Sessão do usuário (etapa 2, regra 3): quem está logado, via GET /v1/eu.
 // Na abertura tenta renovar em silêncio (cookie no navegador; cofre do sistema no desktop).
 import { useSyncExternalStore } from 'react';
+import { toast } from '../components/base';
 import {
-  aoSessaoEncerrada, api, corpoRenovacaoDesktop, ehErroApi, guardarTokens, limparSessaoLocal,
+  aoAvisoDeSessao, aoSessaoEncerrada, api, corpoRenovacaoDesktop, ehErroApi, guardarTokens, limparSessaoLocal,
   renovarSessao, temTokenAcesso, type TokensSaida,
 } from '../api/cliente';
 
@@ -43,6 +44,9 @@ export const lerSessao = (): EstadoSessao => atual;
 export function useSessao(): EstadoSessao {
   return useSyncExternalStore(assinar, lerSessao, lerSessao);
 }
+
+// Cofre do sistema não guardou o login: a sessão segue em memória e o usuário é avisado.
+aoAvisoDeSessao(mensagem => { toast({ mensagem, tom: 'aviso', duracao: 8000 }); });
 
 // Renovação falhou em qualquer chamada → volta para Entrar.
 aoSessaoEncerrada(() => { if (atual.estado !== 'anonimo') definir({ estado: 'anonimo' }); });

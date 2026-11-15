@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Ponte do desktop simulada: `desktop.ativo` liga/desliga o modo Tauri por teste.
-const desktop = vi.hoisted(() => ({ ativo: false, cofre: null as string | null }));
+const desktop = vi.hoisted(() => ({ ativo: false, cofre: null as string | null, cofreFalha: false }));
 vi.mock('../../desktop/ponte', () => ({
   get noDesktop() { return desktop.ativo; },
   cofreLer: vi.fn(async () => desktop.cofre),
-  cofreGravar: vi.fn(async (t: string) => { desktop.cofre = t; }),
+  cofreGravar: vi.fn(async (t: string) => { if (desktop.cofreFalha) throw new Error('credential manager indisponível'); desktop.cofre = t; }),
   cofreApagar: vi.fn(async () => { desktop.cofre = null; }),
   // Sessão compartilhada com a janela da ilha: nos testes a janela é sempre a principal.
   janelaAtual: 'main',
@@ -15,7 +15,7 @@ vi.mock('../../desktop/ponte', () => ({
 
 import {
   _reiniciarClienteParaTestes, aoSessaoEncerrada, api, definirTokenAcesso, ErroApi, guardarTokens,
-  MSG_SEM_REDE, renovarSessao, temTokenAcesso,
+  aoAvisoDeSessao, MSG_COFRE, mensagemDeErro, MSG_SEM_REDE, renovarSessao, temTokenAcesso,
 } from '../cliente';
 
 const json = (status: number, corpo: unknown, headers: Record<string, string> = {}) =>
@@ -31,6 +31,7 @@ beforeEach(() => {
   _reiniciarClienteParaTestes();
   desktop.ativo = false;
   desktop.cofre = null;
+  desktop.cofreFalha = false;
   chamadas = [];
   respostas = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
@@ -91,7 +92,24 @@ describe('api', () => {
   });
 });
 
+describe('mensagens de erro', () => {
+  it('servidor fora (502/503/504) tem mensagem própria; erro local não culpa o servidor', async () => {
+    respostas.push(() => json(503, undefined));
+    const e = await api.get('/v1/eu').catch(x => x);
+    expect(e).toMatchObject({ status: 503 });
+    expect(e.mensagem).toMatch(/fora do ar/);
+    expect(mensagemDeErro(new Error('cofre_gravar falhou'))).toMatch(/neste computador/);
+    expect(mensagemDeErro(new Error('x'))).not.toMatch(/servidor/);
+  });
+});
+
 describe('renovação no 401', () => {
+  it('sem sessão guardada neste navegador, nem tenta renovar (console limpo)', async () => {
+    localStorage.removeItem('sora.sessao.marca.v1');
+    await expect(renovarSessao()).resolves.toBe(false);
+    expect(chamadas).toHaveLength(0);
+  });
+
   it('renova uma vez e repete o pedido com o token novo', async () => {
     definirTokenAcesso('velho');
     respostas.push(() => json(401, { detail: 'Sessão expirada.' }));
@@ -202,6 +220,17 @@ describe('desktop (Tauri)', () => {
     respostas.push(() => json(401, {}));
     await expect(renovarSessao()).resolves.toBe(false);
     expect(desktop.cofre).toBeNull();
+  });
+
+  it('cofre falhando não derruba o login: sessão em memória e aviso próprio', async () => {
+    desktop.cofreFalha = true;
+    const avisos: string[] = [];
+    const parar = aoAvisoDeSessao(m => avisos.push(m));
+    await expect(guardarTokens({ token_acesso: 'a', token_renovacao: 'r' })).resolves.toBeUndefined();
+    parar();
+    expect(temTokenAcesso()).toBe(true);
+    expect(avisos).toEqual([MSG_COFRE]);
+    expect(MSG_COFRE).toMatch(/lembrar o login neste computador/);
   });
 
   it('guardarTokens grava a renovação no cofre e nunca no localStorage', async () => {
