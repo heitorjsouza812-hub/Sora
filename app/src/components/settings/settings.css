@@ -2,23 +2,23 @@
 .cfg-shell { display: grid; grid-template-columns: 190px minmax(0, 930px); justify-content: center; width: 100%; max-width: 1120px; margin: 0 auto; }
 /* item 38: a navegação fica presa ao topo da área que rola (.cfg-page) */
 .cfg-nav { position: sticky; top: 0; z-index: 2; align-self: start; height: calc(100dvh - var(--topbar)); padding: var(--sp-12) var(--sp-5); box-sizing: border-box; border-right: 1px solid var(--line); }
-.cfg-nav h1 { margin: 0 0 24px; font-size: var(--fs-24); font-weight: 620; letter-spacing: -.02em; }
+.cfg-nav h1 { margin: 0 0 24px; font-size: var(--fs-24); font-weight: 600; letter-spacing: -.02em; }
 .cfg-nav [role="tablist"] { display: grid; gap: var(--sp-1); }
 .cfg-nav button { width: 100%; min-height: 40px; padding: var(--sp-2) var(--sp-3); color: var(--text-2); text-align: left; background: transparent; border: 0; border-radius: var(--r-10); font: inherit; font-size: var(--fs-14); cursor: pointer; }
 .cfg-nav button:hover { color: var(--text-1); background: var(--white-a04); }
 .cfg-nav button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .cfg-nav button[aria-selected="true"] { color: var(--text-1); background: var(--white-a07); }
 .cfg-main { width: 100%; max-width: 930px; padding: var(--sp-12) var(--sp-6) calc(var(--sp-16) + var(--sp-4)); box-sizing: border-box; }
-.cfg-heading h2 { margin: 0; font-size: clamp(var(--fs-24), 4vw, var(--fs-32)); font-weight: 520; letter-spacing: -.025em; }
+.cfg-heading h2 { margin: 0; font-size: clamp(var(--fs-24), 4vw, var(--fs-32)); font-weight: 600; letter-spacing: -.025em; }
 .cfg-heading p { max-width: 700px; margin: 10px 0 30px; color: var(--text-2); font-size: var(--fs-14); line-height: 1.6; }
 .cfg-provider-grid { display: grid; gap: var(--sp-3); }
 .cfg-provider-card { overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16); }
 .cfg-provider-card[data-open] { border-color: var(--white-a15); }
 .cfg-provider-summary { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto 20px; gap: var(--sp-4); align-items: center; width: 100%; padding: var(--sp-5); color: inherit; text-align: left; background: transparent; border: 0; }
 .cfg-provider-summary > span:nth-child(2) { display: grid; gap: var(--sp-1); }
-.cfg-provider-summary strong { font-size: var(--fs-16); font-weight: 630; }
+.cfg-provider-summary strong { font-size: var(--fs-16); font-weight: 600; }
 .cfg-provider-summary small { color: var(--text-2); font-size: var(--fs-14); line-height: 1.35; }
-.cfg-provider-icon { display: grid; place-items: center; width: 44px; height: 44px; overflow: hidden; color: var(--text-1); background: var(--white-a08); border: 1px solid var(--line-strong); border-radius: var(--r-16); font-size: var(--fs-13); font-weight: 750; }
+.cfg-provider-icon { display: grid; place-items: center; width: 44px; height: 44px; overflow: hidden; color: var(--text-1); background: var(--white-a08); border: 1px solid var(--line-strong); border-radius: var(--r-16); font-size: var(--fs-13); font-weight: 600; }
 .cfg-provider-icon svg { width: 23px; height: 23px; fill: currentColor; }
 .cfg-status { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-13); white-space: nowrap; }
 .cfg-status i { width: 7px; height: 7px; border: 1px solid currentColor; border-radius: 50%; }
@@ -32,7 +32,7 @@
 .cfg-fields input:focus, .cfg-model-row select:focus, .cfg-defaults select:focus { border-color: var(--focus); }
 .cfg-fields label small { color: var(--text-2); font-size: var(--fs-13); }
 .cfg-secret { position: relative; }.cfg-secret input { padding-right: calc(var(--sp-16) + var(--sp-4)); }.cfg-secret button { position: absolute; right: 7px; top: 7px; height: 28px; padding: 0 var(--sp-2); color: var(--text-1); background: var(--white-a06); border: 0; border-radius: var(--r-6); font-size: var(--fs-12); }
-.cfg-model-list { display: grid; gap: var(--sp-2); }.cfg-eyebrow { color: var(--text-2); font-size: var(--fs-12); font-weight: 720; letter-spacing: .12em; text-transform: uppercase; }
+.cfg-model-list { display: grid; gap: var(--sp-2); }.cfg-eyebrow { color: var(--text-2); font-size: var(--fs-12); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
 .cfg-model-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 120px; gap: var(--sp-4); align-items: center; }.cfg-model-name { display: grid; gap: var(--sp-1); min-width: 0; }.cfg-model-name strong { overflow: hidden; font: 500 var(--fs-14)/1.4 ui-monospace, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }.cfg-model-name small, .cfg-empty { color: var(--text-2); font-size: var(--fs-12); }.cfg-provider-spend { display: grid; align-content: center; gap: var(--sp-1); color: var(--text-2); font-size: var(--fs-13); }.cfg-provider-spend strong { color: var(--text-1); font-size: var(--fs-18); }.cfg-loading, .cfg-error { margin-bottom: var(--sp-4); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-10); color: var(--text-2); font-size: var(--fs-14); }.cfg-error { color: var(--danger); border-color: var(--danger-line); background: var(--danger-bg); }
 .cfg-switch { display: flex; align-items: center; gap: var(--sp-2); cursor: pointer; }.cfg-switch input { position: absolute; opacity: 0; }.cfg-switch span { position: relative; width: 32px; height: 18px; background: var(--surface-3); border-radius: var(--r-pill); }.cfg-switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; background: var(--text-2); border-radius: 50%; transition: .18s; }.cfg-switch input:checked + span { background: var(--ok); }.cfg-switch input:checked + span::after { left: 17px; background: var(--surface-1); }.cfg-switch em { color: var(--text-2); font-size: var(--fs-13); font-style: normal; }
 .cfg-inline { width: fit-content; padding: var(--sp-2) 0; color: var(--focus); background: none; border: 0; font-size: var(--fs-13); }
@@ -85,3 +85,58 @@
 .cfg-capacidades > div { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
 .cfg-capacidade { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 32px; color: var(--text-1); font-size: var(--fs-14); cursor: pointer; }
 .cfg-capacidade input { accent-color: var(--sora, #e2ecff); width: 16px; height: 16px; }
+
+/* Etapa 6: navegação discreta e formulários com eixo comum. */
+.cfg-shell { grid-template-columns: 200px minmax(0, 768px); max-width: 1040px; gap: 24px; padding: 24px; box-sizing: border-box; }
+.cfg-nav { padding: 0; border: 0; height: auto; top: 24px; }
+.cfg-nav button { min-height: 36px; }
+.cfg-nav button[aria-selected="true"] { background: var(--ativo, var(--white-a09)); }
+.cfg-main { padding: 0 0 64px; max-width: 720px; min-width: 0; }
+.cfg-heading h2 { font-size: 24px; line-height: 32px; font-weight: 600; }
+.cfg-heading p { max-width: 600px; font-size: 14px; line-height: 22px; margin: 8px 0 24px; }
+.cfg-provider-grid { gap: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.cfg-provider-grid .cfg-provider-card { border: 0; border-radius: 0; }
+.cfg-provider-grid .cfg-provider-card + .cfg-provider-card { border-top: 1px solid var(--line-soft, var(--line)); }
+.cfg-provider-summary { min-height: 64px; padding: 12px 16px; grid-template-columns: 36px minmax(0, 1fr) auto 16px; gap: 12px; cursor: pointer; }
+.cfg-provider-icon { width: 36px; height: 36px; border-radius: 10px; }
+.cfg-provider-summary strong { font-size: var(--fs-15,15px); font-weight: 600; }
+.cfg-provider-summary small { font-size: 13px; line-height: 18px; }
+.cfg-status:not([data-status="conectado"]) { min-height: 32px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 14px; font-weight: 600; }
+.cfg-status:not([data-status="conectado"]) i { display: none; }
+.cfg-defaults { grid-template-columns: repeat(3, minmax(0,1fr)); margin: 0 0 24px; padding: 16px; }
+.cfg-defaults > :first-child { grid-column: 1 / -1; }
+.cfg-provider-grid + .cfg-defaults { margin-top: 24px; }
+.cfg-fields { max-width: 560px; }
+.cfg-fields label, .cfg-defaults label { font-weight: 600; }
+.cfg-main :is(input, select) { min-width: 0; height: 40px; border-radius: 10px; }
+.cfg-main :is(input, select, textarea, button):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cfg-main .cfg-switch input { height: auto; }
+.cfg-switch input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cfg-main .cfg-btn-perigo { color: var(--danger); background: transparent; border-color: transparent; }
+.cfg-main .cfg-btn-perigo:hover { background: var(--danger-bg); border-color: transparent; }
+.cfg-main .cfg-ilha { gap: 0; }
+.cfg-main .cfg-ilha__linha { min-height: 56px; padding: 12px 0; background: transparent; border: 0; border-bottom: 1px solid var(--line-soft, var(--line)); border-radius: 0; }
+.cfg-main .cfg-ilha__linha .cfg-switch em { display: none; }
+.cfg-danger-title { margin: 32px 0 16px; font-size: 20px; line-height: 28px; font-weight: 600; }
+.cfg-account { padding: 16px 0; border: 0; border-bottom: 1px solid var(--line-soft, var(--line)); border-radius: 0; background: transparent; }
+@media (max-width: 720px) {
+ .cfg-shell { grid-template-columns: minmax(0,1fr); padding: 0; gap: 24px; }
+ .cfg-nav { top: 0; padding: 8px 16px; }
+ .cfg-nav [role="tablist"] { scroll-snap-type: x proximity; padding: 2px; }
+ .cfg-nav[data-fim="true"] [role="tablist"] { mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+ .cfg-nav[data-inicio="true"] [role="tablist"] { mask-image: linear-gradient(to right, transparent, #000 24px); }
+ .cfg-nav[data-inicio="true"][data-fim="true"] [role="tablist"] { mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
+ .cfg-nav button { min-height: 44px; scroll-snap-align: center; }
+ .cfg-main { padding: 0 16px 64px; }
+ .cfg-provider-summary { padding: 12px; gap: 8px; grid-template-columns: 36px minmax(0,1fr) auto; }
+ .cfg-provider-summary .cfg-status { grid-column: 3; grid-row: 1; font-size: 12px; padding: 0 8px; min-height: 44px; }
+ .cfg-provider-summary .cfg-chevron { display: none; }
+ .cfg-defaults { grid-template-columns: minmax(0,1fr); }
+ .cfg-main :is(input, select) { min-height: 44px; }
+ .cfg-main .cfg-ilha__linha { flex-direction: row; align-items: center; flex-wrap: wrap; }
+ .cfg-main .cfg-ilha__linha > span:first-child { flex: 1; min-width: 160px; }
+ .cfg-main .cfg-ilha__linha .cfg-switch { flex: none; }
+}
+
+/* Etapa 6: select com o mesmo desenho dos campos (sem seta nativa). */
+.cfg-main select, .cfg-defaults select { appearance: none; -webkit-appearance: none; padding-right: 36px; background-color: var(--surface-1); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238B93A3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; color: var(--text-1); border: 1px solid var(--line); border-radius: 10px; }

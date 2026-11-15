@@ -47,7 +47,7 @@ export function SecaoMemoria() {
   return <Secao titulo="Memória" texto="O que a Sora e os bots lembram sobre você entre conversas. Você pode acrescentar ou apagar qualquer item; senhas e chaves não são aceitas.">
     <form className="pc-form" onSubmit={ev => void salvar(ev)}>
       <Input rotulo="Nova lembrança" value={texto} onChange={e => setTexto(e.target.value)} maxLength={500} placeholder="Ex.: Prefiro respostas curtas e em tópicos." />
-      <Button type="submit" variante="primario" tamanho="M" disabled={!texto.trim() || acao.ocupado}>Guardar</Button>
+      <Button type="submit" variante="primario" tamanho="M" disabled={!texto.trim() || acao.ocupado}>Guardar</Button>{(!texto.trim()) && <p className="pc-form-hint">Escreva uma lembrança para guardar.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando memórias…</p> : !itens.length ? <p className="pc-vazio">Nada guardado ainda.</p> :
@@ -97,7 +97,7 @@ export function SecaoRotinas() {
           : <><label>Quantidade<input type="number" min={1} value={aCada} onChange={e => setACada(Math.max(1, Number(e.target.value) || 1))} /></label>
             <label>Unidade<select value={unidade} onChange={e => setUnidade(e.target.value as 'minutos' | 'horas' | 'dias')}><option value="minutos">minutos</option><option value="horas">horas</option><option value="dias">dias</option></select></label></>}
       </div>
-      <Button type="submit" variante="primario" tamanho="M" disabled={!titulo.trim() || !pedido.trim() || acao.ocupado}>Criar rotina</Button>
+      <Button type="submit" variante="primario" tamanho="M" disabled={!titulo.trim() || !pedido.trim() || acao.ocupado}>Criar rotina</Button>{(!titulo.trim() || !pedido.trim()) && <p className="pc-form-hint">Preencha o título e o que a rotina deve fazer.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando rotinas…</p> : !itens.length ? <p className="pc-vazio">Nenhuma rotina ainda.</p> :
@@ -133,7 +133,7 @@ export function SecaoConectores() {
       <Input rotulo="Endereço (https)" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://servidor.exemplo.com/mcp" />
       <div className="pc-linha"><label>Cabeçalho (opcional)<input value={chave} onChange={e => setChave(e.target.value)} placeholder="Authorization" /></label>
         <label>Valor<input type="password" value={valor} onChange={e => setValor(e.target.value)} autoComplete="off" /></label></div>
-      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim() || !url.trim() || acao.ocupado}>Adicionar conector</Button>
+      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim() || !url.trim() || acao.ocupado}>Adicionar conector</Button>{(!nome.trim() || !url.trim()) && <p className="pc-form-hint">Preencha o nome e o endereço do conector.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando conectores…</p> : !itens.length ? <p className="pc-vazio">Nenhum conector ainda.</p> :
@@ -158,7 +158,7 @@ export function SecaoHabilidades() {
       <Input rotulo="Nome" value={nome} onChange={e => setNome(e.target.value)} maxLength={40} />
       <Input rotulo="Para que serve" value={descricao} onChange={e => setDescricao(e.target.value)} maxLength={200} />
       <Textarea rotulo="Instruções" value={conteudo} onChange={e => setConteudo(e.target.value)} rows={5} />
-      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim() || !descricao.trim() || !conteudo.trim() || acao.ocupado}>Criar habilidade</Button>
+      <Button type="submit" variante="primario" tamanho="M" disabled={!nome.trim() || !descricao.trim() || !conteudo.trim() || acao.ocupado}>Criar habilidade</Button>{(!nome.trim() || !descricao.trim() || !conteudo.trim()) && <p className="pc-form-hint">Preencha o nome, a descrição e as instruções.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando habilidades…</p> : !itens.length ? <p className="pc-vazio">Nenhuma habilidade ainda.</p> :

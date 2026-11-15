@@ -1,5 +1,5 @@
 import { NotificacoesDesktop } from '../components/settings/NotificacoesDesktop';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/base';
@@ -39,9 +39,9 @@ function ConfiguracaoIlha() {
   return <>
     <header className="cfg-heading"><h2>Ilha da Sora</h2><p>No computador, acompanhe quem está trabalhando e o que precisa de você fora do app — a ilha aparece no topo da tela quando a Sora sai de foco (minimizada ou em segundo plano) e some quando você volta a ela.</p></header>
     <div className="cfg-ilha"><NotificacoesDesktop />
-      <label className="cfg-ilha__linha"><span><strong>Mostrar ilha</strong><small>Liga a ilha fora do app; dentro do app e no navegador ela nunca aparece.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.visivel} onChange={(e) => alternarVisibilidade(e.target.checked)} /><span aria-hidden="true" /><em>{prefs.visivel ? 'Ligada' : 'Desligada'}</em></span></label>
-      <label className="cfg-ilha__linha"><span><strong>Sons</strong><small>Avisos discretos ao abrir, um bot concluir e um pedido novo chegar.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.som} onChange={(e) => definirIlhaPrefs({ som: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.som ? 'Ligados' : 'Desligados'}</em></span></label>
-      <label className="cfg-ilha__linha"><span><strong>Recolher quando nada roda</strong><small>Deixa apenas uma faixa fina até você passar o mouse no topo.</small></span><span className="cfg-switch"><input type="checkbox" checked={prefs.esconderOciosa} onChange={(e) => definirIlhaPrefs({ esconderOciosa: e.target.checked })} /><span aria-hidden="true" /><em>{prefs.esconderOciosa ? 'Sim' : 'Não'}</em></span></label>
+      <label className="cfg-ilha__linha"><span><strong>Mostrar ilha</strong><small>Liga a ilha fora do app; dentro do app e no navegador ela nunca aparece.</small></span><span className="cfg-switch"><input type="checkbox" role="switch" aria-checked={prefs.visivel} checked={prefs.visivel} onChange={(e) => alternarVisibilidade(e.target.checked)} /><span aria-hidden="true" /></span></label>
+      <label className="cfg-ilha__linha"><span><strong>Sons</strong><small>Avisos discretos ao abrir, um bot concluir e um pedido novo chegar.</small></span><span className="cfg-switch"><input type="checkbox" role="switch" aria-checked={prefs.som} checked={prefs.som} onChange={(e) => definirIlhaPrefs({ som: e.target.checked })} /><span aria-hidden="true" /></span></label>
+      <label className="cfg-ilha__linha"><span><strong>Recolher quando nada roda</strong><small>Deixa apenas uma faixa fina até você passar o mouse no topo.</small></span><span className="cfg-switch"><input type="checkbox" role="switch" aria-checked={prefs.esconderOciosa} checked={prefs.esconderOciosa} onChange={(e) => definirIlhaPrefs({ esconderOciosa: e.target.checked })} /><span aria-hidden="true" /></span></label>
       <label className="cfg-ilha__linha"><span><strong>Filtro padrão</strong><small>Quais bots aparecem na ilha. Dá para trocar também direto na ilha.</small></span><select value={prefs.filtro} onChange={(e) => definirIlhaPrefs({ filtro: e.target.value as FiltroBots })}><option value="todos">Todos</option><option value="trabalhando">Trabalhando</option><option value="precisa_de_voce">Precisa de você</option></select></label>
       <div className="cfg-ilha__acoes"><Button onClick={() => tocar('abrir')} disabled={!prefs.som}>Testar som</Button></div>
     </div>
@@ -74,6 +74,19 @@ export default function Configuracoes() {
   const [senhaConta, setSenhaConta] = useState('');
   const [erroConta, setErroConta] = useState('');
   const estado = useModelos();
+  const nav = useRef<HTMLDivElement>(null);
+  const [bordas, setBordas] = useState({ inicio: false, fim: false });
+  const medirAbas = () => { const el = nav.current; if (el) setBordas({ inicio: el.scrollLeft > 2, fim: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 }); };
+  useEffect(() => {
+    nav.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    medirAbas();
+    const el = nav.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(medirAbas); observer.observe(el);
+    return () => observer.disconnect();
+  }, [secao]);
+  const conectados = PROVEDORES_MODELO.some(p => !!estado.provedores[p.id].conexao);
+  const provedores = [...PROVEDORES_MODELO].sort((a, b) => Number(!!estado.provedores[b.id].conexao) - Number(!!estado.provedores[a.id].conexao));
   const navigate = useNavigate();
   // setas/Home/End entre as abas (padrão WAI-ARIA de tablist)
   const teclaAba = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -88,17 +101,18 @@ export default function Configuracoes() {
   };
   return <AppShell titulo="Configurações" acoes={<span />}><main className="cfg-page">
     <div className="cfg-shell">
-      <aside className="cfg-nav"><h1>Configurações</h1><div role="tablist" aria-label="Seções das configurações" aria-orientation="vertical" onKeyDown={teclaAba}>
+      <aside className="cfg-nav" data-inicio={bordas.inicio} data-fim={bordas.fim}><div ref={nav} onScroll={medirAbas} role="tablist" aria-label="Seções das configurações" aria-orientation="vertical" onKeyDown={teclaAba}>
         {SECOES.map(s => <button key={s.id} id={`cfg-aba-${s.id}`} role="tab" aria-selected={secao === s.id} aria-controls="cfg-painel" tabIndex={secao === s.id ? 0 : -1} onClick={() => setSecao(s.id)}>{s.rotulo}</button>)}
       </div></aside>
       <section className="cfg-main" id="cfg-painel" role="tabpanel" aria-labelledby={`cfg-aba-${secao}`}>
         {secao === 'modelos' ? <><header className="cfg-heading"><h2>Modelos de IA</h2><p>Conecte os provedores que a Sora e seus bots podem usar. Você escolhe o modelo padrão e pode personalizar cada bot.</p></header>
           {estado.carregando && <div className="cfg-loading" role="status">Carregando provedores e modelos…</div>}
           {estado.erro && <div className="cfg-error" role="alert">{estado.erro}</div>}
-          <div className="cfg-provider-grid">{PROVEDORES_MODELO.map(p => <ProviderCard key={p.id} provedor={p} />)}</div>
-          <ModelDefaults estado={estado} />
+          {conectados && <ModelDefaults estado={estado} />}
+          <div className="cfg-provider-grid">{provedores.map(p => <ProviderCard key={p.id} provedor={p} />)}</div>
+          {!conectados && <ModelDefaults estado={estado} />}
           <section className="cfg-security"><h3>Segurança das suas chaves</h3><p>As chaves são enviadas ao backend da Sora e guardadas cifradas. O navegador recebe apenas os últimos caracteres para identificação.</p><Button className="cfg-btn-perigo" onClick={() => setConfirmarChaves(true)}>Desconectar todas as APIs</Button></section>
-        </> : secao === 'memoria' ? <SecaoMemoria /> : secao === 'rotinas' ? <SecaoRotinas /> : secao === 'habilidades' ? <SecaoHabilidades /> : secao === 'conectores' ? <SecaoConectores /> : secao === 'navegador' ? <SecaoNavegador /> : secao === 'telegram' ? <SecaoTelegram /> : secao === 'ilha' ? <ConfiguracaoIlha /> : secao === 'conta' ? <><header className="cfg-heading"><h2>Conta</h2><p>Gerencie os dados da sua conta.</p></header><UsoDaConta /><section className="cfg-account"><div><h3>Dados da Sora</h3><p>Apague grupos, conversas e bots. As conexões de modelos não serão alteradas.</p></div><Button className="cfg-btn-perigo" onClick={() => setConfirmarLimpeza(true)}>Apagar todos os dados</Button></section><section className="cfg-account"><div><h3>Apagar conta</h3><p>Remove permanentemente a conta, as chaves cifradas e os dados guardados no servidor.</p></div><Button variante="perigo" onClick={() => setConfirmarConta(true)}>Apagar conta</Button></section></> : null}
+        </> : secao === 'memoria' ? <SecaoMemoria /> : secao === 'rotinas' ? <SecaoRotinas /> : secao === 'habilidades' ? <SecaoHabilidades /> : secao === 'conectores' ? <SecaoConectores /> : secao === 'navegador' ? <SecaoNavegador /> : secao === 'telegram' ? <SecaoTelegram /> : secao === 'ilha' ? <ConfiguracaoIlha /> : secao === 'conta' ? <><header className="cfg-heading"><h2>Conta</h2><p>Gerencie os dados da sua conta.</p></header><UsoDaConta /><h3 className="cfg-danger-title">Zona de perigo</h3><section className="cfg-account"><div><h3>Dados da Sora</h3><p>Apague grupos, conversas e bots. As conexões de modelos não serão alteradas.</p></div><Button className="cfg-btn-perigo" onClick={() => setConfirmarLimpeza(true)}>Apagar todos os dados</Button></section><section className="cfg-account"><div><h3>Apagar conta</h3><p>Remove permanentemente a conta, as chaves cifradas e os dados guardados no servidor.</p></div><Button variante="fantasma" className="cfg-btn-perigo" onClick={() => setConfirmarConta(true)}>Apagar conta</Button></section></> : null}
       </section>
     </div>
     <Modal open={confirmarLimpeza} onClose={() => { if (!apagandoDados) setConfirmarLimpeza(false); }} title="Apagar todos os dados?" description="Esta ação não pode ser desfeita." size="sm" footer={<div className="cfg-modal-actions"><Button disabled={apagandoDados} onClick={() => setConfirmarLimpeza(false)}>Cancelar</Button><Button variante="perigo" carregando={apagandoDados} onClick={() => { setErroLimpeza(''); setApagandoDados(true); void limparTudo().then(() => { setConfirmarLimpeza(false); navigate('/'); }).catch(erro => setErroLimpeza(mensagemDeErro(erro))).finally(() => setApagandoDados(false)); }}>Apagar todos os dados</Button></div>}><p className="cfg-modal-copy">Todos os grupos, chats e bots serão removidos do servidor.</p>{erroLimpeza && <p role="alert">{erroLimpeza}</p>}</Modal>

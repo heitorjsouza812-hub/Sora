@@ -24,3 +24,17 @@
 .pc-abrir > :first-child { min-width: 240px; }
 .pc-aba { display: grid; gap: 6px; margin-top: 10px; padding: 10px; border: 1px solid rgba(126,242,196,.35); border-radius: 10px; }
 .pc-aba p { margin: 0; }
+
+.pc-form { max-width: 560px; }
+.pc-form-coluna > .b-btn { justify-self: end; width: auto; }
+.pc-form :is(label,.b-label) { font-size: 13px; font-weight: 600; }
+.pc-form :is(input, select, textarea) { box-sizing: border-box; max-width: 100%; background: var(--surface-1); border: 1px solid var(--line); border-radius: 10px; color: var(--text-1); font-size: 14px; }
+.pc-form :is(input, select) { height: 40px; }
+.pc-lista { gap: 0; }
+.pc-lista > li { min-height: 56px; box-sizing: border-box; padding: 12px 0; border: 0; border-bottom: 1px solid var(--line-soft, var(--line)); border-radius: 0; background: transparent; font-size: 14px; }
+.pc-lista .b-btn--perigo { background: transparent; border-color: transparent; color: var(--danger); }
+.pc-lista .b-btn--perigo:hover { background: var(--danger-bg); }
+.pc-vazio, .pc-form-hint { font-size: 13px; line-height: 20px; color: var(--text-2); }
+.pc-form-hint { margin: 0; }
+.pc-form .b-btn:disabled { opacity: 1; background: rgba(255,255,255,.14); color: #B6BDCB; }
+@media (max-width: 720px) { .pc-form { flex-wrap: wrap; } .pc-form > :first-child { min-width: 0; } .pc-form :is(input,select) { height: 44px; } .pc-linha > label { flex: 1; min-width: 120px; } .pc-form-coluna > .b-btn { justify-self: end; } }

@@ -56,7 +56,7 @@ export function ProviderCard({ provedor, inicialmenteAberto = false, onConectado
 
   // Modelo que chegou sem capacidades é de fora do catálogo: o bloco continua na tela enquanto o usuário marca.
   const editavel = (id: string, capacidades: string[]) => !capacidades.length || marcando.has(id);
-  const statusTexto = conexao ? 'Conectado' : 'Não conectado';
+  const statusTexto = conexao ? 'Conectado' : 'Conectar';
   return <article className="cfg-provider-card" data-open={aberto || undefined}>
     <button type="button" className="cfg-provider-summary" onClick={() => setAberto(x => !x)} aria-expanded={aberto}>
       <ProviderIcon provedor={provedor} />
