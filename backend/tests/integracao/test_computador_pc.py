@@ -26,11 +26,22 @@ from app.computador.pc_usuario_cartoes import FERRAMENTA_PROGRAMA
 from app.ferramentas.base import ErroFerramenta
 from app.modelos.tabelas import RegraPermissao
 from tests.integracao.relogio_base import Mundo, mundo, servicos_relogio  # noqa: F401
-from tests.integracao.test_fase_b_pronto import entrar
+from tests.integracao.test_fase_b_pronto import SENHA, entrar
 
 pytestmark = pytest.mark.integracao
 
 DESKTOP = {"X-Sora-Cliente": "desktop"}
+
+
+async def entrar_desktop(cliente: httpx.AsyncClient, email: str) -> tuple[dict, str]:
+    """Login do app de desktop: token de acesso + token de renovação (o do cofre do Windows)."""
+    resposta = await cliente.post(
+        "/v1/auth/entrar", json={"email": email, "senha": SENHA}, headers=DESKTOP
+    )
+    assert resposta.status_code == 200, resposta.text
+    corpo = resposta.json()
+    assert corpo["token_renovacao"]
+    return {"Authorization": f"Bearer {corpo['token_acesso']}", **DESKTOP}, corpo["token_renovacao"]
 
 
 def _png() -> str:
@@ -127,10 +138,14 @@ async def test_canal_do_app_de_desktop_de_ponta_a_ponta(mundo: Mundo) -> None:
         bot_b = (
             await cliente.post("/v1/agentes", json={"descricao": "Outro bot"}, headers=b)
         ).json()
-        da = {**a, **DESKTOP}
+        da, renovacao = await entrar_desktop(cliente, "vela3-a@exemplo.com")
 
         # só o app de desktop abre sessão; sem login, 401
-        corpo = {"dispositivo": "PC da Ana", "autorizados": [bot["id"], bot_b["id"]]}
+        corpo = {
+            "dispositivo": "PC da Ana",
+            "autorizados": [bot["id"], bot_b["id"]],
+            "token_renovacao": renovacao,
+        }
         assert (
             await cliente.post("/v1/computador-pc/sessao", json=corpo, headers=a)
         ).status_code == 403
@@ -141,6 +156,11 @@ async def test_canal_do_app_de_desktop_de_ponta_a_ponta(mundo: Mundo) -> None:
             "conectado"
         ] is False
 
+        # o cabeçalho não basta: sem a prova do cofre do desktop, 403 (Cerca B3)
+        sem_prova = {k: v for k, v in corpo.items() if k != "token_renovacao"}
+        assert (
+            await cliente.post("/v1/computador-pc/sessao", json=sem_prova, headers={**a, **DESKTOP})
+        ).status_code == 403
         sessao = await cliente.post("/v1/computador-pc/sessao", json=corpo, headers=da)
         assert sessao.status_code == 200, sessao.text
         dados = sessao.json()

@@ -27,6 +27,7 @@ import asyncio
 import base64
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 from uuid import UUID
 
@@ -77,8 +78,23 @@ SENHA = (
     "essa parte ele mesmo."
 )
 ABRIR = (
-    "No computador do usuário eu não abro programas por comando. Use ctrl+Escape (menu Iniciar), "
-    "digite o nome do programa e Enter, ou peça ao usuário para abrir."
+    "No computador do usuário eu não abro programas. Peça ao usuário para abrir o programa e "
+    "deixar a janela na tela; depois observe de novo."
+)
+TECLA_PROIBIDA = (
+    "Essa tecla não é permitida no computador do usuário (menu Iniciar, Executar, troca de "
+    "janela, Gerenciador de Tarefas ou ferramentas do desenvolvedor). Clique na janela que "
+    "precisa ou peça ao usuário."
+)
+BLOQUEIO = (
+    "Parei: {programa} abriu durante a sua ação, e programas como esse (terminal, scripts, "
+    "registro, Gerenciador de Tarefas) são bloqueados para bots. O controle "
+    "do computador ficou parado até o usuário decidir o cartão 'Precisa de você'. Não tente de "
+    "novo; diga ao usuário o que estava fazendo."
+)
+CAPTURA_OMITIDA = (
+    "A captura foi ocultada: um programa bloqueado (senhas, segurança, terminal ou a própria "
+    "Sora) está na frente ou cobre a maior parte da tela. Peça ao usuário para trocar de janela."
 )
 ARQUIVOS = (
     "No computador do usuário não leio nem gravo arquivos direto: só tela, mouse e teclado. "
@@ -133,6 +149,29 @@ PROGRAMAS_BLOQUEADOS = frozenset(
         "wt.exe",
         "openconsole.exe",
         "conhost.exe",
+        # lançadores e executores de script (Cerca A1): Executar, busca do Iniciar e o resto
+        # rodam qualquer comando sem nunca focar um terminal
+        "explorer.exe",
+        "searchhost.exe",
+        "searchapp.exe",
+        "searchui.exe",
+        "startmenuexperiencehost.exe",
+        "shellexperiencehost.exe",
+        "wscript.exe",
+        "cscript.exe",
+        "mshta.exe",
+        "rundll32.exe",
+        "regsvr32.exe",
+        "msiexec.exe",
+        "bash.exe",
+        "wsl.exe",
+        "wslhost.exe",
+        "certutil.exe",
+        "bitsadmin.exe",
+        "schtasks.exe",
+        "msbuild.exe",
+        "installutil.exe",
+        "control.exe",
         # a própria Sora (o bot não aprova os próprios cartões)
         "sora.exe",
     }
@@ -141,6 +180,38 @@ PROGRAMAS_BLOQUEADOS = frozenset(
 verdade (ela sabe o executável de cada janela); o servidor recusa de novo se o nome aparecer."""
 
 PAPEIS_DE_ESTADO = frozenset({"foco", "senha", "desativado", "marcado", "expandido"})
+
+_MODIFICADORES_SISTEMA = frozenset({"super", "win", "windows", "meta", "cmd", "command", "hyper"})
+
+
+def tecla_proibida(tecla: str | None) -> bool:
+    """Atalhos que abrem outros programas ou trocam para janela não liberada (Cerca A1).
+
+    A ponte recusa de novo (``regras.rs``): tecla Windows, ctrl+Esc (Iniciar), ctrl+shift+Esc
+    (Gerenciador de Tarefas), alt+Tab/alt+Esc, ctrl+alt+Delete e as ferramentas do
+    desenvolvedor do navegador (F12, ctrl+shift+I/J/C), que rodam código na página.
+    """
+    partes = [p.strip().lower() for p in str(tecla or "").split("+") if p.strip()]
+    if not partes:
+        return False
+    *mods, base = partes
+    mods_set = set(mods)
+    if mods_set & _MODIFICADORES_SISTEMA or base in _MODIFICADORES_SISTEMA:
+        return True
+    if base.startswith(("super", "meta", "hyper")) or base in {"menu", "apps"}:
+        return True
+    ctrl = bool(mods_set & {"ctrl", "control"})
+    alt = "alt" in mods_set
+    shift = "shift" in mods_set
+    if base in {"escape", "esc"} and (ctrl or alt):
+        return True
+    if base == "tab" and alt:
+        return True
+    if base in {"delete", "backspace"} and ctrl and alt:
+        return True
+    if base == "f12":
+        return True
+    return ctrl and shift and base in {"i", "j", "c", "k"}
 
 
 class _Pausado(Exception):
@@ -176,14 +247,18 @@ def normalizar_programa(nome: Any) -> str:
 
 def observacao_do_app(resultado: dict[str, Any]) -> Observacao:
     """Confere e limpa o que a ponte mandou. O app é do usuário, mas nada passa sem conferir."""
-    try:
-        png = base64.b64decode(str(resultado.get("png") or ""), validate=True)
-    except (ValueError, TypeError) as erro:
-        raise ErroFerramenta("O app de desktop mandou uma captura inválida.") from erro
-    if not png.startswith(b"\x89PNG\r\n\x1a\n") or len(png) > MAX_PNG_BYTES:
-        raise ErroFerramenta("O app de desktop mandou uma captura inválida.")
     largura = _inteiro(resultado.get("largura"), 1)
     altura = _inteiro(resultado.get("altura"), 1)
+    omitida = bool(resultado.get("captura_omitida"))
+    if omitida:
+        png = _png_preto(largura, altura)  # o que veio no lugar é descartado sem ler
+    else:
+        try:
+            png = base64.b64decode(str(resultado.get("png") or ""), validate=True)
+        except (ValueError, TypeError) as erro:
+            raise ErroFerramenta("O app de desktop mandou uma captura inválida.") from erro
+        if not png.startswith(b"\x89PNG\r\n\x1a\n") or len(png) > MAX_PNG_BYTES:
+            raise ErroFerramenta("O app de desktop mandou uma captura inválida.")
     janelas: list[Janela] = []
     for bruta in (resultado.get("janelas") or [])[:MAX_JANELAS]:
         if not isinstance(bruta, dict):
@@ -223,7 +298,27 @@ def observacao_do_app(resultado: dict[str, Any]) -> Observacao:
         if estados:
             elemento["estados"] = estados
         arvore.append(elemento)
+    if omitida:
+        # Programa bloqueado (ou a própria Sora) na frente (Cerca A3): nenhum pixel e nenhum
+        # elemento seguem ao modelo, ao Redis ou ao SSE, mesmo que a ponte tenha mandado algo.
+        # Fica só uma imagem preta pequena (o tamanho real continua valendo para coordenadas)
+        # e o aviso para o bot.
+        arvore = [{"ref": "", "papel": "aviso", "nome": CAPTURA_OMITIDA}]
     return Observacao(tela=Tela(png, largura, altura), janelas=janelas, arvore=arvore or None)
+
+
+@lru_cache(maxsize=8)
+def _png_preto(largura: int, altura: int) -> bytes:
+    """PNG todo preto, com no máximo 320 px de largura e a mesma proporção da tela."""
+    import io
+
+    from PIL import Image
+
+    escala = min(1.0, 320 / max(largura, 1))
+    tamanho = (max(1, round(largura * escala)), max(1, round(altura * escala)))
+    saida = io.BytesIO()
+    Image.new("RGB", tamanho, (0, 0, 0)).save(saida, format="PNG")
+    return saida.getvalue()
 
 
 _MENSAGENS = {
@@ -253,7 +348,10 @@ class ComputadorPcUsuario:
     # ---------- comandos ----------
 
     async def _preparar(self) -> None:
-        if await self.canal.esta_parado(self.usuario_id, self.agente.id):
+        if (
+            await self.canal.esta_parado(self.usuario_id, self.agente.id)
+            and not await self._bloqueio_liberado()
+        ):
             raise ErroFerramenta(PARADO)
         if await self.canal.esta_pausado(self.usuario_id, self.agente.id):
             await self._esperar_retomada()
@@ -283,6 +381,8 @@ class ComputadorPcUsuario:
         if codigo == "programa_bloqueado":
             programa = normalizar_programa(erro.get("programa")) or "esse programa"
             raise ErroFerramenta(self._bloqueado(programa))
+        if codigo == "processo_bloqueado":
+            await self._parar_por_bloqueio(normalizar_programa(erro.get("programa")))
         if codigo == "em_uso":
             nome = _limpo(erro.get("por"), 60) or "outro bot"
             raise ErroFerramenta(f"O PC está em uso por {nome}. Tente de novo quando ele terminar.")
@@ -306,6 +406,10 @@ class ComputadorPcUsuario:
         """Abre (ou reaproveita) o cartão deste assunto e espera a decisão por um tempo.
         Devolve ``permitida``, ``negada`` ou ``pendente``."""
         u, a = self.usuario_id, self.agente.id
+        # Esperando o usuário, o bot não mexe no PC: solta a vez **antes** de o cartão aparecer,
+        # para que a decisão possa vir de qualquer sessão (com a vez presa, só o app de desktop
+        # decide; Cerca A2). Quem segue depois pega a vez de novo.
+        await self.canal.soltar_vez(u, a)
         guardado = await self.canal.cartao(u, a, assunto)
         status: str | None = None
         aprovacao_id: UUID | None = None
@@ -362,6 +466,47 @@ class ComputadorPcUsuario:
                 "e avise o usuário."
             )
         raise ErroFerramenta(PROGRAMA_ESPERANDO.format(programa=programa))
+
+    async def _parar_por_bloqueio(self, programa: str) -> None:
+        """A ponte viu nascer um programa bloqueado (terminal, script…) durante a ação: parar,
+        abrir cartão e nunca seguir. Permitir no cartão solta o bot; Recusar o mantém parado."""
+        programa = programa or "um programa bloqueado"
+        u, a = self.usuario_id, self.agente.id
+        await self.canal.marcar_bloqueio(u, a)
+        acao = {
+            "tipo": "pc_bloqueio",
+            "titulo": "Um bot abriu um programa bloqueado",
+            "resumo": (
+                f"Durante uma ação de {self.agente.nome} no seu computador, {programa} abriu. "
+                "Programas assim (terminal, scripts, registro) são bloqueados para bots: fechei "
+                f"o programa e parei o controle. “Permitir uma vez”: {self.agente.nome} pode "
+                "voltar a usar o computador. “Recusar”: continua parado."
+            ),
+        }
+        try:
+            aprovacao_id = await self.cartoes.abrir(
+                u, a, acao, f"{programa} abriu durante a ação do bot."
+            )
+            await self.canal.guardar_cartao(u, a, "bloqueio", aprovacao_id, VALIDADE_CARTAO_S)
+        finally:
+            await self.encerrar()
+        raise ErroFerramenta(BLOQUEIO.format(programa=programa))
+
+    async def _bloqueio_liberado(self) -> bool:
+        """Parado por programa bloqueado e o usuário permitiu no cartão: volta a valer."""
+        u, a = self.usuario_id, self.agente.id
+        guardado = await self.canal.cartao(u, a, "bloqueio")
+        if not guardado:
+            return False
+        try:
+            aprovacao_id = UUID(str(guardado.get("id")))
+        except (TypeError, ValueError):
+            return False
+        if await self.cartoes.status(u, aprovacao_id) != "permitida":
+            return False
+        await self.canal.esquecer_cartao(u, a, "bloqueio")
+        await self.canal.limpar_parado(u, a)
+        return True
 
     async def _esperar_retomada(self) -> None:
         """Pausado: cartão para retomar. Volta normalmente só se o usuário mandou retomar."""
@@ -432,6 +577,8 @@ class ComputadorPcUsuario:
             raise ErroFerramenta(ABRIR)
         if acao.acao.tipo == "digitar" and parece_senha(acao.acao.texto or ""):
             raise ErroFerramenta(SENHA)
+        if acao.acao.tipo == "tecla" and tecla_proibida(acao.tecla or acao.acao.tecla):
+            raise ErroFerramenta(TECLA_PROIBIDA)
         await self._preparar()
         dados = self.acao_para_app(acao)
         for tentativa in range(2):
@@ -453,6 +600,8 @@ class ComputadorPcUsuario:
                         f"{pedido.programa} ainda não está liberado. Observe a tela de novo."
                     ) from None
                 await self._pedir_programa(pedido.programa, pedido.titulo)
+                # a vez ficou solta enquanto o usuário decidia (``_cartao``): pegar de novo
+                await self.canal.pegar_vez(self.usuario_id, self.agente)
 
     async def listar_arquivos(self, pasta: str) -> list[ArquivoArea]:
         raise ErroFerramenta(ARQUIVOS)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
@@ -13,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modelos.enumeracoes import StatusAprovacao
 from app.modelos.tabelas import Agente, Aprovacao, Conversa, Pergunta
+from app.revisor.decisoes import aceita_sempre, e_envio
+from app.revisor.decisoes import nome_real as _nome_real
 
 
 class OpcaoAtencao(BaseModel):
@@ -32,26 +33,6 @@ class PedidoAtencao(BaseModel):
     acao: str | None = None
     anexos: list[UUID] = Field(default_factory=list)
     criado_em: datetime
-
-
-_ENVIO = re.compile(
-    r"(^|[_\-.])(send|post|reply|publish|tweet|enviar|responder|postar|publicar|mandar)"
-    r"([_\-.]|$)",
-    re.IGNORECASE,
-)
-"""Ação que manda algo para fora (e-mail, mensagem, post): o cartão é Enviar/Descartar."""
-
-
-def _nome_real(acao: dict) -> str:
-    """Nome da ferramenta de verdade (conector executado pelo catálogo leva o nome no ``id``)."""
-    ferramenta = str(acao.get("ferramenta") or "")
-    if ferramenta not in _META_FERRAMENTAS:
-        return ferramenta
-    argumentos = acao.get("argumentos") if isinstance(acao.get("argumentos"), dict) else {}
-    for chave in ("id", "ferramenta", "nome"):
-        if isinstance(argumentos.get(chave), str):
-            return argumentos[chave]
-    return ferramenta
 
 
 _META_FERRAMENTAS = frozenset(
@@ -112,11 +93,7 @@ def _frase_da_acao(acao: dict) -> str:
 
 def _texto_acao(aprovacao: Aprovacao, nome: str = "O bot") -> tuple[str, str, str]:
     acao = aprovacao.acao if isinstance(aprovacao.acao, dict) else {}
-    envio = acao.get("tipo") == "rascunho_envio" or (
-        acao.get("tipo") != "aprovar_dominio"
-        and acao.get("ferramenta") not in {"propor_instrucoes"}
-        and bool(_ENVIO.search(_nome_real(acao)))
-    )
+    envio = e_envio(acao)
     tipo = "rascunho_envio" if envio else "aprovacao"
     ferramenta = str(acao.get("ferramenta") or "ação externa")
     if acao.get("tipo") == "sugestao_melhoria":
@@ -180,7 +157,14 @@ async def listar_atencao(sessao: AsyncSession, usuario_id: UUID) -> list[PedidoA
             ]
             if tipo == "rascunho_envio"
             else [
-                OpcaoAtencao(rotulo="Aprovar", valor="permitir"),
+                OpcaoAtencao(rotulo="Permitir uma vez", valor="permitir"),
+                # Regra única (``revisor/decisoes.py``): o app só mostra "Sempre permitir"
+                # quando o servidor manda esta opção, no chat e na central.
+                *(
+                    [OpcaoAtencao(rotulo="Sempre permitir", valor="sempre_permitir")]
+                    if aceita_sempre(aprovacao.acao, aprovacao.agente_id)
+                    else []
+                ),
                 OpcaoAtencao(rotulo="Recusar", valor="negar"),
             ]
         )

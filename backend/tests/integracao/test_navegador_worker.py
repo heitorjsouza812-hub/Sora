@@ -183,14 +183,16 @@ async def test_dominio_novo_em_perfil_logado_pausa_aprova_e_navega(mundo: Mundo,
         assert not leitura.done()
 
         decidida = await cliente.post(
-            f"/v1/aprovacoes/{cartao.id}/decidir", headers=auth, json={"decisao": "sempre_permitir"}
+            f"/v1/aprovacoes/{cartao.id}/decidir",
+            headers=auth,
+            json={"decisao": "permitir_uma_vez"},
         )
         assert decidida.status_code == 204, decidida.text
         eventos = await asyncio.wait_for(leitura, 120)
 
     pedida = next(d for n, d in eventos if n == "aprovacao.pedida")
     assert pedida["tipo"] == "aprovar_dominio" and pedida["dominio"] == "localhost"
-    assert [o["valor"] for o in pedida["opcoes"]] == ["sempre_permitir", "negar"]
+    assert [o["valor"] for o in pedida["opcoes"]] == ["permitir_uma_vez", "negar"]
     assert pedida["agente_id"] and pedida["perfil"] == {"tipo": "compartilhado"}
     assert "segredo" not in str(eventos)
 
@@ -519,17 +521,16 @@ async def _todos_os_cartoes(mundo: Mundo, usuario_id: UUID) -> list[Aprovacao]:
 
 
 async def _aprovar_tudo(cliente, mundo: Mundo, auth: dict, usuario_id: UUID, leitura) -> None:
-    """O usuário aprova o que aparecer: o revisor do clique (uma vez) e o domínio (sempre)."""
+    """O usuário aprova o que aparecer (clique e domínio), sempre "uma vez" (Prumo A2)."""
     decididas: set[UUID] = set()
     while not leitura.done():
         for cartao in await _todos_os_cartoes(mundo, usuario_id):
             if cartao.id in decididas or cartao.status.value != "pendente":
                 continue
-            domino = cartao.acao.get("tipo") == "aprovar_dominio"
             resposta = await cliente.post(
                 f"/v1/aprovacoes/{cartao.id}/decidir",
                 headers=auth,
-                json={"decisao": "sempre_permitir" if domino else "permitir_uma_vez"},
+                json={"decisao": "permitir_uma_vez"},
             )
             assert resposta.status_code == 204, resposta.text
             decididas.add(cartao.id)

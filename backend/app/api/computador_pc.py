@@ -12,6 +12,17 @@ comandos e recebe resultados.
 - ``POST   /v1/computador-pc/comandos/{id}/resultado``: resultado, uma única vez, no prazo;
 - ``POST   /v1/computador-pc/parar``: o usuário clicou em Parar na borda;
 - ``GET    /v1/computador-pc/estado``: para a tela de Configurações (vale também no navegador).
+
+Quem é o app de desktop (Cerca B3): o cabeçalho ``X-Sora-Cliente`` só identifica o cliente. Para
+abrir a sessão do PC o app prova que tem o **token de renovação de uma sessão de login do
+desktop** (``sessoes.cliente = "desktop"``), que mora no cofre do Windows (Credential Manager) e
+nunca passa pela Sora web. Um token de acesso roubado não basta. A sessão do PC fica presa àquela
+sessão de login: se ela acabar (Sair, revogada, vencida), o long-poll recebe 409 e o PC solta. O
+``sessao_id`` devolvido é o segredo do app daí em diante (comandos, resultados, Parar).
+
+Cartões e o controle (Cerca A2): enquanto um bot tem a vez e não está pausado, nenhuma sessão
+decide cartões (``api/aprovacoes.py``, 409). O bot solta a vez assim que um cartão dele abre
+(cartão do PC e do revisor), e a entrada física do usuário pausa o bot.
 """
 
 from __future__ import annotations
@@ -44,6 +55,11 @@ RedisDep = Annotated[Redis, Depends(obter_redis)]
 
 SO_DESKTOP = "Só o app de desktop da Sora controla o computador."
 SESSAO_TROCADA = "Outra sessão do app de desktop assumiu o controle do computador nesta conta."
+SEM_PROVA = (
+    "Para ligar o controle do computador, entre de novo no app de desktop da Sora (a sessão "
+    "salva neste computador não foi reconhecida)."
+)
+LOGIN_ACABOU = "A sessão do app de desktop acabou. Entre de novo para usar o computador."
 
 
 def exigir_desktop(x_sora_cliente: Annotated[str | None, Header()] = None) -> None:
@@ -54,9 +70,56 @@ def exigir_desktop(x_sora_cliente: Annotated[str | None, Header()] = None) -> No
 Desktop = Depends(exigir_desktop)
 
 
+async def _login_do_desktop(sessao: AsyncSession, usuario_id: UUID, token: str | None) -> UUID:
+    """Sessão de login do desktop dona do token de renovação (atual ou na janela de troca).
+
+    Só lê: não gira nem revoga nada (isso é do ``/v1/auth/renovar``). Token de outra conta, de
+    sessão web, vencido, encerrado ou reaproveitado de geração antiga: 403.
+    """
+    from datetime import UTC, datetime
+
+    from app.core import seguranca
+    from app.core.contas import CLIENTE_DESKTOP, classificar_token, consulta_sessao_do_token
+
+    if not token:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, SEM_PROVA)
+    token_hash = seguranca.hash_token(token)
+    login = await sessao.scalar(consulta_sessao_do_token(token_hash))
+    if (
+        login is None
+        or login.usuario_id != usuario_id
+        or login.cliente != CLIENTE_DESKTOP
+        or classificar_token(login, token_hash, datetime.now(UTC)) not in ("valido", "tolerado")
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, SEM_PROVA)
+    return login.id
+
+
+async def _login_ainda_vale(sessao: AsyncSession, dados: dict[str, Any]) -> bool:
+    from datetime import UTC, datetime
+
+    from app.modelos.tabelas import Sessao as SessaoLogin
+
+    try:
+        login_id = UUID(str(dados.get("login_sessao_id")))
+    except ValueError:
+        return False
+    linha = (
+        await sessao.execute(
+            select(SessaoLogin.encerrada_em, SessaoLogin.expira_em).where(
+                SessaoLogin.id == login_id
+            )
+        )
+    ).first()
+    await sessao.close()  # devolve a conexão antes do long-poll
+    return linha is not None and linha[0] is None and linha[1] > datetime.now(UTC)
+
+
 class SessaoEntrada(BaseModel):
     dispositivo: str = Field(default="", max_length=80)
     autorizados: list[UUID] = Field(default_factory=list, max_length=MAX_AUTORIZADOS)
+    token_renovacao: str | None = Field(default=None, max_length=512)
+    """Prova de que é o app de desktop: o token de renovação do cofre do Windows (Cerca B3)."""
 
 
 class SessaoSaida(BaseModel):
@@ -133,8 +196,11 @@ async def _bots_do_usuario(sessao: AsyncSession, usuario_id: UUID, ids: list[UUI
 async def registrar_sessao(
     dados: SessaoEntrada, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
 ) -> SessaoSaida:
+    login_id = await _login_do_desktop(sessao, usuario_id, dados.token_renovacao)
     autorizados = await _bots_do_usuario(sessao, usuario_id, dados.autorizados)
-    sessao_id = await CanalPc(redis).registrar_sessao(usuario_id, autorizados, dados.dispositivo)
+    sessao_id = await CanalPc(redis).registrar_sessao(
+        usuario_id, autorizados, dados.dispositivo, login_sessao_id=login_id
+    )
     return SessaoSaida(sessao_id=sessao_id, usuario_id=usuario_id, autorizados=autorizados)
 
 
@@ -166,10 +232,19 @@ async def encerrar_sessao(sessao_id: str, usuario_id: Usuario, redis: RedisDep) 
 async def proximo_comando(
     usuario_id: Usuario,
     redis: RedisDep,
+    sessao: Sessao,
     sessao_id: Annotated[str, Query(max_length=64)],
     espera: Annotated[float, Query(ge=0, le=MAX_ESPERA_LONG_POLL_S)] = 20,
 ) -> Any:
     canal = CanalPc(redis)
+    atual = await canal.sessao_atual(usuario_id, sessao_id)
+    if atual is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, SESSAO_TROCADA)
+    if not await _login_ainda_vale(sessao, atual):
+        # Sair no app, sessão revogada ou vencida: o PC solta na hora (Cerca B3)
+        if await canal.encerrar_sessao(usuario_id, sessao_id):
+            await canal.soltar_vez(usuario_id)
+        raise HTTPException(status.HTTP_409_CONFLICT, LOGIN_ACABOU)
     if not await canal.tocar(usuario_id, sessao_id):
         raise HTTPException(status.HTTP_409_CONFLICT, SESSAO_TROCADA)
     comando = await canal.proximo_comando(usuario_id, sessao_id, espera)

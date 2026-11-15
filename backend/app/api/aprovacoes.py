@@ -20,6 +20,7 @@ from app.eventos.tipos import AprovacaoResolvida
 from app.modelos.enumeracoes import DecisaoAprovacao, StatusAprovacao
 from app.modelos.esquemas import DecisaoAprovacaoEntrada
 from app.modelos.tabelas import Aprovacao, Cadeia, Conversa, Etapa, RegraPermissao
+from app.revisor.decisoes import SO_UMA_VEZ, aceita_sempre, condicao_da_regra
 
 roteador = APIRouter(
     prefix="/aprovacoes", tags=["aprovacoes"], dependencies=[Depends(usuario_atual)]
@@ -37,6 +38,19 @@ def obter_fila(redis: RedisDep) -> ArqRedis:
 
 Fila = Annotated[ArqRedis, Depends(obter_fila)]
 
+SOB_CONTROLE = (
+    "Um bot está usando o seu computador agora. "
+    "Pause ou pare o controle antes de decidir este pedido."
+)
+
+
+async def _conferir_quem_decide(redis: Redis, usuario_id: UUID) -> None:
+    """Com a vez ativa, nenhuma sessão da conta decide cartões (Cerca A2)."""
+    from app.computador.pc_usuario_canal import CanalPc
+
+    if await CanalPc(redis).bot_no_controle(usuario_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, SOB_CONTROLE)
+
 
 @roteador.post("/{aprovacao_id}/decidir", status_code=status.HTTP_204_NO_CONTENT)
 async def decidir_aprovacao(
@@ -49,7 +63,9 @@ async def decidir_aprovacao(
 ) -> None:
     """Registra a decisão e retoma a etapa interrompida.
 
-    ``sempre_permitir`` também grava uma ``regras_permissao`` para o agente e a ferramenta.
+    ``sempre_permitir`` também grava uma ``regras_permissao`` para o agente e a condição de
+    ``revisor/decisoes.py``; fora dela, 422 e o cartão segue pendente. Enquanto um bot desta
+    conta controla o PC do usuário, nenhuma sessão decide: primeiro pause ou pare o controle.
     """
     aprovacao = await sessao.scalar(
         select(Aprovacao)
@@ -62,25 +78,31 @@ async def decidir_aprovacao(
     if aprovacao.status != StatusAprovacao.PENDENTE or aprovacao.expira_em <= agora:
         raise HTTPException(status.HTTP_409_CONFLICT, "Este pedido não está mais pendente.")
 
-    negada = dados.decisao == DecisaoAprovacao.NEGAR
+    await _conferir_quem_decide(redis, usuario_id)
+    # Regra única (``revisor/decisoes.py``): instruções, envio externo, domínio novo, retomar o
+    # PC e o PC do usuário sem programa só aceitam "uma vez"; ferramenta genérica sem condição
+    # também. Recusar antes de mudar qualquer coisa: o cartão continua pendente.
+    condicao = condicao_da_regra(aprovacao.acao)
+    decisao = dados.decisao
+    if decisao == DecisaoAprovacao.SEMPRE_PERMITIR and not aceita_sempre(
+        aprovacao.acao, aprovacao.agente_id
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, SO_UMA_VEZ)
+    sempre = decisao == DecisaoAprovacao.SEMPRE_PERMITIR
+
+    negada = decisao == DecisaoAprovacao.NEGAR
     aprovacao.status = StatusAprovacao.NEGADA if negada else StatusAprovacao.PERMITIDA
     aprovacao.decidida_em = agora
-    ferramenta = aprovacao.acao.get("ferramenta") if isinstance(aprovacao.acao, dict) else None
     sugestao_de_melhoria = (
         isinstance(aprovacao.acao, dict) and aprovacao.acao.get("tipo") == "sugestao_melhoria"
     )
-    if (
-        dados.decisao == DecisaoAprovacao.SEMPRE_PERMITIR
-        and isinstance(ferramenta, str)
-        and not sugestao_de_melhoria  # sugestão de melhoria nunca vira permissão permanente
-    ):
-        condicao = aprovacao.acao.get("condicao")
+    if sempre and condicao is not None:
         sessao.add(
             RegraPermissao(
                 usuario_id=usuario_id,
                 agente_id=aprovacao.agente_id,
-                ferramenta=ferramenta,
-                condicao=condicao if isinstance(condicao, dict) else {},
+                ferramenta=str(aprovacao.acao["ferramenta"]),
+                condicao=condicao,
             )
         )
     if (
@@ -155,14 +177,14 @@ async def decidir_aprovacao(
         await fila.enqueue_job(
             "executar_etapa",
             str(etapa_id),
-            {"aprovacao_id": str(aprovacao_id), "decisao": dados.decisao.value},
+            {"aprovacao_id": str(aprovacao_id), "decisao": decisao.value},
             _job_id=f"aprovacao:{aprovacao_id}",
         )
     elif conversa_fora_de_cadeia is not None:
         await fila.enqueue_job(
             "retomar_conversa",
             str(conversa_fora_de_cadeia),
-            {"aprovacao_id": str(aprovacao_id), "decisao": dados.decisao.value},
+            {"aprovacao_id": str(aprovacao_id), "decisao": decisao.value},
             _job_id=f"aprovacao:{aprovacao_id}",
         )
     elif grupo_id is not None:
@@ -170,6 +192,6 @@ async def decidir_aprovacao(
         await fila.enqueue_job(
             "retomar_tarefa_canal",
             cartao_id=str(aprovacao_id),
-            resposta={"aprovacao_id": str(aprovacao_id), "decisao": dados.decisao.value},
+            resposta={"aprovacao_id": str(aprovacao_id), "decisao": decisao.value},
             _job_id=f"aprovacao:{aprovacao_id}",
         )

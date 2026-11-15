@@ -50,6 +50,8 @@ CHAVE_ESTADO = "computador:estado:{agente_id}"
 CHAVE_USO = "computador:uso"
 """Hash agente_id → último uso (epoch). O desligamento por ociosidade lê daqui."""
 VALIDADE_CAPTURA_S = 60 * 60
+VALIDADE_CAPTURA_PC_S = 5 * 60
+"""Tela do PC do usuário fica só 5 min no Redis (Cerca A3); a do computador virtual, 1 h."""
 VALIDADE_ESTADO_S = 24 * 60 * 60
 LARGURA_MINIATURA = 480
 MAX_LEITURA_BYTES = 20_000
@@ -211,7 +213,8 @@ class ServicoComputador:
         pipe = self.redis.pipeline(transaction=False)
         # base64: o cliente Redis da API devolve texto (decode_responses)
         captura = base64.b64encode(tela.png).decode()
-        pipe.set(CHAVE_CAPTURA.format(agente_id=agente), captura, ex=VALIDADE_CAPTURA_S)
+        validade = VALIDADE_CAPTURA_PC_S if alvo == Alvo.PC_USUARIO else VALIDADE_CAPTURA_S
+        pipe.set(CHAVE_CAPTURA.format(agente_id=agente), captura, ex=validade)
         pipe.set(CHAVE_ESTADO.format(agente_id=agente), json.dumps(estado), ex=VALIDADE_ESTADO_S)
         await pipe.execute()
         await self.publicar(

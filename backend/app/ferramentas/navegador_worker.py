@@ -191,7 +191,7 @@ class AmbienteNavegador:
                     perfil=await self._perfil_do_cartao(revisao.particao),
                     agente_id=contexto.agente_id,
                     opcoes=[
-                        {"rotulo": "Aprovar domínio", "valor": "sempre_permitir"},
+                        {"rotulo": "Aprovar domínio", "valor": "permitir_uma_vez"},
                         {"rotulo": "Negar", "valor": "negar"},
                     ],
                 ),

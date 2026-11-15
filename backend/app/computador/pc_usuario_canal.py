@@ -34,17 +34,22 @@ CHAVE_RESPOSTA = "pc:resp:{comando_id}"
 CHAVE_VEZ = "pc:vez:{usuario_id}"
 CHAVE_PAUSADO = "pc:pausado:{usuario_id}:{agente_id}"
 CHAVE_PARADO = "pc:parado:{usuario_id}:{agente_id}"
-CHAVE_UMA_VEZ = "pc:uma_vez:{usuario_id}:{agente_id}"
+CHAVE_UMA_VEZ = "pc:uma_vez:v2:{usuario_id}:{agente_id}"
 CHAVE_CARTAO = "pc:cartao:{usuario_id}:{agente_id}:{assunto}"
 
 VALIDADE_SESSAO_S = 60
 """O app busca comandos a cada ≤ 25 s; sem buscar por 1 minuto, a sessão some."""
 VEZ_S = 90
 """Quanto tempo o bot segura a vez sem mandar comando (o modelo pensa entre uma ação e outra)."""
-UMA_VEZ_S = 30 * 60
-""""Permitir uma vez" vale para este trabalho: até 30 min sem uso ou até o usuário clicar Parar."""
+UMA_VEZ_S = 5 * 60
+""""Permitir uma vez" vence 5 min depois da decisão, com prazo absoluto por programa: usar não
+renova (Cerca B2). Parar também apaga. Depois disso, a próxima ação no programa abre outro
+cartão."""
 PARADO_S = 120
 """Depois do Parar, o mesmo bot fica 2 min sem conseguir pegar o PC de novo."""
+BLOQUEIO_S = 15 * 60
+"""Um programa bloqueado abriu durante a ação do bot: ele fica parado até o usuário decidir o
+cartão (ou por 15 min)."""
 PAUSADO_S = 15 * 60
 MAX_ESPERA_LONG_POLL_S = 25
 MAX_AUTORIZADOS = 50
@@ -78,9 +83,17 @@ class CanalPc:
     # ---------- sessão do app de desktop ----------
 
     async def registrar_sessao(
-        self, usuario_id: UUID, autorizados: list[UUID], dispositivo: str
+        self,
+        usuario_id: UUID,
+        autorizados: list[UUID],
+        dispositivo: str,
+        *,
+        login_sessao_id: UUID | None = None,
     ) -> str:
-        """Nova sessão (substitui a anterior da mesma conta: só um PC por vez)."""
+        """Nova sessão (substitui a anterior da mesma conta: só um PC por vez).
+
+        ``login_sessao_id`` é a sessão de login do app de desktop que provou ser ela (token de
+        renovação do cofre do Windows, Cerca B3): se ela acabar (sair, revogada), o PC solta."""
         anterior = await self.sessao(usuario_id)
         sessao_id = uuid4().hex
         dados = {
@@ -88,6 +101,7 @@ class CanalPc:
             "autorizados": [str(a) for a in dict.fromkeys(autorizados)][:MAX_AUTORIZADOS],
             "dispositivo": dispositivo[:80],
             "desde": time.time(),
+            "login_sessao_id": str(login_sessao_id) if login_sessao_id else None,
         }
         await self.redis.set(
             CHAVE_SESSAO.format(usuario_id=usuario_id), json.dumps(dados), ex=VALIDADE_SESSAO_S
@@ -336,17 +350,47 @@ class CanalPc:
             await self.redis.exists(CHAVE_PARADO.format(usuario_id=usuario_id, agente_id=agente_id))
         )
 
+    async def marcar_bloqueio(self, usuario_id: UUID, agente_id: UUID) -> None:
+        """Programa bloqueado abriu na ação do bot: Parar mais longo, até o cartão ser decidido."""
+        await self.marcar_parado(usuario_id, agente_id)
+        await self.redis.set(
+            CHAVE_PARADO.format(usuario_id=usuario_id, agente_id=agente_id), "1", ex=BLOQUEIO_S
+        )
+
+    async def limpar_parado(self, usuario_id: UUID, agente_id: UUID) -> None:
+        await self.redis.delete(CHAVE_PARADO.format(usuario_id=usuario_id, agente_id=agente_id))
+
+    async def bot_no_controle(self, usuario_id: UUID) -> bool:
+        """Um bot desta conta está com a vez no PC e não está pausado (pode mexer agora)."""
+        dono = await self.quem_tem_a_vez(usuario_id)
+        if not dono:
+            return False
+        try:
+            agente_id = UUID(str(dono.get("agente_id")))
+        except ValueError:
+            return True  # vez ilegível: na dúvida, há alguém no controle
+        return not await self.esta_pausado(usuario_id, agente_id)
+
     async def permitir_uma_vez(self, usuario_id: UUID, agente_id: UUID, programa: str) -> None:
+        """Libera ``programa`` até ``agora + UMA_VEZ_S``. Cada programa tem o próprio prazo."""
         chave = CHAVE_UMA_VEZ.format(usuario_id=usuario_id, agente_id=agente_id)
-        await self.redis.sadd(chave, programa)
+        await self.redis.hset(chave, programa, str(time.time() + UMA_VEZ_S))
         await self.redis.expire(chave, UMA_VEZ_S)
 
     async def programas_uma_vez(self, usuario_id: UUID, agente_id: UUID) -> set[str]:
+        """Programas ainda no prazo. Ler não renova nada (Cerca B2)."""
         chave = CHAVE_UMA_VEZ.format(usuario_id=usuario_id, agente_id=agente_id)
-        itens = await self.redis.smembers(chave)
-        if itens:
-            await self.redis.expire(chave, UMA_VEZ_S)
-        return {t for t in (_texto(i) for i in itens) if t}
+        agora = time.time()
+        programas: set[str] = set()
+        for nome, prazo in (await self.redis.hgetall(chave)).items():
+            try:
+                vence = float(_texto(prazo) or 0)
+            except ValueError:
+                continue
+            programa = _texto(nome)
+            if programa and vence > agora:
+                programas.add(programa)
+        return programas
 
     # ---------- cartão aberto (um por bot e assunto) ----------
 
