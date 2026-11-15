@@ -294,6 +294,17 @@ async def _rodar_e_falar(
                 await falar(Falar(texto=texto), ferramenta)
             finally:
                 fontes_do_turno.reset(token)
+        elif (
+            antes is not None
+            and depois == antes
+            and not any(isinstance(m, ToolMessage) for m in resultado.get("messages", []))
+        ):
+            # Nem texto nem ferramenta: um provedor que ignora ``stream`` ou devolve vazio deixaria
+            # a conversa muda. O usuário recebe o aviso e pode tentar de novo.
+            registro.warning(
+                "o modelo terminou o turno da conversa %s sem responder", contexto.conversa_id
+            )
+            await falar(Falar(texto=MENSAGEM_FALHA), ferramenta)
     await publicar_evento(
         ctx["redis_eventos"], SugestoesEvento(itens=[]), contexto.conversa_id, contexto.usuario_id
     )

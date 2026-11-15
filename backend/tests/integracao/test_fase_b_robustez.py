@@ -29,7 +29,7 @@ from alembic.config import Config
 from arq.connections import RedisSettings, create_pool
 from arq.worker import create_worker
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -201,6 +201,32 @@ def completar_ferramenta(nome: str, argumentos: dict[str, Any]) -> dict[str, Any
     return _completacao(mensagem, "tool_calls")
 
 
+async def _fluxo_sse(completacao: dict[str, Any]) -> AsyncIterator[str]:
+    """Converte uma ``chat.completion`` inteira nos pedaços SSE de ``stream=true``."""
+    escolha = completacao["choices"][0]
+    mensagem = escolha["message"]
+    base = {
+        "id": completacao["id"],
+        "object": "chat.completion.chunk",
+        "created": completacao["created"],
+        "model": completacao["model"],
+    }
+    delta: dict[str, Any] = {"role": "assistant"}
+    if mensagem.get("content"):
+        delta["content"] = mensagem["content"]
+    if mensagem.get("tool_calls"):
+        delta["tool_calls"] = [{"index": i, **c} for i, c in enumerate(mensagem["tool_calls"])]
+    primeiro = {**base, "choices": [{"index": 0, "delta": delta, "finish_reason": None}]}
+    yield "data: " + json.dumps(primeiro) + "\n\n"
+    ultimo = {
+        **base,
+        "choices": [{"index": 0, "delta": {}, "finish_reason": escolha["finish_reason"]}],
+        "usage": completacao["usage"],
+    }
+    yield "data: " + json.dumps(ultimo) + "\n\n"
+    yield "data: [DONE]" + "\n\n"
+
+
 def _completacao(mensagem: dict[str, Any], motivo: str) -> dict[str, Any]:
     return {
         "id": "local",
@@ -239,6 +265,10 @@ async def ambiente_http(
             resultado = await resultado
         if isinstance(resultado, tuple):
             return JSONResponse(resultado[1], status_code=resultado[0])
+        if corpo.get("stream"):
+            # Como os provedores reais: quem pede ``stream`` recebe SSE. O turno da conversa
+            # (``MiddlewareConversa``) sempre pede; JSON puro viraria uma resposta vazia.
+            return StreamingResponse(_fluxo_sse(resultado), media_type="text/event-stream")
         return JSONResponse(resultado)
 
     @api_modelo.get("/v1/models")
@@ -305,7 +335,13 @@ async def ambiente_http(
             f"http://127.0.0.1:{porta_modelo}/v1",
         )
     finally:
-        await worker.close()
+        # ``close`` cancela os jobs ainda em andamento (ex.: a cadeia que segue depois de uma
+        # etapa); o ``gather`` do ARQ então levanta ``CancelledError`` do job, não deste teste.
+        try:
+            await worker.close()
+        except asyncio.CancelledError:
+            worker.tasks.clear()
+            await worker.close()
         tarefa_worker.cancel()
         servidor_api.should_exit = True
         await tarefa_api
@@ -582,6 +618,32 @@ async def test_pergunta_fora_de_cadeia_retoma_a_conversa(ambiente_http: Ambiente
         papeis = [m["role"] for m in amb.provedor.chamadas[-1]["messages"]]
         assert "tool" in papeis
         assert any("leve" in str(m.get("content")) for m in amb.provedor.chamadas[-1]["messages"])
+
+
+async def test_modelo_que_responde_vazio_nao_deixa_a_conversa_muda(
+    ambiente_http: AmbienteHttp,
+) -> None:
+    """A1 (Prumo-2): sem texto e sem ferramenta (ex.: provedor que ignora ``stream`` e devolve
+    vazio) o usuário recebe o aviso em PT-BR, em vez de ficar sem resposta."""
+    amb = ambiente_http
+    amb.provedor.responder = lambda corpo, n: completar_texto("")
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        _, usuario_id = await usuario_com_modelo_http(amb, cliente, "vazio-sora@exemplo.com")
+        conversa_id, mensagem_id = await _conversa_com_pedido(amb, usuario_id, "Oi")
+        await _enfileirar(amb.url_redis, "responder_direto", str(mensagem_id))
+
+        async def avisou() -> bool:
+            async with amb.fabrica() as sessao:
+                textos = (
+                    await sessao.scalars(
+                        select(Mensagem.conteudo).where(
+                            Mensagem.conversa_id == conversa_id, Mensagem.autor == "sora"
+                        )
+                    )
+                ).all()
+            return any("Não consegui terminar essa resposta" in t for t in textos)
+
+        await esperar(avisou, "a conversa ficou muda com a resposta vazia do modelo")
 
 
 async def _aprovacao_da_sora(amb: AmbienteHttp, usuario_id: UUID) -> Aprovacao:
