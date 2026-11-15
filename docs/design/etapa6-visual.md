@@ -655,3 +655,5 @@ Dependências: 1 antes de tudo; 4 antes de 5, 6, 7 e 13; 7 antes de 8, 9 e 13. A
 1. **Título do estado vazio.** O app diz "Converse com a Sora"; o `CLAUDE.md` §4.2 diz "Em que posso te ajudar hoje?". Mantive o texto do app no protótipo. A frase de §4.2 é mais convidativa e dispensa a linha de apoio; se preferir, é só trocar o texto.
 2. **E-mail na barra lateral.** A proposta tira o e-mail do rodapé (fica em Configurações → Conta). Se a equipe usa mais de uma conta, vale manter.
 3. **"Livre" na barra lateral.** A proposta mostra estado só quando o bot trabalha ou precisa de você. Se "Livre" for considerado informação, volta como segunda linha de 12 px.
+
+**Decidido (Heitor, 2026-11-14):** proposta aprovada. (1) Título do estado vazio: **"Em que posso te ajudar hoje?"**, sem a linha de apoio. (2) E-mail sai do rodapé da barra lateral (fica em Configurações → Conta). (3) "Livre" some da barra lateral; estado só quando o bot trabalha ou precisa de você.
