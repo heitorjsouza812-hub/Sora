@@ -5,7 +5,7 @@
 #   restaurar   -> restaura e traz a principal para frente
 #   foco-outra  -> dá o foco a outro programa (uma janela temporária do PowerShell)
 #   foco-sora   -> dá o foco à janela principal da Sora
-param([string]$acao = 'estado', [string]$a1 = '', [string]$a2 = '')
+param([string]$acao = 'estado', [string]$a1 = '', [string]$a2 = '', [string]$a3 = '', [string]$a4 = '', [string]$a5 = '')
 
 Add-Type @"
 using System;
@@ -31,6 +31,7 @@ public static class U32 {
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr extra);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int hh, bool repintar);
   [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
   [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint f);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
@@ -147,6 +148,19 @@ switch ($acao) {
   # fecha SÓ o que o QA abriu: processo com esse título E iniciado nos últimos 10 min (nunca um terminal do usuário)
   'fechar-titulo' {
     Get-Process | Where-Object { $_.MainWindowTitle -like "*$a1*" -and $_.StartTime -gt (Get-Date).AddMinutes(-10) } | Stop-Process -Force
+  }
+  # posiciona SÓ uma janela que o QA abriu (título e iniciada nos últimos 10 min): titulo x y largura altura
+  'posicionar-titulo' {
+    [void][U32]::SetProcessDPIAware()
+    $alvo = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "*$a1*" -and $_.StartTime -gt (Get-Date).AddMinutes(-10) } | Select-Object -First 1
+    if (-not $alvo) { Write-Error "janela com título '$a1' não encontrada"; exit 4 }
+    [void][U32]::ShowWindow($alvo.MainWindowHandle, 9)
+    [void][U32]::MoveWindow($alvo.MainWindowHandle, [int]$a2, [int]$a3, [int]$a4, [int]$a5, $true)
+    Write-Output "posicionada: $($alvo.ProcessName)"
+  }
+  # fecha com WM_CLOSE (sem matar) SÓ uma janela que o QA abriu nos últimos 10 min
+  'fechar-suave' {
+    Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like "*$a1*" -and $_.StartTime -gt (Get-Date).AddMinutes(-10) } | ForEach-Object { [void][U32]::PostMessage($_.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
   }
   # clique esquerdo (entrada SINTÉTICA, que a vigia do mouse físico ignora de propósito) num ponto da tela
   'clique' {

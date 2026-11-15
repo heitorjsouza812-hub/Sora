@@ -213,39 +213,114 @@ fn janela_bloqueada(alvo: &AlvoJanela) -> bool {
         || titulo_bloqueado(&alvo.titulo)
 }
 
-// Enumeração exclusiva da captura: sem teto de janelas, sem filtrar janelas de ferramenta.
+/// Raio dos cantos arredondados do Windows 11 a 100 % (8 px, com folga; cresce com o DPI): os cantos de uma
+/// janela não maximizada deixam ver o que está atrás, então não contam como cobertos.
+const MARGEM_CANTOS: i32 = 10;
+/// `DWMSBT_TRANSIENTWINDOW`: fundo acrílico, que deixa ver (borrado) o que está atrás.
+const FUNDO_ACRILICO: i32 = 3;
+
+/// Retângulos que a janela cobre de verdade, ou vazio se ela não cobre ou se há dúvida (D1):
+/// pintar a mais é o lado seguro. Não cobrem: janelas da própria Sora (ilha, borda, Parar),
+/// camadas (`WS_EX_LAYERED`, podem ser transparentes), `WS_EX_TRANSPARENT`, janelas de ferramenta
+/// (sombras, menus, avisos), janelas com região própria (formato não retangular), fundo acrílico,
+/// `CoreWindow` (Iniciar, busca, teclado virtual) e janela sem a moldura do DWM.
+fn cobertura(hwnd: HWND, pid: u32) -> Vec<RECT> {
+    use windows::Win32::{
+        Graphics::{
+            Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DWMWA_SYSTEMBACKDROP_TYPE},
+            Gdi::GetWindowRgnBox,
+        },
+        UI::{
+            HiDpi::GetDpiForWindow,
+            WindowsAndMessaging::{IsZoomed, WS_EX_LAYERED, WS_EX_TRANSPARENT},
+        },
+    };
+    if pid == std::process::id() || classe(hwnd) == "Windows.UI.Core.CoreWindow" {
+        return Vec::new();
+    }
+    // SAFETY: só leitura de atributos da janela; os buffers têm o tamanho informado.
+    unsafe {
+        let estilo = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let sem_cobrir = (WS_EX_LAYERED.0 | WS_EX_TRANSPARENT.0 | WS_EX_TOOLWINDOW.0) as isize;
+        if estilo & sem_cobrir != 0 {
+            return Vec::new();
+        }
+        let mut caixa = RECT::default();
+        // sem região própria o Windows responde ERROR (0); com região, não cobre.
+        let regiao = GetWindowRgnBox(hwnd, &mut caixa);
+        if regiao.0 != 0 {
+            return Vec::new();
+        }
+        let mut fundo = 0i32;
+        if DwmGetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, (&mut fundo as *mut i32).cast(), 4).is_ok()
+            && fundo == FUNDO_ACRILICO
+        {
+            return Vec::new();
+        }
+        let mut r = RECT::default();
+        if DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, (&mut r as *mut RECT).cast(), size_of::<RECT>() as u32)
+            .is_err()
+        {
+            return Vec::new();
+        }
+        if IsZoomed(hwnd).as_bool() {
+            return vec![r];
+        }
+        // em cruz: a janela toda menos os quatro cantos.
+        let m = (MARGEM_CANTOS * GetDpiForWindow(hwnd).max(96) as i32 + 95) / 96;
+        vec![
+            RECT { left: r.left + m, top: r.top, right: r.right - m, bottom: r.bottom },
+            RECT { left: r.left, top: r.top + m, right: r.right, bottom: r.bottom - m },
+        ]
+    }
+}
+
+fn retangulo(r: &RECT) -> super::regras::Retangulo {
+    [r.left, r.top, r.right, r.bottom]
+}
+
+// Enumeração exclusiva da captura: sem teto de janelas, sem filtrar janelas de ferramenta. O
+// `EnumWindows` entrega as janelas de topo na ordem z, da frente para trás: é essa ordem que
+// `areas_a_tarjar` usa para tarjar só o que está à mostra.
 unsafe extern "system" fn coletar_bloqueios(hwnd: HWND, dados: LPARAM) -> BOOL {
     // SAFETY: `dados` aponta para o Vec do chamador, vivo durante a enumeração.
-    let lista = unsafe { &mut *(dados.0 as *mut Vec<RECT>) };
+    let pilha = unsafe { &mut *(dados.0 as *mut Vec<super::regras::JanelaNaPilha>) };
+    // escondida, minimizada ou camuflada não aparece na tela: não tarja nem cobre. A borda e o
+    // Parar ficam fora da captura (`WDA_EXCLUDEFROMCAPTURE`): também não tarjam nem cobrem.
     if !na_tela(hwnd) || e_area_de_trabalho(hwnd) || matches!(classe(hwnd).as_str(), "SoraPcBorda" | "SoraPcParar") {
         return BOOL(1);
     }
-    if janela_bloqueada(&alvo_da_janela(hwnd)) {
+    let alvo = alvo_da_janela(hwnd);
+    let tarja = janela_bloqueada(&alvo).then(|| {
         let mut r = RECT::default();
-        // SAFETY: só leitura.
+        // SAFETY: só leitura. O `GetWindowRect` inclui a moldura invisível: tarja a mais.
         if unsafe { GetWindowRect(hwnd, &mut r) }.is_err() {
             r = RECT { left: 0, top: 0, right: i32::MAX / 2, bottom: i32::MAX / 2 };
         }
-        lista.push(r);
-    }
+        retangulo(&r)
+    });
+    let cobre = cobertura(hwnd, alvo.pid).iter().map(retangulo).collect();
+    pilha.push(super::regras::JanelaNaPilha { tarja, cobre });
     BOOL(1)
 }
 
 /// Retângulos (em pixels da captura) a tarjar e se a captura deve ser omitida: programa
 /// bloqueado, a Sora ou nada em primeiro plano (a área de trabalho não conta), ou falha ao listar.
+/// Só a parte à mostra de cada janela bloqueada é tarjada (D1): uma janela bloqueada coberta por
+/// outras não apaga a tela inteira.
 fn retangulos_bloqueados(t: &Tela) -> (Vec<[i32; 4]>, bool) {
-    let mut lista: Vec<RECT> = Vec::new();
-    // SAFETY: callback acima; a lista vive até o fim da chamada.
-    let ok = unsafe { EnumWindows(Some(coletar_bloqueios), LPARAM(&mut lista as *mut _ as isize)) }.is_ok();
+    let mut pilha: Vec<super::regras::JanelaNaPilha> = Vec::new();
+    // SAFETY: callback acima; a pilha vive até o fim da chamada.
+    let ok = unsafe { EnumWindows(Some(coletar_bloqueios), LPARAM(&mut pilha as *mut _ as isize)) }.is_ok();
     let omitida = !ok || bloqueada_na_frente();
-    let retangulos = lista
+    let retangulos = super::regras::areas_a_tarjar(&pilha)
         .iter()
         .map(|r| {
             [
-                (f64::from(r.left) / t.escala).floor() as i32 - 2,
-                (f64::from(r.top) / t.escala).floor() as i32 - 2,
-                (f64::from(r.right) / t.escala).ceil() as i32 + 2,
-                (f64::from(r.bottom) / t.escala).ceil() as i32 + 2,
+                (f64::from(r[0]) / t.escala).floor() as i32 - 2,
+                (f64::from(r[1]) / t.escala).floor() as i32 - 2,
+                (f64::from(r[2]) / t.escala).ceil() as i32 + 2,
+                (f64::from(r[3]) / t.escala).ceil() as i32 + 2,
             ]
         })
         .collect();

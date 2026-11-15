@@ -521,6 +521,76 @@ pub fn tarjar_rgb(rgb: &mut [u8], largura: usize, altura: usize, r: [i32; 4]) {
     }
 }
 
+/// Retângulo `[esquerda, topo, direita, baixo)` em pixels físicos.
+pub type Retangulo = [i32; 4];
+
+/// Uma janela de topo na pilha da tela (Cerca A3, D1 do teste real).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JanelaNaPilha {
+    /// Área a tarjar se a janela estiver à mostra (janela bloqueada); `None` para as liberadas.
+    pub tarja: Option<Retangulo>,
+    /// Área que a janela cobre de verdade (opaca, sem camada transparente, não é da Sora), em um ou
+    /// mais retângulos (os cantos arredondados ficam de fora); vazia quando não cobre nada ou
+    /// quando há dúvida.
+    pub cobre: Vec<Retangulo>,
+}
+
+/// Teto de pedaços: acima disso a janela é tarjada inteira (pintar a mais é o lado seguro).
+const MAX_PEDACOS: usize = 4_096;
+
+fn vazio(r: &Retangulo) -> bool {
+    r[2] <= r[0] || r[3] <= r[1]
+}
+
+/// `r` menos `c`: até 4 pedaços sem sobreposição (faixas de cima, de baixo, da esquerda, da direita).
+fn subtrair(r: Retangulo, c: Retangulo, saida: &mut Vec<Retangulo>) {
+    let [x1, y1, x2, y2] = r;
+    let meio = [x1.max(c[0]), y1.max(c[1]), x2.min(c[2]), y2.min(c[3])];
+    if vazio(&meio) {
+        saida.push(r);
+        return;
+    }
+    for pedaco in [
+        [x1, y1, x2, meio[1]],
+        [x1, meio[3], x2, y2],
+        [x1, meio[1], meio[0], meio[3]],
+        [meio[2], meio[1], x2, meio[3]],
+    ] {
+        if !vazio(&pedaco) {
+            saida.push(pedaco);
+        }
+    }
+}
+
+/// Partes à mostra das janelas bloqueadas. `pilha` vem na ordem z, da frente para trás (a ordem do
+/// `EnumWindows`). Cada janela bloqueada tarja só o que as janelas da frente não cobrem; uma
+/// janela bloqueada por cima é tarjada inteira. Quem não cobre (`cobre` vazio) não esconde nada.
+pub fn areas_a_tarjar(pilha: &[JanelaNaPilha]) -> Vec<Retangulo> {
+    let mut coberto: Vec<Retangulo> = Vec::new();
+    let mut tarjar = Vec::new();
+    for janela in pilha {
+        if let Some(tarja) = janela.tarja.filter(|t| !vazio(t)) {
+            let mut pedacos = vec![tarja];
+            for c in &coberto {
+                let mut proximos = Vec::with_capacity(pedacos.len() + 3);
+                for p in pedacos {
+                    subtrair(p, *c, &mut proximos);
+                }
+                pedacos = proximos;
+                if pedacos.is_empty() || pedacos.len() > MAX_PEDACOS {
+                    break;
+                }
+            }
+            if pedacos.len() > MAX_PEDACOS {
+                pedacos = vec![tarja];
+            }
+            tarjar.extend(pedacos);
+        }
+        coberto.extend(janela.cobre.iter().filter(|c| !vazio(c)));
+    }
+    tarjar
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
@@ -569,6 +639,67 @@ mod testes {
         assert_eq!(&pixels[12..18], &[0; 6]);
         assert_eq!(&pixels[..12], &[255; 12]);
         assert_eq!(&pixels[18..24], &[255; 6]);
+    }
+
+    fn bloqueada(r: Retangulo, cobre: bool) -> JanelaNaPilha {
+        JanelaNaPilha { tarja: Some(r), cobre: if cobre { vec![r] } else { Vec::new() } }
+    }
+
+    fn liberada(r: Retangulo) -> JanelaNaPilha {
+        JanelaNaPilha { tarja: None, cobre: vec![r] }
+    }
+
+    fn area(rs: &[Retangulo]) -> i64 {
+        rs.iter().map(|r| i64::from(r[2] - r[0]) * i64::from(r[3] - r[1])).sum()
+    }
+
+    #[test]
+    fn tarja_so_a_parte_visivel_das_bloqueadas() {
+        let tela = [0, 0, 1920, 1080];
+        // D1: Bloco de Notas maximizado na frente do Chrome com a Sora maximizado → nada tarjado
+        assert!(areas_a_tarjar(&[liberada(tela), bloqueada(tela, true)]).is_empty());
+        // parcialmente coberta: Bloco de Notas à esquerda, a Sora aparece à direita
+        let resto = areas_a_tarjar(&[liberada([0, 0, 1200, 1080]), bloqueada(tela, true)]);
+        assert_eq!(resto, vec![[1200, 0, 1920, 1080]]);
+        // janela no meio: sobra uma moldura de 4 pedaços sem sobreposição
+        let moldura = areas_a_tarjar(&[liberada([100, 100, 300, 200]), bloqueada([0, 0, 400, 300], true)]);
+        assert_eq!(moldura.len(), 4);
+        assert_eq!(area(&moldura), 400 * 300 - 200 * 100);
+        // bloqueada por cima: tarjada inteira, e o que está atrás dela não precisa de mais nada
+        let por_cima = [0, 0, 800, 600];
+        assert_eq!(areas_a_tarjar(&[bloqueada(por_cima, true), liberada(tela)]), vec![por_cima]);
+        // duas bloqueadas: a da frente inteira; a de trás só o que sobra
+        let duas = areas_a_tarjar(&[bloqueada([0, 0, 100, 100], true), bloqueada([50, 0, 200, 100], true)]);
+        assert_eq!(duas, vec![[0, 0, 100, 100], [100, 0, 200, 100]]);
+    }
+
+    #[test]
+    fn quem_nao_cobre_nao_esconde_nada() {
+        let tela = [0, 0, 1920, 1080];
+        // a ilha e as janelas da borda (da Sora) e as de dúvida (camada transparente) não cobrem
+        let ilha = JanelaNaPilha { tarja: Some([560, 0, 1360, 460]), cobre: Vec::new() };
+        let duvida = JanelaNaPilha { tarja: None, cobre: Vec::new() };
+        let resto = areas_a_tarjar(&[ilha, duvida, bloqueada(tela, true)]);
+        assert_eq!(resto, vec![[560, 0, 1360, 460], tela]);
+        // janela que vem DEPOIS (atrás) não cobre a da frente
+        assert_eq!(areas_a_tarjar(&[bloqueada([0, 0, 10, 10], true), liberada(tela)]), vec![[0, 0, 10, 10]]);
+        // retângulo vazio não tarja nem cobre
+        assert_eq!(areas_a_tarjar(&[liberada([5, 5, 5, 5]), bloqueada([0, 0, 10, 10], false)]), vec![[0, 0, 10, 10]]);
+        // cobertura em cruz (cantos arredondados fora): os 4 cantos da janela de trás ficam tarjados
+        let cruz = JanelaNaPilha { tarja: None, cobre: vec![[8, 0, 92, 100], [0, 8, 100, 92]] };
+        let cantos = areas_a_tarjar(&[cruz, bloqueada([0, 0, 100, 100], true)]);
+        assert_eq!(cantos.len(), 4);
+        assert_eq!(area(&cantos), 4 * 8 * 8);
+    }
+
+    #[test]
+    fn muitos_pedacos_tarjam_a_janela_inteira() {
+        // grade de janelinhas liberadas na frente de uma bloqueada: passa do teto e tarja tudo
+        let mut pilha: Vec<JanelaNaPilha> =
+            (0..6_400).map(|i| (i % 80 * 5 + 2, i / 80 * 5 + 2)).map(|(x, y)| liberada([x, y, x + 1, y + 1])).collect();
+        let grande = [0, 0, 400, 400];
+        pilha.push(bloqueada(grande, true));
+        assert_eq!(areas_a_tarjar(&pilha), vec![grande]);
     }
 
     fn alvo(programa: &str, titulo: &str, pid: u32) -> AlvoJanela {
