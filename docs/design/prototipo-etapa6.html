@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sora · protótipo visual da etapa 6</title>
+<!--
+  Protótipo estático da etapa 6 (docs/design/etapa6-visual.md). Um arquivo só, sem rede.
+  O mascote aqui é um marcador simples de pontos: no app continua sendo o SoraOrb, sem mudança.
+  Os nomes ("Bot de pesquisa", "Grupo de planejamento") são genéricos de propósito.
+-->
+<style>
+/* ---------- tokens (derivados de CLAUDE.md §4.1 e de app/src/styles/tokens.css) ---------- */
+:root {
+  --surface-1: #050608; --surface-side: #090B0F; --surface-2: #0F1115; --surface-3: #14161B;
+  --text-1: #F2F5FB; --text-2: #8B93A3; --text-3: #7D8595; --text-inverse: #0B0D12;
+  --line-soft: rgba(255,255,255,.05); --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.16);
+  --hover: rgba(255,255,255,.06); --ativo: rgba(255,255,255,.09);
+  --action: #EEF2FA; --ok: #7EF2C4; --warn: #FEBC2E; --danger: #FF6B6B; --link: #9CC4FF; --focus: #9CC4FF;
+  --sora: #E2ECFF; --atlas: #56A8FF; --luna: #AC80FF; --nina: #46E8A8;
+  --col: 760px; --side-w: 260px; --top-h: 52px; --painel-w: 360px;
+  --r-6: 6px; --r-10: 10px; --r-12: 12px; --r-16: 16px; --r-20: 20px; --r-24: 24px; --r-pill: 999px;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms; --dur-layout: 420ms;
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --beam: #FFD6F5, #FF5CCD, #A868FF, #508CFF, #3CE0D2; /* BorderBeam da demo: rosa → magenta → violeta → azul → ciano */
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+@property --ang { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: #000; color: var(--text-1); font: 14px/20px var(--font); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+h1, h2, h3, p, ul, ol { margin: 0; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- barra do protótipo ---------- */
+.proto { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 16px; height: 48px; padding: 0 16px; background: #000; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.proto strong { font-size: 13px; white-space: nowrap; }
+.proto [role=tablist] { display: flex; gap: 2px; }
+.proto [role=tab] { height: 32px; padding: 0 12px; border-radius: var(--r-pill); color: var(--text-2); font-size: 13px; font-weight: 500; white-space: nowrap; }
+.proto [role=tab]:hover { color: var(--text-1); background: var(--hover); }
+.proto [role=tab][aria-selected=true] { color: var(--text-inverse); background: var(--action); }
+.proto .nota { margin-left: auto; color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.proto .nota button { color: var(--link); text-decoration: underline; text-underline-offset: 3px; }
+.tela { display: none; }
+.tela.on { display: block; }
+
+/* ---------- moldura do app ---------- */
+.app { position: relative; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); height: calc(100vh - 48px); min-height: 660px; background: var(--surface-1); overflow: hidden; }
+.palco { container: palco / inline-size; display: flex; min-width: 0; min-height: 0; height: 100%; background: radial-gradient(900px 380px at 50% -140px, rgba(86,120,180,.10), transparent 70%); }
+.conv { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.coluna { width: 100%; max-width: calc(var(--col) + 48px); margin: 0 auto; padding: 0 24px; }
+
+/* ---------- mascote (marcador de pontos; não é o desenho final) ---------- */
+.orb { --c: var(--sora); --s: 28px; position: relative; flex: none; width: var(--s); height: var(--s); border-radius: 50%; color: var(--c); }
+.orb::before { --g: clamp(2.6px, calc(var(--s) / 20), 6px); content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, currentColor 0 calc(var(--g) * .2), transparent calc(var(--g) * .2 + .6px)) 50% 50% / var(--g) var(--g);
+  -webkit-mask: radial-gradient(ellipse 27% 21% at 41% 50%, transparent 0 80%, #000 100%), radial-gradient(circle at 62% 34%, #000 0 30%, rgba(0,0,0,.5) 58%, transparent 71%); -webkit-mask-composite: source-in;
+          mask: radial-gradient(ellipse 27% 21% at 41% 50%, transparent 0 80%, #000 100%), radial-gradient(circle at 62% 34%, #000 0 30%, rgba(0,0,0,.5) 58%, transparent 71%); mask-composite: intersect; }
+.orb::after { content: ""; position: absolute; left: 31%; top: 42%; width: max(2px, calc(var(--s) * .07)); height: max(3px, calc(var(--s) * .15)); border-radius: 50%; background: #fff; box-shadow: calc(var(--s) * .16) 0 0 #fff; }
+.orb.pensa::before { animation: orb-gira 1.6s linear infinite; }
+.orb.pensa { animation: orb-respira 1.6s ease-in-out infinite; }
+.orb.pensa::after { height: max(2px, calc(var(--s) * .09)); top: 40%; }
+@keyframes orb-gira { to { background-position: calc(50% + var(--g) * 3) 50%; } }
+@keyframes orb-respira { 50% { transform: scale(1.06); filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 55%, transparent)); } }
+
+/* ---------- barra lateral ---------- */
+.lado { display: flex; flex-direction: column; min-height: 0; padding: 8px; background: var(--surface-side); border-right: 1px solid var(--line); }
+.marca { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 8px; border-radius: var(--r-10); }
+.marca b { display: block; font-size: 15px; line-height: 18px; font-weight: 600; }
+.marca small { display: block; color: var(--text-2); font-size: 12px; line-height: 16px; }
+.marca:hover, .linha:hover, .nav:hover { background: var(--hover); }
+.marca.ativo, .linha.ativo { background: var(--ativo); }
+.nav { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 8px; border-radius: var(--r-10); color: var(--text-2); font-size: 14px; text-align: left; }
+.nav:hover { color: var(--text-1); }
+.nav span { flex: 1; }
+.nav kbd { color: var(--text-3); font: 500 12px/16px var(--font); }
+.nav.tem { color: var(--text-1); font-weight: 600; }
+.cont { min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--r-pill); background: var(--action); color: var(--text-inverse); font-size: 12px; line-height: 20px; font-weight: 700; text-align: center; }
+.sec { display: flex; align-items: center; height: 32px; margin-top: 16px; padding: 0 8px; color: var(--text-3); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.sec span { flex: 1; }
+.sec small { font-size: 12px; font-weight: 500; letter-spacing: 0; }
+.sec button { display: grid; place-items: center; width: 28px; height: 28px; margin-right: -4px; border-radius: var(--r-6); color: var(--text-2); }
+.sec button:hover { color: var(--text-1); background: var(--hover); }
+.linha { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 8px; border-radius: var(--r-10); font-size: 14px; }
+.linha .nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.linha .gi { display: grid; place-items: center; width: 24px; height: 24px; color: var(--text-2); }
+.estado { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--text-3)); animation: pulsa 1.4s ease-in-out infinite; }
+@keyframes pulsa { 50% { opacity: .35; transform: scale(.8); } }
+.vazio-lado { padding: 4px 8px; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.conta { display: flex; align-items: center; gap: 10px; height: 52px; margin-top: auto; padding: 0 8px; border-top: 1px solid var(--line); }
+.conta .av { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-3); font-size: 12px; font-weight: 700; }
+.conta .nome { flex: 1; font-size: 13px; font-weight: 500; }
+.ibtn { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-10); color: var(--text-2); flex: none; }
+.ibtn:hover { color: var(--text-1); background: var(--hover); }
+.ibtn[aria-pressed=true] { color: var(--text-1); background: var(--ativo); }
+
+/* ---------- cabeçalho da tela ---------- */
+.topo { display: flex; align-items: center; gap: 10px; height: var(--top-h); padding: 0 12px 0 20px; }
+.topo .quem { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 15px; font-weight: 600; }
+.topo .quem b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo .quem small { color: var(--text-2); font-size: 13px; font-weight: 400; white-space: nowrap; }
+.topo .quem small.vivo { color: var(--c); }
+.topo .espaco { flex: 1; }
+.pilha { display: flex; align-items: center; height: 36px; padding: 0 8px 0 12px; border-radius: var(--r-pill); }
+.pilha:hover { background: var(--hover); }
+.pilha .orb { margin-left: -4px; }
+.so-fone { display: none; }
+
+/* ---------- conversa ---------- */
+.rolagem { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.rolagem .coluna { padding-top: 8px; padding-bottom: 40px; }
+.msg-u { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 28px; }
+.bolha { max-width: 78%; padding: 10px 16px; background: var(--surface-3); border-radius: var(--r-20) var(--r-20) var(--r-6) var(--r-20); font-size: 16px; line-height: 24px; overflow-wrap: anywhere; }
+.bolha .men { color: var(--link); font-weight: 500; }
+.msg-a { margin-top: 28px; }
+.autor { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--c, var(--text-1)); font-size: 13px; line-height: 18px; font-weight: 600; }
+.autor small { color: var(--text-3); font-size: 12px; font-weight: 400; }
+.citado { margin: 0 0 8px; padding-left: 10px; border-left: 2px solid var(--line-strong); color: var(--text-2); font-size: 13px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.md { font-size: 16px; line-height: 26px; }
+.md > * + * { margin-top: 14px; }
+.md h2 { margin-top: 24px; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -.01em; }
+.md > h2:first-child { margin-top: 0; }
+.md ul { padding-left: 22px; }
+.md li + li { margin-top: 6px; }
+.md li::marker { color: var(--text-3); }
+.md strong { font-weight: 600; }
+.md code { padding: 1px 5px; border-radius: var(--r-6); background: var(--line); font: 13px/20px var(--mono); }
+.ref { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin: 0 1px; padding: 0 5px; border-radius: var(--r-pill); background: var(--line); color: var(--text-2); font-size: 12px; line-height: 18px; font-weight: 600; vertical-align: 2px; }
+.ref:hover { background: var(--line-strong); color: var(--text-1); }
+.tabela { width: fit-content; max-width: 100%; border: 1px solid var(--line); border-radius: var(--r-12); overflow-x: auto; }
+.tabela table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 20px; }
+.tabela th { padding: 10px 32px 10px 14px; color: var(--text-2); font-size: 13px; font-weight: 600; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.tabela td { padding: 10px 32px 10px 14px; white-space: nowrap; }
+.tabela tr + tr td { border-top: 1px solid var(--line-soft); }
+.codigo { border: 1px solid var(--line); border-radius: var(--r-12); background: var(--surface-2); overflow: hidden; }
+.codigo header { display: flex; align-items: center; height: 36px; padding: 0 6px 0 14px; color: var(--text-2); font-size: 12px; border-bottom: 1px solid var(--line-soft); }
+.codigo header button { margin-left: auto; height: 28px; padding: 0 10px; border-radius: var(--r-6); color: var(--text-2); font-size: 12px; font-weight: 500; }
+.codigo header button:hover { color: var(--text-1); background: var(--hover); }
+.codigo pre { margin: 0; padding: 12px 14px; overflow-x: auto; font: 13px/20px var(--mono); }
+.codigo .k { color: var(--link); }
+.imagem { position: relative; display: block; width: fit-content; max-width: 100%; border-radius: var(--r-12); overflow: hidden; cursor: zoom-in; }
+.imagem .img { display: grid; place-items: center; width: 420px; max-width: 100%; aspect-ratio: 3 / 2; background: linear-gradient(135deg, #1b2440, #3a2a6a 55%, #1f4a4a); color: rgba(255,255,255,.55); font-size: 12px; }
+.imagem .baixar { position: absolute; top: 8px; right: 8px; background: rgba(5,6,8,.72); color: var(--text-1); opacity: 0; transition: opacity var(--dur-fast); }
+.imagem:hover .baixar, .imagem:focus-within .baixar { opacity: 1; }
+.legenda { margin-top: 6px !important; color: var(--text-3); font-size: 12px; line-height: 16px; }
+.fontes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 16px; }
+.fontes > span { margin-right: 2px; color: var(--text-3); font-size: 12px; font-weight: 600; }
+.fonte { display: inline-flex; align-items: center; gap: 6px; height: 28px; max-width: 220px; padding: 0 10px 0 4px; border-radius: var(--r-pill); background: var(--line-soft); color: var(--text-2); font-size: 13px; transition: background var(--dur-fast), color var(--dur-fast); }
+.fonte:hover { background: var(--line); color: var(--text-1); }
+.fonte b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--line); color: var(--text-2); font-size: 12px; font-weight: 600; }
+.fonte span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.interrompida { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.interrompida i { width: 8px; height: 8px; border-radius: 2px; background: var(--text-3); }
+.interrompida button { color: var(--text-1); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+.acoes { display: flex; gap: 2px; margin: 8px 0 0 -7px; opacity: 0; transition: opacity var(--dur-fast); }
+.msg-u .acoes { margin: 0; }
+.msg-a:hover .acoes, .msg-a:focus-within .acoes, .msg-u:hover .acoes, .msg-u:focus-within .acoes, .ultima .acoes { opacity: 1; }
+.acao { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-10); color: var(--text-3); }
+.acao:hover { color: var(--text-1); background: var(--hover); }
+.pensando { display: flex; align-items: center; gap: 10px; margin-top: 28px; font-size: 14px; }
+.brilho { background: linear-gradient(90deg, var(--text-3) 0 35%, var(--text-1) 50%, var(--text-3) 65% 100%) 0 0 / 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: brilho 1.8s linear infinite; }
+@keyframes brilho { to { background-position: -200% 0; } }
+.cursor::after { content: ""; display: inline-block; width: 7px; height: 16px; margin-left: 2px; border-radius: 2px; background: var(--text-1); vertical-align: -2px; animation: pisca 1s steps(2) infinite; }
+@keyframes pisca { 50% { opacity: 0; } }
+.entra { animation: entra var(--dur-base) var(--ease) both; }
+@keyframes entra { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- compositor ---------- */
+.rodape { padding-bottom: 16px; }
+.conv:not(.vazia) .rodape { position: relative; }
+.conv:not(.vazia) .rodape::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 32px; background: linear-gradient(transparent, var(--surface-1)); pointer-events: none; }
+.comp { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "add txt acts"; align-items: end; gap: 4px; padding: 8px; background: var(--surface-3); border: 1px solid var(--line); border-radius: var(--r-24); box-shadow: 0 12px 40px rgba(0,0,0,.28); transition: border-color var(--dur-base); }
+.comp:hover { border-color: var(--line-strong); }
+.comp .a-add { grid-area: add; }
+.comp .a-acts { grid-area: acts; display: flex; gap: 4px; }
+.comp textarea { grid-area: txt; width: 100%; min-height: 36px; max-height: 200px; padding: 6px 6px; resize: none; background: transparent; border: 0; outline: 0; color: var(--text-1); caret-color: var(--focus); font: 16px/24px var(--font); }
+.comp textarea::placeholder { color: var(--text-2); opacity: 1; }
+.comp.grande { grid-template-areas: "txt txt txt" "add . acts"; row-gap: 6px; padding: 12px 10px 10px; }
+.comp.grande textarea { min-height: 54px; padding: 4px 10px; }
+.cbtn { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--text-2); transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast); }
+.cbtn:hover { color: var(--text-1); background: var(--hover); }
+.cbtn.enviar { background: var(--action); color: var(--text-inverse); }
+.cbtn.enviar:hover { background: #fff; }
+.cbtn.enviar:active { transform: scale(.94); }
+.cbtn.enviar:disabled { background: rgba(255,255,255,.14); color: #B6BDCB; cursor: default; }
+/* BorderBeam: aparece no foco e corre enquanto o campo está ativo */
+.comp::before { content: ""; position: absolute; inset: -1px; padding: 1.5px; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity var(--dur-slow);
+  background: conic-gradient(from var(--ang), transparent 0 58%, #FFD6F5 66%, #FF5CCD 74%, #A868FF 82%, #508CFF 90%, #3CE0D2 97%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: beam 3.2s linear infinite; }
+.comp:focus-within { border-color: var(--line-strong); }
+.comp:focus-within::before { opacity: 1; }
+@keyframes beam { to { --ang: 360deg; } }
+
+/* ---------- estado vazio da Sora ---------- */
+.inicio { display: none; }
+.conv.vazia { grid-template-rows: auto minmax(0, 1.1fr) auto minmax(0, 1fr); }
+.conv.vazia .rodape { padding-bottom: 0; }
+.conv.vazia .rodape .coluna { position: relative; }
+.conv.vazia .rolagem { display: none; }
+.conv.vazia .inicio { display: grid; justify-items: center; align-self: end; gap: 8px; padding: 0 24px 28px; text-align: center; }
+.conv.vazia .inicio .orb { margin-bottom: 12px; }
+.conv.vazia::after { content: ""; }
+.inicio h1 { font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -.02em; }
+.inicio p { max-width: 680px; color: var(--text-2); font-size: 16px; line-height: 24px; }
+.sob { display: none; }
+.conv.vazia .sob { display: block; position: absolute; left: 24px; right: 24px; top: 100%; }
+.aviso { margin-top: 12px; color: var(--text-2); font-size: 13px; line-height: 18px; text-align: center; }
+.aviso a { color: var(--text-1); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 20px; }
+.chip { height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--r-pill); color: var(--text-2); font-size: 13px; transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast); }
+.chip:hover { color: var(--text-1); border-color: var(--line-strong); background: var(--hover); }
+
+/* ---------- botões e cartões ---------- */
+.b { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: var(--r-pill); font-size: 14px; font-weight: 600; white-space: nowrap; transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast); }
+.b.p { height: 32px; padding: 0 12px; font-size: 13px; }
+.b.pri { background: var(--action); color: var(--text-inverse); }
+.b.pri:hover { background: #fff; }
+.b.sc { border: 1px solid var(--line-strong); }
+.b.sc:hover { background: var(--hover); border-color: rgba(255,255,255,.3); }
+.b.fan { color: var(--text-2); }
+.b.fan:hover { color: var(--text-1); background: var(--hover); }
+.b.per { color: var(--danger); }
+.b.per:hover { background: rgba(255,107,107,.1); }
+.cartao { position: relative; max-width: 560px; margin-top: 16px; padding: 16px 16px 16px 19px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-16); overflow: hidden; }
+.cartao::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c, var(--sora)); }
+.cartao .cab { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 12px; line-height: 16px; font-weight: 600; }
+.cartao .cab em { margin-left: auto; color: var(--text-3); font-style: normal; font-weight: 400; }
+.cartao h3, .pedido h3 { margin-top: 10px; font-size: 15px; line-height: 22px; font-weight: 600; }
+.cartao p, .pedido p { margin-top: 2px; color: var(--text-1); font-size: 15px; line-height: 22px; }
+.cartao p.det, .pedido p.det { margin-top: 6px; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.botoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+/* ---------- painel Trabalho ---------- */
+.painel { display: flex; flex-direction: column; width: var(--painel-w); min-height: 0; background: var(--surface-side); border-left: 1px solid var(--line); }
+.painel header { display: flex; align-items: center; height: var(--top-h); padding: 0 8px 0 20px; border-bottom: 1px solid var(--line); }
+.abas { display: flex; gap: 20px; flex: 1; }
+.abas button { height: var(--top-h); color: var(--text-2); font-size: 14px; font-weight: 600; border-bottom: 2px solid transparent; }
+.abas button:hover { color: var(--text-1); }
+.abas button[aria-selected=true] { color: var(--text-1); border-bottom-color: var(--text-1); }
+.painel .corpo { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px 24px; }
+.passos { list-style: none; padding: 0; }
+.passo { position: relative; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; column-gap: 10px; padding-bottom: 18px; }
+.passo:not(:last-child)::before { content: ""; position: absolute; left: 9.5px; top: 22px; bottom: 2px; width: 1px; background: var(--line); }
+.passo .marca-p { display: grid; place-items: center; width: 20px; height: 20px; color: var(--ok); }
+.passo .marca-p .ic { width: 14px; height: 14px; stroke-width: 2.2; }
+.passo.agora .marca-p i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); animation: pulsa 1.4s ease-in-out infinite; }
+.passo b { font-size: 14px; line-height: 20px; font-weight: 500; }
+.passo time { color: var(--text-3); font-size: 12px; line-height: 20px; }
+.passo .sub { grid-column: 2 / -1; margin-top: 2px; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.passo code { padding: 1px 6px; border-radius: var(--r-6); background: var(--line); color: var(--text-2); font: 12px/18px var(--mono); }
+.passo details { grid-column: 2 / -1; margin-top: 8px; }
+.passo summary { width: fit-content; color: var(--text-2); font-size: 12px; cursor: pointer; list-style: none; }
+.passo summary::-webkit-details-marker { display: none; }
+.passo summary:hover { color: var(--text-1); }
+.passo pre { margin: 8px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-10); background: var(--surface-2); color: var(--text-2); font: 12px/18px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.passo pre a { color: var(--link); }
+.rec h4 { margin: 24px 0 8px; color: var(--text-3); font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.rec h4:first-child { margin-top: 0; }
+.rec p { color: var(--text-2); font-size: 13px; line-height: 18px; }
+.rec .fer { display: flex; align-items: center; gap: 10px; height: 40px; border-bottom: 1px solid var(--line-soft); font-size: 14px; color: var(--text-1); }
+.rec .fer .ic { color: var(--text-2); }
+.rec .fer small { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.rec .b { margin-top: 10px; }
+
+/* ---------- grupo ---------- */
+.faixa { display: flex; align-items: center; gap: 10px; min-height: 40px; margin: 0 auto; width: 100%; max-width: calc(var(--col) + 48px); padding: 0 24px; font-size: 13px; }
+.faixa > div { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; height: 40px; padding: 0 6px 0 12px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); }
+.faixa b { color: var(--c); font-weight: 600; white-space: nowrap; }
+.faixa span.oq { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pop { position: absolute; top: 48px; right: 56px; z-index: 5; width: 320px; padding: 8px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--r-16); box-shadow: 0 18px 50px rgba(0,0,0,.5); animation: entra var(--dur-base) var(--ease) both; }
+.pop[hidden] { display: none; }
+.pop h4 { padding: 6px 8px 4px; color: var(--text-3); font-size: 12px; font-weight: 600; }
+.membro { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 8px; border-radius: var(--r-10); }
+.membro > span:not(.orb) { flex: 1; min-width: 0; }
+.membro b { display: block; color: var(--c, var(--text-1)); font-size: 14px; font-weight: 600; }
+.membro small { display: block; color: var(--text-2); font-size: 12px; line-height: 16px; }
+.pop .rod { display: flex; gap: 8px; margin-top: 6px; padding: 8px 8px 2px; border-top: 1px solid var(--line); }
+
+/* ---------- central Precisa de você ---------- */
+.veu { position: absolute; inset: 0; z-index: 20; display: grid; justify-items: center; align-items: start; padding: 11vh 16px 16px; background: rgba(2,3,6,.72); animation: surge var(--dur-base) both; }
+.veu[hidden] { display: none; }
+@keyframes surge { from { opacity: 0; } }
+.modal { width: 560px; max-width: 100%; max-height: 100%; overflow-y: auto; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--r-20); box-shadow: 0 30px 80px rgba(0,0,0,.58); animation: entra var(--dur-slow) var(--ease) both; }
+.modal > header { display: flex; align-items: flex-start; gap: 12px; padding: 20px 12px 16px 24px; }
+.modal > header h2 { font-size: 20px; line-height: 28px; font-weight: 600; }
+.modal > header p { margin-top: 2px; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.modal > header .ibtn { margin-left: auto; }
+.pedido { padding: 16px 24px 20px; border-top: 1px solid var(--line); }
+.pedido .de { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 13px; line-height: 18px; }
+.pedido .de b { color: var(--c, var(--text-1)); font-weight: 600; }
+.pedido .de a { margin-left: auto; color: var(--text-2); font-size: 13px; white-space: nowrap; }
+.pedido .de a:hover { color: var(--text-1); }
+
+/* ---------- celular ---------- */
+.fones { display: flex; gap: 32px; align-items: flex-start; padding: 32px; overflow-x: auto; background: #000; min-height: calc(100vh - 48px); }
+.fones figure { margin: 0; flex: none; }
+.fones figcaption { margin-bottom: 12px; color: var(--text-2); font-size: 13px; }
+.fone { position: relative; width: 390px; height: 844px; border: 1px solid var(--line-strong); border-radius: 36px; overflow: hidden; background: var(--surface-1); }
+.fone .palco { height: 100%; }
+.folha { position: absolute; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 82%; overflow-y: auto; background: var(--surface-2); border-top: 1px solid var(--line-strong); border-radius: var(--r-24) var(--r-24) 0 0; }
+.folha .puxa { width: 36px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--line-strong); }
+.lista-ini { display: none; }
+
+@container palco (max-width: 520px) {
+  .so-fone { display: grid; }
+  .so-desk { display: none !important; }
+  .topo { padding: 0 4px; gap: 2px; }
+  .topo .ibtn { width: 44px; height: 44px; }
+  .topo .quem { flex: 1; justify-content: center; }
+  .topo .quem.esq { justify-content: flex-start; }
+  .coluna { padding: 0 16px; }
+  .bolha { max-width: 86%; }
+  .msg-u, .msg-a, .pensando { margin-top: 24px; }
+  .acoes { opacity: 1; }
+  .acao { width: 44px; height: 44px; }
+  .acoes { margin-left: -13px; gap: 0; }
+  .fonte { height: 36px; padding-right: 12px; }
+  .rodape { padding-bottom: 12px; }
+  .comp { padding: 6px; }
+  .cbtn { width: 44px; height: 44px; }
+  .comp textarea { min-height: 44px; padding: 10px 4px; }
+  .conv.vazia { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .conv.vazia::after { display: none; }
+  .conv.vazia .rodape { padding-bottom: 12px; }
+  .conv.vazia .inicio { align-self: center; padding: 0 24px; }
+  .inicio h1 { font-size: 24px; line-height: 30px; }
+  .inicio p { font-size: 14px; line-height: 22px; }
+  .chips { display: none; }
+  .conv.vazia .lista-ini { display: block; margin-bottom: 12px; }
+  .lista-ini button { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 0 4px; color: var(--text-2); font-size: 14px; text-align: left; border-top: 1px solid var(--line-soft); }
+  .lista-ini button:first-child { border-top: 0; }
+  .aviso { margin: 0 0 10px; }
+  .faixa { padding: 0 16px; }
+  .botoes .b { flex: 1 1 calc(50% - 4px); height: 44px; }
+  .botoes .b.pri { flex-basis: 100%; }
+  .pedido { padding: 16px 16px 20px; }
+  .tabela td, .tabela th { padding: 10px 20px 10px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .comp:focus-within::before { background: var(--focus); }
+  .brilho { color: var(--text-2); background: none; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-enviar" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-parar" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-mais" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-voz" viewBox="0 0 24 24"><path d="M4 10v4M8 6v12M12 9v6M16 4v16M20 10v4"/></symbol>
+  <symbol id="i-busca" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="i-atencao" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5M12 16.2v.3"/></symbol>
+  <symbol id="i-pontos" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></g></symbol>
+  <symbol id="i-copiar" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-refazer" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+  <symbol id="i-boa" viewBox="0 0 24 24"><path d="M7 11v9H4v-9zM7 11l4-7c1.5 0 2.5 1.2 2.2 2.7L12.6 10H18a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 16.8 20H7"/></symbol>
+  <symbol id="i-ruim" viewBox="0 0 24 24"><path d="M17 13V4h3v9zM17 13l-4 7c-1.5 0-2.5-1.2-2.2-2.7l.6-3.3H6a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 7.2 4H17"/></symbol>
+  <symbol id="i-ouvir" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></symbol>
+  <symbol id="i-editar" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+  <symbol id="i-responder" viewBox="0 0 24 24"><path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 6 6v1"/></symbol>
+  <symbol id="i-baixar" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-painel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M14.5 4.5v15"/></symbol>
+  <symbol id="i-voltar" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-config" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-grupo" viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><circle cx="16.5" cy="10" r="2.3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M15 15.2a4.2 4.2 0 0 1 5.5 3.8"/></symbol>
+  <symbol id="i-arroba" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M15.5 8.5v5a2.5 2.5 0 0 0 5 0V12a8.5 8.5 0 1 0-3.5 6.9"/></symbol>
+  <symbol id="i-fim" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-arquivo" viewBox="0 0 24 24"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20z"/><path d="M14 3.5V8h4"/></symbol>
+  <symbol id="i-globo" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17"/></symbol>
+</svg>
+
+<header class="proto">
+  <strong>Sora · etapa 6</strong>
+  <div role="tablist" aria-label="Telas do protótipo">
+    <button role="tab" aria-selected="true" data-tela="vazia">Sora vazia</button>
+    <button role="tab" aria-selected="false" data-tela="conversa">Conversa</button>
+    <button role="tab" aria-selected="false" data-tela="bot">Bot + Trabalho</button>
+    <button role="tab" aria-selected="false" data-tela="grupo">Grupo</button>
+    <button role="tab" aria-selected="false" data-tela="precisa">Precisa de você</button>
+    <button role="tab" aria-selected="false" data-tela="celular">Celular</button>
+  </div>
+  <span class="nota" id="nota"></span>
+</header>
+
+<!-- ================= 1. Sora vazia ================= -->
+<section class="tela on" id="tela-vazia">
+  <div class="app">
+    <div data-lado='{"ativo":"sora","bots":false}'></div>
+    <div class="palco">
+      <div class="conv vazia" id="demo">
+        <header class="topo"><span class="espaco"></span><button class="ibtn" aria-label="Opções da Sora"><i data-ic="pontos"></i></button></header>
+        <div class="rolagem" aria-live="polite"><div class="coluna" id="demo-msgs"></div></div>
+        <div class="inicio">
+          <span class="orb" style="--s:120px" role="img" aria-label="Sora"></span>
+          <h1>Converse com a Sora</h1>
+          <p>Explique o que você precisa. Ela pode criar um bot, reunir um grupo ou ajudar diretamente.</p>
+        </div>
+        <footer class="rodape"><div class="coluna">
+          <div data-comp='{"ph":"Mensagem para a Sora…","grande":true,"id":"demo-comp"}'></div>
+          <div class="sob">
+            <p class="aviso">Nenhuma API de IA conectada ainda. <a href="#">Conectar em Configurações</a></p>
+            <div class="chips">
+              <button class="chip">Quero um bot que todo dia de manhã me traga as notícias de…</button>
+              <button class="chip">Crie um bot para pesquisar e resumir…</button>
+              <button class="chip">Monte um grupo para planejar…</button>
+              <button class="chip">Preciso de um bot que me ajude a escrever…</button>
+            </div>
+          </div>
+        </div></footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 2. Conversa com markdown, fontes e imagem ================= -->
+<section class="tela" id="tela-conversa">
+  <div class="app">
+    <div data-lado='{"ativo":"sora"}'></div>
+    <div class="palco">
+      <div class="conv">
+        <header class="topo"><span class="espaco"></span><button class="ibtn" aria-label="Opções da Sora"><i data-ic="pontos"></i></button></header>
+        <div class="rolagem"><div class="coluna">
+          <div class="msg-u">
+            <div class="acoes" role="toolbar" aria-label="Ações da mensagem"><button class="acao" aria-label="Copiar"><i data-ic="copiar"></i></button><button class="acao" aria-label="Editar pergunta"><i data-ic="editar"></i></button></div>
+            <div class="bolha">Escreva um texto longo sobre o assunto</div>
+          </div>
+          <div class="msg-a">
+            <div class="autor"><span class="orb" style="--s:24px"></span>Sora</div>
+            <div class="md"><p>Claro. Começando pelo contexto geral, o primeiro ponto é</p></div>
+            <p class="interrompida" role="status"><i></i>Resposta interrompida <button>Refazer resposta</button></p>
+          </div>
+
+          <div class="msg-u">
+            <div class="acoes" role="toolbar" aria-label="Ações da mensagem"><button class="acao" aria-label="Copiar"><i data-ic="copiar"></i></button><button class="acao" aria-label="Editar pergunta"><i data-ic="editar"></i></button></div>
+            <div class="bolha">Compare as três opções e resuma em uma tabela</div>
+          </div>
+          <div class="msg-a ultima">
+            <div class="autor"><span class="orb" style="--s:24px"></span>Sora</div>
+            <div class="md">
+              <h2>Resumo</h2>
+              <p>As três opções atendem ao pedido; a diferença está no prazo e no custo <a class="ref" href="#f1" aria-label="Fonte 1">1</a>. A opção B equilibra melhor os dois <a class="ref" href="#f2" aria-label="Fonte 2">2</a>.</p>
+              <ul>
+                <li><strong>Opção A:</strong> a mais rápida, com o custo mais alto.</li>
+                <li><strong>Opção B:</strong> prazo e custo intermediários.</li>
+                <li><strong>Opção C:</strong> a mais barata, com o prazo mais longo.</li>
+              </ul>
+              <div class="tabela"><table>
+                <thead><tr><th>Opção</th><th>Prazo</th><th>Custo</th></tr></thead>
+                <tbody><tr><td>A</td><td>2 semanas</td><td>Alto</td></tr><tr><td>B</td><td>4 semanas</td><td>Médio</td></tr><tr><td>C</td><td>8 semanas</td><td>Baixo</td></tr></tbody>
+              </table></div>
+              <div class="codigo"><header>python<button>Copiar</button></header><pre><span class="k">total</span> = sum(valores)
+<span class="k">print</span>(total)</pre></div>
+              <div>
+                <button class="imagem" aria-label="Ampliar imagem"><span class="img">imagem gerada</span><span class="ibtn baixar" role="link" aria-label="Baixar imagem.png"><i data-ic="baixar"></i></span></button>
+                <p class="legenda">imagem.png · 18 KB</p>
+              </div>
+              <p>Posso detalhar qualquer um dos pontos.</p>
+            </div>
+            <nav class="fontes" aria-label="Fontes da resposta">
+              <span>Fontes</span>
+              <a class="fonte" id="f1" href="#" title="Levantamento do setor"><b>1</b><span>example.com</span></a>
+              <a class="fonte" id="f2" href="#" title="Relatório anual"><b>2</b><span>example.org</span></a>
+              <a class="fonte" href="#" title="Página de referência"><b>3</b><span>example.net</span></a>
+            </nav>
+            <div class="acoes" role="toolbar" aria-label="Ações da mensagem">
+              <button class="acao" aria-label="Copiar"><i data-ic="copiar"></i></button>
+              <button class="acao" aria-label="Refazer resposta"><i data-ic="refazer"></i></button>
+              <button class="acao" aria-label="Boa resposta"><i data-ic="boa"></i></button>
+              <button class="acao" aria-label="Resposta ruim"><i data-ic="ruim"></i></button>
+            </div>
+          </div>
+        </div></div>
+        <footer class="rodape"><div class="coluna"><div data-comp='{"ph":"Mensagem para a Sora…"}'></div></div></footer>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 3. Bot com painel Trabalho ================= -->
+<section class="tela" id="tela-bot">
+  <div class="app">
+    <div data-lado='{"ativo":"bot1","trabalhando":"bot1"}'></div>
+    <div class="palco" style="--c:var(--atlas)">
+      <div class="conv">
+        <header class="topo">
+          <div class="quem"><span class="orb pensa" style="--c:var(--atlas);--s:28px"></span><b>Bot de pesquisa</b><small class="vivo" role="status">· Pesquisando</small></div>
+          <span class="espaco"></span>
+          <button class="ibtn" aria-label="Painel Trabalho" aria-pressed="true" id="alterna-painel"><i data-ic="painel"></i></button>
+          <button class="ibtn" aria-label="Opções de Bot de pesquisa"><i data-ic="pontos"></i></button>
+        </header>
+        <div class="rolagem"><div class="coluna">
+          <div class="msg-u"><div class="acoes"><button class="acao" aria-label="Copiar"><i data-ic="copiar"></i></button></div><div class="bolha">Pesquise as tendências do setor e resuma em uma tabela</div></div>
+          <div class="pensando" role="status"><span class="orb pensa" style="--c:var(--atlas);--s:28px"></span><span class="brilho">Pesquisando na web…</span></div>
+        </div></div>
+        <footer class="rodape"><div class="coluna"><div data-comp='{"ph":"Mensagem para Bot de pesquisa…","voz":true,"parar":true}'></div></div></footer>
+      </div>
+      <aside class="painel" id="painel" aria-label="Painel de Bot de pesquisa">
+        <header>
+          <div class="abas" role="tablist"><button role="tab" aria-selected="true" data-aba="trab">Trabalho</button><button role="tab" aria-selected="false" data-aba="rec">Recursos</button></div>
+          <button class="ibtn" aria-label="Fechar painel"><i data-ic="x"></i></button>
+        </header>
+        <div class="corpo" id="aba-trab">
+          <ol class="passos">
+            <li class="passo"><span class="marca-p"><i data-ic="ok"></i></span><b>Recebeu o pedido</b><time>agora</time></li>
+            <li class="passo"><span class="marca-p"><i data-ic="ok"></i></span><b>Buscar na web</b><time>1,2 s</time>
+              <span class="sub"><code>buscar_web</code> 5 resultados</span>
+              <details open><summary>Ocultar detalhes</summary><pre>consulta: "tendências do setor"
+<a href="#">Levantamento do setor</a> · example.com
+<a href="#">Relatório anual</a> · example.org</pre></details>
+            </li>
+            <li class="passo agora"><span class="marca-p"><i></i></span><b class="brilho">Ler páginas</b><time>3 s</time>
+              <span class="sub"><code>ler_pagina</code> example.com</span>
+            </li>
+          </ol>
+        </div>
+        <div class="corpo rec" id="aba-rec" hidden>
+          <h4>Função</h4>
+          <p>Organiza informações com objetividade.</p>
+          <button class="b sc p">Editar bot</button>
+          <h4>Ferramentas</h4>
+          <div class="fer"><i data-ic="arquivo"></i>Ler anexos<small>Disponível</small></div>
+          <div class="fer"><i data-ic="busca"></i>Buscar na web<small>Em uso</small></div>
+          <div class="fer"><i data-ic="globo"></i>Ler páginas<small>Em uso</small></div>
+          <div class="fer"><i data-ic="editar"></i>Escrever arquivos<small>Disponível</small></div>
+          <h4>Rotinas</h4>
+          <p>Nenhuma rotina deste bot.</p>
+          <button class="b sc p"><i data-ic="mais"></i>Nova rotina</button>
+          <h4>Memória</h4>
+          <p>Nada guardado por este bot ainda.</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 4. Grupo ================= -->
+<section class="tela" id="tela-grupo">
+  <div class="app">
+    <div data-lado='{"ativo":"grupo","trabalhando":"bot2"}'></div>
+    <div class="palco">
+      <div class="conv" style="grid-template-rows:auto auto minmax(0,1fr) auto">
+        <header class="topo">
+          <div class="quem"><b>Grupo de planejamento</b><small>· Sora + 2 bots</small></div>
+          <span class="espaco"></span>
+          <button class="pilha" id="abre-membros" aria-label="Membros do grupo: Sora, Bot de pesquisa e Bot de textos" aria-expanded="false">
+            <span class="orb" style="--s:24px"></span><span class="orb" style="--c:var(--atlas);--s:24px"></span><span class="orb pensa" style="--c:var(--luna);--s:24px"></span>
+          </button>
+          <button class="ibtn" aria-label="Opções do grupo"><i data-ic="pontos"></i></button>
+        </header>
+        <div class="faixa" style="--c:var(--luna)" role="status">
+          <div><span class="estado"></span><b>Bot de textos</b><span class="oq">trabalhando · escrevendo as chamadas</span><button class="b sc p"><i data-ic="parar"></i>Parar</button></div>
+        </div>
+        <div class="rolagem"><div class="coluna">
+          <div class="msg-u"><div class="acoes"><button class="acao" aria-label="Responder"><i data-ic="responder"></i></button><button class="acao" aria-label="Copiar"><i data-ic="copiar"></i></button></div><div class="bolha"><span class="men">@todos</span> Planejem a divulgação da semana e dividam as tarefas</div></div>
+          <div class="msg-a">
+            <div class="autor"><span class="orb" style="--s:24px"></span>Sora</div>
+            <div class="md"><p>Dividi o pedido em duas tarefas:</p><ul><li><strong>Bot de pesquisa:</strong> levantar referências.</li><li><strong>Bot de textos:</strong> escrever as chamadas.</li></ul></div>
+            <div class="acoes"><button class="acao" aria-label="Responder"><i data-ic="responder"></i></button><button class="acao" aria-label="Copiar"><i data-ic="copiar"></i></button></div>
+          </div>
+          <div class="msg-a ultima" style="--c:var(--atlas)">
+            <div class="autor"><span class="orb" style="--c:var(--atlas);--s:24px"></span>Bot de pesquisa <small>entregou</small></div>
+            <p class="citado">Em resposta a @todos Planejem a divulgação da semana e dividam as tarefas</p>
+            <div class="md"><p>Reuni três referências e resumi o que elas têm em comum:</p><ul><li>Primeiro ponto em comum.</li><li>Segundo ponto em comum.</li><li>Terceiro ponto em comum.</li></ul></div>
+            <div class="acoes"><button class="acao" aria-label="Responder"><i data-ic="responder"></i></button><button class="acao" aria-label="Copiar"><i data-ic="copiar"></i></button></div>
+          </div>
+          <div class="pensando" role="status"><span class="orb pensa" style="--c:var(--luna);--s:24px"></span><span class="brilho">Bot de textos está escrevendo…</span></div>
+        </div></div>
+        <footer class="rodape"><div class="coluna"><div data-comp='{"ph":"Mensagem para o grupo…","arroba":true}'></div></div></footer>
+      </div>
+      <div class="pop" id="membros" hidden role="dialog" aria-label="Membros do grupo">
+        <h4>Sora + 2 bots</h4>
+        <div class="membro"><span class="orb" style="--s:28px"></span><span><b>Sora</b><small>Chefe de equipe</small></span></div>
+        <div class="membro" style="--c:var(--atlas)"><span class="orb" style="--c:var(--atlas);--s:28px"></span><span><b>Bot de pesquisa</b><small>Livre</small></span></div>
+        <div class="membro" style="--c:var(--luna)"><span class="orb pensa" style="--c:var(--luna);--s:28px"></span><span><b>Bot de textos</b><small>Trabalhando</small></span><button class="b sc p"><i data-ic="parar"></i>Parar</button></div>
+        <div class="rod"><button class="b fan p">Adicionar bots</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 5. Central Precisa de você ================= -->
+<section class="tela" id="tela-precisa">
+  <div class="app">
+    <div data-lado='{"ativo":"bot1","pend":2}'></div>
+    <div class="palco">
+      <div class="conv">
+        <header class="topo">
+          <div class="quem"><span class="orb" style="--c:var(--atlas);--s:28px"></span><b>Bot de pesquisa</b><small>· Precisa de você</small></div>
+          <span class="espaco"></span><button class="ibtn" aria-label="Painel Trabalho" aria-pressed="false"><i data-ic="painel"></i></button><button class="ibtn" aria-label="Opções de Bot de pesquisa"><i data-ic="pontos"></i></button>
+        </header>
+        <div class="rolagem"><div class="coluna">
+          <div class="msg-u"><div class="bolha">Confira os preços na página do fornecedor</div></div>
+          <div class="msg-a" style="--c:var(--atlas)">
+            <div class="autor"><span class="orb" style="--c:var(--atlas);--s:24px"></span>Bot de pesquisa</div>
+            <div class="md"><p>Encontrei a página. Antes de abrir, preciso da sua permissão.</p></div>
+            <section class="cartao" style="--c:var(--atlas)" aria-label="Precisa de você">
+              <div class="cab"><span class="estado" style="animation:none;background:var(--action)"></span>Precisa de você<em>agora</em></div>
+              <h3>Aprovar ação</h3>
+              <p>Bot de pesquisa quer abrir um site novo.</p>
+              <p class="det">example.com ainda não foi aberto neste perfil de navegador.</p>
+              <div class="botoes"><button class="b pri">Permitir uma vez</button><button class="b sc">Sempre permitir</button><button class="b per">Recusar</button></div>
+            </section>
+          </div>
+        </div></div>
+        <footer class="rodape"><div class="coluna"><div data-comp='{"ph":"Mensagem para Bot de pesquisa…","voz":true}'></div></div></footer>
+      </div>
+    </div>
+    <div class="veu" id="central">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="central-t">
+        <header><div><h2 id="central-t">Precisa de você</h2><p>2 pedidos esperam uma decisão sua.</p></div><button class="ibtn" aria-label="Fechar" id="fecha-central"><i data-ic="x"></i></button></header>
+        <article class="pedido" style="--c:var(--atlas)">
+          <div class="de"><span class="orb" style="--c:var(--atlas);--s:24px"></span><b>Bot de pesquisa</b><span>· agora</span><a href="#">Abrir a conversa com o bot ›</a></div>
+          <h3>Aprovar ação</h3>
+          <p>Bot de pesquisa quer abrir um site novo.</p>
+          <p class="det">example.com ainda não foi aberto neste perfil de navegador.</p>
+          <div class="botoes"><button class="b pri">Permitir uma vez</button><button class="b sc">Sempre permitir</button><button class="b per">Recusar</button></div>
+        </article>
+        <article class="pedido">
+          <div class="de"><span class="orb" style="--s:24px"></span><b>Sora</b><span>· há 2 min</span><a href="#">Abrir a conversa com a Sora ›</a></div>
+          <h3>Responder pergunta</h3>
+          <p>Qual tom você prefere para o texto?</p>
+          <div class="botoes"><button class="b pri">Formal</button><button class="b sc">Leve</button></div>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 6. Celular (390 × 844) ================= -->
+<section class="tela" id="tela-celular">
+  <div class="fones">
+    <figure><figcaption>Sora vazia</figcaption>
+      <div class="fone"><div class="palco"><div class="conv vazia">
+        <header class="topo"><button class="ibtn" aria-label="Abrir menu"><i data-ic="menu"></i></button><div class="quem"><span class="orb" style="--s:22px"></span><b>Sora</b></div><button class="ibtn" aria-label="Opções da Sora"><i data-ic="pontos"></i></button></header>
+        <div class="rolagem"></div>
+        <div class="inicio"><span class="orb" style="--s:96px" role="img" aria-label="Sora"></span><h1>Converse com a Sora</h1><p>Explique o que você precisa. Ela pode criar um bot, reunir um grupo ou ajudar diretamente.</p></div>
+        <footer class="rodape"><div class="coluna">
+          <div class="lista-ini"><button>Quero um bot que todo dia de manhã me traga as notícias de…</button><button>Crie um bot para pesquisar e resumir…</button><button>Monte um grupo para planejar…</button></div>
+          <p class="aviso">Nenhuma API de IA conectada ainda. <a href="#">Conectar em Configurações</a></p>
+          <div data-comp='{"ph":"Mensagem para a Sora…"}'></div>
+        </div></footer>
+      </div></div></div>
+    </figure>
+
+    <figure><figcaption>Bot: resposta com tabela e fontes</figcaption>
+      <div class="fone"><div class="palco"><div class="conv">
+        <header class="topo"><button class="ibtn" aria-label="Abrir menu"><i data-ic="menu"></i></button><div class="quem"><span class="orb" style="--c:var(--atlas);--s:22px"></span><b>Bot de pesquisa</b></div><button class="ibtn" aria-label="Painel Trabalho"><i data-ic="painel"></i></button><button class="ibtn" aria-label="Opções de Bot de pesquisa"><i data-ic="pontos"></i></button></header>
+        <div class="rolagem"><div class="coluna">
+          <div class="msg-u" style="margin-top:8px"><div class="bolha">Pesquise as tendências do setor e resuma em uma tabela</div></div>
+          <div class="msg-a ultima" style="--c:var(--atlas)">
+            <div class="autor"><span class="orb" style="--c:var(--atlas);--s:24px"></span>Bot de pesquisa</div>
+            <div class="md">
+              <p>O setor cresceu de forma <strong>constante</strong> no período <a class="ref" href="#">1</a><a class="ref" href="#">2</a>.</p>
+              <div class="tabela"><table><thead><tr><th>Item</th><th>Antes</th><th>Depois</th><th>Variação</th></tr></thead><tbody><tr><td>Linha A</td><td>10</td><td>14</td><td>+40%</td></tr><tr><td>Linha B</td><td>22</td><td>25</td><td>+14%</td></tr></tbody></table></div>
+              <p>Posso detalhar qualquer um dos pontos.</p>
+            </div>
+            <nav class="fontes" aria-label="Fontes da resposta"><span>Fontes</span><a class="fonte" href="#"><b>1</b><span>example.com</span></a><a class="fonte" href="#"><b>2</b><span>example.org</span></a></nav>
+            <div class="acoes"><button class="acao" aria-label="Copiar"><i data-ic="copiar"></i></button><button class="acao" aria-label="Refazer resposta"><i data-ic="refazer"></i></button><button class="acao" aria-label="Ouvir"><i data-ic="ouvir"></i></button><button class="acao" aria-label="Mais ações"><i data-ic="pontos"></i></button></div>
+          </div>
+        </div></div>
+        <footer class="rodape"><div class="coluna"><div data-comp='{"ph":"Mensagem…","rotulo":"Mensagem para Bot de pesquisa…","voz":true}'></div></div></footer>
+      </div></div></div>
+    </figure>
+
+    <figure><figcaption>Grupo</figcaption>
+      <div class="fone"><div class="palco"><div class="conv" style="grid-template-rows:auto auto minmax(0,1fr) auto">
+        <header class="topo"><button class="ibtn" aria-label="Voltar aos grupos"><i data-ic="voltar"></i></button><div class="quem esq"><b>Grupo de planejamento</b></div>
+          <button class="pilha" aria-label="Membros do grupo: Sora, Bot de pesquisa e Bot de textos" style="height:44px"><span class="orb" style="--s:22px"></span><span class="orb" style="--c:var(--atlas);--s:22px"></span><span class="orb pensa" style="--c:var(--luna);--s:22px"></span></button>
+          <button class="ibtn" aria-label="Opções do grupo"><i data-ic="pontos"></i></button></header>
+        <div class="faixa" style="--c:var(--luna)" role="status"><div style="height:44px"><span class="estado"></span><b>Bot de textos</b><span class="oq">trabalhando</span><button class="b sc p" style="height:36px"><i data-ic="parar"></i>Parar</button></div></div>
+        <div class="rolagem"><div class="coluna">
+          <div class="msg-u"><div class="bolha"><span class="men">@todos</span> Planejem a divulgação da semana e dividam as tarefas</div></div>
+          <div class="msg-a"><div class="autor"><span class="orb" style="--s:24px"></span>Sora</div><div class="md"><p>Dividi o pedido em duas tarefas:</p><ul><li><strong>Bot de pesquisa:</strong> levantar referências.</li><li><strong>Bot de textos:</strong> escrever as chamadas.</li></ul></div></div>
+          <div class="msg-a" style="--c:var(--atlas)"><div class="autor"><span class="orb" style="--c:var(--atlas);--s:24px"></span>Bot de pesquisa <small>entregou</small></div><p class="citado">Em resposta a @todos Planejem a divulgação da semana…</p><div class="md"><p>Reuni três referências e resumi o que elas têm em comum.</p></div></div>
+          <div class="pensando" role="status"><span class="orb pensa" style="--c:var(--luna);--s:24px"></span><span class="brilho">Bot de textos está escrevendo…</span></div>
+        </div></div>
+        <footer class="rodape"><div class="coluna"><div data-comp='{"ph":"Mensagem…","rotulo":"Mensagem para o grupo…","arroba":true}'></div></div></footer>
+      </div></div></div>
+    </figure>
+
+    <figure><figcaption>Central Precisa de você (folha)</figcaption>
+      <div class="fone"><div class="palco"><div class="conv">
+        <header class="topo"><button class="ibtn" aria-label="Abrir menu"><i data-ic="menu"></i></button><div class="quem"><span class="orb" style="--s:22px"></span><b>Sora</b></div><button class="ibtn" aria-label="Opções da Sora"><i data-ic="pontos"></i></button></header>
+        <div class="rolagem"><div class="coluna"><div class="msg-u"><div class="bolha">Escreva o texto de divulgação</div></div></div></div>
+        <footer class="rodape"><div class="coluna"><div data-comp='{"ph":"Mensagem para a Sora…"}'></div></div></footer>
+      </div>
+      <div class="veu" style="padding:0"></div>
+      <div class="folha" role="dialog" aria-modal="true" aria-label="Precisa de você">
+        <div class="puxa"></div>
+        <div class="modal" style="border:0;box-shadow:none;border-radius:0;background:transparent;animation:none">
+          <header style="padding:12px 8px 12px 16px"><div><h2>Precisa de você</h2><p>2 pedidos esperam uma decisão sua.</p></div><button class="ibtn" aria-label="Fechar" style="width:44px;height:44px"><i data-ic="x"></i></button></header>
+          <article class="pedido" style="--c:var(--atlas)"><div class="de"><span class="orb" style="--c:var(--atlas);--s:24px"></span><b>Bot de pesquisa</b><span>· agora</span><a href="#">Abrir ›</a></div><h3>Aprovar ação</h3><p>Bot de pesquisa quer abrir um site novo.</p><div class="botoes"><button class="b pri">Permitir uma vez</button><button class="b sc">Sempre permitir</button><button class="b per">Recusar</button></div></article>
+          <article class="pedido"><div class="de"><span class="orb" style="--s:24px"></span><b>Sora</b><span>· há 2 min</span><a href="#">Abrir ›</a></div><h3>Responder pergunta</h3><p>Qual tom você prefere para o texto?</p><div class="botoes"><button class="b pri">Formal</button><button class="b sc">Leve</button></div></article>
+        </div>
+      </div></div></div>
+    </figure>
+  </div>
+</section>
+
+<script>
+(() => {
+  const ic = n => `<svg class="ic" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+  const orb = (c, s, extra = '') => `<span class="orb ${extra}" style="--c:${c};--s:${s}px" aria-hidden="true"></span>`;
+
+  // Barra lateral (uma só marcação, repetida em cada tela)
+  const lado = ({ ativo, bots = true, pend = 0, trabalhando }) => `
+    <aside class="lado" aria-label="Navegação principal">
+      <a class="marca ${ativo === 'sora' ? 'ativo' : ''}" href="#" aria-label="Conversar com a Sora">${orb('var(--sora)', 28)}<span><b>Sora</b><small>Chefe de equipe</small></span></a>
+      <button class="nav ${pend ? 'tem' : ''}" aria-label="Precisa de você, ${pend ? pend + ' pedidos' : 'nenhum pedido'}">${ic('atencao')}<span>Precisa de você</span>${pend ? `<b class="cont" aria-hidden="true">${pend}</b>` : ''}</button>
+      <button class="nav">${ic('busca')}<span>Buscar</span><kbd>Ctrl K</kbd></button>
+      <div class="sec"><span>Bots</span><small>${bots ? 2 : 0}</small></div>
+      ${bots ? `
+        <a class="linha ${ativo === 'bot1' ? 'ativo' : ''}" href="#">${orb('var(--atlas)', 24, trabalhando === 'bot1' ? 'pensa' : '')}<span class="nome">Bot de pesquisa</span>${trabalhando === 'bot1' ? '<i class="estado" style="--c:var(--atlas)" title="Trabalhando"></i>' : ''}${pend ? '<b class="cont" aria-label="Precisa de você">1</b>' : ''}</a>
+        <a class="linha ${ativo === 'bot2' ? 'ativo' : ''}" href="#">${orb('var(--luna)', 24, trabalhando === 'bot2' ? 'pensa' : '')}<span class="nome">Bot de textos</span>${trabalhando === 'bot2' ? '<i class="estado" style="--c:var(--luna)" title="Trabalhando"></i>' : ''}</a>`
+      : '<p class="vazio-lado">Peça à Sora para criar seu primeiro bot.</p>'}
+      <div class="sec"><span>Grupos</span><button aria-label="Criar grupo" title="Criar grupo">${ic('mais')}</button></div>
+      ${bots ? `<a class="linha ${ativo === 'grupo' ? 'ativo' : ''}" href="#"><span class="gi">${ic('grupo')}</span><span class="nome">Grupo de planejamento</span></a>` : ''}
+      <div class="conta"><span class="av" aria-hidden="true">S</span><span class="nome">Sua conta</span><a class="ibtn" href="#" aria-label="Configurações" title="Configurações">${ic('config')}</a></div>
+    </aside>`;
+
+  // Compositor (o mesmo na Sora, no bot e no grupo)
+  const comp = ({ ph, rotulo, grande, voz, arroba, parar, id }) => `
+    <form class="comp ${grande ? 'grande' : ''}" ${id ? `id="${id}"` : ''}>
+      <button type="button" class="cbtn a-add" aria-label="Anexar arquivos" title="Anexar arquivos">${ic('mais')}</button>
+      <textarea rows="1" aria-label="${rotulo ?? ph}" placeholder="${ph}"></textarea>
+      <div class="a-acts">
+        ${arroba ? `<button type="button" class="cbtn" aria-label="Chamar um bot" title="Chamar um bot">${ic('arroba')}</button>` : ''}
+        ${voz ? `<button type="button" class="cbtn" aria-label="Ativar microfone" title="Ativar microfone">${ic('mic')}</button><button type="button" class="cbtn" aria-label="Conversar por voz" title="Conversar por voz">${ic('voz')}</button>` : ''}
+        ${parar ? `<button type="button" class="cbtn enviar" aria-label="Parar resposta" title="Parar resposta">${ic('parar')}</button>`
+                : `<button type="submit" class="cbtn enviar" aria-label="Enviar mensagem" disabled>${ic('enviar')}</button>`}
+      </div>
+    </form>`;
+
+  document.querySelectorAll('[data-lado]').forEach(el => { el.outerHTML = lado(JSON.parse(el.dataset.lado)); });
+  document.querySelectorAll('[data-comp]').forEach(el => { el.outerHTML = comp(JSON.parse(el.dataset.comp)); });
+  document.querySelectorAll('[data-ic]').forEach(el => { el.outerHTML = ic(el.dataset.ic); });
+
+  // Campo: cresce com o texto e libera o Enviar
+  document.querySelectorAll('.comp').forEach(form => {
+    const campo = form.querySelector('textarea'); const enviar = form.querySelector('[type=submit]');
+    campo.addEventListener('input', () => { campo.style.height = 'auto'; campo.style.height = Math.min(campo.scrollHeight, 200) + 'px'; if (enviar) enviar.disabled = !campo.value.trim(); });
+    campo.addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); form.requestSubmit(); } });
+    form.addEventListener('submit', ev => ev.preventDefault());
+  });
+
+  // Abas do protótipo
+  const notas = {
+    vazia: 'Escreva algo e envie: o compositor desce. <button id="reinicia">Voltar ao estado vazio</button>',
+    conversa: 'Passe o mouse nas mensagens antigas: as ações aparecem. A última resposta mostra sempre.',
+    bot: 'O painel abre e fecha pelo botão do cabeçalho; troque entre Trabalho e Recursos.',
+    grupo: 'Sem segunda lista de grupos. Clique nos avatares do cabeçalho para ver os membros.',
+    precisa: 'Central aberta. <button id="alterna-central">Fechar para ver o cartão na conversa</button>',
+    celular: 'Quatro telas a 390 × 844, com alvos de 44 px.',
+  };
+  const nota = document.getElementById('nota');
+  const abrir = nome => {
+    document.querySelectorAll('.proto [role=tab]').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tela === nome)));
+    document.querySelectorAll('.tela').forEach(t => t.classList.toggle('on', t.id === `tela-${nome}`));
+    nota.innerHTML = notas[nome];
+    history.replaceState(null, '', `#${nome}`);
+  };
+  document.querySelectorAll('.proto [role=tab]').forEach(t => t.addEventListener('click', () => abrir(t.dataset.tela)));
+  abrir(notas[location.hash.slice(1)] ? location.hash.slice(1) : 'vazia');
+
+  // Microinteração: o compositor central desce depois do 1º envio (técnica FLIP)
+  const demo = document.getElementById('demo'); const formDemo = document.getElementById('demo-comp'); const msgs = document.getElementById('demo-msgs');
+  const semMovimento = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  formDemo.addEventListener('submit', () => {
+    const campo = formDemo.querySelector('textarea'); const texto = campo.value.trim(); if (!texto) return;
+    const bolha = document.createElement('div'); bolha.className = 'msg-u entra'; bolha.innerHTML = '<div class="bolha"></div>'; bolha.firstChild.textContent = texto;
+    const primeira = demo.classList.contains('vazia');
+    const antes = formDemo.getBoundingClientRect();
+    if (primeira) { demo.classList.remove('vazia'); formDemo.classList.remove('grande'); }
+    msgs.querySelector('.pensando')?.remove();
+    msgs.append(bolha);
+    msgs.insertAdjacentHTML('beforeend', `<div class="pensando entra" role="status" style="animation-delay:240ms">${orb('var(--sora)', 28, 'pensa')}<span class="brilho">Sora está pensando…</span></div>`);
+    campo.value = ''; campo.style.height = 'auto'; formDemo.querySelector('[type=submit]').disabled = true;
+    if (primeira && !semMovimento) {
+      const depois = formDemo.getBoundingClientRect();
+      formDemo.animate([{ transform: `translate(${antes.left - depois.left}px, ${antes.top - depois.top}px)`, height: `${antes.height}px` }, { transform: 'none', height: `${depois.height}px` }], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    }
+    msgs.parentElement.scrollTop = msgs.parentElement.scrollHeight;
+  });
+  demo.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => { const campo = formDemo.querySelector('textarea'); campo.value = chip.textContent.replace('…', ' '); campo.dispatchEvent(new Event('input')); campo.focus(); }));
+  document.addEventListener('click', ev => {
+    if (ev.target.id === 'reinicia') { demo.classList.add('vazia'); formDemo.classList.add('grande'); msgs.innerHTML = ''; }
+    if (ev.target.id === 'alterna-central' || ev.target.closest('#fecha-central')) {
+      const central = document.getElementById('central'); central.hidden = !central.hidden;
+      const botao = document.getElementById('alterna-central'); if (botao) botao.textContent = central.hidden ? 'Abrir a central' : 'Fechar para ver o cartão na conversa';
+    }
+  });
+
+  // Painel Trabalho: abrir/fechar e abas
+  const painel = document.getElementById('painel'); const alterna = document.getElementById('alterna-painel');
+  const mostrarPainel = aberto => { painel.hidden = !aberto; painel.style.display = aberto ? '' : 'none'; alterna.setAttribute('aria-pressed', String(aberto)); };
+  alterna.addEventListener('click', () => mostrarPainel(painel.hidden));
+  painel.querySelector('[aria-label="Fechar painel"]').addEventListener('click', () => mostrarPainel(false));
+  painel.querySelectorAll('[data-aba]').forEach(aba => aba.addEventListener('click', () => {
+    painel.querySelectorAll('[data-aba]').forEach(a => a.setAttribute('aria-selected', String(a === aba)));
+    document.getElementById('aba-trab').hidden = aba.dataset.aba !== 'trab';
+    document.getElementById('aba-rec').hidden = aba.dataset.aba !== 'rec';
+  }));
+
+  // Grupo: membros
+  const membros = document.getElementById('membros'); const abreMembros = document.getElementById('abre-membros');
+  abreMembros.addEventListener('click', () => { membros.hidden = !membros.hidden; abreMembros.setAttribute('aria-expanded', String(!membros.hidden)); });
+})();
+</script>
+</body>
+</html>
