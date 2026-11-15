@@ -1,5 +1,6 @@
 /* Compositor único (etapa 6, §5.3): Sora, bot e grupo. Compacto no rodapé; grande no estado vazio da Sora. */
 .composer-beam, .voice-beam-wrap { width: 100%; border-radius: var(--r-24); }
+@property --beam-strength { syntax: '<number>'; initial-value: 1; inherits: true; }
 
 .composer {
   position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "anexos anexos anexos" "esq campo dir";

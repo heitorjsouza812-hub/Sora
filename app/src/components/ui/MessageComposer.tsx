@@ -59,6 +59,12 @@ const FormularioDoCampo = createContext<ReactNode>(null);
 function CorpoDoFormulario() { return <>{useContext(FormularioDoCampo)}</>; }
 const CORPO_DO_FORMULARIO = <CorpoDoFormulario />;
 const CORPO_ESTAVEL = <CorpoDoCampo />;
+const BEAM_CSS = `
+[data-beam="{id}"][data-active], [data-beam="{id}"][data-fading] {
+  animation-duration: 3.2s, 320ms;
+}
+[data-beam="{id}"] { transition: --beam-strength 320ms var(--ease); }
+`;
 
 const processingMotion = (): VoiceBeamMotion => ({
   gather: .8,
@@ -262,7 +268,7 @@ export function MessageComposer({
   return (
     <FormularioDoCampo.Provider value={formulario}>
     <ConteudoDoCampo.Provider value={conteudo}>
-      <BorderBeam size="md" colorVariant="colorful" strength={forcaBeam} duration={3.2} theme="dark" active={active} className="composer-beam">{CORPO_ESTAVEL}</BorderBeam>
+      <BorderBeam size="md" colorVariant="colorful" strength={forcaBeam} duration={3.2} css={BEAM_CSS} theme="dark" active={active} className="composer-beam">{CORPO_ESTAVEL}</BorderBeam>
     </ConteudoDoCampo.Provider>
     </FormularioDoCampo.Provider>
   );
