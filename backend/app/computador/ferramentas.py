@@ -35,7 +35,8 @@ NOMES = (
 class ComputadorObservar(BaseModel):
     """Olha a tela do seu computador virtual (Linux com navegador e terminal): tamanho, janelas
     abertas com refs @cN:jM e a janela ativa. Liga o computador na primeira vez. Use antes de
-    agir e sempre que a tela puder ter mudado."""
+    agir e sempre que a tela puder ter mudado. Com alvo "pc_usuario", olha o computador do
+    próprio usuário (só se ele ligou este bot no app de desktop)."""
 
     alvo: AlvoTexto = "virtual"
 
@@ -43,7 +44,9 @@ class ComputadorObservar(BaseModel):
 class ComputadorAgir(BaseModel):
     """Faz até 5 ações seguidas no seu computador virtual (clicar, clique_duplo, clicar_direito,
     digitar, tecla, rolar, arrastar, abrir navegador/terminal) e confere a tela depois. Use x/y
-    da última captura ou a ref de uma janela. Nunca digite senhas nem chaves."""
+    da última captura ou a ref de uma janela. Nunca digite senhas nem chaves. Com alvo
+    "pc_usuario", age no computador do usuário: a primeira ação em cada programa pede permissão a
+    ele e, se ele mexer no mouse ou no teclado, o controle pausa."""
 
     acoes: list[AcaoComputador] = Field(min_length=1, max_length=MAX_ACOES_POR_CHAMADA)
     alvo: AlvoTexto = "virtual"

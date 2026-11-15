@@ -14,6 +14,7 @@ from app.api import (
     canais,
     canais_empresa,
     computador,
+    computador_pc,
     conectores,
     conta,
     conversas,
@@ -67,6 +68,7 @@ for roteador in (
     habilidades.roteador,
     voz.roteador,
     computador.roteador,  # Farol (C2): computador virtual do bot
+    computador_pc.roteador,  # Vela-3 (C3): canal do app de desktop para o PC do usuário
 ):
     roteador_v1.include_router(roteador)
 

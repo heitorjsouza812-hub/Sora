@@ -109,6 +109,30 @@ def _titulo_seguro(titulo: str) -> str:
     return limpar_texto_sensivel(titulo)[:120]
 
 
+TITULO_COM_TEXTO = "(janela com o texto digitado pelo bot)"
+MIN_MARCA_DIGITADO = 4
+MAX_MARCA_DIGITADO = 16
+
+
+def _so_letras(texto: str) -> str:
+    return "".join(c for c in texto.lower() if c.isalnum())
+
+
+def marca_do_digitado(texto: str) -> str | None:
+    """Começo do texto digitado, só letras e números (o Bloco de Notas tira ":" do título)."""
+    marca = _so_letras(texto)[:MAX_MARCA_DIGITADO]
+    return marca if len(marca) >= MIN_MARCA_DIGITADO else None
+
+
+def titulo_sem_digitado(titulo: str, marcas: list[str]) -> str:
+    """Editores põem a primeira linha do documento no título (Bloco de Notas): o título da janela
+    ativa não pode levar para o rastro o que o bot digitou (Vela-6, C3)."""
+    normalizado = _so_letras(titulo)
+    if any(m in normalizado for m in marcas):
+        return TITULO_COM_TEXTO
+    return _titulo_seguro(titulo)
+
+
 @dataclass(slots=True)
 class ServicoComputador:
     provedores: dict[Alvo, ProvedorComputadores]
@@ -119,6 +143,9 @@ class ServicoComputador:
     """Grava um arquivo do computador como anexo (``computador_entregar_arquivo``)."""
     leituras: dict[tuple[UUID, Alvo], LeituraGuardada] = field(default_factory=dict)
     _travas: dict[UUID, asyncio.Lock] = field(default_factory=dict)
+    _digitados: dict[tuple[UUID, Alvo], list[str]] = field(default_factory=dict)
+    """Só a marca (começo normalizado) dos últimos textos digitados, em memória: tira o texto
+    do título da janela ativa no evento ``computador.tela``."""
 
     # ---------- regras ----------
 
@@ -170,7 +197,13 @@ class ServicoComputador:
             "geracao": leitura.geracao,
             "largura": tela.largura,
             "altura": tela.altura,
-            "janela_ativa": _titulo_seguro(ativa.titulo) if ativa else None,
+            "janela_ativa": _titulo_seguro(ativa.programa or "Programa do computador")
+            if ativa and alvo == Alvo.PC_USUARIO
+            else titulo_sem_digitado(
+                ativa.titulo, self._digitados.get((contexto.agente_id, alvo), [])
+            )
+            if ativa
+            else None,
             "acao": acao,
             "atualizado_em": agora.isoformat(),
         }
@@ -284,6 +317,12 @@ class ServicoComputador:
                     "valem para a tela que você viu."
                 )
             resolvidas = [self.resolver(acao, leitura) for acao in acoes]  # tudo antes de agir
+            marcas = self._digitados.setdefault((contexto.agente_id, alvo), [])
+            for resolvida in resolvidas:
+                marca = marca_do_digitado(resolvida.acao.texto or "")
+                if resolvida.acao.tipo == "digitar" and marca and marca not in marcas:
+                    marcas.append(marca)
+            del marcas[:-10]
             computador = await self._computador(contexto, alvo)
             antes = leitura.observacao
             feitas = 0

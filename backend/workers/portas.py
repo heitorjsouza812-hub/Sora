@@ -88,7 +88,7 @@ def construir_dependencias(
             texto=rotulo_do_passo(nome, argumentos),
             ferramenta=nome,
             acao=nome,
-            parametros=parametros_sem_segredos(argumentos),
+            parametros=parametros_sem_segredos(argumentos, nome),
             status=StatusPasso.EXECUTANDO.value,
             iniciado_em=datetime.now(UTC),
         )

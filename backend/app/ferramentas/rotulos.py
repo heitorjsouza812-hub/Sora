@@ -209,9 +209,22 @@ def rotulo_do_passo(acao: str, argumentos: dict[str, Any]) -> str:
     return f"Usando {_detalhe(acao)}"
 
 
-def parametros_sem_segredos(argumentos: dict[str, Any]) -> dict[str, Any]:
-    """Cópia dos argumentos sem nada que pareça chave, token ou senha."""
-    return ocultar_argumentos_sensiveis(argumentos if isinstance(argumentos, dict) else {})
+def parametros_sem_segredos(
+    argumentos: dict[str, Any], ferramenta: str | None = None
+) -> dict[str, Any]:
+    """Cópia dos argumentos sem nada que pareça chave, token ou senha.
+
+    Em ``computador_agir`` (Vela-6, C3) o texto digitado nunca fica no passo: vira só a contagem
+    de caracteres, como no evento ``computador.tela``."""
+    limpos = ocultar_argumentos_sensiveis(argumentos if isinstance(argumentos, dict) else {})
+    if ferramenta == "computador_agir" and isinstance(limpos.get("acoes"), list):
+        limpos["acoes"] = [
+            {**a, "texto": f"[{len(str(argumentos['acoes'][i].get('texto') or ''))} caracteres]"}
+            if isinstance(a, dict) and a.get("texto") not in (None, "")
+            else a
+            for i, a in enumerate(limpos["acoes"])
+        ]
+    return limpos
 
 
 def url_publica(url: str) -> str | None:
