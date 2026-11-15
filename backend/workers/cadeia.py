@@ -24,6 +24,7 @@ from app.agentes.aparencia import aparencia_do_especialista
 from app.eventos.streams import publicar_evento
 from app.eventos.tipos import (
     AgenteCriado,
+    AprovacaoPedida,
     CadeiaAtualizada,
     CadeiaCriada,
     EntregaEvento,
@@ -52,6 +53,15 @@ from workers.fila import enfileirar
 from workers.travados import batimento
 
 registro = logging.getLogger(__name__)
+
+
+class AprovacaoDaCadeia(AprovacaoPedida):
+    """``aprovacao.pedida`` da cadeia: leva a conversa (e o bot/grupo, quando há) para o app
+    mostrar o cartão no chat, não só na central "Precisa de você"."""
+
+    conversa_id: UUID
+    bot_id: UUID | None = None
+    grupo_id: UUID | None = None
 
 
 def _uuid(valor: str) -> UUID:
@@ -728,13 +738,7 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
             valor = getattr(interrupcoes[0], "value", interrupcoes[0])
             etapa.status = _estado_da_pausa(valor)
             if isinstance(valor, dict) and valor.get("aprovacao_id"):
-                from app.eventos.tipos import AprovacaoPedida
                 from app.modelos.tabelas import Aprovacao
-
-                class AprovacaoDaCadeia(AprovacaoPedida):
-                    conversa_id: UUID
-                    bot_id: UUID | None = None
-                    grupo_id: UUID | None = None
 
                 cartao = await sessao.get(Aprovacao, _uuid(str(valor["aprovacao_id"])))
                 if cartao is not None:

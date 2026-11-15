@@ -209,6 +209,32 @@ async def _ja_falou_neste_turno(ctx: dict[str, Any], conversa_id: Any, antes: in
     return (depois or 0) > antes
 
 
+async def _pedido_de_equipe(contexto: Any, entrada: dict[str, Any] | None) -> tuple[str, int]:
+    """Texto do pedido e quantos cartões de bot/grupo já existem, se este turno é um pedido de
+    bot ou de grupo feito à Sora; senão ``("", 0)``."""
+    if contexto.papel != "sora" or not entrada:
+        return "", 0
+    from app.sistema1.atalhos_equipe import contar_cartoes, intencao_de_equipe
+
+    mensagens = entrada.get("messages") or []
+    texto = str(getattr(mensagens[-1], "content", "")) if mensagens else ""
+    if intencao_de_equipe(texto) is None:
+        return "", 0
+    return texto, await contar_cartoes(contexto.usuario_id)
+
+
+async def _cartao_de_seguranca(ferramenta: Any, pedido: str, cartoes_antes: int) -> None:
+    """O turno acabou (bem ou mal) sem o cartão de bot/grupo que o pedido pedia: prepara-o."""
+    if not pedido:
+        return
+    from app.sistema1.atalhos_equipe import garantir_cartao
+
+    try:
+        await garantir_cartao(ferramenta, pedido, cartoes_antes)
+    except Exception:
+        registro.exception("a rede de segurança do cartão falhou")
+
+
 async def _rodar_e_falar(
     ctx: dict[str, Any],
     contexto: Any,
@@ -229,6 +255,7 @@ async def _rodar_e_falar(
         agente_id=contexto.agente_id,
         conversa_id=contexto.conversa_id,
     )
+    pedido_de_equipe, cartoes_antes = await _pedido_de_equipe(contexto, entrada)
     try:
         resultado = await montar_e_rodar_agente(
             contexto=contexto,
@@ -264,6 +291,7 @@ async def _rodar_e_falar(
                 else MENSAGEM_FALHA
             )
             await falar(Falar(texto=texto), ferramenta)
+        await _cartao_de_seguranca(ferramenta, pedido_de_equipe, cartoes_antes)
         await publicar_evento(
             ctx["redis_eventos"],
             SugestoesEvento(itens=[]),
@@ -307,6 +335,8 @@ async def _rodar_e_falar(
                 "o modelo terminou o turno da conversa %s sem responder", contexto.conversa_id
             )
             await falar(Falar(texto=MENSAGEM_FALHA), ferramenta)
+    if not resultado.get("__interrupt__"):
+        await _cartao_de_seguranca(ferramenta, pedido_de_equipe, cartoes_antes)
     await publicar_evento(
         ctx["redis_eventos"], SugestoesEvento(itens=[]), contexto.conversa_id, contexto.usuario_id
     )

@@ -1879,3 +1879,65 @@ async def test_rumo_resultado_da_cadeia_inclui_texto_e_anexos(ambiente_http):
         assert len(mensagens) == 1
         assert "O café está pronto" in mensagens[0].conteudo
         assert mensagens[0].anexos == [str(aid)]
+
+
+@pytest.mark.parametrize(
+    ("frase", "rota"),
+    [
+        ("Crie um bot chamado Resumo que resume textos.", "/v1/bots/rascunhos"),
+        ("Monte um grupo com bots.", "/v1/grupos/propostas"),
+    ],
+)
+async def test_rumo_modelo_pequeno_que_nao_chama_a_ferramenta_ainda_gera_o_cartao(
+    ambiente_http, frase, rota
+):
+    """O modelo promete o cartão em texto e não chama a ferramenta: a rede de segurança prepara."""
+    from uuid import uuid4
+
+    amb = ambiente_http
+    triagem = {
+        "primeira_resposta": "Vou preparar.",
+        "modo": "direto",
+        "dificuldade": 1,
+        "especialistas": [],
+        "idioma": "pt-BR",
+        "confianca": 0.99,
+    }
+
+    def responder(corpo, n):
+        if not corpo.get("tools"):
+            return completar_texto(json.dumps(triagem))
+        return completar_texto("Boa! Já te mando o cartão para revisar.")
+
+    amb.provedor.responder = responder
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, _ = await usuario_com_modelo_http(amb, cliente, f"rede-{uuid4()}@exemplo.com")
+        r = await cliente.post("/v1/conversas", headers=auth, json={"texto": frase})
+        assert r.status_code == 201, r.text
+
+        async def cartao():
+            return (await cliente.get(rota, headers=auth)).json()
+
+        assert await esperar(cartao, "cartão da rede de segurança")
+        assert len(await cartao()) == 1
+
+
+async def test_rumo_provedor_fora_do_ar_nao_impede_o_cartao_de_grupo(ambiente_http):
+    from uuid import uuid4
+
+    amb = ambiente_http
+    amb.provedor.responder = lambda corpo, n: (401, {"error": {"message": "chave inválida"}})
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        auth, _ = await usuario_com_modelo_http(amb, cliente, f"fora-{uuid4()}@exemplo.com")
+        r = await cliente.post(
+            "/v1/conversas", headers=auth, json={"texto": "Monte um grupo com bots."}
+        )
+        assert r.status_code == 201, r.text
+        cid = r.json()["id"]
+
+        async def cartao():
+            return (await cliente.get("/v1/grupos/propostas", headers=auth)).json()
+
+        assert await esperar(cartao, "proposta mesmo sem modelo")
+        mensagens = (await cliente.get(f"/v1/conversas/{cid}/mensagens", headers=auth)).json()
+        assert any("proposta do grupo" in m["conteudo"] for m in mensagens)

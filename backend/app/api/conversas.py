@@ -257,6 +257,15 @@ async def _encaminhar(
         # do usuário não se perde. A conversa é criada e a Sora explica o que houve.
         registro.warning("triagem falhou (%s): %s", type(erro).__name__, str(erro)[:200])
         await sessao.commit()
+        from app.sistema1.atalhos_equipe import intencao_de_equipe
+
+        if intencao_de_equipe(mensagem.conteudo) is not None:
+            # Pedido de bot ou de grupo: o cartão sai mesmo sem a triagem (a Sora, ou a rede de
+            # segurança do worker, prepara o rascunho ou a proposta; nada nasce sem o aceite).
+            await fila.enqueue_job(
+                "responder_direto", str(mensagem.id), _job_id=f"responder:{mensagem.id}"
+            )
+            return
         await _publicar_primeira_resposta(
             redis,
             sessao,
