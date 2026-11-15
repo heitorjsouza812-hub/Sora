@@ -24,7 +24,13 @@ use windows::{
         },
         System::{
             Com::{CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx},
-            Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW},
+            Diagnostics::ToolHelp::{
+                CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
+            },
+            Threading::{
+                OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+                QueryFullProcessImageNameW, TerminateProcess,
+            },
         },
         UI::{
             Accessibility::{
@@ -42,7 +48,7 @@ use windows::{
             },
             WindowsAndMessaging::{
                 EnumChildWindows, EnumWindows, GA_ROOT, GWL_EXSTYLE, GetAncestor, GetForegroundWindow, GetSystemMetrics,
-                GetWindowLongPtrW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+                GetClassNameW, GetWindowLongPtrW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
                 SM_CXSCREEN, SM_CYSCREEN, SetForegroundWindow, WS_EX_TOOLWINDOW, WindowFromPoint,
             },
         },
@@ -50,7 +56,7 @@ use windows::{
     core::{BOOL, BSTR, Interface, PWSTR},
 };
 
-use super::regras::{AlvoJanela, Botao, Passo, normalizar_programa, programa_bloqueado, titulo_bloqueado};
+use super::regras::{AlvoJanela, Botao, ErroPc, Passo, normalizar_programa, programa_bloqueado, titulo_bloqueado};
 
 /// Marca das entradas da Sora (`dwExtraInfo`): "SORA".
 pub const MARCA_SORA: usize = 0x534F_5241;
@@ -90,8 +96,16 @@ fn h(hwnd: isize) -> HWND {
 // ---------- captura ----------
 
 /// Captura PNG da tela principal (GDI). As janelas da borda ficam fora (`WDA_EXCLUDEFROMCAPTURE`).
-pub fn capturar(t: &Tela) -> Result<Vec<u8>, String> {
+///
+/// Cerca A3: antes de codificar, pinta de preto toda janela bloqueada (senhas, segurança,
+/// terminais, a própria Sora e a Sora web; ver `retangulos_bloqueados`), conferindo antes e
+/// depois da cópia. Com um programa bloqueado na frente, devolve `None`: nenhum pixel sai do PC.
+pub fn capturar(t: &Tela) -> Result<Option<Vec<u8>>, String> {
     let (w, hh) = (t.largura, t.altura);
+    let antes = retangulos_bloqueados(t);
+    if antes.1 {
+        return Ok(None);
+    }
     let mut bgra = vec![0u8; (w * hh * 4) as usize];
     // SAFETY: DCs e bitmap criados e liberados aqui mesmo; o buffer tem o tamanho exato do DIB.
     unsafe {
@@ -143,6 +157,14 @@ pub fn capturar(t: &Tela) -> Result<Vec<u8>, String> {
     for px in bgra.as_chunks::<4>().0 {
         rgb.extend_from_slice(&[px[2], px[1], px[0]]);
     }
+    drop(bgra);
+    let depois = retangulos_bloqueados(t);
+    if depois.1 {
+        return Ok(None);
+    }
+    for r in antes.0.iter().chain(depois.0.iter()) {
+        super::regras::tarjar_rgb(&mut rgb, w as usize, hh as usize, *r);
+    }
     let mut saida = Vec::new();
     {
         let mut codificador = png::Encoder::new(&mut saida, w as u32, hh as u32);
@@ -152,7 +174,152 @@ pub fn capturar(t: &Tela) -> Result<Vec<u8>, String> {
         let mut escritor = codificador.write_header().map_err(|e| e.to_string())?;
         escritor.write_image_data(&rgb).map_err(|e| e.to_string())?;
     }
-    Ok(saida)
+    Ok(Some(saida))
+}
+
+fn classe(hwnd: HWND) -> String {
+    let mut buffer = [0u16; 128];
+    // SAFETY: buffer local com tamanho informado.
+    let n = unsafe { GetClassNameW(hwnd, &mut buffer) };
+    String::from_utf16_lossy(&buffer[..n.max(0) as usize])
+}
+
+/// Área de trabalho (papel de parede e ícones) e barra de tarefas: são do `explorer.exe`, mas não
+/// mostram segredo nem cobrem outras janelas. Ficam fora da tarja e da regra "bloqueado na frente".
+fn e_area_de_trabalho(hwnd: HWND) -> bool {
+    matches!(classe(hwnd).as_str(), "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd")
+}
+
+/// Visível de verdade: não escondida, não minimizada, não camuflada (outra área de trabalho
+/// virtual, app suspenso).
+fn na_tela(hwnd: HWND) -> bool {
+    // SAFETY: só leitura.
+    unsafe {
+        if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() {
+            return false;
+        }
+        let mut camuflada = 0u32;
+        let _ = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, (&mut camuflada as *mut u32).cast(), 4);
+        camuflada == 0
+    }
+}
+
+/// Janela que nada do bot pode ver: a própria Sora, programa desconhecido (com mais privilégios),
+/// programa bloqueado ou título bloqueado (inclui a Sora web, `regras::mostra_a_sora`).
+fn janela_bloqueada(alvo: &AlvoJanela) -> bool {
+    alvo.pid == std::process::id()
+        || alvo.programa.is_empty()
+        || programa_bloqueado(&alvo.programa)
+        || titulo_bloqueado(&alvo.titulo)
+}
+
+// Enumeração exclusiva da captura: sem teto de janelas, sem filtrar janelas de ferramenta.
+unsafe extern "system" fn coletar_bloqueios(hwnd: HWND, dados: LPARAM) -> BOOL {
+    // SAFETY: `dados` aponta para o Vec do chamador, vivo durante a enumeração.
+    let lista = unsafe { &mut *(dados.0 as *mut Vec<RECT>) };
+    if !na_tela(hwnd) || e_area_de_trabalho(hwnd) || matches!(classe(hwnd).as_str(), "SoraPcBorda" | "SoraPcParar") {
+        return BOOL(1);
+    }
+    if janela_bloqueada(&alvo_da_janela(hwnd)) {
+        let mut r = RECT::default();
+        // SAFETY: só leitura.
+        if unsafe { GetWindowRect(hwnd, &mut r) }.is_err() {
+            r = RECT { left: 0, top: 0, right: i32::MAX / 2, bottom: i32::MAX / 2 };
+        }
+        lista.push(r);
+    }
+    BOOL(1)
+}
+
+/// Retângulos (em pixels da captura) a tarjar e se a captura deve ser omitida: programa
+/// bloqueado, a Sora ou nada em primeiro plano (a área de trabalho não conta), ou falha ao listar.
+fn retangulos_bloqueados(t: &Tela) -> (Vec<[i32; 4]>, bool) {
+    let mut lista: Vec<RECT> = Vec::new();
+    // SAFETY: callback acima; a lista vive até o fim da chamada.
+    let ok = unsafe { EnumWindows(Some(coletar_bloqueios), LPARAM(&mut lista as *mut _ as isize)) }.is_ok();
+    let omitida = !ok || bloqueada_na_frente();
+    let retangulos = lista
+        .iter()
+        .map(|r| {
+            [
+                (f64::from(r.left) / t.escala).floor() as i32 - 2,
+                (f64::from(r.top) / t.escala).floor() as i32 - 2,
+                (f64::from(r.right) / t.escala).ceil() as i32 + 2,
+                (f64::from(r.bottom) / t.escala).ceil() as i32 + 2,
+            ]
+        })
+        .collect();
+    (retangulos, omitida)
+}
+
+/// Em primeiro plano está algo que o bot não pode ver (a área de trabalho não conta).
+pub fn bloqueada_na_frente() -> bool {
+    // SAFETY: só leitura.
+    let frente = unsafe { GetForegroundWindow() };
+    if frente.is_invalid() {
+        return true;
+    }
+    !e_area_de_trabalho(frente) && janela_bloqueada(&alvo_da_janela(frente))
+}
+
+unsafe extern "system" fn coletar_alvos_bloqueados(hwnd: HWND, dados: LPARAM) -> BOOL {
+    // SAFETY: `dados` aponta para o Vec do chamador, vivo durante a enumeração.
+    let lista = unsafe { &mut *(dados.0 as *mut Vec<AlvoJanela>) };
+    // Só janelas de verdade: as escondidas (IME, mensagens) nascem o tempo todo em qualquer
+    // programa, e avisos do sistema são janelas de ferramenta.
+    // SAFETY: só leitura.
+    let ferramenta = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } & WS_EX_TOOLWINDOW.0 as isize != 0;
+    if ferramenta || !na_tela(hwnd) || e_area_de_trabalho(hwnd) {
+        return BOOL(1);
+    }
+    let alvo = alvo_da_janela(hwnd);
+    if alvo.pid != std::process::id() && janela_bloqueada(&alvo) {
+        lista.push(alvo);
+    }
+    BOOL(1)
+}
+
+/// Janelas bloqueadas visíveis agora (sem as da própria Sora).
+pub fn alvos_bloqueados() -> Result<Vec<AlvoJanela>, ErroPc> {
+    let mut lista: Vec<AlvoJanela> = Vec::new();
+    // SAFETY: callback acima; a lista vive até o fim da chamada.
+    unsafe { EnumWindows(Some(coletar_alvos_bloqueados), LPARAM(&mut lista as *mut _ as isize)) }
+        .map_err(|_| ErroPc::novo("falha"))?;
+    Ok(lista)
+}
+
+/// Processos em execução: (pid, pid do pai, programa).
+pub fn processos() -> Vec<(u32, u32, String)> {
+    let mut saida = Vec::new();
+    // SAFETY: snapshot aberto e fechado aqui; a estrutura tem `dwSize` preenchido.
+    unsafe {
+        let Ok(foto) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return saida;
+        };
+        let mut item = PROCESSENTRY32W { dwSize: size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+        let mut tem = Process32FirstW(foto, &mut item).is_ok();
+        while tem {
+            let n = item.szExeFile.iter().position(|&c| c == 0).unwrap_or(item.szExeFile.len());
+            let nome = normalizar_programa(&String::from_utf16_lossy(&item.szExeFile[..n]));
+            saida.push((item.th32ProcessID, item.th32ParentProcessID, nome));
+            tem = Process32NextW(foto, &mut item).is_ok();
+        }
+        let _ = CloseHandle(foto);
+    }
+    saida
+}
+
+/// Fecha um processo que o bot fez nascer (terminal, script). Melhor esforço.
+pub fn encerrar_processo(pid: u32) -> bool {
+    // SAFETY: handle aberto só para encerrar e fechado em seguida.
+    unsafe {
+        let Ok(processo) = OpenProcess(PROCESS_TERMINATE, false, pid) else {
+            return false;
+        };
+        let ok = TerminateProcess(processo, 1).is_ok();
+        let _ = CloseHandle(processo);
+        ok
+    }
 }
 
 // ---------- janelas e programas ----------
@@ -592,13 +759,17 @@ pub fn enviar(passo: Passo, t: &Tela) -> Result<(), String> {
 pub fn observar(pid_proprio: u32) -> Result<(Value, Tela), String> {
     let t = tela();
     let png = capturar(&t)?;
+    // omitida: nem pixel nem árvore saem do PC; a lista de janelas (títulos bloqueados apagados)
+    // continua, para o bot trazer um programa liberado para a frente
+    let omitida = png.is_none();
     Ok((
         json!({
-            "png": base64::engine::general_purpose::STANDARD.encode(png),
+            "captura_omitida": omitida,
+            "png": png.map(|p| base64::engine::general_purpose::STANDARD.encode(p)).unwrap_or_default(),
             "largura": t.largura,
             "altura": t.altura,
             "janelas": janelas(&t, pid_proprio),
-            "arvore": arvore(&t, pid_proprio),
+            "arvore": if omitida { Vec::new() } else { arvore(&t, pid_proprio) },
         }),
         t,
     ))

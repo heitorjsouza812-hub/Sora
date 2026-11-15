@@ -44,6 +44,29 @@ pub const PROGRAMAS_BLOQUEADOS: &[&str] = &[
     "wt.exe",
     "openconsole.exe",
     "conhost.exe",
+    // lançadores e executores de script (Cerca A1): Explorer (barra de endereço, caixa Executar),
+    // busca do Iniciar e companhia rodam qualquer comando sem nunca focar um terminal
+    "explorer.exe",
+    "searchhost.exe",
+    "searchapp.exe",
+    "searchui.exe",
+    "startmenuexperiencehost.exe",
+    "shellexperiencehost.exe",
+    "wscript.exe",
+    "cscript.exe",
+    "mshta.exe",
+    "rundll32.exe",
+    "regsvr32.exe",
+    "msiexec.exe",
+    "bash.exe",
+    "wsl.exe",
+    "wslhost.exe",
+    "certutil.exe",
+    "bitsadmin.exe",
+    "schtasks.exe",
+    "msbuild.exe",
+    "installutil.exe",
+    "control.exe",
     // a própria Sora
     "sora.exe",
 ];
@@ -80,9 +103,21 @@ pub fn programa_bloqueado(programa: &str) -> bool {
     PROGRAMAS_BLOQUEADOS.contains(&programa)
 }
 
+/// Títulos exatos de janelas que executam comandos (a caixa Executar do Windows).
+const TITULOS_EXATOS_BLOQUEADOS: &[&str] = &["executar", "run"];
+
 pub fn titulo_bloqueado(titulo: &str) -> bool {
-    let titulo = titulo.to_lowercase();
+    let titulo = titulo.trim().to_lowercase();
     TITULOS_BLOQUEADOS.iter().any(|t| titulo.contains(t))
+        || TITULOS_EXATOS_BLOQUEADOS.contains(&titulo.as_str())
+        || mostra_a_sora(&titulo)
+}
+
+/// Janela que mostra a Sora (Cerca A2): a Sora web num navegador liberado tem "Sora" no título da
+/// aba. Palavra inteira, para não pegar "professora" ou "assessora". Conta como bloqueada para
+/// agir, para a árvore e para a captura: o bot não aprova os próprios cartões.
+pub fn mostra_a_sora(titulo: &str) -> bool {
+    titulo.to_lowercase().split(|c: char| !c.is_alphanumeric()).any(|p| p == "sora")
 }
 
 /// Uma janela de topo que vai receber a ação.
@@ -227,6 +262,13 @@ pub fn interpretar_tecla(texto: &str) -> Result<(Vec<Tecla>, Tecla), ErroPc> {
     }
     let tem = |vk| modificadores.iter().any(|m: &Tecla| m.vk == vk);
     if tem(VK_CONTROL) && tem(VK_MENU) && matches!(base_tecla.vk, 0x2E | 0x08) {
+        return Err(invalida());
+    }
+    if (base_tecla.vk == 0x1B && (tem(VK_CONTROL) || tem(VK_MENU)))
+        || (base_tecla.vk == VK_TAB && tem(VK_MENU))
+        || base_tecla.vk == 0x7B
+        || (tem(VK_CONTROL) && tem(VK_SHIFT) && matches!(base_tecla.vk, 0x49 | 0x4A | 0x43))
+    {
         return Err(invalida());
     }
     Ok((modificadores, base_tecla))
@@ -427,10 +469,107 @@ pub fn cor_rgb(cor: &str) -> (u8, u8, u8) {
     (0xE2, 0xEC, 0xFF)
 }
 
+/// Programas que abrem outros (Cerca A1): um processo bloqueado que nasce filho de um deles
+/// durante a ação do bot foi o bot que abriu.
+const LANCADORES: &[&str] = &[
+    "explorer.exe",
+    "searchhost.exe",
+    "searchapp.exe",
+    "searchui.exe",
+    "startmenuexperiencehost.exe",
+    "shellexperiencehost.exe",
+    "sihost.exe",
+];
+
+/// Hospedeiros de console: nascem junto de qualquer programa de linha de comando (inclusive o
+/// `git` que um editor liberado roda sozinho). O terminal de verdade (`cmd`, `powershell`…) é que
+/// denuncia a ação.
+const SO_HOSPEDEIROS: &[&str] = &["conhost.exe", "openconsole.exe", "explorer.exe"];
+
+/// Processos bloqueados que nasceram durante a ação, filhos de um programa liberado, de um
+/// lançador ou de outro processo novo (cadeia `explorer → cmd → powershell`). Devolve (pid,
+/// programa). Processos de serviços do sistema ficam de fora: não foram abertos pela ação.
+pub fn processos_suspeitos(
+    antes: &[(u32, u32, String)],
+    depois: &[(u32, u32, String)],
+    permitidos: &[String],
+) -> Vec<(u32, String)> {
+    let existiam: std::collections::HashSet<u32> = antes.iter().map(|p| p.0).collect();
+    let novos: Vec<&(u32, u32, String)> = depois.iter().filter(|p| !existiam.contains(&p.0)).collect();
+    let mut vigiados: std::collections::HashSet<u32> = antes
+        .iter()
+        .filter(|p| LANCADORES.contains(&p.2.as_str()) || permitidos.iter().any(|q| q == &p.2))
+        .map(|p| p.0)
+        .collect();
+    vigiados.extend(novos.iter().map(|p| p.0));
+    novos
+        .into_iter()
+        .filter(|p| {
+            programa_bloqueado(&p.2) && !SO_HOSPEDEIROS.contains(&p.2.as_str()) && p.2 != "sora.exe" && vigiados.contains(&p.1)
+        })
+        .map(|p| (p.0, p.2.clone()))
+        .collect()
+}
+
+/// Tarja em pixels da captura; retângulos fora da tela são recortados.
+pub fn tarjar_rgb(rgb: &mut [u8], largura: usize, altura: usize, r: [i32; 4]) {
+    let [x1, y1, x2, y2] = r;
+    for y in y1.max(0) as usize..(y2.max(0) as usize).min(altura) {
+        for x in x1.max(0) as usize..(x2.max(0) as usize).min(largura) {
+            rgb[(y * largura + x) * 3..(y * largura + x + 1) * 3].fill(0);
+        }
+    }
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn sora_no_titulo_e_caixa_executar_sao_bloqueadas() {
+        for titulo in ["Sora - Google Chrome", "Sora — agentes de IA - Microsoft Edge", "Precisa de você · SORA", "Executar", "Run"] {
+            assert!(titulo_bloqueado(titulo), "{titulo}");
+            assert!(conferir_alvo(&alvo("chrome.exe", titulo, 10), &["chrome.exe".into()], 99).is_err());
+        }
+        for titulo in ["Professora Ana - Gmail", "Assessoria - Word", "Executar testes.txt - Bloco de Notas"] {
+            assert!(!titulo_bloqueado(titulo), "{titulo}");
+        }
+    }
+
+    #[test]
+    fn processo_bloqueado_filho_da_acao_e_pego() {
+        let p = |pid: u32, pai: u32, nome: &str| (pid, pai, nome.to_string());
+        let antes = vec![p(4, 0, "system"), p(100, 4, "explorer.exe"), p(200, 100, "chrome.exe"), p(300, 4, "services.exe"), p(400, 100, "code.exe")];
+        let permitidos = vec!["chrome.exe".to_string(), "code.exe".to_string()];
+        // caixa Executar / barra do Explorer → powershell; e a cadeia cmd → powershell
+        let depois = [antes.clone(), vec![p(500, 100, "powershell.exe"), p(501, 500, "conhost.exe")]].concat();
+        assert_eq!(processos_suspeitos(&antes, &depois, &permitidos), vec![(500, "powershell.exe".into())]);
+        let cadeia = [antes.clone(), vec![p(600, 200, "cmd.exe"), p(601, 600, "powershell.exe")]].concat();
+        assert_eq!(processos_suspeitos(&antes, &cadeia, &permitidos).len(), 2);
+        let script = [antes.clone(), vec![p(700, 200, "mshta.exe")]].concat();
+        assert_eq!(processos_suspeitos(&antes, &script, &permitidos), vec![(700, "mshta.exe".into())]);
+        // o que não é da ação fica: serviço do sistema, git do editor com o conhost dele, processo que já existia
+        let ruido = [antes.clone(), vec![p(800, 300, "cmd.exe"), p(801, 400, "git.exe"), p(802, 801, "conhost.exe"), p(803, 100, "notepad.exe")]].concat();
+        assert!(processos_suspeitos(&antes, &ruido, &permitidos).is_empty());
+        assert!(processos_suspeitos(&cadeia, &cadeia, &permitidos).is_empty());
+    }
+
+    #[test]
+    fn ataques_vela9_recusados() {
+        for tecla in ["ctrl+Escape", "ctrl+shift+Escape", "alt+Tab", "F12", "ctrl+shift+i"] {
+            assert!(interpretar_tecla(tecla).is_err(), "{tecla}");
+        }
+        for programa in ["explorer.exe", "searchhost.exe", "taskmgr.exe", "wscript.exe"] {
+            assert!(conferir_alvo(&alvo(programa, "Executar", 10), &[programa.into()], 99).is_err());
+        }
+        assert!(conferir_alvo(&alvo("chrome.exe", "Sora - Chrome", 10), &["chrome.exe".into()], 99).is_err());
+        let mut pixels = vec![255; 4 * 4 * 3];
+        tarjar_rgb(&mut pixels, 4, 4, [-1, 1, 2, 8]);
+        assert_eq!(&pixels[12..18], &[0; 6]);
+        assert_eq!(&pixels[..12], &[255; 12]);
+        assert_eq!(&pixels[18..24], &[255; 6]);
+    }
 
     fn alvo(programa: &str, titulo: &str, pid: u32) -> AlvoJanela {
         AlvoJanela { hwnd: 1, pid, programa: programa.into(), titulo: titulo.into() }

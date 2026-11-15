@@ -486,6 +486,8 @@ fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
             return Err(ErroPc::novo("senha"));
         }
     }
+    let bloqueados_antes = sistema::alvos_bloqueados()?;
+    let processos_antes = sistema::processos();
     let digitando = plano.conferencias == [Conferencia::Foco];
     for (i, passo) in plano.passos.iter().enumerate() {
         // soltar uma tecla não digita nada; conferir antes de soltar fazia `ctrl+Escape` (que muda
@@ -518,6 +520,31 @@ fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
             Passo::Tecla(..) => 15,
             Passo::Roda(..) => 40,
         }));
+    }
+    // Cerca A1, camada 3: o que a ação fez nascer. Um lançador (Executar, barra do Explorer,
+    // busca) ou um atalho do programa liberado pode rodar um terminal ou script sem nunca focar
+    // nada bloqueado; aqui o processo novo é fechado e o bot para até o usuário decidir.
+    thread::sleep(Duration::from_millis(150));
+    let processos_depois = sistema::processos();
+    let suspeitos = regras::processos_suspeitos(&processos_antes, &processos_depois, &permitidos);
+    if !suspeitos.is_empty() {
+        for (pid_novo, _) in &suspeitos {
+            let _ = sistema::encerrar_processo(*pid_novo);
+        }
+        c.interrompido.store(true, Ordering::SeqCst);
+        return Err(ErroPc { programa: Some(suspeitos[0].1.clone()), ..ErroPc::novo("processo_bloqueado") });
+    }
+    for alvo in sistema::alvos_bloqueados()? {
+        if !bloqueados_antes.iter().any(|a| a.hwnd == alvo.hwnd && a.pid == alvo.pid) {
+            c.interrompido.store(true, Ordering::SeqCst);
+            return Err(ErroPc { programa: Some(alvo.programa), ..ErroPc::novo("processo_bloqueado") });
+        }
+    }
+    if sistema::bloqueada_na_frente() {
+        // a ação trouxe para a frente um programa bloqueado (ou a Sora) que já estava aberto
+        let programa = sistema::alvo_em_foco().map(|a| if a.pid == pid { "sora.exe".into() } else { a.programa });
+        c.interrompido.store(true, Ordering::SeqCst);
+        return Err(ErroPc { programa, ..ErroPc::novo("processo_bloqueado") });
     }
     Ok(Value::Null)
 }

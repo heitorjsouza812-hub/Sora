@@ -3,6 +3,7 @@ fn main() {
     // o libera (capabilities/main.json e capabilities/ilha.json). APP-003.
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "ilha_emitir",
             "ilha_retangulo",
             "ilha_visivel",
             "notificar_atencao",

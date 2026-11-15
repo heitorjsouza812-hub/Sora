@@ -326,6 +326,18 @@ fn reconciliar<R: Runtime>(
 }
 
 #[tauri::command]
+fn ilha_emitir(janela: tauri::WebviewWindow, evento: String, dados: serde_json::Value) -> Result<(), String> {
+    if janela.label() != "ilha" || !evento_ilha_permitido(&evento) {
+        return Err("Evento não permitido nesta janela.".into());
+    }
+    janela.app_handle().emit_to("main", &evento, dados).map_err(|e| e.to_string())
+}
+
+fn evento_ilha_permitido(evento: &str) -> bool {
+    matches!(evento, "sora-armazenamento" | "sora-sessao-pedir")
+}
+
+#[tauri::command]
 fn ilha_retangulo(
     x: f64,
     y: f64,
@@ -698,6 +710,7 @@ pub fn run() {
         .manage(estado.clone())
         .manage(RotasNotificacao::default())
         .invoke_handler(tauri::generate_handler![
+            ilha_emitir,
             ilha_retangulo,
             ilha_visivel,
             notificar_atencao,
@@ -878,5 +891,17 @@ mod testes {
             ))
             .exists()
         );
+    }
+}
+
+#[cfg(test)]
+mod testes_eventos_pc {
+    #[test]
+    fn ilha_nao_forja_eventos_pc() {
+        assert!(!super::evento_ilha_permitido("pc-estado"));
+        assert!(!super::evento_ilha_permitido("pc-parar"));
+        assert!(super::evento_ilha_permitido("sora-armazenamento"));
+        let cap: serde_json::Value = serde_json::from_str(include_str!("../capabilities/ilha.json")).unwrap();
+        assert!(!cap["permissions"].as_array().unwrap().iter().any(|p| p == "core:event:allow-emit"));
     }
 }
