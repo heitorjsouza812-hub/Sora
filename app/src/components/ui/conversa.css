@@ -1,0 +1,28 @@
+/* Coluna de leitura (etapa 6, §2 e tarefa 4): mensagens, cartões e compositor dividem o mesmo eixo de 760 px. */
+.conversation { min-width: 0; min-height: 0; max-width: 100%; display: grid; grid-template-rows: minmax(0, 1fr); }
+/* a coluna da conversa aceita arquivos arrastados (ZonaSoltar envolve conversa + compositor) */
+.conversation > .conversation-drop { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.conversation-area { position: relative; min-width: 0; max-width: 100%; min-height: 0; display: grid; }
+.conversation-area > .conversation-scroll { min-height: 0; }
+
+/* O respiro lateral é a folga entre a janela e a coluna: nunca menos de 24 px (16 no celular). */
+.conversation { --gut: max(var(--sp-6), calc((100% - var(--col)) / 2)); }
+.conversation-scroll {
+  min-width: 0; min-height: 0; overflow-y: auto; overflow-anchor: none; scroll-behavior: auto;
+  scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent;
+  padding: var(--sp-4) var(--gut) var(--sp-10);
+}
+.chat-item { min-width: 0; max-width: 100%; }
+.chat-item + .chat-item { margin-top: var(--sp-7); }
+.chat-item > .deliveries { margin-top: 0; }
+
+/* compositor na coluna, com degradê de 32 px por cima para o texto não "cortar" seco */
+.chat-composer { position: relative; padding: 0 var(--gut) var(--sp-4); }
+.chat-composer::before { content: ""; position: absolute; inset: auto 0 100% 0; height: var(--sp-8); background: linear-gradient(transparent, var(--bg)); pointer-events: none; }
+
+@media (max-width: 767px) {
+  .conversation { --gut: var(--sp-4); height: 100%; }
+  .conversation-scroll { padding-bottom: var(--sp-8); }
+  .chat-item + .chat-item { margin-top: var(--sp-6); }
+  .chat-composer { padding-bottom: max(var(--sp-3), env(safe-area-inset-bottom, 0px)); }
+}

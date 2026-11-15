@@ -12,6 +12,7 @@ import { EditorAgenteHost, MenuAgente } from '../builder';
 import { ContaRodape, MarcaSora, Navegacao, Sidebar } from './Sidebar';
 import './etapa5.css';
 import './topbar.css';
+import '../ui/conversa.css';
 
 export interface AppShellProps {
   children: ReactNode;
