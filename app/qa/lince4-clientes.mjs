@@ -1,6 +1,6 @@
 // Confere ao vivo a barra lateral (Clientes com lugar próprio), a aba de conhecimento e o console limpo.
 import { chromium } from '@playwright/test';
-process.env.SORA_QA_BASE ??= 'http://localhost:5383';
+process.env.SORA_QA_BASE ??= 'http://localhost:5173';
 const { entrarNoContexto } = await import('./entrar.mjs');
 const base = process.env.SORA_QA_BASE;
 const browser = await chromium.launch();

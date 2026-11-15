@@ -32,7 +32,7 @@ async function captura(page: import('@playwright/test').Page, nome: string) {
 // de rodadas anteriores são arquivados aqui para a barra lateral começar vazia.
 test.beforeEach(async ({ page }) => {
   const sessao = await entrarNoContexto(page.context(), { limparConversas: true });
-  const base = process.env.SORA_QA_BASE ?? 'http://localhost:5383';
+  const base = process.env.SORA_QA_BASE ?? 'http://localhost:5173';
   const headers = { Authorization: `Bearer ${sessao.token_acesso}` };
   const grupos = await (await page.context().request.get(`${base}/v1/grupos`, { headers })).json() as { id: string }[];
   for (const grupo of grupos) await page.context().request.post(`${base}/v1/canais-equipe/${grupo.id}/arquivar`, { headers, failOnStatusCode: false });

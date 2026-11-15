@@ -1,7 +1,7 @@
 // QA ao vivo (Vitral-8): painel Trabalho com tela do navegador e do computador do bot.
 // API e Vite reais (bot criado pela API real); só as rotas de tela são simuladas com page.route, porque o worker
 // de QA usa modelo falso e não abre navegador nem computador de verdade.
-// Uso: node qa/trabalho-telas.mjs   (SORA_QA_BASE=http://localhost:5383)
+// Uso: node qa/trabalho-telas.mjs   (SORA_QA_BASE=http://localhost:5173)
 import { readFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';

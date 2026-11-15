@@ -1,11 +1,11 @@
-// Semeia, pela API real (8200), um bot que fica "precisa de você" para a Ilha ter o que mostrar.
+// Semeia, pela API real (8000), um bot que fica "precisa de você" para a Ilha ter o que mostrar.
 // Só com o modelo falso (SORA_MODELO_FALSO=1): "[pergunta]" faz o bot perguntar e esperar a resposta.
 // Sempre reaproveita UM bot de QA ("Revisora QA da Ilha"); só cria se ele não existir. Antes de
 // semear, apaga as conversas antigas desse bot, então rodar várias vezes não acumula nada.
 // Uso:
 //   node qa/ilha-semear.mjs [pergunta|aprovacao]   → imprime {agenteId, nome, conversaId}
 //   node qa/ilha-semear.mjs limpar                 → apaga as conversas e o bot de QA
-const API = process.env.SORA_QA_API ?? 'http://localhost:8200';
+const API = process.env.SORA_QA_API ?? 'http://localhost:8000';
 const EMAIL = process.env.SORA_QA_ILHA_EMAIL ?? 'qa-ilha-e5@sora.local';
 const SENHA = process.env.SORA_QA_SENHA ?? 'sora-qa-senha-123';
 const NOME_BOT = 'Revisora QA da Ilha';

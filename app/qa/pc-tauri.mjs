@@ -4,7 +4,7 @@
 // desktop se apresentou ao servidor com o bot ligado. Imprime ids e estado, sem credenciais.
 // Com `--desligar <bot_id>`: desliga o bot pela mesma tela (limpeza no fim do teste).
 //
-// Pré-requisitos: API (8200) + Vite (5383) no ar e o app aberto com a porta de depuração do WebView2:
+// Pré-requisitos: API (8000) + Vite (5173) no ar e o app aberto com a porta de depuração do WebView2:
 //   cd app/src-tauri
 //   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333 cargo run --no-default-features
 // Uso: node qa/pc-tauri.mjs  (o resto do teste, que manda os comandos do bot, roda no backend)
@@ -15,9 +15,9 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { QA_SENHA } from './entrar.mjs';
 
-process.env.SORA_QA_BASE ??= 'http://localhost:5383';
+process.env.SORA_QA_BASE ??= 'http://localhost:5173';
 const CDP = process.env.SORA_CDP ?? 'http://127.0.0.1:9333';
-const API = process.env.SORA_QA_API ?? 'http://localhost:8200';
+const API = process.env.SORA_QA_API ?? 'http://localhost:8000';
 const EMAIL = process.env.SORA_QA_PC_EMAIL ?? 'qa-pc-e5@sora.local';
 const shots = join(dirname(fileURLToPath(import.meta.url)), 'shots', 'pc-tauri');
 await mkdir(shots, { recursive: true });

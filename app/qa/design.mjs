@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { deflateSync } from 'node:zlib';
 
 const APP = 'file:///C:/dev/sora-e5/app/';
-const BASE = 'http://localhost:5383';
+const BASE = process.env.SORA_QA_BASE ?? 'http://localhost:5173';
 process.env.SORA_QA_BASE = BASE;
 const { chromium } = await import(`${APP}node_modules/@playwright/test/index.mjs`);
 const { entrarNoContexto } = await import(`${APP}qa/entrar.mjs`);

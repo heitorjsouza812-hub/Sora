@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
-const BASE = process.env.SORA_QA_BASE ?? 'http://localhost:5383';
+const BASE = process.env.SORA_QA_BASE ?? 'http://localhost:5173';
 // `entrar.mjs` atende vários QAs antigos e ainda tem 5173 como padrão. Importe-o
 // depois de fixar a origem desta etapa para login, API e página usarem a mesma porta.
 process.env.SORA_QA_BASE ??= BASE;

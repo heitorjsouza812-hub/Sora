@@ -1,10 +1,10 @@
 // Etapa 5 — Ilha no Tauri REAL (Windows): a janela da ilha só aparece com a principal fora de foco ou
 // minimizada e some quando o app volta ao foco; dentro do app (janela principal) nada da ilha existe.
 //
-// Pré-requisitos: API (8200) + Vite (5383) no ar e o app aberto com a porta de depuração do WebView2:
+// Pré-requisitos: API (8000) + Vite (5173) no ar e o app aberto com a porta de depuração do WebView2:
 //   cd app/src-tauri
 //   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333 cargo run --no-default-features
-// Uso: SORA_QA_BASE=http://localhost:5383 node qa/ilha-tauri.mjs
+// Uso: SORA_QA_BASE=http://localhost:5173 node qa/ilha-tauri.mjs
 // Foco/minimizar são feitos por qa/janelas.ps1 (user32); o estado das janelas nativas também.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { QA_SENHA } from './entrar.mjs';
 
-process.env.SORA_QA_BASE ??= 'http://localhost:5383';
+process.env.SORA_QA_BASE ??= 'http://localhost:5173';
 const CDP = process.env.SORA_CDP ?? 'http://127.0.0.1:9333';
 const qaDir = dirname(fileURLToPath(import.meta.url));
 const shots = join(qaDir, 'shots', 'ilha-tauri');
@@ -35,7 +35,7 @@ async function ate(descricao, predicado, ms = 6000) {
   assert.fail(`${descricao}: estado final ${JSON.stringify(ultimo)}`);
 }
 
-const API = process.env.SORA_QA_API ?? 'http://localhost:8200';
+const API = process.env.SORA_QA_API ?? 'http://localhost:8000';
 async function api(caminho, { token, method = 'GET', body } = {}) {
   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
   const r = await fetch(`${API}${caminho}`, { method, headers, body });

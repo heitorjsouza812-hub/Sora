@@ -1,12 +1,12 @@
 // Item 57 · auditoria de contraste (WCAG 2.1 AA) de todos os textos visíveis.
 // Uso: node qa/contraste.mjs [rotas…] [--todos] [--json]
-//  - percorre as rotas em 1440 e 390 px (dev server em SORA_QA_BASE, padrão http://localhost:5383; conta em SORA_QA_EMAIL);
+//  - percorre as rotas em 1440 e 390 px (dev server em SORA_QA_BASE, padrão http://localhost:5173; conta em SORA_QA_EMAIL);
 //  - para cada nó de texto visível mede a cor efetiva (opacidade dos ancestrais incluída) contra o
 //    fundo composto (camadas rgba até um fundo opaco) e compara com 4,5:1 (ou 3:1 em texto grande);
 //  - texto sobre imagem/gradiente/canvas fica como "não medido";
 //  - escreve qa/contraste.md e sai com código 1 se algo falhar.
 import { chromium } from '@playwright/test';
-process.env.SORA_QA_BASE ??= 'http://localhost:5383';
+process.env.SORA_QA_BASE ??= 'http://localhost:5173';
 const { entrarNoContexto } = await import('./entrar.mjs');
 import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';

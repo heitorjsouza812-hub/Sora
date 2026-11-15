@@ -16,10 +16,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 // entrar.mjs lê SORA_QA_BASE ao ser importado: fixa a porta desta etapa antes de importá-lo.
-process.env.SORA_QA_BASE ??= 'http://localhost:5383';
+process.env.SORA_QA_BASE ??= 'http://localhost:5173';
 const { entrarNoContexto } = await import('./entrar.mjs');
 
-const BASE = process.env.SORA_QA_BASE ?? 'http://localhost:5383';
+const BASE = process.env.SORA_QA_BASE ?? 'http://localhost:5173';
 const qaDir = dirname(fileURLToPath(import.meta.url));
 const shotsDir = join(qaDir, 'shots', 'ilha');
 const erros = [];
@@ -49,7 +49,7 @@ async function expectAusente(locator, descricao) {
 
 // Limpeza: a conversa que este teste abre com a Sora (e o pedido pendente dela) é apagada no fim,
 // para a conta de QA não acumular nada entre execuções.
-const API = process.env.SORA_QA_API ?? 'http://localhost:8200';
+const API = process.env.SORA_QA_API ?? 'http://localhost:8000';
 const EMAIL_QA = process.env.SORA_QA_ILHA_EMAIL ?? 'qa-ilha-e5@sora.local';
 async function tokenQa() {
   const r = await fetch(`${API}/v1/auth/entrar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL_QA, senha: process.env.SORA_QA_SENHA ?? 'sora-qa-senha-123' }) });

@@ -1,6 +1,6 @@
 // Vitral-10: ao vivo. (1) Resposta direta encerra o turno: o botão volta a Enviar. (2) Cartão de rascunho de bot com
 // descrição longa não vaza em 1440 e 390 px. Precisa de API + worker + Vite.
-//   SORA_QA_BASE=http://localhost:5383 SORA_QA_EMAIL=vitral10@sora.local node qa/vitral10.mjs
+//   SORA_QA_BASE=http://localhost:5173 SORA_QA_EMAIL=vitral10@sora.local node qa/vitral10.mjs
 import { chromium } from '@playwright/test';
 import { entrarNoContexto, BASE } from './entrar.mjs';
 

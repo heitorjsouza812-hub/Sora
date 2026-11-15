@@ -1,8 +1,8 @@
 // Screenshots de /clientes e Configurações → Canais da empresa (1440 e 390), contra API e Vite reais.
 import { chromium } from '@playwright/test';
-process.env.SORA_QA_BASE ??= 'http://localhost:5383';
+process.env.SORA_QA_BASE ??= 'http://localhost:5173';
 const { entrarNoContexto } = await import('./entrar.mjs');
-const BASE = 'http://localhost:5383';
+const BASE = process.env.SORA_QA_BASE ?? 'http://localhost:5173';
 const b = await chromium.launch();
 let erros = 0;
 for (const [nome, w, h] of [['desktop', 1440, 900], ['celular', 390, 844]]) {
