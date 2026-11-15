@@ -525,7 +525,7 @@ const previasDaSessao = new Map<string, string>();
 export const previaDoAnexo = (id: string) => previasDaSessao.get(id);
 export async function anexarEnvio<T>(anexos: Anexo[] | undefined, enviar: (anexos: Anexo[]) => Promise<T>): Promise<T> { (anexos ?? []).forEach(a => { if (a.urlPrevia) previasDaSessao.set(a.id, a.urlPrevia); }); return enviar(anexos ?? []); }
 
-if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__sora = { limparTudo, lerEstado, novoChat, abrirProjeto, iniciarProjetos, removerProjeto, removerAgente };
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__sora = { limparTudo, lerEstado, novoChat, abrirProjeto, iniciarProjetos, removerProjeto, removerAgente, injetarEvento: receber };
 export function _aplicarEventoParaTestes(evento: EventoSse) { receber(evento); }
 export function _reiniciarProjetosParaTestes() { encerrarProjetos(); estado = { ...inicial(), carregando: false }; notificar(); }
 export function _definirEstadoParaTestes(snapshot: EstadoProjetos) { estado = snapshot; notificar(); }
