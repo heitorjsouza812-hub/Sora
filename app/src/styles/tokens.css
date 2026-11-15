@@ -12,7 +12,7 @@
   --line-strong: rgba(255, 255, 255, 0.16);
   --focus: #9cc4ff;
   --focus-soft: rgba(156, 196, 255, 0.4);
-  --focus-ring: 0 0 0 3px var(--focus-soft);
+  --focus-ring: 0 0 0 3px var(--focus-soft); /* só a Ilha; no resto vale o contorno de 2 px (index.css) */
   --ok: #7ef2c4;
   --warn: #febc2e;
   --danger: #ff6b6b;
@@ -23,6 +23,7 @@
   --fs-12: 12px;
   --fs-13: 13px;
   --fs-14: 14px;
+  --fs-15: 15px;
   --fs-16: 16px;
   --fs-20: 20px;
   --fs-24: 24px;
@@ -48,7 +49,9 @@
 
   --r-6: 6px;
   --r-10: 10px;
+  --r-12: 12px;
   --r-16: 16px;
+  --r-20: 20px;
   --r-24: 24px;
   --r-pill: 999px;
 
@@ -58,6 +61,8 @@
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
+  --dur-layout: 420ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --duration-fast: var(--dur-fast);
   --duration-normal: var(--dur-base);
   --duration-slow: var(--dur-slow);
@@ -113,13 +118,29 @@
   --browser-red: #ff5f57;
   --browser-green: #28c840;
 
+  /* Etapa 6 (visual novo). Fonte: docs/design/etapa6-visual.md §4.2 e §4.3. */
+  --surface-side: #090b0f; /* barra lateral e painel Trabalho */
+  --line-soft: rgba(255, 255, 255, 0.05); /* divisória dentro de tabela e lista */
+  --hover: rgba(255, 255, 255, 0.06); /* fundo de hover */
+  --ativo: rgba(255, 255, 255, 0.09); /* item selecionado */
+  --col: 760px; /* coluna de leitura */
+  --side-w: 260px; /* barra lateral */
+  --top-h: 52px; /* cabeçalho da tela */
+  --painel-w: 360px; /* painel Trabalho */
+  --beam: #ffd6f5, #ff5ccd, #a868ff, #508cff, #3ce0d2; /* cores do BorderBeam */
+  --action-hover: #ffffff;
+  --off-bg: rgba(255, 255, 255, 0.14); /* botão desativado: fundo */
+  --off-fg: #b6bdcb; /* botão desativado: texto e ícone (6,32:1) */
+  --danger-hover: rgba(255, 107, 107, 0.1);
+
   /* Cores fixas do mascote e dos agentes: não alterar. */
   --sora: #e2ecff;
   --atlas: #56a8ff;
   --luna: #ac80ff;
   --nina: #46e8a8;
 
-  --font: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
   --font-display: "Playfair Display", Georgia, serif;
 
   /* Aliases legados. */

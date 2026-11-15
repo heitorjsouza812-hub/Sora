@@ -6,7 +6,7 @@
 .md ul, .md ol { margin: var(--sp-1) 0 var(--sp-2); padding-left: var(--sp-6); }
 .md li { margin: 2px 0; }
 .md li::marker { color: var(--text-2); }
-.md strong { color: var(--text-1); font-weight: 650; }
+.md strong { color: var(--text-1); font-weight: 600; }
 .md em { color: var(--text-1); }
 .md a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
 .md a:hover { text-decoration-thickness: 2px; }
@@ -14,7 +14,7 @@
 .md :not(pre) > code { padding: 1px 6px; color: var(--text-1); background: var(--white-a07); border-radius: var(--r-6); font: 0.9em/1.4 ui-monospace, "SF Mono", Consolas, monospace; }
 .md table { width: 100%; margin: var(--sp-2) 0 var(--sp-3); border-collapse: collapse; font-size: var(--fs-14); }
 .md th, .md td { padding: var(--sp-2) var(--sp-3); text-align: left; border-bottom: 1px solid var(--line); }
-.md th { color: var(--text-2); font-size: var(--fs-12); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.md th { color: var(--text-2); font-size: var(--fs-12); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .md-code { margin: var(--sp-2) 0 var(--sp-3); overflow: hidden; background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--r-10); }
 .md-code-bar { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3); color: var(--text-2); background: var(--white-a04); border-bottom: 1px solid var(--line); font-size: var(--fs-12); }
 .md-copy { height: 28px; padding: 0 var(--sp-3); color: var(--text-1); background: transparent; border: 1px solid var(--line-strong); border-radius: var(--r-pill); font: inherit; font-size: var(--fs-12); cursor: pointer; }
