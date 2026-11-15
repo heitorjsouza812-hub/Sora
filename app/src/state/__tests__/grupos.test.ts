@@ -74,3 +74,21 @@ describe('estado de grupos por SSE', () => {
     expect(estadoDoMembro(lerGrupos().tarefas.g1, 'b1')).toBe('livre');
   });
 });
+
+describe('prévia ao vivo do grupo (mensagem.token)', () => {
+  const token = (texto: string, extra: Record<string, unknown> = {}) => ({ tipo: 'mensagem.token', dados: { fluxo_id: 'fg1', agente_id: 'bot-1', canal_id: 'grupo-1', texto, fim: false, ...extra } });
+
+  it('substitui o acumulado, sai no fim e a fala oficial do bot não fica duplicada', () => {
+    _reiniciarGruposParaTestes();
+    receberEventoGrupos(token('Haicai'));
+    receberEventoGrupos(token('Haicai de café'));
+    expect(lerGrupos().previas['grupo-1']).toHaveLength(1);
+    expect(lerGrupos().previas['grupo-1']?.[0]).toMatchObject({ texto: 'Haicai de café', botId: 'bot-1' });
+    receberEventoGrupos({ tipo: 'canal.mensagem', dados: { id: 'm1', grupo_id: 'grupo-1', seq: 1, autor: 'bot', bot_id: 'bot-1', texto: 'Haicai de café', tipo: 'resultado' } });
+    expect(lerGrupos().previas['grupo-1']).toHaveLength(0);
+    expect(lerGrupos().mensagens['grupo-1']).toHaveLength(1);
+    receberEventoGrupos(token('Haicai de café', { fim: true }));
+    receberEventoGrupos(token('atrasado'));
+    expect(lerGrupos().previas['grupo-1']).toHaveLength(0);
+  });
+});

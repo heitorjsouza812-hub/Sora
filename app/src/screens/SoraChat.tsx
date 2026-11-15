@@ -8,6 +8,8 @@ import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb, SoraThinking } from '../components/mascot';
 import { CartaoRascunhoBot } from '../components/builder';
 import { CartaoPrecisaDeVoce } from '../components/pendencias/CartaoPrecisaDeVoce';
+import { CartaoPendencia } from '../components/pendencias/Pendencias';
+import { AvisosMemoria } from '../components/memoria';
 import { CartaoPropostaGrupo } from '../components/pendencias/CartaoPropostaGrupo';
 import { MessageComposer } from '../components/ui/MessageComposer';
 import { HistoricoConversa } from '../components/ui/HistoricoConversa';
@@ -21,7 +23,7 @@ import { usePrecisaDeVoce } from '../state/atencao';
 import { useSoraId } from '../state/bots';
 import { carregarPropostasPendentes, carregarRascunhosPendentes, useCartoesSora } from '../state/sora';
 import {
-  abrirProjeto, anexarEnvio, conversarComSora, gerandoNa, mensagensDa, pararConversa,
+  abrirProjeto, anexarEnvio, conversarComSora, gerandoNa, mensagensDa, pararConversa, pendenciasDa,
   projetoAtivo, textoVisivel, useAgora, useProjetos,
 } from '../state/projetos';
 
@@ -60,18 +62,22 @@ export default function SoraChat() {
 
   const mensagens = projeto ? mensagensDa(estado, projeto.id, agora) : [];
   // Pergunta/aprovação da própria Sora chega com agente_id = id dela; fora de grupo, é deste chat.
-  const pedidosDaSora = atencao.lista.filter(pedido => !pedido.grupoId && (!pedido.botId || pedido.botId === soraId));
+  // Cartões da cadeia (aprovação, pergunta, domínio) chegam com `conversa_id` e valem aqui mesmo que o pedido seja de um especialista.
+  const pendencias = projeto ? pendenciasDa(estado, projeto.id) : [];
+  const idsPendencias = new Set(pendencias.map(x => x.id));
+  const pedidosDaSora = atencao.lista.filter(pedido => !pedido.grupoId && (!pedido.botId || pedido.botId === soraId) && !idsPendencias.has(pedido.id));
   const assinatura = mensagens.map(mensagem => `${mensagem.id}:${textoVisivel(mensagem, agora).texto.length}`).join('|');
-  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(mensagens.map(m => m.id), assinatura + ':' + cartoes.rascunhos.length + ':' + cartoes.propostas.length + ':' + pedidosDaSora.length);
+  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(mensagens.map(m => m.id), assinatura + ':' + cartoes.rascunhos.length + ':' + cartoes.propostas.length + ':' + pedidosDaSora.length + ':' + pendencias.length);
 
   useIrParaMensagemDaConversa(projeto?.id);
   const gerando = !!projeto && gerandoNa(estado, projeto.id, agora);
   // esperando o primeiro pedaço da resposta: a linha "pensando" (orb + texto em shimmer)
-  const pensando = gerando && !mensagens.some(m => m.gerando);
+  // com cartão esperando o usuário, ninguém está "pensando": o trabalho parou até a decisão
+  const pensando = gerando && !mensagens.some(m => m.gerando) && !pendencias.length && !pedidosDaSora.length;
   const ultimaRespostaId = [...mensagens].reverse().find(m => m.autor !== 'usuario')?.id;
 
   // Estado vazio: orb e compositor juntos no centro. Depois do 1º envio o compositor desce (FLIP).
-  const vazio = !estado.carregando && !mensagens.length && !pensando && !cartoes.rascunhos.length && !cartoes.propostas.length && !pedidosDaSora.length;
+  const vazio = !estado.carregando && !mensagens.length && !pensando && !cartoes.rascunhos.length && !cartoes.propostas.length && !pedidosDaSora.length && !pendencias.length;
   const compositor = useRef<HTMLDivElement>(null);
   const hero = useRef<HTMLElement>(null);
   const rodapeVazio = useRef<HTMLDivElement>(null);
@@ -116,11 +122,13 @@ export default function SoraChat() {
             {pensando && <div className="pensando-linha"><SoraThinking size={28} color="#E2ECFF" label="Sora está pensando…" /></div>}
             {cartoes.rascunhos.map(rascunho => <CartaoRascunhoBot key={rascunho.id} rascunho={rascunho} />)}
             {cartoes.propostas.map(proposta => <CartaoPropostaGrupo key={proposta.id} proposta={proposta} />)}
+            {pendencias.map(pendencia => <CartaoPendencia key={pendencia.id} p={pendencia} cor="#E2ECFF" />)}
             {pedidosDaSora.map(pedido => <CartaoPrecisaDeVoce key={pedido.id} pedido={pedido} />)}
           </div>
           {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}
         </div>
         <div className="chat-composer" ref={compositor}>
+          {soraId && <AvisosMemoria agenteId={soraId} />}
           <MessageComposer placeholder="Mensagem para a Sora…" grande={vazio && !celular} focoSinal={focoSinal} value={rascunho} onValueChange={setRascunho}
             processing={pensando} onActivity={setOuvindo}
             onSend={enviar}

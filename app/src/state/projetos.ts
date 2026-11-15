@@ -46,7 +46,7 @@ export interface MensagemChat {
   id: string; conversaId: string; autor: 'usuario' | 'sora' | string; agenteId?: string; texto: string; criadoEm: number;
   envio?: 'enviando' | 'erro';
   fontes?: FonteMensagem[]; estado?: 'concluida' | 'interrompida';
-  gerando?: boolean; interrompidaEm?: number; avaliacao?: 'positiva' | 'negativa'; origem?: 'conversa'; variante?: number; anexos?: AnexoMsg[];
+  gerando?: boolean; /** prévia ao vivo (mensagem.token): nunca persistida, some quando a mensagem oficial chega */ previa?: boolean; interrompidaEm?: number; avaliacao?: 'positiva' | 'negativa'; origem?: 'conversa'; variante?: number; anexos?: AnexoMsg[];
 }
 export interface AnexoMsg { id: string; nome: string; tipo: string; tamanho: number }
 export interface SoraPerfil { nome: string; cor: string }
@@ -58,6 +58,8 @@ export interface EstadoProjetos {
   mensagensOcultas?: string[];
   conversasOcupadas?: string[];
   pendencias?: Pendencia[];
+  /** fluxos de prévia já encerrados: token atrasado não ressuscita a bolha */
+  fluxosFechados?: string[];
 }
 /** Algo que a equipe espera do usuário: pergunta (inclui o orçamento estourado: Continuar/Parar) ou aprovação. */
 export type Pendencia = (
@@ -115,7 +117,27 @@ const enviosAgenteEmVoo = new Map<string, Promise<void>>();
 let iniciando: Promise<void> | null = null;
 let geracaoSessao = 0;
 
+// Prévias (`mensagem.token`) chegam em rajada: junta por fluxo e aplica uma vez por quadro. O `fim` descarrega antes.
+const tokensPendentes = new Map<string, EventoSse>();
+let quadroTokens: number | undefined;
+function aplicarToken(evento: EventoSse) {
+  if (evento.dados.canal_id) receberEventoGrupos(evento);
+  else alterar(e => aplicarEvento(e, evento));
+}
+function descarregarTokens() {
+  if (quadroTokens !== undefined && typeof cancelAnimationFrame !== 'undefined') cancelAnimationFrame(quadroTokens);
+  quadroTokens = undefined;
+  const lote = [...tokensPendentes.values()]; tokensPendentes.clear();
+  lote.forEach(aplicarToken);
+}
+function receberToken(evento: EventoSse) {
+  if (evento.dados.fim === true || typeof requestAnimationFrame === 'undefined') { tokensPendentes.delete(String(evento.dados.fluxo_id ?? '')); descarregarTokens(); aplicarToken(evento); return; }
+  tokensPendentes.set(String(evento.dados.fluxo_id ?? ''), evento);
+  quadroTokens ??= requestAnimationFrame(descarregarTokens);
+}
+
 function receber(evento: EventoSse) {
+  if (evento.tipo === 'mensagem.token') { receberToken(evento); return; }
   receberEventoEquipe(evento);
   receberEventoGrupos(evento);
   receberEventoSora(evento);
@@ -209,7 +231,7 @@ export function iniciarProjetos(): Promise<void> {
 }
 export function encerrarProjetos() {
   geracaoSessao++;
-  cargas.clear(); tentativas.clear(); enviosAgenteEmVoo.clear(); conversasCriadas.clear();
+  tokensPendentes.clear(); cargas.clear(); tentativas.clear(); enviosAgenteEmVoo.clear(); conversasCriadas.clear();
   controladorGeral?.abort(); controladorGeral = null;
   encerrarConversas(); errosEventosPorCanal.clear();
 }
@@ -450,11 +472,14 @@ export async function pararConversa(conversaOuAgenteId: string) {
   if (sessao !== geracaoSessao) return;
   const conversaId = estado.agentes[conversaOuAgenteId]?.conversaId ?? conversasCriadas.get(conversaOuAgenteId) ?? conversaOuAgenteId;
   await api.post<void>(`/v1/conversas/${conversaId}/parar`);
+  receberEventoAtencao({ tipo: 'precisa_de_voce.atualizado' }); // relê a central: o servidor expira os cartões das etapas
   const lista = await api.get<MensagemApi[]>(`/v1/conversas/${conversaId}/mensagens?limite=50`);
   if (sessao !== geracaoSessao) return;
   alterar(e => ({ ...e,
     projetos: e.projetos.map(p => p.id === conversaId ? { ...p, mensagensPendentes: false, cadeiaStatus: p.cadeiaId ? 'cancelada' : p.cadeiaStatus } : p),
-    mensagens: [...e.mensagens.filter(m => !lista.some(x => x.id === m.id)).map(m => m.conversaId === conversaId ? { ...m, gerando: false } : m), ...lista.map(mensagemDaApi)].sort((a,b) => a.criadoEm - b.criadoEm),
+    // Parar cancela a cadeia desta conversa e expira os cartões das etapas: saem do chat sem esperar o evento.
+    pendencias: e.projetos.some(p => p.id === conversaId) ? (e.pendencias ?? []).filter(x => x.conversaId !== conversaId) : e.pendencias,
+    mensagens: [...e.mensagens.filter(m => !lista.some(x => x.id === m.id) && !(m.previa && m.conversaId === conversaId)).map(m => m.conversaId === conversaId ? { ...m, gerando: false } : m), ...lista.map(mensagemDaApi)].sort((a,b) => a.criadoEm - b.criadoEm),
   }));
 }
 export async function avaliarMensagem(id: string, valor: 'positiva' | 'negativa') {

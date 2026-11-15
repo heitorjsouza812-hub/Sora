@@ -36,6 +36,7 @@ function PaginaGrupo({ grupoId }: { grupoId: string }) {
   const grupo = estado.lista.find(item => item.id === grupoId);
   const membros = useMembrosDoGrupo(grupo?.membros ?? [], grupoId, grupo?.liderId);
   const mensagens = estado.mensagens[grupoId] ?? [];
+  const previas = estado.previas[grupoId] ?? [];
   const pedidos = atencao.lista.filter(pedido => pedido.grupoId === grupoId);
   const [resposta, setResposta] = useState<MensagemGrupoApi | null>(null);
   const [renomeando, setRenomeando] = useState(false);
@@ -43,7 +44,7 @@ function PaginaGrupo({ grupoId }: { grupoId: string }) {
   const [editandoBots, setEditandoBots] = useState(false);
   const [erro, setErro] = useState('');
   const ultima = mensagens.at(-1);
-  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(mensagens.map(item => item.id), `${ultima?.id ?? ''}:${ultima?.texto.length ?? 0}`);
+  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(mensagens.map(item => item.id), `${ultima?.id ?? ''}:${ultima?.texto.length ?? 0}:${previas.map(p => p.texto.length).join(',')}`);
   const [prontoEm, setProntoEm] = useState<string | null>(null);
   // Grupo carrega de 100 em 100 para a frente; a busca da paleta pode apontar para uma mensagem mais adiante.
   const carregarMais = useCallback(async () => {
@@ -61,7 +62,7 @@ function PaginaGrupo({ grupoId }: { grupoId: string }) {
   const lider = grupo.liderId ?? grupo.membros[0];
   const botsDoGrupo = bots.filter(bot => grupo.membros.includes(bot.id) && bot.id !== lider);
   const precisaDeBots = grupoPrecisaDeBots(grupo);
-  const escrevendo = botsDoGrupo.filter(bot => membros.situacaoDe(bot.id) === 'trabalhando');
+  const escrevendo = botsDoGrupo.filter(bot => membros.situacaoDe(bot.id) === 'trabalhando' && !previas.some(p => p.botId === bot.id));
   const salvarNome = async () => {
     const valor = nome.trim();
     if (!valor || valor === grupo.nome) { setRenomeando(false); return; }
@@ -90,6 +91,7 @@ function PaginaGrupo({ grupoId }: { grupoId: string }) {
             <div className="conversation-scroll" ref={rolagemRef} onScroll={aoRolar} aria-live="polite" aria-relevant="additions">
               {mensagens.length === 0 && <p className="grp-nota grp-vazio-conversa">Converse com o grupo. Use @bot para direcionar ou @todos para chamar a equipe inteira.</p>}
               {mensagens.map(mensagem => <MensagemGrupo key={mensagem.id} mensagem={mensagem} todas={mensagens} soraId={lider} onResponder={setResposta} ultima={mensagem.id === ultima?.id} />)}
+              {previas.map(previa => <MensagemGrupo key={previa.id} mensagem={previa} todas={mensagens} soraId={lider} onResponder={setResposta} previa />)}
               {escrevendo.map(bot => <div key={bot.id} className="chat-item grp-escrevendo" role="status"><OrbDoAutor cor={bot.cor} movimento={bot.movimento} tamanho={28} trabalhando semente={bot.nome.length} /><ShimmerText>{`${bot.nome} está escrevendo…`}</ShimmerText></div>)}
             </div>
             {!noFim && <IrParaFim novas={novas} onClick={irParaFim} />}

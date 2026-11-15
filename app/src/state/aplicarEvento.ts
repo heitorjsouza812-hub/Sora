@@ -35,12 +35,29 @@ function garantirExecucao(estado: EstadoProjetos, conversaId: string, etapaId: s
   return { ...estado, execucoes: [...estado.execucoes, nova] };
 }
 
+export const PREFIXO_PREVIA = 'previa:';
+const SEM_PREVIA = (conversaId: string) => (m: { conversaId: string; previa?: boolean }) => !(m.previa && m.conversaId === conversaId);
+
 /** Redutor único do contrato SSE. É idempotente por id de mensagem, etapa, passo e entrega. */
 export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): EstadoProjetos {
   const d = evento.dados as Dados;
   const conversaId = texto(d.conversa_id) || estado.projetoAtivoId || '';
   if (!conversaId || estado.mensagensOcultas?.includes(texto(d.mensagem_id))) return estado;
 
+  if (evento.tipo === 'mensagem.token') {
+    // Prévia ao vivo: `texto` é o acumulado (substitui), `fluxo_id` identifica a chamada ao modelo. Grupo (`canal_id`)
+    // é tratado em state/grupos. Só vale com conversa explícita (o canal da conversa a injeta; o global não).
+    const fluxo = texto(d.fluxo_id), explicita = texto(d.conversa_id);
+    if (!fluxo || !explicita || d.canal_id) return estado;
+    const idPrevia = PREFIXO_PREVIA + fluxo, fechados = estado.fluxosFechados ?? [];
+    if (d.fim === true) return { ...estado, mensagens: estado.mensagens.filter(m => m.id !== idPrevia), fluxosFechados: [...fechados.filter(f => f !== fluxo), fluxo].slice(-50) };
+    if (fechados.includes(fluxo)) return estado;
+    const conteudo = texto(d.texto), atual = estado.mensagens.find(m => m.id === idPrevia);
+    if (atual) return atual.texto === conteudo ? estado : { ...estado, mensagens: estado.mensagens.map(m => m.id === idPrevia ? { ...m, texto: conteudo } : m) };
+    if (!conteudo) return estado;
+    const agenteId = texto(d.agente_id) || undefined;
+    return { ...estado, mensagens: [...estado.mensagens, { id: idPrevia, conversaId, autor: agenteId && estado.agentes[agenteId] ? agenteId : 'sora', agenteId, texto: conteudo, criadoEm: evento.recebidoEm, gerando: true, previa: true }] };
+  }
   if (evento.tipo === 'pergunta') {
     const id = texto(d.pergunta_id); if (!id || (estado.pendencias ?? []).some(p => p.id === id)) return estado;
     const opcoes = (lista(d.opcoes) as Dados[]).map(o => ({ rotulo: texto(o.rotulo), valor: texto(o.valor) }));
@@ -68,7 +85,8 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     const autorBruto = texto(d.autor);
     const agenteId = texto(d.agente_id) || undefined;
     const autor = autorBruto === 'agente' && agenteId ? agenteId : autorBruto === 'usuario' ? 'usuario' : 'sora';
-    return { ...estado, mensagens: [...estado.mensagens, { id, conversaId, autor, agenteId, texto: '', criadoEm: evento.recebidoEm, gerando: true }] };
+    // A mensagem oficial substitui a prévia (mesma conversa): sem bolha duplicada.
+    return { ...estado, mensagens: [...estado.mensagens.filter(SEM_PREVIA(conversaId)), { id, conversaId, autor, agenteId, texto: '', criadoEm: evento.recebidoEm, gerando: true }] };
   }
   if (evento.tipo === 'mensagem.delta') {
     const id = texto(d.mensagem_id);
@@ -79,7 +97,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
   if (evento.tipo === 'mensagem.fim') {
     const id = texto(d.mensagem_id);
     // A resposta terminou: some o "pensando". Cobre a falha da triagem, em que o backend só publica mensagem.*.
-    const fechado = { ...estado, mensagens: estado.mensagens.map(m => m.id === id ? { ...m, gerando: false, estado: d.estado === 'interrompida' ? 'interrompida' as const : 'concluida' as const, fontes: Array.isArray(d.fontes) && d.fontes.length ? d.fontes as FonteMensagem[] : m.fontes, anexos: Array.isArray(d.anexos) && d.anexos.length ? normalizarAnexos(d.anexos as (AnexoMsg | string)[]) : m.anexos } : m) };
+    const fechado = { ...estado, mensagens: estado.mensagens.filter(SEM_PREVIA(conversaId)).map(m => m.id === id ? { ...m, gerando: false, estado: d.estado === 'interrompida' ? 'interrompida' as const : 'concluida' as const, fontes: Array.isArray(d.fontes) && d.fontes.length ? d.fontes as FonteMensagem[] : m.fontes, anexos: Array.isArray(d.anexos) && d.anexos.length ? normalizarAnexos(d.anexos as (AnexoMsg | string)[]) : m.anexos } : m) };
     return atualizarProjeto(fechado, conversaId, p => p.mensagensPendentes ? { ...p, mensagensPendentes: false } : p);
   }
   if (evento.tipo === 'roteamento') return atualizarProjeto(estado, conversaId, p => ({ ...p, roteamento: texto(d.modo) as ProjetoSora['roteamento'], mensagensPendentes: false }));

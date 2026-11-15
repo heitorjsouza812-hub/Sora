@@ -49,7 +49,7 @@ const copiar = (texto: string) => {
 
 /** Mensagem do grupo com o mesmo desenho do chat 1:1: bolha escura à direita para o usuário, resposta sem caixa;
  *  Copiar e Responder são ações de hover (no celular, pelo "…" ou sempre na última). */
-export function MensagemGrupo({ mensagem, todas, soraId, onResponder, ultima = false }: { mensagem: MensagemGrupoApi; todas: MensagemGrupoApi[]; soraId: string | undefined; onResponder: (mensagem: MensagemGrupoApi) => void; ultima?: boolean }) {
+export function MensagemGrupo({ mensagem, todas, soraId, onResponder, ultima = false, previa = false }: { mensagem: MensagemGrupoApi; todas: MensagemGrupoApi[]; soraId: string | undefined; onResponder: (mensagem: MensagemGrupoApi) => void; ultima?: boolean; /** prévia ao vivo: sem ações, com cursor */ previa?: boolean }) {
   const autor = useAutorDaMensagem(mensagem, soraId);
   const [abertas, setAbertas] = useState(false);
   const anterior = mensagem.respondeA ? todas.find(item => item.id === mensagem.respondeA) : null;
@@ -64,7 +64,7 @@ export function MensagemGrupo({ mensagem, todas, soraId, onResponder, ultima = f
     <Acao rotulo="Responder" icone={Icone.responder} onClick={() => onResponder(mensagem)} />
   </div>;
   const mais = <IconButton className="msg-mais" aria-label="Mais ações" aria-expanded={abertas} tamanho="P" icone={Icone.mais} onClick={() => setAbertas(v => !v)} />;
-  const classe = `chat-msg chat-item grp-msg ${doUsuario ? 'is-user' : 'is-assistant'}${abertas ? ' is-acoes-abertas' : ''}${ultima ? ' is-ultima' : ''}`;
+  const classe = `chat-msg chat-item grp-msg ${previa ? 'is-previa ' : ''}${doUsuario ? 'is-user' : 'is-assistant'}${abertas ? ' is-acoes-abertas' : ''}${ultima ? ' is-ultima' : ''}`;
   const atributos = { id: `msg-${mensagem.id}`, 'data-msg-id': mensagem.id, 'data-autor': autor.ehSora ? 'sora' : mensagem.autor, 'data-tipo': mensagem.tipo, 'data-chave': mensagem.id };
   if (doUsuario) return <div className={classe} {...atributos}>
     {citacao}
@@ -78,9 +78,9 @@ export function MensagemGrupo({ mensagem, todas, soraId, onResponder, ultima = f
     </div>
     <div className="msg-corpo">
       {citacao}
-      {mensagem.texto.trim() && <Markdown texto={mensagem.texto} />}
+      {mensagem.texto.trim() && <Markdown texto={mensagem.texto} gerando={previa} />}
       {!!mensagem.anexos.length && <AnexosResposta anexos={mensagem.anexos} />}
-      <div className="msg-barra">{acoes}{mais}</div>
+      {!previa && <div className="msg-barra">{acoes}{mais}</div>}
     </div>
   </div>;
 }
