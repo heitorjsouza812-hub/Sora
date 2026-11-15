@@ -127,7 +127,7 @@ try {
   await page.waitForURL(`${BASE}/grupos`);
 
   await page.getByRole('button', { name: 'Criar grupo' }).click();
-  const modal = page.getByRole('dialog', { name: 'Reúna seus bots' });
+  const modal = page.getByRole('dialog', { name: 'Novo grupo' });
   await modal.getByLabel('Nome do grupo').fill(nomeGrupo);
   for (const nome of nomes) await modal.getByText(nome, { exact: true }).click();
   await modal.getByRole('button', { name: 'Criar grupo', exact: true }).click();
@@ -135,7 +135,11 @@ try {
   await page.getByText(nomeGrupo, { exact: true }).first().waitFor({ state: 'visible' });
   await page.getByText('Sora', { exact: true }).first().waitFor({ state: 'visible' });
   // A Sora lidera o grupo mas não conta como bot na barra lateral.
-  await page.locator('aside.sidebar').getByRole('link', { name: new RegExp(nomeGrupo) }).getByText(/^(2 bots|Trabalhando|Precisa de você)$/).waitFor({ state: 'visible', timeout: 10_000 });
+  // (a linha do grupo é de uma linha só; a contagem fica no title: "nome · Sora + 2 bots")
+  const linhaGrupo = page.locator('aside.sidebar').getByRole('link', { name: new RegExp(nomeGrupo) });
+  await linhaGrupo.waitFor({ state: 'visible', timeout: 10_000 });
+  const tituloGrupo = await linhaGrupo.getAttribute('title');
+  if (!/Sora + 2 bots$/.test(tituloGrupo ?? '')) throw new Error(`linha do grupo sem "Sora + 2 bots": ${tituloGrupo}`);
   await foto('04-grupo');
 
   const urlGrupo = page.url();
