@@ -99,13 +99,13 @@ async def test_conectores_mcp_de_ponta_a_ponta(
             cliente,
             auth,
             titulo="Clima",
-            pedido='[chamar:mcp__clima__buscar_clima|{"cidade": "Recife"}]',
+            pedido='[catalogo:mcp__clima__buscar_clima|{"cidade": "Recife"}]',
         )
         escrita = await criar(
             cliente,
             auth,
             titulo="Email",
-            pedido='[chamar:mcp__clima__enviar_email|{"para": "a@b.com", "texto": "oi"}]',
+            pedido='[catalogo:mcp__clima__enviar_email|{"para": "a@b.com", "texto": "oi"}]',
             daqui_segundos=2,
         )
 
@@ -118,9 +118,16 @@ async def test_conectores_mcp_de_ponta_a_ponta(
         await esperar(terminou)
         feita = (await execucoes(cliente, auth, leitura["id"]))[0]
         assert feita["status"] == "enviada" and "Sol em Recife" in feita["resumo"]
+        # o caminho novo: busca → carrega o esquema → executa pelo id (conectores_*)
+        assert (
+            "Sol em Recife" in feita["resumo"]
+            and "Retorno de mcp__clima__buscar_clima" in (feita["resumo"])
+        )
         anotado = chamadas.read_text()
         assert "buscar_clima:Recife" in anotado
         assert "enviar_email" not in anotado  # a ferramenta de escrita nunca foi chamada
+        recusada = (await execucoes(cliente, auth, escrita["id"]))[0]
+        assert "desconhecida ou não autorizada" in recusada["resumo"]  # nem entrou no catálogo
 
         # desativar tira as ferramentas; remover apaga
         off = await cliente.patch(
@@ -460,8 +467,10 @@ async def test_voz_nao_alcanca_a_rede_interna(
             )
             falar = await cliente.post("/v1/voz/falar", headers=auth, json={"texto": "oi"})
             transcrever = await cliente.post("/v1/voz/transcrever", headers=auth, files=audio)
+            # "Ouvir" é opcional e falha com 424 (Motor-4); ditar continua 502
+            assert falar.status_code == 424, falar.text
+            assert transcrever.status_code == 502, transcrever.text
             for r in (falar, transcrever):
-                assert r.status_code == 502, r.text
                 assert "corpo-interno" not in r.text and "sk-chave" not in r.text
             assert chamadas == []
     finally:

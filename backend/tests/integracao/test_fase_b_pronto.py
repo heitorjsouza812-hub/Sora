@@ -349,7 +349,8 @@ async def test_cadeia_de_ponta_a_ponta_com_worker_arq_real(
         eventos = await ler_sse(cliente, id_direta, auth, ate=lambda n, d: n == "sugestoes")
         nomes = [n for n, _ in eventos]
         assert "roteamento" in nomes and "cadeia.criada" not in nomes
-        assert nomes.count("mensagem.fim") >= 2  # primeira resposta + a da Sora
+        # desde o 8b66d56 o modo direto não publica a confirmação da triagem: uma bolha só
+        assert nomes.count("mensagem.fim") == 1
         async with fabrica() as sessao:
             falas = (
                 await sessao.scalars(
@@ -358,7 +359,7 @@ async def test_cadeia_de_ponta_a_ponta_com_worker_arq_real(
                     )
                 )
             ).all()
-            assert any("resposta de exemplo" in f for f in falas), falas
+            assert len(falas) == 1 and "resposta de exemplo" in falas[0], falas
 
 
 async def _esperar_aprovacao(

@@ -163,13 +163,26 @@ class AprovacaoPedida(EventoBase):
     perfil: dict[str, Any] | None = None
     agente_id: UUID | None = None
     opcoes: list[dict[str, str]] | None = None
+    conversa_id: UUID | None = None
+    bot_id: UUID | None = None
+    grupo_id: UUID | None = None
 
     @model_serializer(mode="wrap")
     def _sem_extras_vazios(self, proximo: Any) -> dict[str, Any]:
-        """Cartão comum mantém o formato de sempre; os campos do cartão de domínio só vão
-        quando existem (Leme, etapa 4)."""
+        """Cartão comum mantém o formato de sempre; os campos do cartão de domínio e os que
+        levam o cartão ao chat (conversa, bot, grupo) só vão quando existem."""
         dados = proximo(self)
-        for campo in ("tipo", "dominio", "url", "perfil", "agente_id", "opcoes"):
+        for campo in (
+            "tipo",
+            "dominio",
+            "url",
+            "perfil",
+            "agente_id",
+            "opcoes",
+            "conversa_id",
+            "bot_id",
+            "grupo_id",
+        ):
             if dados.get(campo) is None:
                 dados.pop(campo, None)
         return dados

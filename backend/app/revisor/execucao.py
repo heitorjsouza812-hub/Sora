@@ -195,6 +195,9 @@ async def _abrir_cartao(
             quem_recebe=quem_recebe,
             expira_em=expira_em,
             agente_id=contexto.agente_id,
+            conversa_id=contexto.conversa_id,
+            bot_id=contexto.agente_id,
+            grupo_id=contexto.canal_id,
         ),
     )
     from app.atencao import publicar_estado_atencao_persistido

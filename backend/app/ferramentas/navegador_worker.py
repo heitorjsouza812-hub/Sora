@@ -190,6 +190,9 @@ class AmbienteNavegador:
                     url=revisao.url,
                     perfil=await self._perfil_do_cartao(revisao.particao),
                     agente_id=contexto.agente_id,
+                    conversa_id=contexto.conversa_id,
+                    bot_id=contexto.agente_id,
+                    grupo_id=contexto.canal_id,
                     opcoes=[
                         {"rotulo": "Aprovar domínio", "valor": "permitir_uma_vez"},
                         {"rotulo": "Negar", "valor": "negar"},

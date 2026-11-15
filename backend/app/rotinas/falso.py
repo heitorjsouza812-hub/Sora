@@ -6,6 +6,8 @@ Só para desenvolvimento e testes. O que o pedido da rotina contém decide o rot
 - ``[usar:listar]``: chama ``listar_agendamentos`` (ferramenta segura) e relata o resultado;
 - ``[tentar:agendar]``: tenta ``agendar`` (proibida sem supervisão) e relata o que voltou;
 - ``[chamar:NOME|{json}]``: chama a ferramenta NOME com esses argumentos e relata o retorno;
+- ``[catalogo:ID|{json}]``: o caminho do catálogo sob demanda (``conectores_*``): busca a
+  ferramenta, carrega o esquema, executa pelo id e relata o retorno;
 - ``[lembrar:texto]``: chama ``buscar_memoria`` com o texto;
 - qualquer outro: um resumo curto.
 """
@@ -20,6 +22,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 
 _LEMBRAR = re.compile(r"\[lembrar:([^\]]+)\]")
 _CHAMAR = re.compile(r"\[chamar:([\w.-]+)\|(\{.*?\})\]")
+_CATALOGO = re.compile(r"\[catalogo:([\w.-]+)\|(\{.*?\})\]")
 
 
 def _chamada(nome: str, argumentos: dict) -> AIMessage:
@@ -42,6 +45,21 @@ def resposta_da_rotina(mensagens: list[BaseMessage]) -> AIMessage:
         if not resultados:
             return _chamada("agendar", {"titulo": "intruso", "pedido": "x", "daqui_minutos": 5})
         return AIMessage(content=f"Retorno do agendar: {resultados[-1].content}")
+    catalogo = _CATALOGO.search(pedido)
+    if catalogo:
+        identificador = catalogo.group(1)
+        if not resultados:
+            return _chamada(
+                "conectores_buscar_ferramentas", {"consulta": identificador.split("__")[-1]}
+            )
+        if len(resultados) == 1:
+            return _chamada("conectores_carregar_ferramenta", {"id": identificador})
+        if len(resultados) == 2:
+            return _chamada(
+                "conectores_executar_ferramenta",
+                {"id": identificador, "argumentos": json.loads(catalogo.group(2))},
+            )
+        return AIMessage(content=f"Retorno de {identificador}: {resultados[-1].content}")
     chamar = _CHAMAR.search(pedido)
     if chamar:
         if not resultados:
