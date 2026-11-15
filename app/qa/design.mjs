@@ -13,7 +13,7 @@ await mkdir(SHOTS, { recursive: true });
 
 const so = process.argv[2] ? process.argv[2].split(',') : null;
 const browser = await chromium.launch({ headless: true });
-const email = 'qa-design@sora.local';
+const email = process.env.SORA_DESIGN_EMAIL ?? 'qa-design@sora.local';
 const desk = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
 const sessao = await entrarNoContexto(desk, { email, limparConversas: !so });
 const auth = { Authorization: `Bearer ${sessao.token_acesso}` };

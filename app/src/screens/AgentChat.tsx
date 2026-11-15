@@ -153,13 +153,14 @@ export default function AgentChat() {
       t: pergunta.criadoEm + 1, key: 'erro-modelo',
       node: <CardErroModelo cor={a.cor} autor={a.nome} onTentarDeNovo={() => definirErroSimulado(null)} />,
     });
+    const ultimaRespostaId = [...todas].reverse().find(m => m.autor !== 'usuario')?.id;
     (pergunta ? todas.filter(m => m.autor === 'usuario' || m.criadoEm <= pergunta.criadoEm) : todas).forEach(m => itens.push({
       t: m.criadoEm, key: m.id,
       node: m.autor === 'usuario' ? <MensagemChat m={m} agora={agora} />
         : m.autor === 'sora'
-          ? <MensagemChat m={m} agora={agora} nome={e.sora.nome} avatar={<SoraOrb size={30} color={e.sora.cor} state="coordinating" glow={false} decorative seed={72} />} />
-          : <MensagemChat m={m} agora={agora} nome={a.nome} cor={a.cor}
-            avatar={<SoraOrb size={30} color={a.cor} movimento={a.tipoMovimento} state={textoVisivel(m, agora).gerando ? 'working' : 'idle'} glow={false} decorative seed={5} />} />,
+          ? <MensagemChat m={m} agora={agora} ultima={m.id === ultimaRespostaId} nome={e.sora.nome} avatar={<SoraOrb size={24} color={e.sora.cor} state="coordinating" glow={false} decorative seed={72} />} />
+          : <MensagemChat m={m} agora={agora} ultima={m.id === ultimaRespostaId} nome={a.nome} cor={a.cor}
+            avatar={<SoraOrb size={24} color={a.cor} movimento={a.tipoMovimento} state={textoVisivel(m, agora).gerando ? 'working' : 'idle'} glow={false} decorative seed={5} />} />,
     }));
   }
   itens.sort((x, y) => x.t - y.t);

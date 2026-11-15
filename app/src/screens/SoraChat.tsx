@@ -67,6 +67,7 @@ export default function SoraChat() {
   useIrParaMensagemDaConversa(projeto?.id);
   const gerando = !!projeto && gerandoNa(estado, projeto.id, agora);
   const pensando = !!projeto?.mensagensPendentes && !gerando;
+  const ultimaRespostaId = [...mensagens].reverse().find(m => m.autor !== 'usuario')?.id;
 
   // Estado vazio: orb e compositor juntos no centro. Depois do 1º envio o compositor desce (FLIP).
   const vazio = !estado.carregando && !mensagens.length && !pensando && !cartoes.rascunhos.length && !cartoes.propostas.length && !pedidosDaSora.length;
@@ -109,7 +110,7 @@ export default function SoraChat() {
             <HistoricoConversa conversaId={projeto?.id} />
             {estado.carregando && <p role="status" className="sr-only">Carregando conversa…</p>}
             {mensagens.map(mensagem => <div className="chat-item" data-chave={mensagem.id} key={mensagem.id}>
-              <MensagemChat m={mensagem} agora={agora} nome={mensagem.autor === 'usuario' ? undefined : 'Sora'} avatar={mensagem.autor === 'usuario' ? undefined : <SoraOrb size={30} color="#E2ECFF" state={textoVisivel(mensagem, agora).gerando ? 'thinking' : 'idle'} glow={false} decorative seed={31} />} />
+              <MensagemChat m={mensagem} agora={agora} ultima={mensagem.id === ultimaRespostaId} nome={mensagem.autor === 'usuario' ? undefined : 'Sora'} avatar={mensagem.autor === 'usuario' ? undefined : <SoraOrb size={24} color="#E2ECFF" state={textoVisivel(mensagem, agora).gerando ? 'thinking' : 'idle'} glow={false} decorative seed={31} />} />
             </div>)}
             {pensando && <div className="assistant-row thinking-row"><SoraThinking size={56} color="#E2ECFF" label="Sora está pensando…" /></div>}
             {cartoes.rascunhos.map(rascunho => <CartaoRascunhoBot key={rascunho.id} rascunho={rascunho} />)}

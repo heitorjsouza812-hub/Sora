@@ -1,24 +1,47 @@
-/* Mensagens do chat: ações por mensagem, edição da pergunta, "ir para o fim". */
-.chat-msg { position: relative; }
+/* Mensagens do chat (etapa 6, §5.4): pergunta em bolha, resposta como texto na página, ações discretas. */
+.chat-msg { position: relative; min-width: 0; }
+
+/* ---------- pergunta do usuário: à direita da coluna, ações à esquerda da bolha ---------- */
 .chat-msg.is-user { display: flex; flex-direction: column; align-items: flex-end; }
-.chat-msg.is-user .user-message { margin-bottom: var(--sp-1); }
-.chat-msg .assistant-row { margin-bottom: var(--sp-1); }
-.msg-corpo { flex: 1; min-width: 0; padding-top: 4px; }
-.msg-nome { display: block; margin-bottom: 2px; color: var(--agent, var(--text-1)); font-size: var(--fs-14); }
-.msg-interrompida { display: inline-flex; align-items: center; gap: var(--sp-1); margin: var(--sp-1) 0 0; padding: 2px var(--sp-2); color: var(--warn); background: var(--white-a04); border-radius: var(--r-6); font-size: var(--fs-12); }
-.msg-barra { display: flex; align-items: center; gap: 2px; min-height: 32px; margin-bottom: var(--sp-3); }
-.msg-acoes { display: flex; gap: 2px; opacity: 0; transition: opacity var(--dur-fast); }
-.chat-msg:hover .msg-acoes, .chat-msg:focus-within .msg-acoes, .chat-msg.is-acoes-abertas .msg-acoes { opacity: 1; }
-.msg-acao { color: var(--text-2); }
-.msg-acao.is-on { color: var(--text-1); background: var(--white-a10); }
+.user-linha { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); width: 100%; min-width: 0; }
+.user-message {
+  max-width: 78%; padding: 10px var(--sp-4); color: var(--text-1); background: var(--surface-3);
+  border-radius: var(--r-20) var(--r-20) var(--r-6) var(--r-20);
+  font: 400 var(--fs-16)/24px var(--font); overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.user-message .mencao { color: var(--link); font-weight: 500; }
+
+/* ---------- resposta: cabeçalho de uma linha e texto sem recuo ---------- */
+.msg-cabeca { display: flex; align-items: center; gap: var(--sp-2); min-height: 24px; margin-bottom: 6px; }
+.msg-cabeca canvas { flex: none; width: 24px !important; height: 24px !important; }
+.msg-nome { color: var(--agent, var(--text-1)); font: 600 var(--fs-13)/18px var(--font); }
+.msg-rotulo { color: var(--text-3); font-size: var(--fs-12); }
+.msg-corpo { min-width: 0; }
+.msg-barra { display: flex; align-items: center; gap: 2px; min-height: 32px; margin-top: var(--sp-2); }
+
+/* aviso de resposta interrompida: pertence à resposta, em cinza (parar foi escolha do usuário, não erro) */
+.msg-interrompida { display: flex; align-items: center; gap: var(--sp-2); margin: 10px 0 0; color: var(--text-2); font: 400 var(--fs-13)/18px var(--font); }
+.msg-interrompida i { flex: none; width: 8px; height: 8px; background: var(--text-3); border-radius: 2px; }
+.msg-refazer { margin-left: var(--sp-1); padding: 0; color: var(--text-1); background: none; border: 0; font: 500 var(--fs-13)/18px var(--font); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.msg-refazer:disabled { color: var(--text-3); cursor: default; }
+
+/* ---------- ações da mensagem (32×32, ícone de 18 px) ---------- */
+.msg-acoes { display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity var(--dur-fast); }
+.chat-msg:hover .msg-acoes, .chat-msg:focus-within .msg-acoes, .chat-msg.is-acoes-abertas .msg-acoes, .chat-msg.is-ultima .msg-acoes { opacity: 1; }
+.msg-acao.b-btn { --b-alt: 32px; width: 32px; padding: 0; color: var(--text-3); background: transparent; border-radius: var(--r-10); }
+.msg-acao.b-btn:hover { color: var(--text-1); background: var(--hover); }
+.msg-acao .b-btn__icone svg { width: 18px; height: 18px; stroke-width: 1.7; }
+.msg-acao.is-on, .msg-acao.is-on:hover { color: var(--text-1); background: var(--ativo); }
+.msg-acao.is-ok, .msg-acao.is-ok:hover { color: var(--ok); }
 .msg-mais { display: none; }
+
 .msg-edit { width: min(600px, 88%); margin-bottom: var(--sp-1); padding: var(--sp-3); background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: var(--r-16); }
-.msg-edit textarea { width: 100%; min-height: 64px; color: var(--text-1); background: transparent; border: 0; outline: 0; resize: vertical; font: inherit; line-height: 1.5; }
+.msg-edit textarea { width: 100%; min-height: 64px; color: var(--text-1); background: transparent; border: 0; outline: 0; resize: vertical; font: 400 var(--fs-16)/24px var(--font); }
 .msg-edit-acoes { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-2); }
-.msg-edit-acoes button { height: 36px; padding: 0 var(--sp-4); border-radius: var(--r-pill); font: inherit; font-size: var(--fs-13); font-weight: 600; cursor: pointer; }
+.msg-edit-acoes button { height: 36px; padding: 0 var(--sp-4); border-radius: var(--r-pill); font: 600 var(--fs-13) var(--font); cursor: pointer; }
 .msg-edit-cancelar { color: var(--text-2); background: transparent; border: 1px solid var(--line-strong); }
-.msg-edit-enviar { color: var(--btn-text); background: var(--btn-bg); border: 0; }
-.msg-edit-enviar:disabled { opacity: .4; cursor: default; }
+.msg-edit-enviar { color: var(--text-inverse); background: var(--action); border: 0; }
+.msg-edit-enviar:disabled { color: var(--off-fg); background: var(--off-bg); cursor: default; }
 
 /* "ir para o fim" com contador de novas mensagens */
 .ir-fim { position: absolute; z-index: 4; left: 50%; bottom: var(--sp-3); translate: -50% 0; display: inline-flex; align-items: center; gap: var(--sp-2); height: 36px; padding: 0 var(--sp-4); color: var(--text-1); background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: var(--r-pill); box-shadow: var(--shadow-md); font: inherit; font-size: var(--fs-13); font-weight: 600; cursor: pointer; animation: ir-fim-in var(--dur-base) ease-out; }
@@ -26,15 +49,32 @@
 .ir-fim b { min-width: 20px; height: 20px; display: inline-grid; place-items: center; padding: 0 6px; color: var(--btn-text); background: var(--btn-bg); border-radius: var(--r-pill); font-size: var(--fs-12); }
 @keyframes ir-fim-in { from { opacity: 0; translate: -50% 6px; } }
 
+/* entrada das mensagens novas (mensagens antigas e recarga não animam: .is-nova só vale nos primeiros segundos) */
+.chat-msg.is-nova.is-user .user-message { animation: msg-bolha-in 200ms var(--ease) both; }
+.chat-msg.is-nova .msg-cabeca { animation: msg-cabeca-in 160ms var(--ease) both; }
+@keyframes msg-bolha-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes msg-cabeca-in { from { opacity: 0; } }
+
 @media (max-width: 767px) {
+  .user-message { max-width: 86%; }
+  /* celular: ações de 44 px, sempre à mostra na última resposta; nas outras, pelo botão "…" */
   .msg-acoes { display: none; opacity: 1; }
-  .chat-msg.is-acoes-abertas .msg-acoes { display: flex; }
-  .msg-mais { display: inline-flex; color: var(--text-2); }
-  .msg-barra .b-btn { --b-alt: 44px; }
+  .chat-msg.is-acoes-abertas .msg-acoes, .chat-msg.is-ultima .msg-acoes { display: flex; }
+  .msg-mais { display: inline-flex; color: var(--text-3); }
+  .chat-msg.is-ultima .msg-mais { display: none; }
+  .msg-acao.b-btn, .msg-mais.b-btn { --b-alt: 44px; width: 44px; }
+  .user-linha { flex-direction: column; align-items: flex-end; gap: 0; }
+  .user-linha .user-message { order: 1; }
+  .user-linha .msg-acoes, .user-linha .msg-mais { order: 2; }
   .msg-edit-acoes button { height: 44px; }
-  .ir-fim { height: 44px; bottom: calc(var(--sp-16) + var(--sp-4)); }
+  .ir-fim { height: 44px; bottom: var(--sp-3); }
 }
-@media (prefers-reduced-motion: reduce) { .ir-fim { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .ir-fim { animation: none; }
+  .chat-msg.is-nova.is-user .user-message, .chat-msg.is-nova .msg-cabeca { animation: none; }
+  .msg-acoes { transition: none; }
+}
+
 /* anexos na bolha do usuário (só leitura) */
 .chat-msg.is-user .msg-anexos { justify-content: flex-end; max-width: min(560px, 85%); margin-left: auto; margin-top: var(--sp-2); }
 
@@ -50,7 +90,8 @@
 .msg-imagem-ampliada::backdrop { background:rgba(0,0,0,.8); }
 .msg-imagem-ampliada img { display:block; max-width:85vw; max-height:80vh; object-fit:contain; }
 
-.conversa-voz { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-2); color: var(--text); font-size: var(--fs-13); }
+.conversa-voz-faixa:empty { display: none; }
+.conversa-voz { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-2); color: var(--text-1); font-size: var(--fs-13); }
 .conversa-voz button { min-height: 36px; padding: 0 var(--sp-4); background: var(--surface-3); color: inherit; border: 1px solid var(--white-a12); border-radius: 999px; cursor: pointer; font: inherit; }
 .conversa-voz button:disabled { opacity: .5; cursor: not-allowed; }
 .conversa-voz [role="alert"] { color: var(--text-2); }

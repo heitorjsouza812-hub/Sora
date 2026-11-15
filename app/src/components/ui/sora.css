@@ -40,7 +40,6 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 .suggestions button:hover { color: var(--text); border-color: var(--white-a22); background: var(--white-a04); }
 .workspace-grid { height: calc(100dvh - var(--topbar)); display: grid; grid-template-columns: minmax(520px, 1fr) minmax(330px, 390px); gap: var(--sp-5); padding: var(--sp-5); overflow: hidden; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); }
-.user-message { width: min(600px, 76%); margin: 12px 0 35px auto; padding: var(--sp-4) var(--sp-5); color: var(--action); line-height: 1.55; background: var(--surface-3); border-radius: var(--r-16) var(--r-16) var(--r-6) var(--r-16); }
 .assistant-row { display: flex; align-items: flex-start; gap: var(--sp-3); margin: 20px 0; color: var(--text-1); }
 .assistant-row p { margin: 5px 0; line-height: 1.55; }
 .shimmer { color: transparent; background: linear-gradient(100deg, var(--text-3) 20%, var(--text-1) 45%, var(--text-3) 70%); background-size: 220% 100%; background-clip: text; -webkit-background-clip: text; animation: shimmer 1.65s linear infinite; }
@@ -240,7 +239,6 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
   .suggestions button { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-12); }
   .workspace-grid, .agent-workspace { height: calc(100dvh - var(--topbar)); display: block; padding: 0; overflow: hidden; }
   .team-panel, .agent-panel { display: none; }
-  .user-message { width: 88%; margin-bottom: 22px; padding: var(--sp-3) var(--sp-4); font-size: var(--fs-13); }
   .plan-card { padding: var(--sp-4); }
   .task-grid, .delivery-grid { grid-template-columns: 1fr; }
   .task-card { padding: var(--sp-3); }
@@ -503,7 +501,6 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
   .topbar-identity strong { font-size: var(--fs-14); }
   .topbar-title strong { font-size: var(--fs-16); }
   .workspace-grid { gap: var(--sp-4); padding: var(--sp-4); }
-  .user-message { margin: var(--sp-3) 0 var(--sp-7) auto; padding: var(--sp-3) var(--sp-4); font-size: var(--fs-16); }
   .assistant-row { margin: var(--sp-4) 0; font-size: var(--fs-16); }
   .assistant-row p { margin: 4px 0; line-height: 1.55; }
   .section-heading h2 { font-size: var(--fs-14); }
