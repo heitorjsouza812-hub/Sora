@@ -20,14 +20,25 @@ def chave_parar(conversa_id: Any) -> str:
     return f"conversa:parar:{conversa_id}"
 
 
+def _fonte_invalida(partes) -> bool:  # type: ignore[no-untyped-def]
+    """Página de erro/bloqueio do buscador e endereço sem domínio de verdade não são fontes."""
+    host = (partes.hostname or "").lower()
+    if "." not in host or host.endswith("."):
+        return True
+    caminho = partes.path.lower()
+    if host.endswith("duckduckgo.com") and ("static-pages" in caminho or "error" in caminho):
+        return True
+    return caminho.rstrip("/").endswith("/captcha")
+
+
 def coletar_fontes(texto: str, fontes: list[dict]) -> None:
     titulo = ""
-    for linha in texto.splitlines():
+    for linha in texto.replace("\\n", "\n").splitlines():
         if linha.startswith("Título: "):
             titulo = linha.removeprefix("Título: ").strip()
         elif re.match(r"\d+\. ", linha):
             titulo = re.sub(r"^\d+\. ", "", linha).strip()
-        for encontrada in re.findall(r"https?://[^\s<>\"']+", linha):
+        for encontrada in re.findall(r"https?://[^\s<>\"'\\]+", linha):
             url = encontrada.rstrip(".,;)]}")
             try:
                 partes = urlsplit(url)
@@ -35,6 +46,8 @@ def coletar_fontes(texto: str, fontes: list[dict]) -> None:
             except ValueError:
                 continue
             if not partes.hostname or partes.username or partes.password:
+                continue
+            if _fonte_invalida(partes):
                 continue
             url = urlunsplit(
                 (partes.scheme.lower(), partes.netloc.lower(), partes.path, partes.query, "")
@@ -47,7 +60,9 @@ def coletar_fontes(texto: str, fontes: list[dict]) -> None:
 
 
 class TextoParcial(AsyncCallbackHandler):
-    def __init__(self):
+    def __init__(self, fluxo=None):
+        self.fluxo = fluxo
+        self.chamadas = {}
         self.texto = ""
         self.argumentos = ""
 
@@ -56,7 +71,15 @@ class TextoParcial(AsyncCallbackHandler):
         chunk = kwargs.get("chunk")
         mensagem = getattr(chunk, "message", None)
         for chamada in getattr(mensagem, "tool_call_chunks", []) or []:
-            self.argumentos += chamada.get("args") or ""
+            indice = chamada.get("index", 0)
+            acumulada = self.chamadas.setdefault(indice, {"nome": "", "args": ""})
+            if chamada.get("name"):
+                acumulada["nome"] = chamada["name"]
+            acumulada["args"] += chamada.get("args") or ""
+            if acumulada["nome"] in {"falar", "canal_resultado"}:
+                self.argumentos = acumulada["args"]
+        if self.fluxo is not None:
+            await self.fluxo.publicar(self.parcial())
 
     def parcial(self) -> str:
         from langchain_core.utils.json import parse_partial_json
@@ -149,7 +172,10 @@ class MiddlewareConversa(AgentMiddleware):
             return await sessao.get(Mensagem, UUID(thread.rsplit(":pedido:", 1)[1]))
 
     async def awrap_model_call(self, request, handler):
-        parcial = TextoParcial()
+        from app.agentes.streaming import FluxoTexto
+
+        fluxo = FluxoTexto(self.contexto)
+        parcial = TextoParcial(fluxo)
         anteriores = request.model.callbacks
         if anteriores is not None and not isinstance(anteriores, list):
             callbacks = anteriores.copy()
@@ -160,7 +186,10 @@ class MiddlewareConversa(AgentMiddleware):
         if "streaming" in type(request.model).model_fields:
             atributos["streaming"] = True
         modelo = request.model.model_copy(update=atributos)
-        return await self._vigiar(lambda: handler(request.override(model=modelo)), parcial)
+        try:
+            return await self._vigiar(lambda: handler(request.override(model=modelo)), parcial)
+        finally:
+            await fluxo.publicar(parcial.parcial(), fim=True)
 
     async def awrap_tool_call(self, request, handler):
         token = fontes_do_turno.set(self.fontes)
@@ -183,3 +212,10 @@ class MiddlewareConversa(AgentMiddleware):
             return resultado
         finally:
             fontes_do_turno.reset(token)
+
+
+class MiddlewareStreamingCanal(MiddlewareConversa):
+    """O worker de grupo controla cancelamento e persistencia do resultado."""
+
+    async def _vigiar(self, chamada, parcial=None):
+        return await chamada()

@@ -40,7 +40,8 @@ def montar_middleware(
     from app.agentes.middleware.limite_provedor import MiddlewareLimiteDoProvedor
 
     # Por dentro da nova tentativa e da troca: espera o limite do plano em vez de trocar de modelo.
-    itens.append(MiddlewareLimiteDoProvedor(ao_esperar=contexto.dependencias.ao_esperar_limite))
+    if contexto.canal_id is None:
+        itens.append(MiddlewareLimiteDoProvedor(ao_esperar=contexto.dependencias.ao_esperar_limite))
     from app.agentes.middleware.limites import limites_do_agente
 
     chamadas_modelo, chamadas_ferramenta = limites_do_agente(contexto)
@@ -145,6 +146,10 @@ def montar_middleware(
         )
     from app.agentes.middleware.conversa import MiddlewareConversa
 
-    if contexto.dependencias.iniciar_passo is not None:
+    if contexto.canal_id is not None:
+        from app.agentes.middleware.conversa import MiddlewareStreamingCanal
+
+        itens.insert(0, MiddlewareStreamingCanal(contexto))
+    elif contexto.dependencias.iniciar_passo is not None:
         itens.insert(0, MiddlewareConversa(contexto))
     return itens
