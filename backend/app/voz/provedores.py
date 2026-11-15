@@ -84,6 +84,16 @@ class _Base:
             raise ErroVoz(f"A chave da voz ({self.nome}) foi recusada.")
         if resposta.status_code == 429:
             raise ErroVoz(f"A voz ({self.nome}) chegou no limite. Tente daqui a pouco.")
+        if resposta.status_code == 400:
+            try:
+                codigo = resposta.json().get("error", {}).get("code")
+            except (ValueError, AttributeError):
+                codigo = None
+            if codigo == "model_terms_required":
+                raise ErroVoz(
+                    "O Groq exige que o administrador aceite os termos deste modelo "
+                    "de voz no console Groq antes de usar Ouvir."
+                )
         if resposta.status_code >= 400:
             raise ErroVoz(f"A voz ({self.nome}) respondeu {resposta.status_code} {acao}.")
         if len(resposta.content) > MAX_BYTES_AUDIO:
@@ -115,6 +125,11 @@ class VozOpenAI(_Base):
         return {"Authorization": f"Bearer {self._chave}"}
 
     async def sintetizar(self, texto: str, voz: str = "alloy") -> Audio:
+        orpheus = "orpheus" in self.modelo_fala
+        if orpheus and len(texto) > 200:
+            raise ErroVoz("Este modelo de voz aceita até 200 caracteres por pedido.")
+        if orpheus and voz == "alloy":
+            voz = "troy" if "english" in self.modelo_fala else "fahad"
         resposta = await self._pedir(
             "POST",
             "/audio/speech",
@@ -124,10 +139,10 @@ class VozOpenAI(_Base):
                 "model": self.modelo_fala,
                 "voice": voz,
                 "input": self._conferir_texto(texto),
-                "response_format": "mp3",
+                "response_format": "wav" if orpheus else "mp3",
             },
         )
-        return Audio(resposta.content)
+        return Audio(resposta.content, "audio/wav" if orpheus else "audio/mpeg")
 
     async def transcrever(self, audio: bytes, tipo: str = "audio/webm", idioma: str = "pt") -> str:
         resposta = await self._pedir(

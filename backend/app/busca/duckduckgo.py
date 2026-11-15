@@ -118,4 +118,17 @@ class BuscaDuckDuckGo:
             raise ErroBusca("A busca (duckduckgo) limitou os pedidos. Siga com o que já tem.")
         if resposta.status_code >= 400:
             raise ErroBusca(f"A busca (duckduckgo) respondeu {resposta.status_code}.")
-        return ler_resultados(resposta.text, limite)
+        html = resposta.text.lower()
+        if any(
+            marca in html
+            for marca in ("anomaly.js", "challenge-form", "bots use duckduckgo", "captcha")
+        ):
+            raise ErroBusca(
+                "A busca DuckDuckGo pediu verificação humana. Configure outro provedor de busca."
+            )
+        resultados = ler_resultados(resposta.text, limite)
+        if not resultados and "no-results" not in html and "no results" not in html:
+            raise ErroBusca(
+                "A busca DuckDuckGo retornou uma página vazia ou inválida. Tente outro provedor."
+            )
+        return resultados

@@ -18,7 +18,9 @@ from langgraph.errors import GraphBubbleUp
 from app.llm.limite import (
     TENTATIVAS_NO_LIMITE,
     ErroLimiteDoProvedor,
+    cota_diaria,
     enxugar,
+    erro_cota_diaria,
     espera_com_teto,
     pedido_grande_demais,
 )
@@ -61,6 +63,8 @@ class MiddlewareLimiteDoProvedor(AgentMiddleware):
                     registro.warning("pedido grande demais para o plano; enxugando e repetindo")
                     pedido = request.override(messages=enxugar(list(request.messages), 2))
                     continue
+                if cota_diaria(erro):
+                    raise erro_cota_diaria(erro) from None
                 espera = espera_com_teto(erro)
                 if espera is None or espera_feita >= TENTATIVAS_NO_LIMITE:
                     raise ErroLimiteDoProvedor("limite por minuto") from None

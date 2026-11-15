@@ -286,6 +286,24 @@ def escolher_modelos(
                 )
             )
 
+    # Limites Groq sao por modelo: mantenha os demais modelos com ferramentas como reserva.
+    if (
+        lista
+        and lista[0].provedor.tipo == TipoProvedor.GROQ
+        and papel in {PapelModelo.SORA, PapelModelo.AGENTE_INDIVIDUAL, PapelModelo.RESPOSTA_DIRETA}
+    ):
+        lista += ordenar(
+            [
+                m
+                for m in elegiveis
+                if m not in lista
+                and m.provedor.tipo == TipoProvedor.GROQ
+                and "ferramentas" in m.capacidades
+                and not m.somente_se_escolhido
+            ],
+            prioridade,
+            regra.preferir,
+        )
     if not lista:
         detalhe = (
             "Conversa privada sem modelo local (Ollama) disponível."

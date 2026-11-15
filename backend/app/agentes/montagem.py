@@ -126,10 +126,15 @@ def nomes_das_ferramentas(contexto: ContextoAgente) -> list[str]:
     """Ferramentas do papel seguidas das extras, sem repetição."""
     from app.agentes.ancora import ferramentas_do_papel
 
+    base = FERRAMENTAS_POR_PAPEL[contexto.papel]
+    if contexto.papel == "individual" and contexto.ferramentas_do_bot is not None:
+        from app.ferramentas.permissoes import ferramentas_do_agente
+
+        base = tuple(ferramentas_do_agente("individual", contexto.ferramentas_do_bot))
     return list(
         dict.fromkeys(
             (
-                *FERRAMENTAS_POR_PAPEL[contexto.papel],
+                *base,
                 *ferramentas_do_papel(contexto.papel),
                 *contexto.ferramentas_extras,
             )

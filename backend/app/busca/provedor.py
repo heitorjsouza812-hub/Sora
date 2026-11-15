@@ -126,7 +126,9 @@ def obter_provedor(
 
 def _exigir_chave(nome: str, chave: str | None) -> str:
     if not chave:
-        raise ErroBusca(f"O provedor de busca {nome} precisa de BUSCA_CHAVE.")
+        raise ErroBusca(
+            f"A busca na web não está configurada: falta a chave de {nome} (BUSCA_CHAVE)."
+        )
     return chave
 
 

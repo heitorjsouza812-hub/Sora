@@ -29,7 +29,15 @@ class ErroLimiteDoProvedor(Exception):
     """
 
     def __init__(self, detalhe: str = "") -> None:
-        super().__init__(MENSAGEM_LIMITE + (f" [{detalhe}]" if detalhe else ""))
+        mensagem = MENSAGEM_LIMITE
+        if detalhe == "pedido grande demais":
+            mensagem = (
+                "O pedido excede o limite deste modelo. "
+                "Compacte a conversa ou escolha outro modelo."
+            )
+        elif detalhe.startswith("cota do dia"):
+            mensagem = "A cota diária deste modelo acabou. " + detalhe + ". Escolha outro modelo."
+        super().__init__(mensagem)
 
 
 def _cadeia(erro: BaseException) -> list[BaseException]:
@@ -120,6 +128,8 @@ async def com_espera_de_limite(chamar: Any, *, ao_esperar: Any = None, dormir: A
         except Exception as erro:
             if classificar_erro(erro) is not MotivoTroca.LIMITE_DE_TAXA:
                 raise
+            if cota_diaria(erro):
+                raise erro_cota_diaria(erro) from None
             espera = espera_com_teto(erro)
             if espera is None or esperas >= TENTATIVAS_NO_LIMITE:
                 raise ErroLimiteDoProvedor("limite por minuto") from None
@@ -168,3 +178,20 @@ def enxugar(mensagens: list[Any], nivel: int) -> list[Any]:
                 update={"content": texto[:limite] + " … [resultado antigo resumido]"}
             )
     return saida
+
+
+def cota_diaria(erro: BaseException) -> bool:
+    return any(
+        marca in _texto(erro)
+        for marca in ("tokens per day", "requests per day", "tpd", "rpd", "daily quota")
+    )
+
+
+def erro_cota_diaria(erro: BaseException) -> ErroLimiteDoProvedor:
+    segundos = espera_pedida(erro)
+    volta = (
+        f"cota do dia: tente novamente em {int(segundos) + 1} segundos"
+        if segundos is not None
+        else "cota do dia: o provedor não informou quando renova"
+    )
+    return ErroLimiteDoProvedor(volta)
