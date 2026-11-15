@@ -136,3 +136,13 @@ _Atualizado em 2026-11-01 — **navegador por árvore adaptado do agent-desktop*
 - Repositório em `C:\dev\sora`. Esqueleto do backend e da infra (`8d7b2ed`) validado pelo Vigia.
 - Etapa 3 (fundação) **concluída**: Alicerce (segurança, migrações 0001–0003, contas, infra), Trama (eventos/SSE, ler_pagina com SSRF, busca, estados da cadeia, arquivos sem path traversal, checkpointer) e Bússola (modelo falso, seletor, Sistema 1, custo e fábrica de modelos). Vigia: rodadas 1 a 3. Depois, a revisão de segurança do time do Clausecurity (acima).
 - **Próximo:** backend de ponta a ponta (conexão das APIs, prompt da Sora, worker com o modo Cadeia, especialistas em LangChain, middlewares, entregas com versões, passos, cartões de pergunta, agente independente, anexos, dados de treino do Laya); depois ligar o app (inclui tratar o erro `recarregar` do contrato em `tests/contrato/retomada/`).
+
+## Vela-4 — C3 (2026-11-14)
+
+- Onde parou: recuperou o WIP da Vela-3 e completou backend, canal autenticado, cartões, ponte Tauri/Windows e Configurações → Computador. Documentação: `docs/computador-por-bot.md` § C3 e contrato § Vela-4. Relatório: `.maestri/relatorios/vela4.md`.
+- Próximo passo: teste interativo no desktop (Bloco de Notas, entrada física e campo real de senha), antes de marcar C3 NO AR. Sem push; WIP dos outros integrantes preservado.
+
+## Heitor / Vela-7 — C3 (2026-11-15)
+
+- Onde parou: backend recuperado, revisado e commitado em `1dcf0ad`; 1239 unitários passaram / 2 pulados, integração C3 real passou. App build/lint/347 testes e Rust Clippy/12 testes C3 passaram. Rastro do PC sem título de documento, pausa no primeiro movimento físico e leitura de senha conservadora. Relatório: `.maestri/relatorios/vela7.md`.
+- Próximo passo: resolver o erro de login desktop no ambiente local e testar Bloco de Notas, mouse físico e campo real IsPassword. C3 ainda não marcado NO AR; sem push/instalador. Outros donos preservados.
