@@ -12,7 +12,8 @@ middleware de ``troca.py``, para a troca aparecer na linha do tempo.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any
 
 from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
 from app.llm.provedores import (
@@ -24,6 +25,30 @@ from app.llm.provedores import (
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
+
+
+@lru_cache(maxsize=1)
+def _classe_do_chat() -> type:
+    """``ChatLiteLLM`` que tira o raciocínio das mensagens do assistente antes de enviar.
+
+    Sem isso o Groq (e a maioria das APIs) responde 400 a ``reasoning_content`` na segunda
+    chamada de qualquer turno com ferramenta (B1 do Prumo-3). O campo ``enviar_raciocinio``
+    liga o envio só para os provedores que o leem (``app/llm/mensagens.py``).
+    """
+    from langchain_litellm import ChatLiteLLM
+
+    from app.llm.mensagens import sem_campos_de_raciocinio
+
+    class ChatLiteLLMSora(ChatLiteLLM):
+        enviar_raciocinio: bool = False
+
+        def _create_message_dicts(self, messages: Any, stop: Any) -> Any:
+            dicts, params = super()._create_message_dicts(messages, stop)
+            if not self.enviar_raciocinio:
+                dicts = sem_campos_de_raciocinio(dicts)
+            return dicts, params
+
+    return ChatLiteLLMSora
 
 
 def criar_chat_model(
@@ -44,11 +69,12 @@ def criar_chat_model(
     if modelo_falso_ativo():
         return criar_modelo_falso(papel or "")
 
-    from langchain_litellm import ChatLiteLLM
+    from app.llm.mensagens import aceita_raciocinio_no_historico
 
     politica = politica_de_rede()
     parametros = parametros_litellm(provedor, politica)
-    chat = ChatLiteLLM(
+    chat = _classe_do_chat()(
+        enviar_raciocinio=aceita_raciocinio_no_historico(provedor.tipo),
         model=modelo,
         temperature=temperatura,
         max_tokens=max_tokens,
