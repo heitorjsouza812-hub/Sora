@@ -3,7 +3,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../mascot', () => ({ SoraOrb: () => <span data-testid="orb" /> }));
-vi.mock('../../comandos', () => ({ abrirPaleta: vi.fn() }));
 const api = vi.hoisted(() => ({ listarPedidosAtencao: vi.fn(), resolverPedidoAtencao: vi.fn(), listarGrupos: vi.fn(), listarMensagensGrupo: vi.fn(), listarTarefasGrupo: vi.fn() }));
 vi.mock('../../../api/grupos', async (importar) => ({ ...(await importar<typeof import('../../../api/grupos')>()), ...api }));
 const listarBots = vi.hoisted(() => vi.fn());
@@ -13,7 +12,7 @@ import { pedidoDaApi } from '../../../api/grupos';
 import { _reiniciarAtencaoParaTestes, lerPrecisaDeVoce } from '../../../state/atencao';
 import { _reiniciarBotsParaTestes } from '../../../state/bots';
 import { _reiniciarGruposParaTestes } from '../../../state/grupos';
-import { Navegacao } from '../../layout/Sidebar';
+import { CentralPrecisaDeVoce } from '../CentralPrecisaDeVoce';
 
 const bot = (id: string, nome: string, cor: string) => ({ id, tipo: 'individual', nome, funcao: 'Função', cor, movimento: 'gira', ferramentas: [], estado: 'livre' });
 const PEDIDOS = [
@@ -31,20 +30,18 @@ beforeEach(() => {
   api.resolverPedidoAtencao.mockResolvedValue(undefined);
 });
 
-const montar = () => render(<MemoryRouter><Navegacao /></MemoryRouter>);
+const montar = () => render(<MemoryRouter><CentralPrecisaDeVoce aberta onFechar={() => undefined} /></MemoryRouter>);
 
 describe('central Precisa de você', () => {
-  it('fica no topo da barra lateral com o contador de pedidos', async () => {
+  it('diz quantos pedidos esperam e não repete o rótulo dentro das faixas', async () => {
     montar();
-    const botao = await screen.findByRole('button', { name: 'Precisa de você, 3 pedidos' });
-    expect(botao.textContent).toContain('3');
-    const botoes = screen.getAllByRole('button');
-    expect(botoes[0]).toBe(botao);
+    const dialogo = await screen.findByRole('dialog', { name: 'Precisa de você' });
+    await within(dialogo).findByText('3 pedidos esperam uma decisão sua.');
+    expect(within(dialogo).getAllByText('Precisa de você')).toHaveLength(1); // só o título do modal
   });
 
   it('lista todos os pedidos com a origem (bot, grupo e Sora) e as mesmas opções em todo lugar', async () => {
     montar();
-    fireEvent.click(await screen.findByRole('button', { name: /Precisa de você, 3 pedidos/ }));
     const dialogo = await screen.findByRole('dialog', { name: 'Precisa de você' });
     const cartoes = within(dialogo).getAllByRole('region', { name: 'Precisa de você' });
     expect(cartoes).toHaveLength(3);
@@ -60,7 +57,6 @@ describe('central Precisa de você', () => {
 
   it('Sempre permitir manda a decisão certa e o contador desce até zerar', async () => {
     montar();
-    fireEvent.click(await screen.findByRole('button', { name: /Precisa de você, 3 pedidos/ }));
     const dialogo = await screen.findByRole('dialog', { name: 'Precisa de você' });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Sempre permitir' }));
     await waitFor(() => expect(api.resolverPedidoAtencao).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), 'sempre_permitir', undefined));
@@ -72,7 +68,5 @@ describe('central Precisa de você', () => {
     await waitFor(() => expect(api.resolverPedidoAtencao).toHaveBeenCalledWith(expect.objectContaining({ id: 'p3' }), 'responder', 'Clientes novos'));
     await waitFor(() => expect(lerPrecisaDeVoce().lista).toEqual([]));
     expect(await within(dialogo).findByText(/Nada espera por você agora/)).toBeTruthy();
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Fechar' }));
-    expect(screen.getByRole('button', { name: 'Precisa de você, nenhum pedido' }).textContent).not.toMatch(/\d/);
   });
 });
