@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { aplicarEvento, registrarEnvioDoUsuario } from '../aplicarEvento';
 import type { EventoSse } from '../../api/eventos';
-import type { EstadoProjetos } from '../projetos';
+import { gerandoNa, type EstadoProjetos } from '../projetos';
 
 const AGORA = 1_700_000_000_000;
 const conversaId = '00000000-0000-0000-0000-000000000001';
@@ -116,5 +116,32 @@ describe('lote por quadro (receber)', () => {
     expect(lerEstado().mensagens).toHaveLength(0);
     _reiniciarProjetosParaTestes();
     vi.useRealTimers();
+  });
+});
+
+describe('resposta direta: entre a confirmação da triagem e a resposta do agente', () => {
+  it('segue "pensando" depois da confirmação e para quando a resposta do agente começa', () => {
+    let e = aplicarEvento(estado(), ev('roteamento', { modo: 'direto' }));
+    e = aplicarEvento(e, ev('mensagem.inicio', { mensagem_id: 'ack', autor: 'sora', agente_id: soraId }));
+    e = aplicarEvento(e, ev('mensagem.delta', { mensagem_id: 'ack', texto: 'Entendi, você quer saber a capital.' }));
+    e = aplicarEvento(e, ev('mensagem.fim', { mensagem_id: 'ack' }));
+    expect(e.mensagens.some(m => m.gerando)).toBe(false);
+    expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(true);
+    e = aplicarEvento(e, ev('mensagem.inicio', { mensagem_id: 'resp', autor: 'sora', agente_id: soraId }));
+    e = aplicarEvento(e, ev('mensagem.fim', { mensagem_id: 'resp' }));
+    expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(false);
+  });
+
+  it('sem resposta do agente, a espera acaba sozinha e o histórico já carregado não a reabre', () => {
+    let e = aplicarEvento(estado(), ev('roteamento', { modo: 'direto' }));
+    expect(gerandoNa(e, conversaId, AGORA + 10 * 60_000)).toBe(false);
+    e = aplicarEvento({ ...estado(), historicos: { [conversaId]: { carregando: false, carregado: true, anteriores: false, ultimo: AGORA + 1e6 } } }, ev('roteamento', { modo: 'direto' }));
+    expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(false);
+  });
+
+  it('erro encerra a espera', () => {
+    let e = aplicarEvento(estado(), ev('roteamento', { modo: 'direto' }));
+    e = aplicarEvento(e, ev('erro', { mensagem: 'Falhou' }));
+    expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(false);
   });
 });

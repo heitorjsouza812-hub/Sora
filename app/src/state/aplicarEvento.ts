@@ -86,7 +86,9 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     const agenteId = texto(d.agente_id) || undefined;
     const autor = autorBruto === 'agente' && agenteId ? agenteId : autorBruto === 'usuario' ? 'usuario' : 'sora';
     // A mensagem oficial substitui a prévia (mesma conversa): sem bolha duplicada.
-    return { ...estado, mensagens: [...estado.mensagens.filter(SEM_PREVIA(conversaId)), { id, conversaId, autor, agenteId, texto: '', criadoEm: evento.recebidoEm, gerando: true }] };
+    const comMensagem = { ...estado, mensagens: [...estado.mensagens.filter(SEM_PREVIA(conversaId)), { id, conversaId, autor, agenteId, texto: '', criadoEm: evento.recebidoEm, gerando: true }] };
+    // Resposta direta: a 1ª mensagem depois do roteamento é a confirmação da triagem; a 2ª já é a do agente.
+    return autor === 'usuario' ? comMensagem : atualizarProjeto(comMensagem, conversaId, p => !p.aguardaRespostaDesde ? p : p.confirmacaoVista ? { ...p, aguardaRespostaDesde: undefined } : { ...p, confirmacaoVista: true });
   }
   if (evento.tipo === 'mensagem.delta') {
     const id = texto(d.mensagem_id);
@@ -100,7 +102,9 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     const fechado = { ...estado, mensagens: estado.mensagens.filter(SEM_PREVIA(conversaId)).map(m => m.id === id ? { ...m, gerando: false, estado: d.estado === 'interrompida' ? 'interrompida' as const : 'concluida' as const, fontes: Array.isArray(d.fontes) && d.fontes.length ? d.fontes as FonteMensagem[] : m.fontes, anexos: Array.isArray(d.anexos) && d.anexos.length ? normalizarAnexos(d.anexos as (AnexoMsg | string)[]) : m.anexos } : m) };
     return atualizarProjeto(fechado, conversaId, p => p.mensagensPendentes ? { ...p, mensagensPendentes: false } : p);
   }
-  if (evento.tipo === 'roteamento') return atualizarProjeto(estado, conversaId, p => ({ ...p, roteamento: texto(d.modo) as ProjetoSora['roteamento'], mensagensPendentes: false }));
+  if (evento.tipo === 'roteamento') return atualizarProjeto(estado, conversaId, p => ({ ...p, roteamento: texto(d.modo) as ProjetoSora['roteamento'], mensagensPendentes: false,
+    // resposta direta: a triagem publica uma confirmação e só depois o agente responde; entre as duas a conversa segue "pensando"
+    aguardaRespostaDesde: d.modo === 'direto' && evento.recebidoEm > (estado.historicos?.[conversaId]?.ultimo ?? 0) ? evento.recebidoEm : undefined, confirmacaoVista: false }));
 
   if (evento.tipo === 'agente.criado') {
     const id = texto(d.agente_id); if (!id) return estado;
@@ -169,7 +173,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
     ...p, mensagensPendentes: false, cadeiaStatus: texto(d.status) as ProjetoSora['cadeiaStatus'],
     marcos: d.status === 'concluida' ? { ...p.marcos, fim: evento.recebidoEm } : p.marcos,
   }));
-  if (evento.tipo === 'erro') return atualizarProjeto(estado, conversaId, p => ({ ...p, mensagensPendentes: false, erro: texto(d.mensagem) || 'O trabalho foi interrompido.' }));
+  if (evento.tipo === 'erro') return atualizarProjeto(estado, conversaId, p => ({ ...p, mensagensPendentes: false, aguardaRespostaDesde: undefined, erro: texto(d.mensagem) || 'O trabalho foi interrompido.' }));
   return estado;
 }
 

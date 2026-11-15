@@ -40,6 +40,8 @@ export interface ProjetoSora {
   aprovadoEm?: number; aprovadaVersao?: number | null; versao: number; entregasAnteriores?: Record<string, EntregaGerada>;
   ajusteAgenteId?: string; cadeiaId?: string; cadeiaStatus?: 'planejando' | 'executando' | 'verificando' | 'aguardando_usuario' | 'concluida' | 'falhou' | 'cancelada';
   roteamento?: 'direto' | 'cadeia' | 'pergunta'; erro?: string; mensagensPendentes?: boolean;
+  /** resposta direta: a triagem já confirmou o pedido e a resposta do agente ainda não começou (instante do roteamento) */
+  aguardaRespostaDesde?: number; confirmacaoVista?: boolean;
 }
 export interface FonteMensagem { n: number; titulo: string; url: string; dominio: string }
 export interface MensagemChat {
@@ -459,11 +461,13 @@ export function alternarPlugin(_nome: string) { /* plugins seguem congelados */ 
 export interface TextoVisivel { texto: string; gerando: boolean; interrompida: boolean }
 export const duracaoStream = (_texto: string) => 0;
 export function textoVisivel(m: MensagemChat, _agora: number): TextoVisivel { return { texto: m.texto, gerando: !!m.gerando, interrompida: m.estado === 'interrompida' || m.interrompidaEm !== undefined }; }
+/** Depois da confirmação da triagem, quanto tempo a conversa segue "pensando" à espera da resposta do agente. */
+const ESPERA_RESPOSTA_DIRETA_MS = 120_000;
 export function gerandoNa(e: EstadoProjetos, conversaOuAgenteId: string, agora: number) {
   const id = e.agentes[conversaOuAgenteId]?.conversaId ?? conversaOuAgenteId;
   const p = e.projetos.find(x => x.id === id);
   const ultima = mensagensDa(e, conversaOuAgenteId, agora).at(-1);
-  return !!(e.conversasOcupadas?.includes(id) || p?.mensagensPendentes || ['planejando', 'executando', 'verificando'].includes(p?.cadeiaStatus ?? '') || ultima?.autor === 'usuario' && ultima.estado !== 'interrompida' && ultima.envio !== 'erro' || mensagensDa(e, conversaOuAgenteId, agora).some(m => m.gerando));
+  return !!(e.conversasOcupadas?.includes(id) || p?.mensagensPendentes || (!!p?.aguardaRespostaDesde && agora - p.aguardaRespostaDesde < ESPERA_RESPOSTA_DIRETA_MS) || ['planejando', 'executando', 'verificando'].includes(p?.cadeiaStatus ?? '') || ultima?.autor === 'usuario' && ultima.estado !== 'interrompida' && ultima.envio !== 'erro' || mensagensDa(e, conversaOuAgenteId, agora).some(m => m.gerando));
 }
 export async function pararConversa(conversaOuAgenteId: string) {
   const sessao = geracaoSessao;
@@ -476,7 +480,7 @@ export async function pararConversa(conversaOuAgenteId: string) {
   const lista = await api.get<MensagemApi[]>(`/v1/conversas/${conversaId}/mensagens?limite=50`);
   if (sessao !== geracaoSessao) return;
   alterar(e => ({ ...e,
-    projetos: e.projetos.map(p => p.id === conversaId ? { ...p, mensagensPendentes: false, cadeiaStatus: p.cadeiaId ? 'cancelada' : p.cadeiaStatus } : p),
+    projetos: e.projetos.map(p => p.id === conversaId ? { ...p, mensagensPendentes: false, aguardaRespostaDesde: undefined, cadeiaStatus: p.cadeiaId ? 'cancelada' : p.cadeiaStatus } : p),
     // Parar cancela a cadeia desta conversa e expira os cartões das etapas: saem do chat sem esperar o evento.
     pendencias: e.projetos.some(p => p.id === conversaId) ? (e.pendencias ?? []).filter(x => x.conversaId !== conversaId) : e.pendencias,
     mensagens: [...e.mensagens.filter(m => !lista.some(x => x.id === m.id) && !(m.previa && m.conversaId === conversaId)).map(m => m.conversaId === conversaId ? { ...m, gerando: false } : m), ...lista.map(mensagemDaApi)].sort((a,b) => a.criadoEm - b.criadoEm),
