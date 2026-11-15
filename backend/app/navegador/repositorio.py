@@ -138,7 +138,7 @@ class RepositorioNavegador:
                 select(Agente).where(Agente.id == agente_id, Agente.usuario_id == usuario_id)
             )
         if agente is None:
-            raise ValueError("Agente não encontrado.")
+            raise ValueError("Bot não encontrado.")
         if agente.perfil_navegador == "efemero":
             return None
         tipo = TipoPerfil(agente.perfil_navegador)

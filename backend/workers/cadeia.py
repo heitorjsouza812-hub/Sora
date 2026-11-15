@@ -641,7 +641,7 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
         assert cadeia is not None
         if etapa.agente_id is None:
             etapa.status = StatusEtapa.FALHOU
-            etapa.erro = "a etapa não tem agente"
+            etapa.erro = "a tarefa não tem bot"
             await sessao.commit()
             await _publicar(ctx, cadeia, _evento_etapa(etapa, 100))
             await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
@@ -729,7 +729,7 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
         entrega = await sessao.scalar(select(Entrega).where(Entrega.etapa_id == etapa.id))
         if entrega is None:
             etapa.status = StatusEtapa.FALHOU
-            etapa.erro = "o agente terminou sem entregar"
+            etapa.erro = "o bot terminou sem entregar"
         else:
             etapa.status = StatusEtapa.CONCLUIDA
             etapa.saida = {"entrega_id": str(entrega.id), "titulo": entrega.titulo}
@@ -1103,7 +1103,7 @@ async def entregar_resultado(ctx: dict[str, Any], cadeia_id: str) -> None:
         mensagem = Mensagem(
             conversa_id=cadeia.conversa_id,
             autor=AutorMensagem.SORA,
-            conteudo="Pronto! A equipe concluiu o trabalho. Revise as entregas antes de publicar.",
+            conteudo="Pronto! A equipe concluiu o trabalho. Confira as entregas e peça ajustes.",
             anexos=[],
             visivel=True,
             fontes=fontes,

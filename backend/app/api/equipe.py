@@ -165,7 +165,7 @@ async def _exigir_agente(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID
         )
     )
     if existe is None:
-        raise HTTPException(404, "Agente nao encontrado.")
+        raise HTTPException(404, "Bot não encontrado.")
 
 
 async def _publicar_mudancas(redis: Redis, usuario_id: UUID, mudancas: Mudancas) -> None:

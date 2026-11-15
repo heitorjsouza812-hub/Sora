@@ -75,7 +75,7 @@ async def _exigir_agente(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID
         )
     )
     if achou is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
 
 
 @roteador.get("/memorias")
@@ -300,7 +300,7 @@ async def compactar_agora(
         .limit(1)
     )
     if conversa_id is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Este agente ainda não tem conversa.")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Este bot ainda não tem conversa.")
     estado = await ler(redis, agente_id, fio) or medir(
         agente_id, fio, janela=None, tokens_informados=0
     )

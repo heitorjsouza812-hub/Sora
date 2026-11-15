@@ -75,7 +75,7 @@ async def _obter(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID) -> Age
         )
     )
     if agente is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
     return agente
 
 
@@ -206,7 +206,7 @@ async def criar_agente(dados: AgenteCriacao, usuario_id: UsuarioId, sessao: Sess
     if isinstance(dados, AgentePorDescricao):
         descricao = dados.descricao.strip()
         if not descricao:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Descreva o agente.")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Descreva o bot.")
         agente = Agente(
             usuario_id=usuario_id,
             tipo=TipoAgente.INDIVIDUAL,
@@ -222,7 +222,7 @@ async def criar_agente(dados: AgenteCriacao, usuario_id: UsuarioId, sessao: Sess
         if not nome or nome.casefold() == "sora":
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Escolha outro nome.")
         if nome.casefold() in {n.casefold() for n in nomes}:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um agente com esse nome.")
+            raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um bot com esse nome.")
         agente = Agente(
             usuario_id=usuario_id,
             tipo=TipoAgente.INDIVIDUAL,
@@ -271,7 +271,7 @@ async def atualizar_agente(
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Escolha outro nome.")
         nomes, _ = await _em_uso(sessao, usuario_id)
         if nome.casefold() in {n.casefold() for n in nomes} - {agente.nome.casefold()}:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um agente com esse nome.")
+            raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um bot com esse nome.")
         agente.nome = nome
     if dados.funcao is not None:
         agente.funcao = dados.funcao.strip()

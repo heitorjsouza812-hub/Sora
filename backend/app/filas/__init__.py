@@ -201,7 +201,7 @@ class FilaAgente:
             raise ErroFila("A mensagem está vazia.")
         abertos = [i for i in await self._armazem.itens(agente_id) if i.status in ABERTOS]
         if len(abertos) >= MAX_ITENS_NA_FILA:
-            raise ErroFila("A fila deste agente está cheia. Espere ou cancele alguns itens.")
+            raise ErroFila("A fila deste bot está cheia. Espere ou cancele alguns itens.")
         item = ItemFila(
             id=uuid4(),
             usuario_id=usuario_id,
@@ -461,7 +461,7 @@ class FilaAgente:
         for item in await self._armazem.itens(agente_id):
             if item.id == item_id:
                 return item
-        raise ErroFila("Item não encontrado na fila deste agente.")
+        raise ErroFila("Item não encontrado na fila deste bot.")
 
     async def _mudar(self, item: ItemFila, **mudancas: object) -> ItemFila:
         novo = replace(item, **mudancas)  # type: ignore[arg-type]

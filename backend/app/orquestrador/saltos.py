@@ -63,7 +63,7 @@ def conferir_envio(salto_de_origem: int | None) -> int:
     salto = proximo_salto(salto_de_origem)
     if saltos_esgotados(salto):
         raise SaltosEsgotados(
-            f"Mensagem não enviada: a conversa entre agentes passou de {max_saltos()} trocas "
+            f"Mensagem não enviada: a conversa entre bots passou de {max_saltos()} trocas "
             "seguidas sem o usuário. Termine o trabalho com o que já tem e responda ao usuário."
         )
     return salto

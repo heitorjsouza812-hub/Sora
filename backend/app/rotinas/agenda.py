@@ -193,5 +193,5 @@ def proxima_depois(plano: Plano, executou_em: datetime) -> datetime | None:
 def conferir_limite(ativos: int) -> None:
     if ativos >= MAX_AGENDAMENTOS_ATIVOS:
         raise ErroFerramenta(
-            f"Este agente já tem {MAX_AGENDAMENTOS_ATIVOS} agendamentos ativos. Cancele um antes."
+            f"Este bot já tem {MAX_AGENDAMENTOS_ATIVOS} agendamentos ativos. Cancele um antes."
         )

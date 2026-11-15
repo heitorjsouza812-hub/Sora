@@ -51,7 +51,7 @@ class ArmazemFilaSQL:
     async def salvar_estado(self, estado: EstadoFila) -> None:
         agente = await self.sessao.get(Agente, estado.agente_id, with_for_update=True)
         if agente is None:
-            raise LookupError("Agente nao encontrado.")
+            raise LookupError("Bot não encontrado.")
         agente.fila_pausada = estado.pausada
         agente.limite_tarefas = estado.limite_tarefas
         await self.sessao.flush()

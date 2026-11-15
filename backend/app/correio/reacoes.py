@@ -123,7 +123,7 @@ async def alternar(
     agente_id: UUID | None = None,
 ) -> ResultadoReacao:
     if (autor == "agente") != (agente_id is not None):
-        raise ErroFerramenta("Reação de agente precisa do agente; a do usuário, não.")
+        raise ErroFerramenta("Reação de bot precisa do bot; a do usuário, não.")
     emoji = normalizar_emoji(emoji)
     nova = Reacao(mensagem_id, autor, agente_id, emoji)
     existentes = await armazem.da_mensagem(mensagem_id)

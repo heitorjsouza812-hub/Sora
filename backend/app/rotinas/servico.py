@@ -50,7 +50,7 @@ async def criar(
         )
     )
     if dono is None:
-        raise ErroFerramenta("Agente não encontrado.")
+        raise ErroFerramenta("Bot não encontrado.")
     ativos = await sessao.scalar(
         select(func.count())
         .select_from(Rotina)

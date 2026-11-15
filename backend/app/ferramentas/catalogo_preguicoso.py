@@ -220,7 +220,7 @@ class CatalogoFerramentas:
         candidatas = [e for e in self.entradas if nome_curto(e.ferramenta) == identificador]
         if len(candidatas) == 1:
             return self._conferir_tamanho(candidatas[0])
-        raise ErroFerramenta("Ferramenta desconhecida ou não autorizada para este agente.")
+        raise ErroFerramenta("Ferramenta desconhecida ou não autorizada para este bot.")
 
     @staticmethod
     def _conferir_tamanho(entrada: Entrada) -> Entrada:

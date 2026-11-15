@@ -184,11 +184,11 @@ class ServicoCanais:
             raise ErroCanal(f"O nome do canal precisa ter de 1 a {MAX_NOME_CANAL} caracteres.")
         membros = list(dict.fromkeys(membros))
         if not membros:
-            raise ErroCanal("Escolha pelo menos um agente para o canal.")
+            raise ErroCanal("Escolha pelo menos um bot para o grupo.")
         if len(membros) > MAX_MEMBROS:
-            raise ErroCanal(f"Um canal tem no máximo {MAX_MEMBROS} agentes.")
+            raise ErroCanal(f"Um grupo tem no máximo {MAX_MEMBROS} bots.")
         if not set(membros) <= agentes_do_usuario:
-            raise ErroCanal("Só dá para pôr no canal agentes da sua conta.")
+            raise ErroCanal("Só dá para pôr no grupo bots da sua conta.")
         if lider_id is not None and lider_id not in membros:
             raise ErroCanal("O líder precisa ser um dos membros do canal.")
         if len(proposito) > MAX_PROPOSITO or len(instrucoes) > MAX_INSTRUCOES:

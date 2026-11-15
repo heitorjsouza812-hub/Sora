@@ -350,7 +350,7 @@ async def criar_conversa(
     await _conferir_entrada(sessao, usuario_id, dados.texto, dados.anexos)
     agente = await repositorio.obter_agente(sessao, usuario_id, dados.agente_id)
     if agente is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
     conversa, mensagem = await repositorio.criar(
         sessao,
         usuario_id=usuario_id,
@@ -535,7 +535,7 @@ async def pedir_ajuste(
     if dados.agente_id is not None:
         agente = await repositorio.obter_agente(sessao, usuario_id, dados.agente_id)
         if agente is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
     await sessao.commit()
     await fila.enqueue_job(
         "ajustar",

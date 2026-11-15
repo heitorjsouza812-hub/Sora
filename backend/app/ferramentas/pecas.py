@@ -178,7 +178,7 @@ async def propor_instrucoes(args: Any, contexto: ContextoFerramenta) -> str:
     async with abrir_sessao() as sessao:
         agente = await sessao.get(Agente, contexto.agente_id)
         if agente is None or agente.usuario_id != contexto.usuario_id:
-            raise ErroFerramenta("Agente não encontrado.")
+            raise ErroFerramenta("Bot não encontrado.")
         await sessao.execute(
             text("UPDATE agentes SET instrucoes = :t WHERE id = :id").bindparams(
                 t=args.instrucoes, id=contexto.agente_id
@@ -407,7 +407,7 @@ async def enviar_para_agente(args: Any, contexto: ContextoFerramenta) -> str:
             .limit(1)
         )
         if conversa_destino is None:
-            raise ErroFerramenta("Esse agente ainda não tem uma conversa para receber a mensagem.")
+            raise ErroFerramenta("Esse bot ainda não tem uma conversa para receber a mensagem.")
         mensagem = Mensagem(
             id=uuid4(),
             conversa_id=conversa_destino.id,
