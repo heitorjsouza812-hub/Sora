@@ -22,12 +22,6 @@
 .pend-erro { margin: 0; color: var(--danger); font-size: 13px; }
 .pend-url { word-break: break-all; font-size: 12px; }
 
-/* Botão de perigo: só texto (a listagem não grita mais que a ação principal). */
-.pend-acoes .b-btn--perigo, .pend-central .b-btn--perigo { color: var(--danger); background: transparent; }
-.pend-acoes .b-btn--perigo:hover, .pend-central .b-btn--perigo:hover { background: rgba(255, 107, 107, .1); }
-.pend-card .b-btn:disabled { opacity: 1; color: #B6BDCB; background: rgba(255, 255, 255, .14); border-color: transparent; }
-.pend-card .b-btn--perigo:disabled { background: transparent; }
-
 /* Densidade da Ilha: mesmo cartão, menos ar. */
 .ilha .pend-card { padding: var(--sp-3) var(--sp-4) var(--sp-3) 19px; border-radius: var(--r-12, 12px); }
 .pend-compacto { gap: var(--sp-2); }

@@ -126,8 +126,8 @@ describe('gerir o grupo', () => {
     fireEvent.change(within(tarefas).getByLabelText(/Passar a tarefa de Atlas para/), { target: { value: 'b2' } });
     fireEvent.click(within(tarefas).getByRole('button', { name: 'Passar tarefa' }));
     await waitFor(() => expect(api.reatribuirTarefaGrupo).toHaveBeenCalledWith('t1', 'b2'));
-    expect(await within(tarefas).findByText('Luna')).toBeTruthy();
-    expect(within(tarefas).queryByRole('button', { name: 'Reatribuir' })).toBeNull();
+    // reatribuída, a tarefa volta para a fila e sai desta lista (quem trabalha aparece na faixa de trabalho)
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Tarefas do grupo' })).toBeNull());
   });
 
   it('Cancelar chama a rota da tarefa e a tarefa sai da lista', async () => {

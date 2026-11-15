@@ -78,7 +78,7 @@ export function CompositorGrupo({ grupoId, botsDoGrupo, resposta, onCancelarResp
         <span>@{opcao.nome}</span>
       </button>)}
     </div>}
-    <MessageComposer placeholder="Mensagem para o grupo…" compact value={texto} onValueChange={valor => { setTexto(valor); setFechadoEm(null); setIndice(0); }} onSend={(conteudo, anexos) => void enviar(conteudo, anexos)}
+    <MessageComposer placeholder="Mensagem para o grupo…" placeholderCurto="Mensagem ao grupo…" compact value={texto} onValueChange={valor => { setTexto(valor); setFechadoEm(null); setIndice(0); }} onSend={(conteudo, anexos) => void enviar(conteudo, anexos)}
       acoesDireita={<button type="button" className="icon-button grp-arroba" aria-label="Mencionar um bot" title="Mencionar um bot (@)" onClick={abrirMencao}>@</button>} />
     {erro && <p className="grp-erro" role="alert">{erro}</p>}
   </div>;

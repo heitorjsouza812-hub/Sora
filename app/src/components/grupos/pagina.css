@@ -106,3 +106,8 @@
   .grp-faixa .b-btn { min-height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { .grp-faixa i { animation: none; } }
+@media (max-width: 767px) {
+  .app-stage:has(.grp-pagina) .topbar-sub { display: none; }
+  .grp-pilha { padding: 4px; }
+  .grp-pilha > canvas { width: 24px !important; height: 24px !important; margin-left: -8px; }
+}

@@ -23,7 +23,8 @@ export function TarefasGrupo({ grupoId, membros, liderId, tarefas }: { grupoId: 
   const [reatribuindo, setReatribuindo] = useState('');
   const [novoDono, setNovoDono] = useState('');
   const [erro, setErro] = useState('');
-  const abertas = tarefasAbertasDoGrupo(tarefas).filter(tarefa => tarefa.grupoId === grupoId);
+  // Quem trabalha ou espera na fila já aparece na faixa de trabalho (com Parar); aqui só o que pede uma decisão.
+  const abertas = tarefasAbertasDoGrupo(tarefas).filter(tarefa => tarefa.grupoId === grupoId && tarefa.status !== 'rodando' && tarefa.status !== 'na_fila');
   if (!abertas.length) return null;
   const botsDoGrupo = bots.filter(bot => membros.includes(bot.id) && bot.id !== (liderId ?? membros[0]));
   const nomeDe = (id: string) => botsDoGrupo.find(bot => bot.id === id)?.nome ?? bots.find(bot => bot.id === id)?.nome ?? 'Bot';
