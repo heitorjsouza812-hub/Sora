@@ -1,5 +1,6 @@
 import { normalizarAnexos, type FonteMensagem, type AnexoMsg } from './projetos';
 import type { Movimento, PassoTrabalho } from '../types';
+import { propostaDe } from '../components/pendencias/proposta';
 import type { RevisaoDominio, AgenteSora, EntregaGerada, EstadoProjetos, Execucao, ProjetoSora, TarefaGerada } from './projetos';
 import type { EventoSse } from '../api/eventos';
 
@@ -69,6 +70,7 @@ export function aplicarEvento(estado: EstadoProjetos, evento: EventoSse): Estado
       tipo: 'aprovacao', id, conversaId, resumo: texto(d.resumo), dano: texto(d.dano), quemRecebe: texto(d.quem_recebe) || null,
       expiraEm: Date.parse(texto(d.expira_em)) || 0, desde: evento.recebidoEm,
       ...(d.tipo === 'aprovar_dominio' ? { revisaoDominio: revisaoDominioDe(d) } : {}),
+      ...(propostaDe(d.proposta) ? { proposta: propostaDe(d.proposta) } : {}),
     }] };
   }
   if (evento.tipo === 'aprovacao.resolvida') return { ...estado, pendencias: (estado.pendencias ?? []).filter(p => p.id !== texto(d.aprovacao_id)) };

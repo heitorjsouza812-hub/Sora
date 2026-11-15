@@ -5,6 +5,7 @@ import { useState, type CSSProperties, type FormEvent } from 'react';
 import { Button, Input } from '../base';
 import { decidirAprovacao, responderPergunta, type Pendencia } from '../../state/projetos';
 import { BotoesAprovacao, CabecaPedido } from './decisao';
+import { ProporInstrucoes } from './ProporInstrucoes';
 import { usePrecisaDeVoce } from '../../state/atencao';
 import './pendencias.css';
 
@@ -69,6 +70,7 @@ function CartaoAprovacao({ p, cor }: { p: AprovacaoP; cor: string }) {
     <section className="pend-card" style={{ "--cor": cor } as CSSProperties} aria-label="Pedido de aprovação" data-pendencia="aprovacao">
       <CabecaPedido />
       <p className="pend-texto">{p.resumo}</p>
+      {p.proposta && <ProporInstrucoes proposta={p.proposta} />}
       {p.dano && <p className="pend-dano"><b>O que pode acontecer:</b> {p.dano}</p>}
       {p.quemRecebe && <p className="pend-dano"><b>Quem recebe:</b> {p.quemRecebe}</p>}
       <BotoesAprovacao desabilitado={p.enviando} onPermitir={() => void decidirAprovacao(p.id, 'permitir_uma_vez')} onSempre={aceitaSempre ? () => void decidirAprovacao(p.id, 'sempre_permitir') : undefined} onRecusar={() => void decidirAprovacao(p.id, 'negar')} />

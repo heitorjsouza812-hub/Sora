@@ -63,10 +63,12 @@ export interface EstadoProjetos {
   /** fluxos de prévia já encerrados: token atrasado não ressuscita a bolha */
   fluxosFechados?: string[];
 }
+import type { PropostaInstrucoes } from '../components/pendencias/proposta';
+export type { PropostaInstrucoes };
 /** Algo que a equipe espera do usuário: pergunta (inclui o orçamento estourado: Continuar/Parar) ou aprovação. */
 export type Pendencia = (
   | { tipo: 'pergunta'; texto: string; opcoes: { rotulo: string; valor: string }[]; respostaLivre: boolean }
-  | { tipo: 'aprovacao'; resumo: string; dano: string; quemRecebe: string | null; expiraEm: number; revisaoDominio?: RevisaoDominio }
+  | { tipo: 'aprovacao'; resumo: string; dano: string; quemRecebe: string | null; expiraEm: number; revisaoDominio?: RevisaoDominio; proposta?: PropostaInstrucoes }
 ) & { id: string; conversaId: string; desde: number; enviando?: boolean; erro?: string };
 /** Cartão `aprovar_dominio` (Leme): o agente quer abrir um domínio novo num perfil com login salvo. */
 export interface RevisaoDominio { dominio: string; url: string; perfil: { tipo: string; nome: string | null }; agenteId: string | null; opcoes: { rotulo: string; valor: 'sempre_permitir' | 'negar' }[] }

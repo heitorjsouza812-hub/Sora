@@ -1,4 +1,5 @@
 import { api } from './cliente';
+import { propostaDe } from '../components/pendencias/proposta';
 import type { PedidoAtencao, PropostaGrupo } from '../components/pendencias/tipos';
 
 export type EstadoMembroGrupo = 'livre' | 'trabalhando' | 'precisa_de_voce' | 'parado';
@@ -167,7 +168,7 @@ export function pedidoDaApi(d: Dados): PedidoAtencao {
   return {
     id: texto(d.id), tipo, titulo: texto(d.titulo), resumo: texto(d.resumo) || texto(d.pergunta),
     // `acao` é o id técnico da ferramenta (ex.: propor_instrucoes): o resumo já diz o que é.
-    detalhes: null, botId: textoOuNulo(d.agente_id), grupoId: textoOuNulo(d.grupo_id), acao: textoOuNulo(d.acao),
+    detalhes: null, proposta: propostaDe(d.proposta) ?? null, botId: textoOuNulo(d.agente_id), grupoId: textoOuNulo(d.grupo_id), acao: textoOuNulo(d.acao),
     opcoes: lista(d.opcoes).map(item => {
       const opcao = item as Dados;
       return { rotulo: texto(opcao.rotulo), valor: texto(opcao.valor), tom: opcao.valor === 'negar' ? 'perigo' as const : 'principal' as const };

@@ -157,3 +157,14 @@ describe('resposta direta: espera pela resposta', () => {
     expect(gerandoNa(e, conversaId, AGORA + 5_000)).toBe(false);
   });
 });
+
+describe('aprovacao.pedida de propor_instrucoes', () => {
+  it('guarda o texto proposto, a diferença e o motivo para o cartão mostrar antes de aprovar', () => {
+    const e = aplicarEvento(estado(), ev('aprovacao.pedida', { aprovacao_id: 'ap1', resumo: 'Propondo novas instruções', dano: 'Muda algo na sua conta.', quem_recebe: null, expira_em: new Date(AGORA + 6e5).toISOString(), agente_id: botId, proposta: { instrucoes: 'Responda sempre em PT-BR.', diferenca: '+ Responda sempre em PT-BR.', motivo: 'Pedido do usuário' } }));
+    expect(e.pendencias?.[0]).toMatchObject({ tipo: 'aprovacao', proposta: { instrucoes: 'Responda sempre em PT-BR.', diferenca: '+ Responda sempre em PT-BR.', motivo: 'Pedido do usuário' } });
+  });
+  it('sem proposta no evento, o cartão segue como antes', () => {
+    const e = aplicarEvento(estado(), ev('aprovacao.pedida', { aprovacao_id: 'ap2', resumo: 'x', dano: '', quem_recebe: null, expira_em: new Date(AGORA + 6e5).toISOString() }));
+    expect(e.pendencias?.[0]).not.toHaveProperty('proposta');
+  });
+});

@@ -13,6 +13,8 @@ export interface PedidoAtencao {
   titulo: string;
   resumo: string;
   detalhes?: string | null;
+  /** Instruções novas propostas pelo bot (`propor_instrucoes`), para ler antes de aprovar. */
+  proposta?: { instrucoes: string; diferenca?: string; motivo?: string } | null;
   botId?: string | null;
   grupoId?: string | null;
   /** Id técnico da ferramenta que pediu a aprovação (só decide se "Sempre permitir" existe). */

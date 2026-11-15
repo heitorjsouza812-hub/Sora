@@ -3,6 +3,7 @@ import { Button, Input } from '../base';
 import { SoraOrb } from '../mascot';
 import { decidirPedidoAtencao } from '../../state/atencao';
 import { BotoesAprovacao, CabecaPedido } from './decisao';
+import { ProporInstrucoes } from './ProporInstrucoes';
 import { ROTULOS_DECISAO, tempoRelativo } from './rotulos';
 import { registrarDecisao } from './registro';
 import { useOrigemDoPedido } from './useOrigemDoPedido';
@@ -45,6 +46,7 @@ export function CartaoPrecisaDeVoce({ pedido, compacto = false, semGrupo = false
       <div className="pend-conteudo">
         <h3>{pedido.titulo}</h3>
         <p className="pend-texto">{pedido.resumo}</p>
+        {pedido.proposta && <ProporInstrucoes proposta={pedido.proposta} />}
         {pedido.detalhes && <p className="pend-dano">{pedido.detalhes}</p>}
       </div>
       {pedido.tipo === 'pergunta' ? <>

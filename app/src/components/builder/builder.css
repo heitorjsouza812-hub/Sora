@@ -101,3 +101,12 @@
 @supports (interpolate-size: allow-keywords) { .bot-draft-sections details { interpolate-size: allow-keywords; } .bot-draft-sections details::details-content { height: 0; overflow: hidden; transition: height 200ms var(--ease, ease), content-visibility 200ms allow-discrete; } .bot-draft-sections details[open]::details-content { height: auto; } }
 @media (max-width: 720px) { .bot-draft-grid { grid-template-columns: minmax(0,1fr); } .bot-draft-swatches button { width: 44px; height: 44px; } .bot-draft-chips button, .bot-draft-card > footer button { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .bot-draft-card { animation: none; } .bot-draft-sections details::details-content, .bot-draft-sections summary::after { transition: none; } }
+
+/* Vitral-10: descrição longa não pode vazar o cartão (1440 e 390 px). Quebra a linha em vez de cortar. */
+.bot-draft-card { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.bot-draft-card > p { overflow-wrap: anywhere; }
+.bot-draft-sections { grid-template-columns: minmax(0, 1fr); }
+.bot-draft-sections details, .bot-draft-sections details > div, .bot-draft-sections details > label { min-width: 0; }
+.bot-draft-sections summary { align-items: flex-start; height: auto; }
+.bot-draft-sections summary span { flex: 1 1 0; min-width: 0; max-width: none; margin-left: auto; text-align: right; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.bot-draft-sections input, .bot-draft-sections select, .bot-draft-sections textarea { min-width: 0; max-width: 100%; }
