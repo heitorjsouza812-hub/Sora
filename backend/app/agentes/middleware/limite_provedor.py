@@ -34,6 +34,23 @@ AoEsperar = Callable[[int], Awaitable[None]]
 Dormir = Callable[[float], Awaitable[None]]
 
 
+def _so_chamadas_invalidas(resposta: Any) -> bool:
+    """A resposta do modelo tem chamadas de ferramenta, mas nenhuma com JSON válido."""
+    from langchain_core.messages import AIMessage
+
+    mensagens = getattr(resposta, "result", None)
+    if mensagens is None:
+        mensagens = [resposta]
+    for mensagem in mensagens:
+        if (
+            isinstance(mensagem, AIMessage)
+            and mensagem.invalid_tool_calls
+            and not mensagem.tool_calls
+        ):
+            return True
+    return False
+
+
 class MiddlewareLimiteDoProvedor(AgentMiddleware):
     def __init__(
         self,
@@ -60,7 +77,14 @@ class MiddlewareLimiteDoProvedor(AgentMiddleware):
         nivel = 1
         while True:
             try:
-                return await handler(pedido)
+                resposta = await handler(pedido)
+                if _so_chamadas_invalidas(resposta) and malformadas < TENTATIVAS_CHAMADA_MALFORMADA:
+                    # JSON quebrado nos argumentos: o LangChain põe a chamada em
+                    # ``invalid_tool_calls`` e o turno acabava mudo (sem ferramenta e sem texto).
+                    malformadas += 1
+                    registro.warning("o modelo mandou argumentos que não são JSON; repetindo")
+                    continue
+                return resposta
             except GraphBubbleUp:
                 raise
             except Exception as erro:
