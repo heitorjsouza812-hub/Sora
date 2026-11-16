@@ -152,6 +152,10 @@ def montar_middleware(
                 conversa_id=contexto.conversa_id,
                 cadeia_id=contexto.cadeia_id,
                 etapa_id=contexto.etapa_id,
+                # Bot de grupo: sem o grupo no cartão, "Permitir" não achava o turno a retomar.
+                canal_id=contexto.canal_id,
+                tarefa_canal_id=contexto.tarefa_canal_id,
+                revisao_canal=contexto.revisao_canal,
                 sem_supervisao=contexto.sem_supervisao,
                 etapa_painel=etapa_painel,
             )

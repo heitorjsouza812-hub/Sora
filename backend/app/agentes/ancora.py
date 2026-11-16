@@ -246,18 +246,32 @@ def _catalogo_revisado(
     import hashlib
     import json
 
+    from app.agentes.middleware.passos import id_do_turno
     from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
     from app.ferramentas.catalogo_preguicoso import montar_catalogo
     from app.revisor.execucao import conferir_acao
 
+    # O mesmo contexto do ``MiddlewareRevisor``: no grupo o cartão precisa do grupo (senão
+    # "Permitir" não retoma o turno) e na conversa direta o passo "Aprovado automaticamente" vai
+    # para o painel do turno.
     ferramenta_ctx = ContextoFerramenta(
         usuario_id=contexto.usuario_id,
         agente_id=contexto.agente_id,
         conversa_id=contexto.conversa_id,
         cadeia_id=contexto.cadeia_id,
         etapa_id=contexto.etapa_id,
+        canal_id=contexto.canal_id,
+        tarefa_canal_id=contexto.tarefa_canal_id,
+        revisao_canal=contexto.revisao_canal,
         sem_supervisao=contexto.sem_supervisao,
-        etapa_painel=contexto.etapa_id,
+        etapa_painel=contexto.etapa_id
+        or (
+            id_do_turno(contexto)
+            if contexto.papel in {"sora", "individual"}
+            and not contexto.sem_supervisao
+            and contexto.thread_proprio
+            else None
+        ),
     )
 
     async def antes(ferramenta, argumentos) -> None:
