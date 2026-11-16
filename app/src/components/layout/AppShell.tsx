@@ -1,3 +1,4 @@
+import { PreferenciasDaConversa, SeloAcessoTotal } from '../../state/preferenciasConversa';
 // Moldura do app: barra lateral + cabeçalho (identidade + ações). A navegação é pela barra lateral.
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { estadoAgente, useAgora, useProjetos } from '../../state/projetos';
@@ -16,6 +17,8 @@ import '../ui/conversa.css';
 
 export interface AppShellProps {
   children: ReactNode;
+  conversaId?: string;
+  preferenciasBotId?: string;
   /** quem aparece no cabeçalho: a Sora (padrão), um agente, ou só um título */
   agenteId?: string;
   titulo?: string;
@@ -82,11 +85,12 @@ function useDivisoriaAoRolar(cabecalho: RefObject<HTMLElement | null>) {
   }, [cabecalho]);
 }
 
-export function AppShell({ children, agenteId, titulo, subtitulo, acoes, menuItens }: AppShellProps) {
+export function AppShell({ children, agenteId, titulo, subtitulo, acoes, menuItens, conversaId, preferenciasBotId }: AppShellProps) {
   const [menu, setMenu] = useState(false);
   const cabecalho = useRef<HTMLElement>(null);
   useDivisoriaAoRolar(cabecalho);
   return (
+    <PreferenciasDaConversa conversaId={conversaId} botId={preferenciasBotId}>
     <div className="app-shell">
       <Sidebar />
       <section className="app-stage">
@@ -94,7 +98,7 @@ export function AppShell({ children, agenteId, titulo, subtitulo, acoes, menuIte
           <IconButton className="mobile-menu-button" variante="secundario" aria-label="Abrir menu" aria-expanded={menu} onClick={() => setMenu(true)}
             icone={<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>} />
           <Identidade agenteId={agenteId} titulo={titulo} subtitulo={subtitulo} />
-          <div className="topbar-actions">{acoes}<MenuDoCabecalho agenteId={agenteId} titulo={titulo} menuItens={menuItens} /></div>
+          <div className="topbar-actions"><SeloAcessoTotal />{acoes}<MenuDoCabecalho agenteId={agenteId} titulo={titulo} menuItens={menuItens} /></div>
         </header>
         <FaixaSemConexao />
         <FaixaErroEventos />
@@ -111,5 +115,6 @@ export function AppShell({ children, agenteId, titulo, subtitulo, acoes, menuIte
       <GestaoHost />
       <Comandos />
     </div>
+    </PreferenciasDaConversa>
   );
 }

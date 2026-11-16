@@ -75,7 +75,7 @@ function PaginaGrupo({ grupoId }: { grupoId: string }) {
     <MenuDoGrupo grupo={grupo} onRenomear={() => { setNome(grupo.nome); setRenomeando(true); }} onGerirBots={() => setEditandoBots(true)} />
   </>;
 
-  return <AppShell titulo={grupo.nome} subtitulo={rotuloBots(botsDoGrupo.length)} acoes={acoes}>
+  return <AppShell conversaId={grupo.conversaId} titulo={grupo.nome} subtitulo={rotuloBots(botsDoGrupo.length)} acoes={acoes}>
     <section className="grp-pagina" aria-label={`Grupo ${grupo.nome}`}>
       <div className="grp-avisos">
         <FaixaDeTrabalho estado={membros} />

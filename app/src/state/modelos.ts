@@ -1,3 +1,4 @@
+import type { NivelRaciocinio } from '../api/preferenciasConversa';
 import { useEffect, useSyncExternalStore } from 'react';
 import { api, mensagemDeErro } from '../api/cliente';
 import { recarregarSessao } from './sessao';
@@ -29,6 +30,8 @@ export interface ModeloConfigurado {
   preco_saida: string | number | null;
   velocidade_tps: number | null;
   ativo: boolean;
+  raciocinio?: NivelRaciocinio[];
+  rapido?: boolean;
 }
 
 /** Nome voltado à interface; o identificador técnico completo continua em `modelo`. */

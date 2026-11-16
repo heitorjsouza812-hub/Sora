@@ -103,7 +103,7 @@ export default function SoraChat() {
     void anexarEnvio(anexos, enviados => conversarComSora(texto, undefined, enviados));
   };
 
-  return <AppShell>
+  return <AppShell conversaId={projeto?.id} preferenciasBotId={soraId}>
     <main className={`conversation sora-main-chat${vazio ? ' is-vazio' : ''}${estado.carregando ? ' is-carregando' : ''}`} aria-label="Conversa com a Sora">
       <ZonaSoltar className="conversation-drop">
         <div className="conversation-area">

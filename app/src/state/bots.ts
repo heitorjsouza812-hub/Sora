@@ -5,6 +5,7 @@ import type { Movimento } from '../types';
 export type EstadoBot = 'livre' | 'trabalhando' | 'precisa_de_voce';
 
 export interface BotResumo {
+  criadoEm?: string;
   id: string;
   nome: string;
   cor: string;
@@ -31,6 +32,7 @@ export const estadoDoBot = (agente: Pick<AgenteBotSaida, 'estado'>): EstadoBot =
 function resumoDoBot(agente: AgenteBotSaida): BotResumo {
   return {
     id: agente.id,
+    criadoEm: agente.criado_em,
     nome: agente.nome,
     cor: agente.cor,
     funcao: agente.funcao,

@@ -179,7 +179,7 @@ export default function AgentChat() {
   if (!a || !st) return <Navigate to="/" replace />;
 
   return (
-    <AppShell agenteId={a.id} menuItens={[{ rotulo: 'Ver trabalho', onClick: verTrabalho }]} acoes={<IconButton aria-label="Painel Trabalho" aria-pressed={painelEmFolha ? folha : !painel.recolhido} icone={<ActivityIcon />} onClick={() => painelEmFolha ? setFolha(!folha) : painel.setRecolhido(!painel.recolhido)} />}>
+    <AppShell conversaId={a.conversaId} preferenciasBotId={a.id} agenteId={a.id} menuItens={[{ rotulo: 'Ver trabalho', onClick: verTrabalho }]} acoes={<IconButton aria-label="Painel Trabalho" aria-pressed={painelEmFolha ? folha : !painel.recolhido} icone={<ActivityIcon />} onClick={() => painelEmFolha ? setFolha(!folha) : painel.setRecolhido(!painel.recolhido)} />}>
       <div className={`workspace-grid agent-workspace ${painel.recolhido ? 'panel-collapsed' : ''}`} style={{ '--agent': a.cor } as CSSProperties}>
         <main className="conversation" aria-label={`Conversa com ${a.nome}`}>
           <ZonaSoltar className="conversation-drop">

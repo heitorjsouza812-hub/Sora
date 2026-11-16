@@ -47,6 +47,7 @@ test.beforeEach(async ({ page }) => {
 for (const [rota, titulo, nome] of [
   ['/', 'Em que posso te ajudar hoje?', 'sora'],
   ['/bots', 'Nenhum bot ainda', 'bots'],
+  ['/bots/novo', 'Que bot você quer criar?', 'novo-bot'],
   ['/grupos', 'Grupos reúnem seus bots', 'grupos'],
   ['/configuracoes', 'Configurações', 'configuracoes'],
   ['/configuracoes?secao=memoria', 'Nada guardado ainda.', 'configuracoes-secao-memoria'],

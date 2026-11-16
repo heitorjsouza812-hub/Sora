@@ -1,3 +1,5 @@
+import { SeletorModelo } from './SeletorModelo';
+import type { ControlePreferencias } from '../../state/preferenciasConversa';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ClipboardEvent, type FormEvent, type ReactNode } from 'react';
 import { BorderBeam } from 'border-beam';
 import { useGravacaoVoz } from './useGravacaoVoz';
@@ -13,6 +15,7 @@ import { useMedia } from './useMedia';
 import './compositor.css';
 
 interface Props {
+  preferencias?: ControlePreferencias;
   /** texto do campo; também é o rótulo acessível (aria-label) */
   placeholder: string;
   /** versão curta para o celular, quando o nome não cabe (padrão: "Mensagem…" se o texto passar de 26 letras) */
@@ -84,6 +87,7 @@ const avisoMic: Record<string, string> = {
 export function MessageComposer({
   placeholder, placeholderCurto, onSend, initialValue = '', value: controlado, onValueChange, processing = false,
   grande = false, tools = false, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras, acoesDireita, voz = false, focoSinal,
+  preferencias,
 }: Props) {
   const campoRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -227,6 +231,7 @@ export function MessageComposer({
               <button type="button" ref={toolsRef} className="tool-button" aria-haspopup="dialog" aria-expanded={toolsOpen} onClick={() => setToolsOpen((v) => !v)}>Ferramentas</button>
               <ToolsPopover open={toolsOpen} onClose={() => setToolsOpen(false)} anchorRef={toolsRef} plugins={pluginsConectados} />
             </>}
+            <SeletorModelo controle={preferencias} />
             {extras}
           </div>
           <div className="composer-dir">

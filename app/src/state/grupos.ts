@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { enviarMensagemGrupo, grupoDaApi, listarGrupos, listarMensagensGrupo, listarTarefasGrupo, mensagemDaApi, tarefaDaApi, type EnvioMensagemGrupo, type GrupoApi, type MensagemGrupoApi, type TarefaGrupoApi } from '../api/grupos';
 
 export interface GrupoResumo {
+  conversaId?: string;
   id: string;
   nome: string;
   membros: string[];

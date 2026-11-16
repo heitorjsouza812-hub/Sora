@@ -5,6 +5,7 @@ import type { PedidoAtencao, PropostaGrupo } from '../components/pendencias/tipo
 export type EstadoMembroGrupo = 'livre' | 'trabalhando' | 'precisa_de_voce' | 'parado';
 
 export interface GrupoApi {
+  conversaId?: string;
   id: string;
   nome: string;
   membros: string[];
@@ -53,6 +54,7 @@ export function grupoDaApi(d: Dados): GrupoApi {
   return {
     id: texto(d.id ?? d.grupo_id ?? d.canal_id),
     nome: texto(d.nome),
+    conversaId: textoOuNulo(d.conversa_id) ?? undefined,
     membros: lista(d.membros).map(item => typeof item === 'string' ? item : texto((item as Dados).id ?? (item as Dados).agente_id)).filter(Boolean),
     liderId: textoOuNulo(d.lider_id),
     precisaDeVoce: d.precisa_de_voce === true || d.estado === 'precisa_de_voce',
