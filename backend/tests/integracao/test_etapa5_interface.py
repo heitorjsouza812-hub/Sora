@@ -471,7 +471,7 @@ async def test_cartao_no_turno_de_grupo_pausa_e_a_decisao_retoma_o_mesmo_turno(
     chamadas: list[dict] = []
     alvo: dict[str, UUID] = {}
 
-    async def turno_falso(*, contexto, modelos, checkpointer, entrada=None, resposta=None):
+    async def turno_falso(*, contexto, modelos, checkpointer, entrada=None, resposta=None, **_):
         chamadas.append(
             {
                 "agente": str(contexto.agente_id),
@@ -867,7 +867,7 @@ async def test_grupo_com_429_espera_avisa_no_canal_e_entrega_o_resultado(
 
     tentativas: list[int] = []
 
-    async def turno_falso(*, contexto, modelos, checkpointer, entrada=None, resposta=None):
+    async def turno_falso(*, contexto, modelos, checkpointer, entrada=None, resposta=None, **_):
         tentativas.append(1)
         if len(tentativas) == 1:
             raise litellm.RateLimitError(

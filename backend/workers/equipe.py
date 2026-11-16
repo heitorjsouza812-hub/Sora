@@ -324,16 +324,28 @@ async def _turno_real(
         thread_proprio=thread,
     )
 
+    tentativas = 0
+
     async def chamar():
+        nonlocal tentativas
+        tentativas += 1
+        # Nova tentativa depois do 429: continua de onde a thread parou em vez de mandar o pedido
+        # de novo (o modelo refazia as ferramentas que já tinham rodado).
+        continuar = tentativas > 1
         if resposta is None:
             return await montar_e_rodar_agente(
                 contexto=contexto,
                 modelos=modelos,
                 checkpointer=ctx["checkpointer"],
                 entrada={"messages": [HumanMessage(entrada_usuario.conteudo)]},
+                continuar_se_parou=continuar,
             )
         return await montar_e_rodar_agente(
-            contexto=contexto, modelos=modelos, checkpointer=ctx["checkpointer"], resposta=resposta
+            contexto=contexto,
+            modelos=modelos,
+            checkpointer=ctx["checkpointer"],
+            resposta=resposta,
+            continuar_se_parou=continuar,
         )
 
     async def avisar_espera(segundos):

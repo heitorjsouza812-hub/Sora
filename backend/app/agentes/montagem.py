@@ -316,9 +316,16 @@ async def rodar_etapa(
     contexto: ContextoAgente,
     entrada: dict[str, Any] | None = None,
     resposta: Any | None = None,
+    *,
+    continuar_se_parou: bool = False,
 ) -> dict[str, Any]:
     """Roda (ou retoma com ``Command(resume=resposta)``) o agente da etapa com
-    ``ainvoke``, até ``entregar``, ``veredito`` ou uma interrupção."""
+    ``ainvoke``, até ``entregar``, ``veredito`` ou uma interrupção.
+
+    ``continuar_se_parou`` é para a nova tentativa depois de um erro (429 no grupo): se a thread
+    parou no meio (um passo falhou), continua dali com ``ainvoke(None)``. Mandar a entrada de
+    novo acrescentaria o pedido outra vez ao histórico, e o modelo refazia o que já tinha feito
+    (ferramentas com efeito rodando duas vezes)."""
     from langgraph.types import Command
 
     if entrada is not None and resposta is not None:
@@ -337,6 +344,10 @@ async def rodar_etapa(
     )
     configuracao = {"configurable": {"thread_id": thread_id}}
     chamada = Command(resume=resposta) if resposta is not None else entrada
+    if continuar_se_parou:
+        estado = await agente.aget_state(configuracao)
+        if estado.next and not getattr(estado, "interrupts", ()):
+            chamada = None
     # ``sync``: o checkpoint de cada passo é gravado antes de o job terminar. No modo padrão
     # (assíncrono) uma pausa recém-criada pode ainda não estar gravada quando o usuário responde.
     resultado = await agente.ainvoke(chamada, config=configuracao, durability="sync")
@@ -350,7 +361,10 @@ async def montar_e_rodar_agente(
     checkpointer: BaseCheckpointSaver,
     entrada: dict[str, Any] | None = None,
     resposta: Any | None = None,
+    continuar_se_parou: bool = False,
 ) -> dict[str, Any]:
     """Fronteira pública usada pelo worker: monta e executa ou retoma um agente."""
     agente = await montar_agente(contexto, modelos, checkpointer)
-    return await rodar_etapa(agente, contexto, entrada, resposta)
+    return await rodar_etapa(
+        agente, contexto, entrada, resposta, continuar_se_parou=continuar_se_parou
+    )
