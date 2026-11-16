@@ -59,6 +59,11 @@ def montar_middleware(
 
     # Por dentro da troca de modelo: a linha é do modelo que de fato respondeu.
     itens.append(MiddlewareCustoDasChamadas(_gravar_custo))
+    from app.agentes.middleware.pedido_valido import MiddlewarePedidoValido
+
+    # Por dentro da troca: o histórico e os esquemas saem no formato do modelo que vai responder.
+    # Por fora do revisor: ele confere os argumentos já lidos.
+    itens.append(MiddlewarePedidoValido())
     from app.agentes.middleware.limites import limites_do_agente
 
     chamadas_modelo, chamadas_ferramenta = limites_do_agente(contexto)
