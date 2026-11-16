@@ -633,10 +633,186 @@ pub fn areas_a_tarjar(pilha: &[JanelaNaPilha]) -> Vec<Retangulo> {
     tarjar
 }
 
+// ---------- abrir programa pelo nome (Vela-12) ----------
+
+/// Programa que o bot pode abrir pelo nome (`abrir_programa`). Lista fechada: nada de caminho,
+/// argumento livre, caixa Executar ou busca do Iniciar. O executável sai do registro "App Paths"
+/// (ou da pasta do Windows, para o Bloco de Notas e o Paint) e precisa ter exatamente o nome
+/// esperado: um App Paths adulterado que aponte para um terminal é recusado.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ProgramaAbrivel {
+    /// Nomes que o bot pode usar (minúsculas, sem acento).
+    pub nomes: &'static [&'static str],
+    /// Nome legível, para o cartão e para o bot.
+    pub rotulo: &'static str,
+    /// Executável procurado no App Paths.
+    pub executavel: &'static str,
+    /// Programa das janelas que ele abre (o que o cartão "Precisa de você" libera).
+    pub janela: &'static str,
+    /// Argumentos fixos (nunca vindos do servidor).
+    pub argumentos: &'static str,
+    /// Fica na pasta do sistema (`C:\Windows\System32`) quando não há App Paths.
+    pub do_sistema: bool,
+}
+
+pub const PROGRAMAS_ABRIVEIS: &[ProgramaAbrivel] = &[
+    ProgramaAbrivel { nomes: &["excel", "microsoft excel", "planilha", "planilhas"], rotulo: "Excel", executavel: "excel.exe", janela: "excel.exe", argumentos: "", do_sistema: false },
+    ProgramaAbrivel { nomes: &["word", "microsoft word"], rotulo: "Word", executavel: "winword.exe", janela: "winword.exe", argumentos: "", do_sistema: false },
+    ProgramaAbrivel { nomes: &["powerpoint", "microsoft powerpoint"], rotulo: "PowerPoint", executavel: "powerpnt.exe", janela: "powerpnt.exe", argumentos: "", do_sistema: false },
+    ProgramaAbrivel { nomes: &["bloco de notas", "notepad", "bloco"], rotulo: "Bloco de Notas", executavel: "notepad.exe", janela: "notepad.exe", argumentos: "", do_sistema: true },
+    ProgramaAbrivel { nomes: &["paint", "mspaint"], rotulo: "Paint", executavel: "mspaint.exe", janela: "mspaint.exe", argumentos: "", do_sistema: true },
+    ProgramaAbrivel { nomes: &["libreoffice calc", "calc do libreoffice", "libreoffice planilha"], rotulo: "LibreOffice Calc", executavel: "soffice.exe", janela: "soffice.bin", argumentos: "--calc", do_sistema: false },
+    ProgramaAbrivel { nomes: &["libreoffice writer", "writer do libreoffice", "libreoffice"], rotulo: "LibreOffice Writer", executavel: "soffice.exe", janela: "soffice.bin", argumentos: "--writer", do_sistema: false },
+];
+
+fn sem_acento(texto: &str) -> String {
+    texto
+        .chars()
+        .map(|c| match c {
+            'á' | 'à' | 'â' | 'ã' | 'ä' => 'a',
+            'é' | 'ê' | 'è' | 'ë' => 'e',
+            'í' | 'î' | 'ì' | 'ï' => 'i',
+            'ó' | 'ô' | 'õ' | 'ò' | 'ö' => 'o',
+            'ú' | 'û' | 'ù' | 'ü' => 'u',
+            'ç' => 'c',
+            c => c,
+        })
+        .collect()
+}
+
+/// Programa da lista pelo nome que o bot mandou ("Excel", "excel.exe", "Bloco de Notas").
+pub fn programa_abrivel(nome: &str) -> Option<&'static ProgramaAbrivel> {
+    let nome = sem_acento(&nome.trim().to_lowercase());
+    let nome = nome.strip_suffix(".exe").unwrap_or(&nome).trim();
+    if nome.is_empty() || nome.len() > 60 {
+        return None;
+    }
+    PROGRAMAS_ABRIVEIS.iter().find(|p| {
+        p.nomes.contains(&nome) || p.executavel.strip_suffix(".exe") == Some(nome)
+    })
+}
+
+/// O caminho achado no registro abre mesmo o programa esperado (nunca um terminal ou script)?
+pub fn caminho_confere(caminho: &str, programa: &ProgramaAbrivel) -> bool {
+    let exe = normalizar_programa(caminho.trim_matches('"'));
+    exe == programa.executavel && !programa_bloqueado(&exe) && !programa_bloqueado(programa.janela)
+}
+
+// ---------- árvore: o que vale mostrar (Vela-12) ----------
+
+/// Elemento candidato da árvore de UI Automation, antes da escolha.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Candidato {
+    pub papel: &'static str,
+    pub nome: String,
+    pub tem_valor: bool,
+    pub foco: bool,
+}
+
+/// Elementos que só poluem a leitura: célula vazia de planilha (centenas no Excel) e cabeçalho de
+/// linha/coluna de grade ("A", "B", "12").
+pub fn elemento_ruido(c: &Candidato) -> bool {
+    if c.foco {
+        return false;
+    }
+    match c.papel {
+        "item de tabela" => !c.tem_valor,
+        "cabeçalho" => {
+            let n = c.nome.trim();
+            !n.is_empty() && n.len() <= 3 && n.chars().all(|ch| ch.is_ascii_alphanumeric())
+        }
+        _ => false,
+    }
+}
+
+/// Escolhe até `max` elementos: primeiro o que tem foco e o que tem valor (células e campos
+/// preenchidos: é o que o bot precisa para conferir o trabalho), depois o resto na ordem da
+/// janela. Devolve os índices na ordem original.
+pub fn escolher_elementos(candidatos: &[Candidato], max: usize) -> Vec<usize> {
+    let mut escolhidos: Vec<usize> = Vec::new();
+    for (i, c) in candidatos.iter().enumerate() {
+        if escolhidos.len() >= max {
+            break;
+        }
+        if !elemento_ruido(c) && (c.foco || c.tem_valor) {
+            escolhidos.push(i);
+        }
+    }
+    for (i, c) in candidatos.iter().enumerate() {
+        if escolhidos.len() >= max {
+            break;
+        }
+        if !elemento_ruido(c) && !(c.foco || c.tem_valor) {
+            escolhidos.push(i);
+        }
+    }
+    escolhidos.sort_unstable();
+    escolhidos
+}
+
+// ---------- digitação: quando conferir o foco de novo (Vela-12) ----------
+
+/// Conferir a cada caractere (UI Automation no Excel custa dezenas de ms) deixava a digitação
+/// lenta. A janela em primeiro plano é conferida a **cada passo** (barato); o campo com o foco
+/// (senha?) e o programa são conferidos de novo depois de toda tecla que muda o foco (Tab, Enter,
+/// setas…), a cada `CONFERIR_A_CADA` caracteres e sempre que a janela da frente muda.
+pub const CONFERIR_A_CADA: usize = 8;
+
+pub fn tecla_muda_foco(tecla: &Tecla) -> bool {
+    matches!(tecla.vk, 0x09 | 0x0D | 0x21..=0x28 | 0x1B)
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn abrir_pelo_nome_so_na_lista_e_nunca_bloqueado() {
+        assert_eq!(programa_abrivel("Excel").map(|p| p.executavel), Some("excel.exe"));
+        assert_eq!(programa_abrivel("EXCEL.EXE").map(|p| p.executavel), Some("excel.exe"));
+        assert_eq!(programa_abrivel("Bloco de Notas").map(|p| p.executavel), Some("notepad.exe"));
+        assert_eq!(programa_abrivel("libreoffice calc").map(|p| p.argumentos), Some("--calc"));
+        for nome in ["cmd", "powershell", "explorer", "regedit", "C:\\Windows\\System32\\cmd.exe", "excel.exe /x", "", "taskmgr", "sora", "executar"] {
+            assert!(programa_abrivel(nome).is_none(), "{nome}");
+        }
+        for p in PROGRAMAS_ABRIVEIS {
+            assert!(!programa_bloqueado(p.executavel) && !programa_bloqueado(p.janela), "{}", p.rotulo);
+            assert!(!p.argumentos.contains(['&', '|', '>', '<', '"']), "{}", p.rotulo);
+        }
+        let excel = programa_abrivel("excel").unwrap();
+        assert!(caminho_confere("C:\\Program Files\\Microsoft Office\\Root\\Office16\\EXCEL.EXE", excel));
+        assert!(caminho_confere("\"C:\\Office\\EXCEL.EXE\"", excel));
+        // App Paths adulterado: nunca abre outra coisa
+        assert!(!caminho_confere("C:\\Windows\\System32\\cmd.exe", excel));
+        assert!(!caminho_confere("C:\\x\\excel.exe.cmd", excel));
+    }
+
+    #[test]
+    fn arvore_mostra_primeiro_o_que_tem_valor() {
+        let c = |papel: &'static str, nome: &str, tem_valor: bool, foco: bool| Candidato { papel, nome: nome.into(), tem_valor, foco };
+        let mut lista = vec![c("botão", "Negrito", false, false); 5];
+        lista.push(c("cabeçalho", "A", false, false));
+        lista.push(c("item de tabela", "A1", true, false));
+        lista.push(c("item de tabela", "B1", false, false));
+        lista.push(c("item de tabela", "C7", false, true));
+        lista.push(c("cabeçalho", "Nome do arquivo", false, false));
+        assert!(elemento_ruido(&lista[5]) && elemento_ruido(&lista[7]));
+        assert!(!elemento_ruido(&lista[8]) && !elemento_ruido(&lista[9]));
+        // com espaço para 3: a célula preenchida e a com foco entram antes dos botões
+        assert_eq!(escolher_elementos(&lista, 3), vec![0, 6, 8]);
+        assert_eq!(escolher_elementos(&lista, 100), vec![0, 1, 2, 3, 4, 6, 8, 9]);
+    }
+
+    #[test]
+    fn teclas_que_mudam_o_foco() {
+        for nome in ["Tab", "Return", "Down", "Escape", "Page_Down"] {
+            let (_, base) = interpretar_tecla(nome).unwrap();
+            assert!(tecla_muda_foco(&base), "{nome}");
+        }
+        let (_, a) = interpretar_tecla("ctrl+a").unwrap();
+        assert!(!tecla_muda_foco(&a));
+    }
 
     #[test]
     fn sora_no_titulo_e_caixa_executar_sao_bloqueadas() {

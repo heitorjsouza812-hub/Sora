@@ -63,6 +63,8 @@ pub const MARCA_SORA: usize = 0x534F_5241;
 /// Largura máxima da captura enviada ao bot (o resto da tela é reduzido na mesma proporção).
 const LARGURA_MAXIMA: i32 = 1280;
 const MAX_ELEMENTOS: usize = 250;
+/// Quantos elementos da janela são lidos antes da escolha (o Excel tem ~700, quase todos células).
+const MAX_CANDIDATOS: usize = 3_000;
 const MAX_JANELAS: usize = 25;
 
 /// Tela principal: tamanho físico, tamanho da captura e a escala entre os dois.
@@ -101,6 +103,61 @@ fn h(hwnd: isize) -> HWND {
 /// terminais, a própria Sora e a Sora web; ver `retangulos_bloqueados`), conferindo antes e
 /// depois da cópia. Com um programa bloqueado na frente, devolve `None`: nenhum pixel sai do PC.
 pub fn capturar(t: &Tela) -> Result<Option<Vec<u8>>, String> {
+    match copiar_tela(t)? {
+        Some(rgb) => codificar(t, &rgb).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// Espera a tela parar de mudar (Vela-12): copia até `tentativas` vezes, `intervalo` entre uma
+/// e outra, e codifica só a última. Antes o servidor pedia três observações completas (captura,
+/// PNG, árvore e ida e volta) depois de cada ação; aqui a comparação é local e barata.
+pub fn capturar_estavel(t: &Tela, tentativas: usize, intervalo: std::time::Duration) -> Result<Option<Vec<u8>>, String> {
+    let mut anterior: Option<u64> = None;
+    let mut ultima: Option<Vec<u8>> = None;
+    for i in 0..tentativas.max(1) {
+        if i > 0 {
+            std::thread::sleep(intervalo);
+        }
+        let Some(rgb) = copiar_tela(t)? else {
+            return Ok(None);
+        };
+        let assinatura = assinar(&rgb);
+        let parou = anterior == Some(assinatura);
+        anterior = Some(assinatura);
+        ultima = Some(rgb);
+        if parou {
+            break;
+        }
+    }
+    match ultima {
+        Some(rgb) => codificar(t, &rgb).map(Some),
+        None => Ok(None),
+    }
+}
+
+fn assinar(rgb: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    rgb.hash(&mut h);
+    h.finish()
+}
+
+fn codificar(t: &Tela, rgb: &[u8]) -> Result<Vec<u8>, String> {
+    let mut saida = Vec::new();
+    {
+        let mut codificador = png::Encoder::new(&mut saida, t.largura as u32, t.altura as u32);
+        codificador.set_color(png::ColorType::Rgb);
+        codificador.set_depth(png::BitDepth::Eight);
+        codificador.set_compression(png::Compression::Fast);
+        let mut escritor = codificador.write_header().map_err(|e| e.to_string())?;
+        escritor.write_image_data(rgb).map_err(|e| e.to_string())?;
+    }
+    Ok(saida)
+}
+
+/// Cópia da tela já tarjada (RGB, tamanho da captura) ou `None` se deve ser omitida (Cerca A3).
+fn copiar_tela(t: &Tela) -> Result<Option<Vec<u8>>, String> {
     let (w, hh) = (t.largura, t.altura);
     let antes = retangulos_bloqueados(t);
     if antes.1 {
@@ -165,16 +222,7 @@ pub fn capturar(t: &Tela) -> Result<Option<Vec<u8>>, String> {
     for r in antes.0.iter().chain(depois.0.iter()) {
         super::regras::tarjar_rgb(&mut rgb, w as usize, hh as usize, *r);
     }
-    let mut saida = Vec::new();
-    {
-        let mut codificador = png::Encoder::new(&mut saida, w as u32, hh as u32);
-        codificador.set_color(png::ColorType::Rgb);
-        codificador.set_depth(png::BitDepth::Eight);
-        codificador.set_compression(png::Compression::Fast);
-        let mut escritor = codificador.write_header().map_err(|e| e.to_string())?;
-        escritor.write_image_data(&rgb).map_err(|e| e.to_string())?;
-    }
-    Ok(Some(saida))
+    Ok(Some(rgb))
 }
 
 fn classe(hwnd: HWND) -> String {
@@ -488,6 +536,43 @@ pub fn alvo_em_foco() -> Option<AlvoJanela> {
     (!frente.is_invalid()).then(|| alvo_da_janela(frente))
 }
 
+/// A Sora na frente cega o bot (captura omitida, ação recusada: Cerca A2/A3), e o usuário
+/// conversa com o bot justamente na janela da Sora. Quando um bot vai usar o PC e a janela
+/// principal da Sora está na frente, ela é minimizada (a ilha aparece fora do app, com o bot
+/// trabalhando); se a frente é a ilha, volta a janela em que o bot trabalhava. Nada de tecla
+/// injetada: só `ShowWindow`/`SetForegroundWindow`. Devolve se tirou a Sora da frente.
+pub fn afastar_a_sora(janela_do_bot: Option<isize>) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{SW_MINIMIZE, ShowWindow};
+    // SAFETY: só leitura da janela da frente.
+    let frente = unsafe { GetForegroundWindow() };
+    if frente.is_invalid() || pid_da_janela(frente) != std::process::id() {
+        return false;
+    }
+    if matches!(classe(frente).as_str(), "SoraPcBorda" | "SoraPcParar") {
+        return false;
+    }
+    let ilha = super::regras::ilha_conhecida().hwnd;
+    if ilha != 0 && ilha == frente.0 as isize {
+        return janela_do_bot.is_some_and(trazer_para_frente);
+    }
+    // SAFETY: janela da própria Sora; minimizar não fecha nem muda nada dentro dela.
+    unsafe {
+        let _ = ShowWindow(frente, SW_MINIMIZE);
+    }
+    if let Some(h) = janela_do_bot {
+        let _ = trazer_para_frente(h);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(350));
+    true
+}
+
+/// Só o HWND da janela da frente (barato: sem abrir processo nem UI Automation).
+pub fn janela_da_frente() -> Option<isize> {
+    // SAFETY: só leitura.
+    let frente = unsafe { GetForegroundWindow() };
+    (!frente.is_invalid()).then_some(frente.0 as isize)
+}
+
 pub fn alvo_da_ref(hwnd: isize) -> Option<AlvoJanela> {
     // SAFETY: HWND vindo do servidor; com HWND inválido as chamadas só falham.
     let visivel = unsafe { IsWindowVisible(h(hwnd)).as_bool() };
@@ -498,7 +583,26 @@ pub fn alvo_da_ref(hwnd: isize) -> Option<AlvoJanela> {
 pub fn trazer_para_frente(hwnd: isize) -> bool {
     // SAFETY: HWND do servidor; inválido só falha.
     unsafe {
+        use windows::Win32::System::Threading::GetCurrentThreadId;
+        use windows::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SW_RESTORE, ShowWindow};
+        if IsIconic(h(hwnd)).as_bool() {
+            let _ = ShowWindow(h(hwnd), SW_RESTORE);
+        }
         let _ = SetForegroundWindow(h(hwnd));
+        if GetForegroundWindow() == h(hwnd) {
+            return true;
+        }
+        // O Windows só deixa trocar o primeiro plano a quem recebeu a última entrada: junta a fila de
+        // entrada desta thread à da janela da frente por um instante (sem injetar tecla nenhuma).
+        let frente = GetForegroundWindow();
+        let thread_frente = GetWindowThreadProcessId(frente, None);
+        let minha = GetCurrentThreadId();
+        let juntou = thread_frente != 0 && thread_frente != minha && windows::Win32::System::Threading::AttachThreadInput(minha, thread_frente, true).as_bool();
+        let _ = BringWindowToTop(h(hwnd));
+        let _ = SetForegroundWindow(h(hwnd));
+        if juntou {
+            let _ = windows::Win32::System::Threading::AttachThreadInput(minha, thread_frente, false);
+        }
         GetForegroundWindow() == h(hwnd)
     }
 }
@@ -577,7 +681,23 @@ pub fn janelas(t: &Tela, pid_proprio: u32) -> Vec<Value> {
 
 // ---------- UI Automation ----------
 
+thread_local! {
+    /// Um `CUIAutomation` por thread (Vela-12): criar um a cada conferência custava milissegundos
+    /// por caractere digitado.
+    static AUTOMACAO: std::cell::RefCell<Option<IUIAutomation>> = const { std::cell::RefCell::new(None) };
+}
+
 fn automacao() -> Option<IUIAutomation> {
+    AUTOMACAO.with(|celula| {
+        let mut guardada = celula.borrow_mut();
+        if guardada.is_none() {
+            *guardada = criar_automacao();
+        }
+        guardada.clone()
+    })
+}
+
+fn criar_automacao() -> Option<IUIAutomation> {
     // SAFETY: COM no modo multithread desta thread (repetir é inofensivo: devolve S_FALSE).
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -662,11 +782,13 @@ pub fn arvore(t: &Tela, pid_proprio: u32) -> Vec<Value> {
         let Ok(todos) = raiz.FindAllBuildCache(TreeScope_Descendants, &condicao, &cache) else {
             return saida;
         };
-        let total = todos.Length().unwrap_or(0);
+        // Vela-12: primeiro junta os candidatos (até `MAX_CANDIDATOS`), depois escolhe: o que tem
+        // foco e o que tem valor (células e campos preenchidos) entra antes dos botões da faixa de
+        // opções; célula vazia e cabeçalho de grade ficam de fora (`regras::escolher_elementos`).
+        let total = todos.Length().unwrap_or(0).min(MAX_CANDIDATOS as i32);
+        let mut itens: Vec<Value> = Vec::new();
+        let mut candidatos: Vec<super::regras::Candidato> = Vec::new();
         for i in 0..total {
-            if saida.len() >= MAX_ELEMENTOS {
-                break;
-            }
             let Ok(el) = todos.GetElement(i) else { continue };
             if el.CachedIsOffscreen().map(|b| b.as_bool()).unwrap_or(true) {
                 continue;
@@ -695,21 +817,29 @@ pub fn arvore(t: &Tela, pid_proprio: u32) -> Vec<Value> {
                 estados.push("desativado");
             }
             let mut item = json!({
-                "ref": format!("e{}", saida.len() + 1),
                 "papel": nome_papel,
                 "nome": nome.chars().take(120).collect::<String>(),
                 "centro": [capturado(t, cx), capturado(t, cy)],
             });
+            let mut tem_valor = false;
             if !senha
                 && let Ok(valor) = el.GetCachedPropertyValue(UIA_ValueValuePropertyId)
                 && let Ok(texto) = BSTR::try_from(&valor)
                 && !texto.is_empty()
             {
+                tem_valor = true;
                 item["valor"] = Value::String(texto.to_string().chars().take(200).collect());
             }
+            let foco = estados.contains(&"foco");
             if !estados.is_empty() {
                 item["estados"] = json!(estados);
             }
+            candidatos.push(super::regras::Candidato { papel: nome_papel, nome, tem_valor, foco });
+            itens.push(item);
+        }
+        for i in super::regras::escolher_elementos(&candidatos, MAX_ELEMENTOS) {
+            let mut item = itens[i].take();
+            item["ref"] = Value::String(format!("e{}", saida.len() + 1));
             saida.push(item);
         }
     }
@@ -839,21 +969,120 @@ pub fn enviar(passo: Passo, t: &Tela) -> Result<(), String> {
 }
 
 /// Observação completa para o servidor.
-pub fn observar(pid_proprio: u32) -> Result<(Value, Tela), String> {
+/// Com `estavel`, espera a tela parar de mudar (até 4 cópias, 200 ms entre elas) antes de
+/// codificar: é a conferência depois de agir. `ms` traz o tempo de cada parte (medição, Vela-12).
+pub fn observar(pid_proprio: u32, estavel: bool) -> Result<(Value, Tela), String> {
+    let inicio = std::time::Instant::now();
     let t = tela();
-    let png = capturar(&t)?;
+    let png = if estavel { capturar_estavel(&t, 4, std::time::Duration::from_millis(200))? } else { capturar(&t)? };
+    let ms_captura = inicio.elapsed().as_millis() as u64;
     // omitida: nem pixel nem árvore saem do PC; a lista de janelas (títulos bloqueados apagados)
     // continua, para o bot trazer um programa liberado para a frente
     let omitida = png.is_none();
+    let lista = janelas(&t, pid_proprio);
+    let ms_janelas = inicio.elapsed().as_millis() as u64 - ms_captura;
+    let elementos = if omitida { Vec::new() } else { arvore(&t, pid_proprio) };
+    let ms_total = inicio.elapsed().as_millis() as u64;
     Ok((
         json!({
             "captura_omitida": omitida,
             "png": png.map(|p| base64::engine::general_purpose::STANDARD.encode(p)).unwrap_or_default(),
             "largura": t.largura,
             "altura": t.altura,
-            "janelas": janelas(&t, pid_proprio),
-            "arvore": if omitida { Vec::new() } else { arvore(&t, pid_proprio) },
+            "janelas": lista,
+            "arvore": elementos,
+            "ms": {"captura": ms_captura, "janelas": ms_janelas, "arvore": ms_total - ms_captura - ms_janelas, "total": ms_total},
         }),
         t,
     ))
+}
+
+// ---------- abrir programa pelo nome (Vela-12) ----------
+
+/// Caminho do executável no registro "App Paths" (usuário, depois máquina); para o Bloco de
+/// Notas e o Paint, a pasta do sistema. Só devolve caminho que existe e que confere com o
+/// programa esperado (`regras::caminho_confere`).
+pub fn caminho_do_programa(programa: &super::regras::ProgramaAbrivel) -> Option<String> {
+    use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
+    use windows::core::HSTRING;
+    let chave = HSTRING::from(format!("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\{}", programa.executavel));
+    for raiz in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        let mut buffer = [0u16; 1024];
+        let mut tamanho = (buffer.len() * 2) as u32;
+        // SAFETY: buffer local com o tamanho em bytes informado; valor padrão da chave.
+        let ok = unsafe {
+            RegGetValueW(raiz, &chave, None, RRF_RT_REG_SZ, None, Some(buffer.as_mut_ptr().cast()), Some(&mut tamanho))
+        };
+        if ok.is_ok() {
+            let n = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+            let caminho = String::from_utf16_lossy(&buffer[..n]).trim_matches('"').to_string();
+            if super::regras::caminho_confere(&caminho, programa) && std::path::Path::new(&caminho).is_file() {
+                return Some(caminho);
+            }
+        }
+    }
+    if programa.do_sistema {
+        let pasta = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
+        let caminho = format!("{pasta}\\System32\\{}", programa.executavel);
+        if super::regras::caminho_confere(&caminho, programa) && std::path::Path::new(&caminho).is_file() {
+            return Some(caminho);
+        }
+    }
+    None
+}
+
+/// Janelas de topo visíveis de um programa (da frente para trás).
+pub fn janelas_do_programa(programa: &str) -> Vec<isize> {
+    let mut coleta = Coleta { janelas: Vec::new() };
+    // SAFETY: callback de `janelas`; a coleta vive até o fim da chamada.
+    unsafe {
+        let _ = EnumWindows(Some(coletar_janela), LPARAM(&mut coleta as *mut _ as isize));
+    }
+    coleta
+        .janelas
+        .into_iter()
+        .filter(|(hwnd, _)| !titulo(*hwnd).trim().is_empty() && alvo_da_janela(*hwnd).programa == programa)
+        .map(|(hwnd, _)| hwnd.0 as isize)
+        .collect()
+}
+
+/// Abre o executável (sem shell de comando, sem caixa Executar: `ShellExecuteW` direto no caminho
+/// conferido) e espera uma janela nova do programa aparecer. Devolve o HWND dela.
+pub fn abrir_programa(caminho: &str, argumentos: &str, programa_da_janela: &str, prazo: std::time::Duration) -> Result<isize, String> {
+    use windows::Win32::UI::{
+        Shell::ShellExecuteW,
+        WindowsAndMessaging::{ASFW_ANY, AllowSetForegroundWindow, SW_SHOWNORMAL},
+    };
+    use windows::core::HSTRING;
+    let antes = janelas_do_programa(programa_da_janela);
+    // SAFETY: strings válidas até o fim da chamada; sem janela dona.
+    let r = unsafe {
+        let _ = AllowSetForegroundWindow(ASFW_ANY);
+        ShellExecuteW(None, &HSTRING::from("open"), &HSTRING::from(caminho), &HSTRING::from(argumentos), None, SW_SHOWNORMAL)
+    };
+    if (r.0 as isize) <= 32 {
+        return Err("o Windows não conseguiu abrir o programa".into());
+    }
+    let inicio = std::time::Instant::now();
+    while inicio.elapsed() < prazo {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let agora = janelas_do_programa(programa_da_janela);
+        if let Some(nova) = agora.iter().find(|h| !antes.contains(h)) {
+            // a janela nasce antes de pintar: um respiro para ela aceitar o foco
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            if !trazer_para_frente(*nova) {
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                let _ = trazer_para_frente(*nova);
+            }
+            return Ok(*nova);
+        }
+    }
+    // programa de instância única que já estava aberto (reaproveitou a janela)
+    janelas_do_programa(programa_da_janela)
+        .first()
+        .copied()
+        .inspect(|h| {
+            let _ = trazer_para_frente(*h);
+        })
+        .ok_or_else(|| "o programa não abriu a tempo".into())
 }

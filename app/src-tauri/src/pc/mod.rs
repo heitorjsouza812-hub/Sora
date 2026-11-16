@@ -79,6 +79,10 @@ struct Estado {
     executando: bool,
     parados: HashMap<String, Instant>,
     usados: HashMap<String, Instant>,
+    /// Janela em que o bot trabalhava (a da frente depois da última ação dele). Ao retomar depois
+    /// da pausa, volta para a frente: o usuário acabou de clicar na Sora para decidir o cartão, e
+    /// com a Sora na frente o bot não vê nem age em nada (Vela-12, teste do Heitor).
+    janela_do_bot: Option<isize>,
 }
 
 impl Estado {
@@ -222,6 +226,7 @@ fn encerrar_controle(c: &ControlePc, e: &mut Estado) {
     e.controlador = None;
     e.pausado = false;
     e.desde = None;
+    e.janela_do_bot = None;
     atualizar_borda(c, e);
 }
 
@@ -390,15 +395,18 @@ fn executar(c: &ControlePc, comando: &Value) -> Value {
                 if let Some(outro) = outro {
                     return erro(ErroPc { por: Some(outro.nome), ..ErroPc::novo("em_uso") });
                 }
+                let mesmo = e.controlador.as_ref().is_some_and(|a| a.id == agente.id);
+                let janela = if mesmo { e.janela_do_bot } else { None };
                 e.pausado = false;
                 e.controlador = Some(agente);
                 e.desde = Some(Instant::now());
                 e.ultimo = Some(Instant::now());
                 c.interrompido.store(false, Ordering::SeqCst);
                 atualizar_borda(c, &e);
-                return ok(Value::Null);
+                drop(e);
+                return ok(json!({ "janela_restaurada": restaurar_janela(janela) }));
             }
-            "observar" | "agir" => {}
+            "observar" | "agir" | "abrir_programa" => {}
             _ => return erro(ErroPc::com_mensagem("invalido", "operação desconhecida")),
         }
         if e.parados.get(&agente.id).is_some_and(|t| t.elapsed() < PARADO_POR) {
@@ -419,32 +427,159 @@ fn executar(c: &ControlePc, comando: &Value) -> Value {
         e.ultimo = Some(Instant::now());
         e.executando = true;
     }
+    // Vela-12: o usuário pede pelo chat da Sora, então a Sora está na frente quando o bot começa;
+    // ela sai da frente (minimizada) em vez de o bot ficar cego. Só no app (nos testes não há tela).
+    #[cfg(windows)]
+    let afastou = c.avisos.get().is_some() && sistema::afastar_a_sora(travar(&c.estado).janela_do_bot);
+    #[cfg(not(windows))]
+    let afastou = false;
+    let prazo = comando["prazo_em_ms"].as_u64().unwrap_or(0);
     let resultado = match operacao {
-        "observar" => observar(),
-        _ => agir(c, &dados, comando["prazo_em_ms"].as_u64().unwrap_or(0)),
+        "observar" => observar(dados.get("estavel").and_then(Value::as_bool).unwrap_or(false)),
+        "abrir_programa" => abrir(c, &dados, prazo),
+        _ => agir(c, &dados, prazo),
     };
     let mut e = travar(&c.estado);
     e.executando = false;
     e.ultimo = Some(Instant::now());
     match resultado {
-        Ok(v) => ok(v),
+        Ok(mut v) => {
+            if afastou && let Some(obj) = v.as_object_mut() {
+                obj.insert("sora_minimizada".into(), Value::Bool(true));
+            }
+            if let Some(janela) = v.get("janela").and_then(Value::as_str).and_then(|j| j.parse::<isize>().ok()) {
+                e.janela_do_bot = Some(janela);
+            }
+            ok(v)
+        }
         Err(falha) => erro(falha),
     }
 }
 
 #[cfg(not(windows))]
-fn observar() -> Result<Value, ErroPc> {
+fn restaurar_janela(_janela: Option<isize>) -> bool {
+    false
+}
+
+/// Traz de volta a janela em que o bot trabalhava (só se ainda existe e não é bloqueada).
+#[cfg(windows)]
+fn restaurar_janela(janela: Option<isize>) -> bool {
+    let Some(hwnd) = janela else { return false };
+    let Some(alvo) = sistema::alvo_da_ref(hwnd) else { return false };
+    if alvo.pid == std::process::id() || regras::programa_bloqueado(&alvo.programa) || regras::titulo_bloqueado(&alvo.titulo) {
+        return false;
+    }
+    let ok = sistema::trazer_para_frente(hwnd);
+    if ok {
+        thread::sleep(Duration::from_millis(150));
+    }
+    ok
+}
+
+#[cfg(not(windows))]
+fn observar(_estavel: bool) -> Result<Value, ErroPc> {
     Err(ErroPc::novo("so_windows"))
 }
 
 #[cfg(windows)]
-fn observar() -> Result<Value, ErroPc> {
-    sistema::observar(std::process::id()).map(|(v, _)| v).map_err(|m| ErroPc::com_mensagem("falha", m))
+fn observar(estavel: bool) -> Result<Value, ErroPc> {
+    sistema::observar(std::process::id(), estavel).map(|(v, _)| v).map_err(|m| ErroPc::com_mensagem("falha", m))
 }
 
 #[cfg(not(windows))]
 fn agir(_c: &ControlePc, _dados: &Value, _prazo: u64) -> Result<Value, ErroPc> {
     Err(ErroPc::novo("so_windows"))
+}
+
+#[cfg(not(windows))]
+fn abrir(_c: &ControlePc, _dados: &Value, _prazo: u64) -> Result<Value, ErroPc> {
+    Err(ErroPc::novo("so_windows"))
+}
+
+fn programas_permitidos(dados: &Value) -> Vec<String> {
+    dados
+        .get("programas_permitidos")
+        .and_then(Value::as_array)
+        .map(|l| l.iter().filter_map(Value::as_str).map(regras::normalizar_programa).take(MAX_PERMITIDOS).collect())
+        .unwrap_or_default()
+}
+
+/// Abre um programa da lista pelo nome (Vela-12): sem caixa Executar e sem busca do Iniciar, que
+/// continuam bloqueadas. O programa precisa estar liberado (cartão da primeira ação, como agir);
+/// depois de abrir valem as mesmas conferências de processo e janela bloqueada de `agir`.
+#[cfg(windows)]
+fn abrir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
+    if !borda::pronta() {
+        return Err(ErroPc::com_mensagem("falha", "a borda ou a pausa física não estão disponíveis; não abri o programa"));
+    }
+    let inicio = Instant::now();
+    let nome = dados.get("programa").and_then(Value::as_str).unwrap_or("");
+    let Some(programa) = regras::programa_abrivel(nome) else {
+        return Err(ErroPc::com_mensagem("nao_abrivel", nome.chars().take(60).collect::<String>()));
+    };
+    let permitidos = programas_permitidos(dados);
+    if !permitidos.iter().any(|p| p == programa.janela) {
+        return Err(ErroPc {
+            programa: Some(programa.janela.into()),
+            titulo: Some(programa.rotulo.into()),
+            ..ErroPc::novo("programa_nao_permitido")
+        });
+    }
+    let Some(caminho) = sistema::caminho_do_programa(programa) else {
+        return Err(ErroPc { programa: Some(programa.janela.into()), titulo: Some(programa.rotulo.into()), ..ErroPc::novo("nao_instalado") });
+    };
+    let processos_antes = sistema::processos();
+    let bloqueados_antes = sistema::alvos_bloqueados()?;
+    let restante = Duration::from_millis(prazo.saturating_sub(agora_ms()).saturating_sub(2_000).min(20_000));
+    let hwnd = sistema::abrir_programa(&caminho, programa.argumentos, programa.janela, restante)
+        .map_err(|m| ErroPc::com_mensagem("falha", m))?;
+    if c.interrompido.load(Ordering::SeqCst) {
+        return Err(interrupcao(c));
+    }
+    depois_da_acao(c, &processos_antes, &bloqueados_antes, &permitidos)?;
+    let na_frente = sistema::alvo_em_foco().is_some_and(|a| a.hwnd == hwnd);
+    Ok(json!({
+        "janela": hwnd.to_string(),
+        "programa": programa.janela,
+        "na_frente": na_frente,
+        "ms": inicio.elapsed().as_millis() as u64,
+    }))
+}
+
+/// Cerca A1, camada 3: o que a ação fez nascer. Um lançador (Executar, barra do Explorer, busca)
+/// ou um atalho do programa liberado pode rodar um terminal ou script sem nunca focar nada
+/// bloqueado; aqui o processo novo é fechado e o bot para até o usuário decidir.
+#[cfg(windows)]
+fn depois_da_acao(
+    c: &ControlePc,
+    processos_antes: &[(u32, u32, String)],
+    bloqueados_antes: &[regras::AlvoJanela],
+    permitidos: &[String],
+) -> Result<(), ErroPc> {
+    let pid = std::process::id();
+    thread::sleep(Duration::from_millis(150));
+    let processos_depois = sistema::processos();
+    let suspeitos = regras::processos_suspeitos(processos_antes, &processos_depois, permitidos);
+    if !suspeitos.is_empty() {
+        for (pid_novo, _) in &suspeitos {
+            let _ = sistema::encerrar_processo(*pid_novo);
+        }
+        c.interrompido.store(true, Ordering::SeqCst);
+        return Err(ErroPc { programa: Some(suspeitos[0].1.clone()), ..ErroPc::novo("processo_bloqueado") });
+    }
+    for alvo in sistema::alvos_bloqueados()? {
+        if !bloqueados_antes.iter().any(|a| a.hwnd == alvo.hwnd && a.pid == alvo.pid) {
+            c.interrompido.store(true, Ordering::SeqCst);
+            return Err(ErroPc { programa: Some(alvo.programa), ..ErroPc::novo("processo_bloqueado") });
+        }
+    }
+    if sistema::bloqueada_na_frente() {
+        // a ação trouxe para a frente um programa bloqueado (ou a Sora) que já estava aberto
+        let programa = sistema::alvo_em_foco().map(|a| if a.pid == pid { "sora.exe".into() } else { a.programa });
+        c.interrompido.store(true, Ordering::SeqCst);
+        return Err(ErroPc { programa, ..ErroPc::novo("processo_bloqueado") });
+    }
+    Ok(())
 }
 
 fn interrupcao(c: &ControlePc) -> ErroPc {
@@ -453,17 +588,14 @@ fn interrupcao(c: &ControlePc) -> ErroPc {
 
 #[cfg(windows)]
 fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
-    use regras::{Conferencia, Passo, conferir_alvo, normalizar_programa, planejar};
+    use regras::{Conferencia, Passo, conferir_alvo, planejar};
 
     if !borda::pronta() {
         return Err(ErroPc::com_mensagem("falha", "a borda ou a pausa física não estão disponíveis; não executei a ação"));
     }
+    let inicio = Instant::now();
     let pid = std::process::id();
-    let permitidos: Vec<String> = dados
-        .get("programas_permitidos")
-        .and_then(Value::as_array)
-        .map(|l| l.iter().filter_map(Value::as_str).map(normalizar_programa).take(MAX_PERMITIDOS).collect())
-        .unwrap_or_default();
+    let permitidos = programas_permitidos(dados);
     let acao = dados.get("acao").cloned().unwrap_or(Value::Null);
     let t = sistema::tela();
     let plano = planejar(&acao, t.escala, (t.largura_fisica, t.altura_fisica))?;
@@ -489,14 +621,37 @@ fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
     let bloqueados_antes = sistema::alvos_bloqueados()?;
     let processos_antes = sistema::processos();
     let digitando = plano.conferencias == [Conferencia::Foco];
+    // Vela-12: a janela da frente é conferida a cada passo (barato); campo de senha e programa,
+    // depois de tecla que muda o foco, a cada `CONFERIR_A_CADA` passos e quando a janela muda.
+    let mut janela_da_frente = sistema::janela_da_frente();
+    let mut desde_conferencia = 0usize;
+    let mut tecla_mudou_foco = false;
     for (i, passo) in plano.passos.iter().enumerate() {
         // soltar uma tecla não digita nada; conferir antes de soltar fazia `ctrl+Escape` (que muda
         // o foco no meio da combinação) parecer falha (Vela-6, teste ao vivo)
         let conferir_foco = digitando && !matches!(passo, Passo::Tecla(_, false));
         let parou = c.interrompido.load(Ordering::SeqCst) || agora_ms() >= prazo;
-        let mudou = conferir_foco
-            && (sistema::senha_em_foco()
-                || sistema::alvo_em_foco().is_none_or(|a| conferir_alvo(&a, &permitidos, pid).is_err()));
+        let mudou = conferir_foco && {
+            let frente = sistema::janela_da_frente();
+            let completa = frente != janela_da_frente || tecla_mudou_foco || desde_conferencia >= regras::CONFERIR_A_CADA;
+            if completa {
+                janela_da_frente = frente;
+                desde_conferencia = 0;
+                tecla_mudou_foco = false;
+                sistema::senha_em_foco()
+                    || sistema::alvo_em_foco().is_none_or(|a| conferir_alvo(&a, &permitidos, pid).is_err())
+            } else {
+                false
+            }
+        };
+        if conferir_foco {
+            desde_conferencia += 1;
+        }
+        if let Passo::Tecla(tecla, false) = passo
+            && regras::tecla_muda_foco(tecla)
+        {
+            tecla_mudou_foco = true;
+        }
         if parou || mudou {
             for soltar in regras::ainda_apertados(&plano.passos[..i]) {
                 let _ = sistema::enviar(soltar, &t);
@@ -521,32 +676,12 @@ fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
             Passo::Roda(..) => 40,
         }));
     }
-    // Cerca A1, camada 3: o que a ação fez nascer. Um lançador (Executar, barra do Explorer,
-    // busca) ou um atalho do programa liberado pode rodar um terminal ou script sem nunca focar
-    // nada bloqueado; aqui o processo novo é fechado e o bot para até o usuário decidir.
-    thread::sleep(Duration::from_millis(150));
-    let processos_depois = sistema::processos();
-    let suspeitos = regras::processos_suspeitos(&processos_antes, &processos_depois, &permitidos);
-    if !suspeitos.is_empty() {
-        for (pid_novo, _) in &suspeitos {
-            let _ = sistema::encerrar_processo(*pid_novo);
-        }
-        c.interrompido.store(true, Ordering::SeqCst);
-        return Err(ErroPc { programa: Some(suspeitos[0].1.clone()), ..ErroPc::novo("processo_bloqueado") });
-    }
-    for alvo in sistema::alvos_bloqueados()? {
-        if !bloqueados_antes.iter().any(|a| a.hwnd == alvo.hwnd && a.pid == alvo.pid) {
-            c.interrompido.store(true, Ordering::SeqCst);
-            return Err(ErroPc { programa: Some(alvo.programa), ..ErroPc::novo("processo_bloqueado") });
-        }
-    }
-    if sistema::bloqueada_na_frente() {
-        // a ação trouxe para a frente um programa bloqueado (ou a Sora) que já estava aberto
-        let programa = sistema::alvo_em_foco().map(|a| if a.pid == pid { "sora.exe".into() } else { a.programa });
-        c.interrompido.store(true, Ordering::SeqCst);
-        return Err(ErroPc { programa, ..ErroPc::novo("processo_bloqueado") });
-    }
-    Ok(Value::Null)
+    depois_da_acao(c, &processos_antes, &bloqueados_antes, &permitidos)?;
+    // a janela em que o bot trabalha agora (para voltar a ela ao retomar depois da pausa)
+    let janela = sistema::alvo_em_foco()
+        .filter(|a| conferir_alvo(a, &permitidos, pid).is_ok())
+        .map(|a| a.hwnd.to_string());
+    Ok(json!({ "janela": janela, "ms": inicio.elapsed().as_millis() as u64 }))
 }
 
 #[cfg(test)]
@@ -636,6 +771,29 @@ mod testes {
             e.parados.insert(ATLAS.into(), Instant::now());
         }
         assert_eq!(codigo(&executar(&c, &comando(ATLAS, "retomar"))), "parado");
+    }
+
+    #[test]
+    fn retomar_so_devolve_a_janela_do_proprio_bot_e_encerrar_esquece() {
+        let c = controle_de_teste();
+        {
+            let mut e = travar(&c.estado);
+            e.conta = Some("conta".into());
+            e.config.contas.entry("conta".into()).or_default().bots.extend([ATLAS.into(), LUNA.into()]);
+            e.controlador = Some(Agente { id: ATLAS.into(), nome: "Atlas".into(), cor: "#56A8FF".into() });
+            e.pausado = true;
+            e.janela_do_bot = None;
+        }
+        let r = executar(&c, &comando(ATLAS, "retomar"));
+        assert_eq!(r["ok"], true);
+        assert_eq!(r["resultado"]["janela_restaurada"], false);
+        assert!(!travar(&c.estado).pausado);
+        travar(&c.estado).janela_do_bot = Some(12345);
+        assert_eq!(executar(&c, &comando(ATLAS, "encerrar"))["ok"], true);
+        assert_eq!(travar(&c.estado).janela_do_bot, None);
+        // abrir programa: mesma porta de entrada (vez, pausa) que observar e agir
+        travar(&c.estado).controlador = Some(Agente { id: LUNA.into(), nome: "Luna".into(), cor: "#AC80FF".into() });
+        assert_eq!(codigo(&executar(&c, &comando(ATLAS, "abrir_programa"))), "em_uso");
     }
 
     #[test]

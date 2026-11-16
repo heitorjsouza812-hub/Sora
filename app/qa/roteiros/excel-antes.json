@@ -1,0 +1,10 @@
+[
+  {"op": "liberar", "programa": "excel.exe"},
+  {"op": "observar"},
+  {"op": "agir", "acoes": [{"tipo": "tecla", "tecla": "ctrl+n"}]},
+  {"op": "agir", "acoes": [{"tipo": "digitar", "texto": "Produto\tQuantidade\tPreço\n"}]},
+  {"op": "agir", "acoes": [{"tipo": "digitar", "texto": "Café\t2\t10,50\n"}]},
+  {"op": "agir", "acoes": [{"tipo": "digitar", "texto": "Pão\t6\t0,80\n"}]},
+  {"op": "agir", "acoes": [{"tipo": "digitar", "texto": "Leite\t3\t5,20\n"}]},
+  {"op": "observar", "mostrar": 9000}
+]
