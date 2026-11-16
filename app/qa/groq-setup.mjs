@@ -1,0 +1,15 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { chromium } from '@playwright/test';
+import { entrarNoContexto } from './entrar.mjs';
+const b = await chromium.launch({ channel: 'chrome' });
+const ctx = await b.newContext();
+const email = `qa-groq-final-${Date.now()}@sora.local`;
+const login = await entrarNoContexto(ctx, { email });
+const headers = { Authorization: `Bearer ${login.token_acesso}` };
+const chave = readFileSync('../backend/.env','utf8').match(/^SORA_QA_GROQ_CHAVE\s*=\s*(.+)$/m)?.[1].trim().replace(/^['"]|['"]$/g,'');
+const p = await ctx.request.post('http://localhost:5173/v1/provedores',{headers,data:{tipo:'groq',chave}});
+console.log('prov', p.status());
+const m = await (await ctx.request.get('http://localhost:5173/v1/modelos',{headers})).json();
+console.log(JSON.stringify(m.map(x=>({id:x.id,modelo:x.modelo,nivel:x.nivel,ativo:x.ativo,cap:x.capacidades}))));
+writeFileSync('qa/shots/groq-final/conta.json', JSON.stringify({email}));
+await ctx.close(); await b.close();

@@ -1,0 +1,35 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { chromium } from '@playwright/test';
+import { entrarNoContexto } from './entrar.mjs';
+const S='qa/shots/groq-final';
+const {email}=JSON.parse(readFileSync(`${S}/conta.json`,'utf8'));
+const b = await chromium.launch({ channel: 'chrome' });
+const ctx = await b.newContext({viewport:{width:1440,height:900}});
+const login = await entrarNoContexto(ctx,{email});
+const H={Authorization:`Bearer ${login.token_acesso}`};
+const page = await ctx.newPage(); await page.goto('http://localhost:5173');
+const t0=Date.now();
+await page.getByRole('button',{name:'Criar novo',exact:true}).click();
+await page.getByRole('menuitem',{name:'Novo bot',exact:true}).click();
+await page.getByRole('heading',{name:'Que bot você quer criar?'}).waitFor(); await page.waitForTimeout(1500);
+const pedido='crie um bot que entre no site https://br.ridingtimes.com/ e veja qual o produto mais barato';
+await page.getByRole('textbox').click(); await page.keyboard.insertText(pedido); await page.screenshot({path:`${S}/t1-00-digitado.png`});
+await page.getByRole('button',{name:'Enviar mensagem',exact:true}).click();
+await page.waitForURL(/\/bots\/[0-9a-f-]+$/,{timeout:90000});
+console.log('criou em',Date.now()-t0,'ms');
+const botId=page.url().split('/').pop();
+await page.getByText(pedido,{exact:true}).first().waitFor();
+await page.screenshot({path:`${S}/t1-01-chat-aberto-1440.png`});
+const bots=await (await ctx.request.get('http://localhost:5173/v1/agentes',{headers:H})).json();
+const bot=bots.find(x=>x.id===botId);
+console.log('BOT',JSON.stringify(bot).slice(0,1500));
+writeFileSync(`${S}/t1-bot.json`,JSON.stringify({botId,bot},null,1));
+for(let i=0;i<40;i++){
+  await page.waitForTimeout(8000);
+  await page.screenshot({path:`${S}/t1-prog-${String(i).padStart(2,'0')}.png`});
+  const txt=await page.locator('main').innerText().catch(()=>'');
+  console.log(i,Math.round((Date.now()-t0)/1000)+'s',txt.slice(-300).replace(/\n+/g,' | '));
+  if(/preço|R\$/i.test(txt.slice(txt.indexOf(pedido)+pedido.length)) && !(await page.getByRole('button',{name:/Parar/}).count())) break;
+}
+await page.screenshot({path:`${S}/t1-final-1440.png`});
+await ctx.close(); await b.close();
