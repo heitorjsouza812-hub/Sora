@@ -73,7 +73,48 @@ def _saida(
         perfil_navegador=(
             "perfil" if agente.perfil_navegador == "nomeado" else agente.perfil_navegador
         ),
+        **_preferencia_do_bot(agente),
     )
+
+
+def _preferencia_do_bot(agente: Agente) -> dict[str, object]:
+    from app.preferencias_conversa import padrao_do_bot
+
+    escolha = padrao_do_bot(agente)
+    return {
+        "provedor_id": escolha.provedor_id,
+        "modelo": escolha.modelo,
+        "raciocinio": escolha.raciocinio,
+        "permissao": escolha.permissao,
+    }
+
+
+async def aplicar_preferencia_no_bot(
+    sessao: AsyncSession, usuario_id: UUID, agente: Agente, dados: object
+) -> None:
+    """Grava no bot os campos do seletor enviados (``provedor_id``, ``modelo``, ``raciocinio``,
+    ``permissao``); escolha inválida = 422 em PT-BR."""
+    from pydantic import BaseModel
+
+    from app.preferencias_conversa import (
+        ErroPreferencia,
+        aplicar_mudancas,
+        campos_enviados,
+        gravar_no_bot,
+        padrao_do_bot,
+        so_preferencia,
+    )
+
+    assert isinstance(dados, BaseModel)
+    if not campos_enviados(dados):
+        return
+    try:
+        nova = await aplicar_mudancas(
+            sessao, usuario_id, padrao_do_bot(agente), so_preferencia(dados)
+        )
+    except ErroPreferencia as erro:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(erro)) from erro
+    gravar_no_bot(agente, nova)
 
 
 async def _obter(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID) -> Agente:
@@ -291,6 +332,7 @@ async def atualizar_agente(
         agente.movimento = dados.movimento
     if "modelo_padrao" in campos:
         agente.modelo_padrao = (dados.modelo_padrao or "").strip() or None
+    await aplicar_preferencia_no_bot(sessao, usuario_id, agente, dados)
     saida = _saida(agente)
     await sessao.commit()
     return saida

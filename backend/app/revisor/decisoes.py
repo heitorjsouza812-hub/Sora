@@ -116,3 +116,211 @@ def condicao_da_regra(acao: Any) -> dict[str, Any] | None:
 def aceita_sempre(acao: Any, agente_id: UUID | None) -> bool:
     """O cartão pode oferecer "Sempre permitir" (regra presa ao bot e a uma condição)."""
     return agente_id is not None and condicao_da_regra(acao) is not None
+
+
+# ---------- modo de permissão da conversa (Âncora-9) ----------
+#
+# O seletor do campo de mensagem tem três modos (``app/preferencias_conversa.py``):
+#
+# - ``perguntar``: como sempre (regra "sempre permitir", juiz e cartão);
+# - ``automatico``: aprova sozinho só o que é de **risco baixo** (``risco_baixo``);
+# - ``total``: aprova sozinho tudo o que a política deixa o usuário aprovar num cartão.
+#
+# Em nenhum modo passam sozinhos os **bloqueios absolutos** (``bloqueio_absoluto``), as
+# ferramentas de cartão fixo (criar bot, mudar instruções, esquecer memória, apagar habilidade,
+# adicionar servidor MCP) e nada de rotina sem supervisão. Quem aplica: ``revisor/execucao.py``
+# (cartões do revisor) e ``computador/pc_usuario.py`` (cartão por programa do PC, só no total).
+
+MODOS_PERMISSAO = ("perguntar", "automatico", "total")
+
+FERRAMENTAS_NUNCA_SOZINHAS = frozenset(
+    {
+        "propor_instrucoes",  # o bot mudar as próprias instruções
+        "criar_habilidade",  # ... ou as próprias habilidades
+        "atualizar_habilidade",
+        "apagar_habilidade",
+    }
+)
+"""O bot mudar a si mesmo nunca é aprovado por modo."""
+
+TIPOS_NUNCA_SOZINHOS = frozenset({"sugestao_melhoria", "pc_bloqueio"})
+"""Aplicar sugestão de melhoria dos bots e liberar programa bloqueado do PC: sempre o usuário."""
+
+ACOES_LEVES_DO_COMPUTADOR = frozenset(
+    {"clicar", "clique_duplo", "clicar_direito", "rolar", "tecla", "digitar", "arrastar"}
+)
+"""Ações do computador virtual sem abrir programa (``abrir`` pode trazer rede nova). ``digitar``
+com cara de senha é bloqueio absoluto antes de chegar aqui."""
+
+_PAGAMENTO_NOME = re.compile(
+    r"(^|[_\-.])(pay|payment|payments|pagar|pagamento|pagamentos|comprar|compra|compras|"
+    r"purchase|buy|checkout|charge|cobrar|cobranca|invoice|fatura|subscribe|subscription|"
+    r"assinatura|pix|boleto|transfer|transferir|transferencia|refund|reembolso)([_\-.]|$)",
+    re.IGNORECASE,
+)
+_PAGAMENTO_TEXTO = re.compile(
+    r"\b(comprar|compre|finalizar (a )?compra|finalizar pedido|fechar pedido|pagar|pagamento|"
+    r"checkout|buy now|buy|place order|purchase|pay now|confirmar pagamento|"
+    r"adicionar ao carrinho|add to cart|carrinho|cart|assinar plano|subscribe|pix|boleto|"
+    r"cart[aã]o de cr[eé]dito|credit card)\b",
+    re.IGNORECASE,
+)
+_PAGAMENTO_URL = re.compile(
+    r"/(checkout|pagamento|payment|pay|cart|carrinho|billing)(/|$|\?)", re.IGNORECASE
+)
+_CANAL_DA_EMPRESA = re.compile(r"(slack|whatsapp|canal_empresa|canais_empresa)", re.IGNORECASE)
+_CHAVE_DE_SENHA = re.compile(r"(senha|password|passwd|pwd|ispassword|is_password)", re.IGNORECASE)
+
+
+def _textos(valor: Any, profundidade: int = 0) -> list[str]:
+    """Todos os textos dos argumentos (até 4 níveis), para procurar pagamento."""
+    if profundidade > 4:
+        return []
+    if isinstance(valor, str):
+        return [valor]
+    if isinstance(valor, dict):
+        return [t for item in valor.values() for t in _textos(item, profundidade + 1)]
+    if isinstance(valor, list | tuple):
+        return [t for item in valor for t in _textos(item, profundidade + 1)]
+    return []
+
+
+def _acoes(argumentos: dict[str, Any]) -> list[dict[str, Any]]:
+    """Ações de mouse e teclado (``computador_agir``, ``navegador_lote``…) ou o próprio corpo."""
+    for chave in ("acoes", "passos", "lote"):
+        lista = argumentos.get(chave)
+        if isinstance(lista, list):
+            return [a for a in lista if isinstance(a, dict)]
+    return [argumentos]
+
+
+def _campo_de_senha(valor: Any, profundidade: int = 0) -> bool:
+    """Uma chave de senha com valor (``senha``, ``password``, ``IsPassword: true``…)."""
+    if profundidade > 4:
+        return False
+    if isinstance(valor, dict):
+        for chave, item in valor.items():
+            if _CHAVE_DE_SENHA.search(str(chave)) and item not in (None, False, "", 0):
+                return True
+            if _campo_de_senha(item, profundidade + 1):
+                return True
+    if isinstance(valor, list | tuple):
+        return any(_campo_de_senha(item, profundidade + 1) for item in valor)
+    return False
+
+
+def _mexe_em_senha(argumentos: dict[str, Any]) -> bool:
+    from app.computador.interface import parece_senha
+
+    if _campo_de_senha(argumentos):
+        return True
+    for acao in _acoes(argumentos):
+        tipo = str(acao.get("tipo") or acao.get("acao") or "")
+        texto = acao.get("texto") or acao.get("valor") or acao.get("text")
+        if tipo in {"digitar", "preencher", "type", "fill"} and isinstance(texto, str):
+            if parece_senha(texto):
+                return True
+    return False
+
+
+def _programa_bloqueado(acao: dict[str, Any], argumentos: dict[str, Any]) -> bool:
+    from app.computador.pc_usuario import PROGRAMAS_BLOQUEADOS
+
+    condicao = acao.get("condicao") if isinstance(acao.get("condicao"), dict) else {}
+    candidatos = [acao.get("programa"), condicao.get("programa"), argumentos.get("programa")]
+    candidatos += [a.get("programa") for a in _acoes(argumentos)]
+    return any(isinstance(p, str) and p.strip().lower() in PROGRAMAS_BLOQUEADOS for p in candidatos)
+
+
+def bloqueio_absoluto(acao: Any) -> str | None:
+    """Motivo pelo qual a ação **nunca** é aprovada sozinha, em nenhum modo; ``None`` = nenhum.
+
+    Senha (texto que parece senha ou campo de senha), programa bloqueado do PC, envio pelos
+    canais da empresa (só leitura), o bot mudar as próprias instruções ou habilidades, sugestão de
+    melhoria e pagamento ou compra.
+    """
+    if not isinstance(acao, dict):
+        return "ação ilegível"
+    ferramenta = str(acao.get("ferramenta") or "")
+    real = nome_real(acao)
+    argumentos = acao.get("argumentos") if isinstance(acao.get("argumentos"), dict) else {}
+    if acao.get("tipo") in TIPOS_NUNCA_SOZINHOS:
+        return "sugestão de melhoria ou programa bloqueado: só você decide"
+    if ferramenta in FERRAMENTAS_NUNCA_SOZINHAS or real in FERRAMENTAS_NUNCA_SOZINHAS:
+        return "o bot mudar as próprias instruções ou habilidades"
+    if _mexe_em_senha(argumentos):
+        return "digitar senha ou mexer em campo de senha"
+    if _programa_bloqueado(acao, argumentos):
+        return "programa bloqueado para bots"
+    if (_CANAL_DA_EMPRESA.search(real) or _CANAL_DA_EMPRESA.search(ferramenta)) and not (
+        real.startswith("consultar_")
+    ):
+        return "envio pelos canais da empresa (só leitura)"
+    textos = _textos(argumentos)
+    if (
+        _PAGAMENTO_NOME.search(real)
+        or any(_PAGAMENTO_TEXTO.search(t) for t in textos)
+        or any(_PAGAMENTO_URL.search(t) for t in textos)
+    ):
+        return "pagamento ou compra"
+    return None
+
+
+def risco_baixo(acao: Any, *, perfil_tem_login: bool = True) -> bool:
+    """Ações que hoje viram cartão mas são de risco baixo (o modo ``automatico`` aprova sozinho):
+
+    - leitura (nome de leitura, inclusive por conector ou catálogo);
+    - navegador num perfil **sem login salvo** (clicar, digitar, tecla, lote);
+    - computador **virtual** do bot sem abrir programa (clicar, digitar sem senha, tecla, rolar,
+      arrastar).
+
+    ``perfil_tem_login`` vem do perfil do bot; na dúvida é ``True`` (falha fechada). Bloqueio
+    absoluto e envio externo nunca são risco baixo.
+    """
+    from app.revisor.politica import parece_somente_leitura
+
+    if not isinstance(acao, dict) or bloqueio_absoluto(acao) is not None:
+        return False
+    if acao.get("tipo") in TIPOS_SO_UMA_VEZ or e_envio(acao):
+        return False
+    ferramenta = str(acao.get("ferramenta") or "")
+    real = nome_real(acao)
+    argumentos = acao.get("argumentos") if isinstance(acao.get("argumentos"), dict) else {}
+    if parece_somente_leitura(real.split("__")[-1]):
+        return True
+    if ferramenta.startswith("navegador_") or real.startswith("navegador_"):
+        return not perfil_tem_login
+    if ferramenta == "computador_agir":
+        if (argumentos.get("alvo") or "virtual") != "virtual":
+            return False
+        tipos = {str(a.get("tipo") or "") for a in _acoes(argumentos)}
+        return bool(tipos) and tipos <= ACOES_LEVES_DO_COMPUTADOR
+    return False
+
+
+def aprova_sozinho(
+    modo: str, acao: Any, *, sem_supervisao: bool = False, perfil_tem_login: bool = True
+) -> bool:
+    """O modo da conversa dispensa o cartão desta ação?
+
+    ``perguntar`` nunca; rotina sem supervisão nunca; bloqueio absoluto e cartão fixo nunca;
+    ``total`` sim; ``automatico`` só com ``risco_baixo``.
+    """
+    from app.revisor.politica import Politica, politica_da_ferramenta
+
+    if sem_supervisao or modo not in {"automatico", "total"}:
+        return False
+    if not isinstance(acao, dict) or bloqueio_absoluto(acao) is not None:
+        return False
+    ferramenta = str(acao.get("ferramenta") or "")
+    if ferramenta and politica_da_ferramenta(ferramenta) is Politica.CARTAO_FIXO:
+        return False
+    if modo == "total":
+        return True
+    return risco_baixo(acao, perfil_tem_login=perfil_tem_login)
+
+
+def texto_aprovado_automaticamente(modo: str, resumo: str) -> str:
+    """Passo do painel Trabalho: "Aprovado automaticamente (modo X)"."""
+    rotulo = {"automatico": "automático", "total": "total"}.get(modo, modo)
+    return f"Aprovado automaticamente (modo {rotulo}): {resumo}"[:300]

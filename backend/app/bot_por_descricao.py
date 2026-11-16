@@ -37,7 +37,9 @@ class SugestaoBot(BaseModel):
         return valor.strip()
 
 
-async def sugerir_bot(sessao, usuario_id, descricao):
+async def sugerir_bot(sessao, usuario_id, descricao, escolha=None):
+    """Sugestão do bot pelo modelo do usuário. ``escolha`` (seletor do Novo bot) fixa o modelo e o
+    raciocínio dessa chamada; sem ela, o seletor de sempre. Qualquer falha usa as regras locais."""
     from app.api.agentes import FERRAMENTAS_CONHECIDAS, _validar_ferramentas
 
     base = list(FERRAMENTAS_POR_PAPEL["individual"])
@@ -46,10 +48,23 @@ async def sugerir_bot(sessao, usuario_id, descricao):
     fallback = {"ferramentas": list(dict.fromkeys(base + obrigatorias))}
     try:
         contexto = await contexto_do_usuario(sessao, usuario_id)
-        selecao = escolher_modelos(contexto, PapelModelo.SORA, 1, set(), 1000)
-        candidato = selecao.modelos[0]
+        if escolha is not None and escolha.modelo_fixo:
+            candidato = next(
+                m
+                for m in contexto.modelos
+                if m.provedor.id == escolha.provedor_id and m.modelo == escolha.modelo
+            )
+        else:
+            candidato = escolher_modelos(contexto, PapelModelo.SORA, 1, set(), 1000).modelos[0]
         provedor = await config_do_provedor(sessao, usuario_id, candidato.provedor.id)
-        modelo = criar_chat_model(candidato.modelo, provedor, timeout_s=25, max_tokens=1800)
+        nivel = None
+        if escolha is not None and escolha.raciocinio != "auto":
+            from app.llm.raciocinio import nivel_mais_proximo
+
+            nivel = nivel_mais_proximo(candidato.modelo, escolha.raciocinio)
+        modelo = criar_chat_model(
+            candidato.modelo, provedor, timeout_s=25, max_tokens=1800, raciocinio=nivel
+        )
         resposta = await asyncio.wait_for(
             modelo.ainvoke(
                 [

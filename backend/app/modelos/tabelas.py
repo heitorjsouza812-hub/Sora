@@ -119,6 +119,15 @@ class Agente(Base):
     )
     # 0008: instruções próprias aprovadas pelo usuário (``propor_instrucoes``)
     instrucoes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # 0015: padrão do bot no seletor do campo de mensagem (``app/preferencias_conversa.py``).
+    # ``modelo_padrao`` (acima) só vale com ``provedor_padrao_id``; sem ele, o seletor de sempre.
+    provedor_padrao_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("provedores.id", ondelete="SET NULL")
+    )
+    raciocinio_padrao: Mapped[str] = mapped_column(Text, default="auto", server_default="auto")
+    permissao_padrao: Mapped[str] = mapped_column(
+        Text, default="perguntar", server_default="perguntar"
+    )
 
 
 class Conversa(Base):
@@ -787,6 +796,29 @@ class RotinaExecucao(Base):
     erro: Mapped[str | None] = mapped_column(Text)
     mensagem_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("mensagens.id", ondelete="SET NULL")
+    )
+
+
+# ---------- 0015: seletor de modelo e permissão por conversa (Âncora-9) ----------
+
+
+class PreferenciaConversa(Base):
+    """Modelo, raciocínio e permissão escolhidos no campo de mensagem de uma conversa (Sora ou bot
+    1:1) ou de um grupo. ``alvo_id`` é o id da conversa ou do grupo (``canais_equipe``), por isso
+    sem chave estrangeira; ``tipo`` diz qual. Sem linha, vale o padrão do bot ou o automático."""
+
+    __tablename__ = "preferencias_conversa"
+    alvo_id: Mapped[UUID] = mapped_column(primary_key=True)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"))
+    tipo: Mapped[str] = mapped_column(Text)
+    provedor_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("provedores.id", ondelete="SET NULL")
+    )
+    modelo: Mapped[str | None] = mapped_column(Text)
+    raciocinio: Mapped[str] = mapped_column(Text, default="auto", server_default="auto")
+    permissao: Mapped[str] = mapped_column(Text, default="perguntar", server_default="perguntar")
+    atualizada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 

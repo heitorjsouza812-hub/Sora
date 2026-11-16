@@ -48,6 +48,16 @@ from app.modelos.esquemas import (
     RenomearConversaEntrada,
 )
 from app.modelos.tabelas import Agente, Cadeia, Conector, Conversa, Entrega, Mensagem, Roteamento
+from app.preferencias_conversa import (
+    ErroPreferencia,
+    PreferenciaAtualizacao,
+    PreferenciaSaida,
+    aplicar_mudancas,
+    escolha_efetiva,
+    gravar_da_conversa,
+)
+from app.preferencias_conversa import alvo_do_usuario as _alvo_da_preferencia
+from app.preferencias_conversa import saida as _saida_da_preferencia
 from app.repositorios import conversas as repositorio
 from app.seletor.repositorio import config_do_provedor, contexto_do_usuario
 from app.seletor.tipos import Capacidade, ModeloCandidato, ProvedorSeletor
@@ -225,6 +235,23 @@ async def _encaminhar(
         return
 
     seletor = await contexto_do_usuario(sessao, usuario_id, conversa_privada=conversa.privada)
+    escolha = await escolha_efetiva(
+        sessao, usuario_id, conversa_id=conversa.id, agente_id=agente.id
+    )
+    if escolha.modelo_fixo:
+        # Modelo fixo no seletor do campo de mensagem: a triagem também usa só ele (sem raciocínio
+        # extra, para caber no prazo). Ele entra como apto ao JSON da triagem, que lê texto.
+        fixo = [
+            m.model_copy(
+                update={
+                    "capacidades": m.capacidades | {Capacidade.JSON},
+                    "somente_se_escolhido": False,
+                }
+            )
+            for m in seletor.modelos
+            if m.provedor.id == escolha.provedor_id and m.modelo == escolha.modelo and m.ativo
+        ]
+        seletor = seletor.model_copy(update={"modelos": fixo})
     configs: dict[str, ConfigProvedor]
     if obter_configuracao().sora_modelo_falso and not seletor.modelos:
         provedor_falso = ProvedorSeletor(id=PROVEDOR_FALSO_ID, tipo=TipoProvedor.OLLAMA)
@@ -276,12 +303,20 @@ async def _encaminhar(
                 "responder_direto", str(mensagem.id), _job_id=f"responder:{mensagem.id}"
             )
             return
+        texto_falha = _texto_da_falha_da_triagem(erro)
+        if escolha.modelo_fixo:
+            from app.preferencias_conversa import texto_da_falha_do_escolhido
+
+            texto_falha = (
+                texto_da_falha_do_escolhido(escolha.modelo or "", erro)
+                + " Sua mensagem foi guardada."
+            )
         await _publicar_primeira_resposta(
             redis,
             sessao,
             usuario_id=usuario_id,
             conversa_id=conversa.id,
-            texto=_texto_da_falha_da_triagem(erro),
+            texto=texto_falha,
             agente_id=agente.id,
         )
         return
@@ -423,6 +458,49 @@ async def apagar_conversa(
         raise _nao_encontrada()
     await sessao.commit()
     await publicar_encerrados(redis, sessao, usuario_id, afetados | {(dono, None)})
+
+
+# ---------- seletor do campo de mensagem (Âncora-9) ----------
+
+
+@roteador.get("/{conversa_id}/preferencias")
+async def obter_preferencias(
+    conversa_id: UUID, usuario_id: Usuario, sessao: Sessao
+) -> PreferenciaSaida:
+    """Modelo, raciocínio e permissão desta conversa (Sora, bot 1:1) ou grupo (id do grupo).
+
+    Sem escolha gravada, devolve o padrão do bot (``origem: "bot"``) ou o automático."""
+    alvo = await _alvo_da_preferencia(sessao, usuario_id, conversa_id)
+    if alvo is None:
+        raise _nao_encontrada()
+    tipo, agente = alvo
+    escolha = await escolha_efetiva(
+        sessao, usuario_id, conversa_id=conversa_id, agente_id=agente.id if agente else None
+    )
+    return _saida_da_preferencia(escolha, tipo)
+
+
+@roteador.patch("/{conversa_id}/preferencias")
+async def atualizar_preferencias(
+    conversa_id: UUID, dados: PreferenciaAtualizacao, usuario_id: Usuario, sessao: Sessao
+) -> PreferenciaSaida:
+    """Grava a escolha desta conversa ou grupo (PATCH parcial). A primeira gravação parte do que
+    valia (padrão do bot ou automático). Escolha inválida = 422 em PT-BR; ``total`` exige
+    ``confirmar_total: true``."""
+    alvo = await _alvo_da_preferencia(sessao, usuario_id, conversa_id)
+    if alvo is None:
+        raise _nao_encontrada()
+    tipo, agente = alvo
+    atual = await escolha_efetiva(
+        sessao, usuario_id, conversa_id=conversa_id, agente_id=agente.id if agente else None
+    )
+    try:
+        nova = await aplicar_mudancas(sessao, usuario_id, atual, dados)
+    except ErroPreferencia as erro:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(erro)) from erro
+    gravada = await gravar_da_conversa(sessao, usuario_id, conversa_id, tipo, nova)
+    await sessao.commit()
+    return _saida_da_preferencia(gravada, tipo)
 
 
 @roteador.get("/{conversa_id}/mensagens")

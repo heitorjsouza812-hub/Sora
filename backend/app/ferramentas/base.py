@@ -29,6 +29,11 @@ class ContextoFerramenta:
     revisao_canal: int | None = None
     sem_supervisao: bool = False
     """Rotina sem ninguém olhando: o navegador só usa abas efêmeras (sem login salvo)."""
+    etapa_painel: UUID | None = None
+    """Id sob o qual o painel Trabalho agrupa os passos deste turno (etapa ou turno da conversa
+    direta). O passo "Aprovado automaticamente" sai com ele (Âncora-9)."""
+    permissao: str | None = None
+    """Modo de permissão fixo para esta execução; ``None`` = o da conversa (ou do bot)."""
 
 
 class ErroFerramenta(Exception):

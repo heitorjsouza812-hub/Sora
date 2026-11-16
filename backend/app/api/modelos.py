@@ -36,7 +36,7 @@ async def listar_modelos(
     consulta = consulta_modelos_do_usuario(usuario_id).order_by(
         Provedor.criado_em, Provedor.id, ModeloDisponivel.modelo
     )
-    return [ModeloSaida.model_validate(m) for m in (await sessao.scalars(consulta)).all()]
+    return [ModeloSaida.de_linha(m) for m in (await sessao.scalars(consulta)).all()]
 
 
 @roteador.patch("/{modelo_id}")
@@ -83,4 +83,4 @@ async def atualizar_modelo(
     if dados.ativo is not None:
         modelo.ativo = dados.ativo
     await sessao.flush()
-    return ModeloSaida.model_validate(modelo)
+    return ModeloSaida.de_linha(modelo)

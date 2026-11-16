@@ -67,7 +67,7 @@ async def conectar_provedor(
     provedor, modelos = await conexoes.conectar(sessao, redis, usuario_id, dados, listador, sonda)
     return ProvedorConexaoSaida(
         provedor=_saida(provedor),
-        modelos=[ModeloSaida.model_validate(modelo) for modelo in modelos],
+        modelos=[ModeloSaida.de_linha(modelo) for modelo in modelos],
     )
 
 

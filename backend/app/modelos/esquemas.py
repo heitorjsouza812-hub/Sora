@@ -89,6 +89,12 @@ class AgenteAtualizacao(EsquemaBase):
     cor: str | None = Field(default=None, max_length=32)
     movimento: Movimento | None = None
     modelo_padrao: str | None = Field(default=None, max_length=NOME_MAX)
+    # Padrão do bot no seletor do campo de mensagem (``app/preferencias_conversa.py``).
+    provedor_id: UUID | None = None
+    modelo: str | None = Field(default=None, max_length=200)
+    raciocinio: str | None = Field(default=None, max_length=20)
+    permissao: str | None = Field(default=None, max_length=20)
+    confirmar_total: bool = False
 
 
 class AgenteSaida(EsquemaBase):
@@ -103,6 +109,11 @@ class AgenteSaida(EsquemaBase):
     estado: Literal["livre", "trabalhando", "precisa_de_voce"] = "livre"
     perfil_navegador: Literal["efemero", "compartilhado", "agente", "perfil"] | None = None
     """Navegador que o bot usa (Farol, C1): ``agente`` = só dele (padrão de bot novo)."""
+    # Padrão do bot no seletor do campo de mensagem (Âncora-9). ``None`` = automático.
+    provedor_id: UUID | None = None
+    modelo: str | None = None
+    raciocinio: str = "auto"
+    permissao: str = "perguntar"
 
 
 class ConversaCriacao(EsquemaBase):
@@ -227,6 +238,22 @@ class ModeloSaida(EsquemaBase):
     preco_saida: Decimal | None
     velocidade_tps: int | None
     ativo: bool
+    raciocinio: list[str] = Field(default_factory=list)
+    """Níveis de raciocínio aceitos (``baixo`` … ``maximo``); vazio = sem ajuste (Âncora-9)."""
+    rapido: bool = False
+    """Indicado para resposta rápida (N1 ou 300 tokens/s ou mais)."""
+
+    @classmethod
+    def de_linha(cls, linha: Any) -> "ModeloSaida":
+        from app.llm.raciocinio import e_rapido, niveis_de_raciocinio
+
+        saida = cls.model_validate(linha)
+        return saida.model_copy(
+            update={
+                "raciocinio": list(niveis_de_raciocinio(saida.modelo)),
+                "rapido": e_rapido(saida.nivel, saida.velocidade_tps),
+            }
+        )
 
 
 class PreferenciasAtualizacao(EsquemaBase):

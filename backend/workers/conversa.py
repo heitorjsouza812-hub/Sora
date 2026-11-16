@@ -23,6 +23,11 @@ from app.filas.sql import ArmazemFilaSQL
 from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
 from app.modelos.enumeracoes import AutorMensagem, TipoAgente
 from app.modelos.tabelas import Agente, Conversa, Mensagem
+from app.preferencias_conversa import (
+    ModeloEscolhidoIndisponivel,
+    escolha_efetiva,
+    texto_da_falha,
+)
 
 registro = logging.getLogger(__name__)
 
@@ -112,18 +117,28 @@ async def _responder_direto_sem_fila(
         if conversa is None or agente is None or texto is None:
             return
         papel = "sora" if agente.tipo == TipoAgente.SORA else "individual"
-        # Anexos do usuário chegam ao modelo: lista de arquivos e, com modelo de visão, as imagens.
-        entrada_usuario, modelos = await preparar_entrada(
-            sessao,
-            conversa.usuario_id,
-            texto,
-            mensagem.anexos if mensagem_id is not None else anexos,
-            papel,
-            dificuldade=1,
-            conversa_privada=conversa.privada,
-            precisa_visao=any(f.startswith("computador_") for f in agente.ferramentas or []),
-        )
         usuario_id, conversa_id, agente_id = conversa.usuario_id, conversa.id, agente.id
+        # Seletor do campo de mensagem: modelo e raciocínio desta conversa (ou do bot).
+        escolha = await escolha_efetiva(
+            sessao, usuario_id, conversa_id=conversa_id, agente_id=agente_id
+        )
+        # Anexos do usuário chegam ao modelo: lista de arquivos e, com modelo de visão, as imagens.
+        try:
+            entrada_usuario, modelos = await preparar_entrada(
+                sessao,
+                conversa.usuario_id,
+                texto,
+                mensagem.anexos if mensagem_id is not None else anexos,
+                papel,
+                dificuldade=1,
+                conversa_privada=conversa.privada,
+                precisa_visao=any(f.startswith("computador_") for f in agente.ferramentas or []),
+                escolha=escolha,
+            )
+        except ModeloEscolhidoIndisponivel as erro:
+            indisponivel = str(erro)
+        else:
+            indisponivel = None
         antes = await sessao.scalar(
             select(func.count()).select_from(Mensagem).where(Mensagem.conversa_id == conversa_id)
         )
@@ -139,6 +154,16 @@ async def _responder_direto_sem_fila(
         if mensagem_id is not None:
             posicao = next((i for i, m in enumerate(historico) if str(m.id) == mensagem_id), 0)
             historico = historico[:posicao]
+    if indisponivel is not None:
+        # O modelo escolhido sumiu: avisa e não troca sozinho.
+        await falar(
+            Falar(texto=indisponivel),
+            ContextoFerramenta(usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id),
+        )
+        await publicar_evento(
+            ctx["redis_eventos"], SugestoesEvento(itens=[]), conversa_id, usuario_id
+        )
+        return
 
     contexto = ContextoAgente(
         usuario_id=usuario_id,
@@ -286,7 +311,7 @@ async def _rodar_e_falar(
             texto = (
                 MENSAGEM_LIMITE_DE_PASSOS
                 if estourou_limite_de_passos(erro)
-                else mensagem_de_limite(erro) or MENSAGEM_FALHA
+                else texto_da_falha(modelos, erro) or mensagem_de_limite(erro) or MENSAGEM_FALHA
             )
             await falar(Falar(texto=texto), ferramenta)
         await _cartao_de_seguranca(ferramenta, pedido_de_equipe, cartoes_antes)
@@ -356,9 +381,31 @@ async def retomar_conversa(ctx: dict[str, Any], conversa_id: str, resposta: Any)
         if conversa is None or agente is None:
             return
         papel = "sora" if agente.tipo == TipoAgente.SORA else "individual"
-        modelos = await modelos_do_papel(
-            sessao, conversa.usuario_id, papel, dificuldade=1, conversa_privada=conversa.privada
+        escolha = await escolha_efetiva(
+            sessao, conversa.usuario_id, conversa_id=conversa.id, agente_id=agente.id
         )
+        try:
+            modelos = await modelos_do_papel(
+                sessao,
+                conversa.usuario_id,
+                papel,
+                dificuldade=1,
+                conversa_privada=conversa.privada,
+                escolha=escolha,
+            )
+        except ModeloEscolhidoIndisponivel as erro:
+            from app.ferramentas.base import ContextoFerramenta
+            from app.ferramentas.falar import Falar, falar
+
+            usuario_id, agente_id = conversa.usuario_id, agente.id
+            await sessao.commit()
+            await falar(
+                Falar(texto=str(erro)),
+                ContextoFerramenta(
+                    usuario_id=usuario_id, agente_id=agente_id, conversa_id=UUID(conversa_id)
+                ),
+            )
+            return
         usuario_id, agente_id = conversa.usuario_id, agente.id
         pedido_id = await sessao.scalar(
             select(Mensagem.id)

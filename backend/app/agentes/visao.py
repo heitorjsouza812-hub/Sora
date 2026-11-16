@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.preferencias_conversa import EscolhaModelo
+
 registro = logging.getLogger(__name__)
 
 MAX_IMAGENS = 4
@@ -202,12 +204,15 @@ async def modelos_com_visao(
     *,
     dificuldade: int = 1,
     conversa_privada: bool = False,
+    escolha: EscolhaModelo | None = None,
 ) -> tuple[list[BaseChatModel], bool]:
     """Modelos do papel que enxergam, ou, se o usuário não tem nenhum, os de sempre e ``False``.
 
-    O seletor já filtra pela capacidade ``visao``, então todo o fallback também enxerga."""
+    O seletor já filtra pela capacidade ``visao``, então todo o fallback também enxerga. Com modelo
+    fixo no seletor do campo de mensagem, vale ele (enxerga se o catálogo diz que tem visão)."""
     from app.llm.falso import modelo_falso_ativo
     from app.orquestrador.modelos import SemModeloDisponivel, modelos_do_papel
+    from app.preferencias_conversa import escolhido_enxerga
     from app.seletor.tipos import Capacidade
 
     if modelo_falso_ativo():
@@ -215,6 +220,11 @@ async def modelos_com_visao(
             sessao, usuario_id, papel, dificuldade=dificuldade, conversa_privada=conversa_privada
         )
         return modelos, True
+    if escolha is not None and escolha.modelo_fixo:
+        modelos = await modelos_do_papel(
+            sessao, usuario_id, papel, conversa_privada=conversa_privada, escolha=escolha
+        )
+        return modelos, escolhido_enxerga(modelos)
     try:
         modelos = await modelos_do_papel(
             sessao,
@@ -223,11 +233,17 @@ async def modelos_com_visao(
             dificuldade=dificuldade,
             precisa=(Capacidade.FERRAMENTAS, Capacidade.VISAO),
             conversa_privada=conversa_privada,
+            escolha=escolha,
         )
         return modelos, True
     except SemModeloDisponivel:
         modelos = await modelos_do_papel(
-            sessao, usuario_id, papel, dificuldade=dificuldade, conversa_privada=conversa_privada
+            sessao,
+            usuario_id,
+            papel,
+            dificuldade=dificuldade,
+            conversa_privada=conversa_privada,
+            escolha=escolha,
         )
         return modelos, False
 
@@ -243,6 +259,7 @@ async def preparar_entrada(
     conversa_privada: bool = False,
     usuario_avisado: bool = True,
     precisa_visao: bool = False,
+    escolha: EscolhaModelo | None = None,
 ) -> tuple[EntradaDoUsuario, list[BaseChatModel]]:
     """Carrega os anexos do dono, escolhe os modelos (com visão se houver imagem) e monta a
     entrada do turno. Sem anexos, só escolhe os modelos de sempre.
@@ -254,7 +271,12 @@ async def preparar_entrada(
     anexos = await anexos_do_dono(sessao, usuario_id, anexo_ids)
     if precisa_visao and not any(a.tipo in TIPOS_IMAGEM for a in anexos):
         modelos, _ = await modelos_com_visao(
-            sessao, usuario_id, papel, dificuldade=dificuldade, conversa_privada=conversa_privada
+            sessao,
+            usuario_id,
+            papel,
+            dificuldade=dificuldade,
+            conversa_privada=conversa_privada,
+            escolha=escolha,
         )
         entrada = await montar_entrada(
             texto, anexos, tem_visao=True, ler=ler_do_disco, usuario_avisado=usuario_avisado
@@ -262,11 +284,21 @@ async def preparar_entrada(
         return entrada, modelos
     if any(a.tipo in TIPOS_IMAGEM for a in anexos):
         modelos, tem_visao = await modelos_com_visao(
-            sessao, usuario_id, papel, dificuldade=dificuldade, conversa_privada=conversa_privada
+            sessao,
+            usuario_id,
+            papel,
+            dificuldade=dificuldade,
+            conversa_privada=conversa_privada,
+            escolha=escolha,
         )
     else:
         modelos = await modelos_do_papel(
-            sessao, usuario_id, papel, dificuldade=dificuldade, conversa_privada=conversa_privada
+            sessao,
+            usuario_id,
+            papel,
+            dificuldade=dificuldade,
+            conversa_privada=conversa_privada,
+            escolha=escolha,
         )
         tem_visao = True
     entrada = await montar_entrada(

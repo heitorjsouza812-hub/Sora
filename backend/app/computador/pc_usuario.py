@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -344,6 +345,11 @@ class ComputadorPcUsuario:
     espera_cartao_s: float = ESPERA_CARTAO_S
     intervalo_cartao_s: float = 1.0
     alvo: Alvo = Alvo.PC_USUARIO
+    modo_permissao: str = "perguntar"
+    """Modo da conversa (Âncora-9). Com ``total`` a primeira ação num programa liberado não pede
+    cartão; programa bloqueado, senha, pausa pelo mouse, Parar e borda continuam iguais."""
+    ao_aprovar_sozinho: Callable[[str, str], Awaitable[None]] | None = None
+    """Avisa o painel Trabalho (modo, resumo) quando o modo dispensou o cartão."""
 
     # ---------- comandos ----------
 
@@ -443,6 +449,23 @@ class ComputadorPcUsuario:
         titulo_seguro = _limpo(titulo, 80)
         onde = f"{programa} (“{titulo_seguro}”)" if titulo_seguro else programa
         nome = self.agente.nome
+        if self.modo_permissao == "total":
+            from app.revisor.decisoes import aprova_sozinho
+
+            pedido = {
+                "tipo": "pc_programa",
+                "ferramenta": FERRAMENTA_PROGRAMA,
+                "argumentos": {"programa": programa},
+                "condicao": {"programa": programa},
+            }
+            if aprova_sozinho("total", pedido):
+                await self.canal.permitir_uma_vez(self.usuario_id, self.agente.id, programa)
+                if self.ao_aprovar_sozinho is not None:
+                    try:
+                        await self.ao_aprovar_sozinho("total", f"usar {onde} no seu computador")
+                    except Exception:  # o aviso é só de leitura: nunca derruba a ação
+                        pass
+                return
         acao = {
             "tipo": "pc_programa",
             "ferramenta": FERRAMENTA_PROGRAMA,

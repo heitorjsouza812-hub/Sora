@@ -115,8 +115,16 @@ async def _obter_plano(ctx: dict[str, Any], sessao: Any, cadeia: Cadeia) -> Plan
         memorias_relevantes="nenhuma",
         especialistas_e_ferramentas=especialistas,
     )
+    from app.preferencias_conversa import (
+        FalhaDoModeloEscolhido,
+        escolha_efetiva,
+        falha_de_provedor,
+        texto_da_falha,
+    )
+
+    escolha = await escolha_efetiva(sessao, cadeia.usuario_id, conversa_id=cadeia.conversa_id)
     modelos = await modelos_do_papel(
-        sessao, cadeia.usuario_id, "planejador", dificuldade=3, precisa=()
+        sessao, cadeia.usuario_id, "planejador", dificuldade=3, precisa=(), escolha=escolha
     )
     ultimo: Exception | None = None
     for modelo in modelos:
@@ -127,6 +135,11 @@ async def _obter_plano(ctx: dict[str, Any], sessao: Any, cadeia: Cadeia) -> Plan
             return plano
         except Exception as erro:
             ultimo = erro
+    # Só falha de provedor vira o aviso do modelo escolhido; plano ilegível segue o de sempre.
+    if ultimo is not None and falha_de_provedor(ultimo):
+        aviso = texto_da_falha(modelos, ultimo)
+        if aviso is not None:
+            raise FalhaDoModeloEscolhido(aviso) from ultimo
     raise RuntimeError(f"o planejador nao devolveu um plano valido: {ultimo}")
 
 
@@ -145,8 +158,16 @@ async def _mensagem_final(ctx, sessao, cadeia, texto):
     await _publicar(ctx, cadeia, MensagemFim(mensagem_id=mensagem.id))
 
 
-async def _falhar_cadeia(ctx: dict[str, Any], sessao: Any, cadeia: Cadeia) -> None:
-    """Cadeia ``falhou`` + evento: o usuário nunca fica olhando uma cadeia presa."""
+FALHA_DA_CADEIA = (
+    "Não consegui concluir o trabalho. A execução foi encerrada; você pode tentar novamente."
+)
+
+
+async def _falhar_cadeia(
+    ctx: dict[str, Any], sessao: Any, cadeia: Cadeia, aviso: str | None = None
+) -> None:
+    """Cadeia ``falhou`` + evento: o usuário nunca fica olhando uma cadeia presa. ``aviso`` troca
+    o texto padrão (ex.: o modelo escolhido no seletor falhou)."""
     cadeia_id = cadeia.id
     await sessao.rollback()
     cadeia = await sessao.get(Cadeia, cadeia_id, with_for_update=True)
@@ -159,7 +180,7 @@ async def _falhar_cadeia(ctx: dict[str, Any], sessao: Any, cadeia: Cadeia) -> No
         ctx,
         sessao,
         cadeia,
-        "Não consegui concluir o trabalho. A execução foi encerrada; você pode tentar novamente.",
+        aviso or FALHA_DA_CADEIA,
     )
     await _publicar(
         ctx,
@@ -184,8 +205,18 @@ async def planejar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
             return
         try:
             eventos = await _criar_equipe(ctx, sessao, cadeia)
-        except Exception:
-            await _falhar_cadeia(ctx, sessao, cadeia)
+        except Exception as erro:
+            from app.preferencias_conversa import (
+                FalhaDoModeloEscolhido,
+                ModeloEscolhidoIndisponivel,
+            )
+
+            aviso = (
+                str(erro)
+                if isinstance(erro, FalhaDoModeloEscolhido | ModeloEscolhidoIndisponivel)
+                else None
+            )
+            await _falhar_cadeia(ctx, sessao, cadeia, aviso)
             return
         eventos_agentes, eventos_etapas = eventos
         for evento in eventos_agentes:
@@ -350,16 +381,30 @@ async def avancar_cadeia(ctx: dict[str, Any], cadeia_id: str) -> None:
 
 
 async def _modelos_da_etapa(
-    ctx: dict[str, Any], sessao: Any, usuario_id: UUID, papel: str, nivel: str = "N2"
+    ctx: dict[str, Any],
+    sessao: Any,
+    usuario_id: UUID,
+    papel: str,
+    nivel: str = "N2",
+    conversa_id: UUID | None = None,
 ) -> list[Any]:
-    """Modelos na ordem do seletor. ``ctx["modelos_da_etapa"]`` (teste) tem prioridade."""
+    """Modelos na ordem do seletor. ``ctx["modelos_da_etapa"]`` (teste) tem prioridade. Com
+    ``conversa_id``, vale o modelo e o raciocínio escolhidos para a conversa da cadeia."""
     from app.orquestrador.modelos import modelos_do_papel
+    from app.preferencias_conversa import escolha_efetiva
 
     fabrica_de_modelos = ctx.get("modelos_da_etapa")
     if fabrica_de_modelos is not None:
         return list(fabrica_de_modelos(papel))
     dificuldade = int(nivel[1]) if len(nivel) == 2 and nivel[1].isdigit() else 2
-    return await modelos_do_papel(sessao, usuario_id, papel, dificuldade=dificuldade)
+    escolha = (
+        await escolha_efetiva(sessao, usuario_id, conversa_id=conversa_id)
+        if conversa_id is not None
+        else None
+    )
+    return await modelos_do_papel(
+        sessao, usuario_id, papel, dificuldade=dificuldade, escolha=escolha
+    )
 
 
 def valor_da_retomada(resposta: Any) -> Any:
@@ -681,13 +726,20 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
             ferramentas_extras=list(ctx.get("ferramentas_extras", ["perguntar", "criar_agente"])),
             dependencias=dependencias_da_etapa(ctx, cadeia=cadeia, etapa=etapa),
         )
+        modelos_da_etapa: list[Any] = []
         try:
             async with batimento(ctx["redis_eventos"], etapa.id):
+                modelos_da_etapa = await _modelos_da_etapa(
+                    ctx,
+                    sessao,
+                    cadeia.usuario_id,
+                    etapa.especialista,
+                    etapa.nivel,
+                    conversa_id=cadeia.conversa_id,
+                )
                 resultado = await montar_e_rodar_agente(
                     contexto=contexto,
-                    modelos=await _modelos_da_etapa(
-                        ctx, sessao, cadeia.usuario_id, etapa.especialista, etapa.nivel
-                    ),
+                    modelos=modelos_da_etapa,
                     checkpointer=ctx["checkpointer"],
                     entrada=None if retomada else {"messages": [HumanMessage(etapa.tarefa)]},
                     resposta=resposta,
@@ -713,12 +765,17 @@ async def _executar_com_agente(ctx: dict[str, Any], etapa_id: str, resposta: Any
                 estourou_limite_de_passos,
             )
             from app.llm.limite import mensagem_de_limite
+            from app.preferencias_conversa import texto_da_falha
 
             etapa.status = StatusEtapa.FALHOU
             if estourou_limite_de_passos(erro):
                 etapa.erro = MENSAGEM_LIMITE_DE_PASSOS
             else:
-                etapa.erro = mensagem_de_limite(erro) or ERRO_SEGURO_DA_ETAPA
+                etapa.erro = (
+                    texto_da_falha(modelos_da_etapa, erro)
+                    or mensagem_de_limite(erro)
+                    or ERRO_SEGURO_DA_ETAPA
+                )
             await sessao.commit()
             await _publicar(ctx, cadeia, _evento_etapa(etapa, 100))
             await enfileirar("avancar_cadeia", cadeia_id=str(cadeia.id))
@@ -948,7 +1005,12 @@ async def _rodar_verificador(
         await montar_e_rodar_agente(
             contexto=contexto,
             modelos=await _modelos_da_etapa(
-                ctx, sessao, cadeia.usuario_id, "verificador", verificador.nivel
+                ctx,
+                sessao,
+                cadeia.usuario_id,
+                "verificador",
+                verificador.nivel,
+                conversa_id=cadeia.conversa_id,
             ),
             checkpointer=ctx["checkpointer"],
             entrada={"messages": [HumanMessage(verificador.tarefa)]},

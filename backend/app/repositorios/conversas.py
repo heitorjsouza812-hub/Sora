@@ -21,6 +21,7 @@ from app.modelos.tabelas import (
     Mensagem,
     Passo,
     Pergunta,
+    PreferenciaConversa,
     Reacao,
     RegistroAcao,
     Roteamento,
@@ -244,6 +245,9 @@ async def apagar(
     await sessao.execute(delete(Pergunta).where(Pergunta.conversa_id == conversa_id))
     await sessao.execute(delete(Entrega).where(Entrega.conversa_id == conversa_id))
     await sessao.execute(delete(Mensagem).where(Mensagem.conversa_id == conversa_id))
+    await sessao.execute(
+        delete(PreferenciaConversa).where(PreferenciaConversa.alvo_id == conversa_id)
+    )
     await sessao.delete(conversa)
     await sessao.flush()
     return True

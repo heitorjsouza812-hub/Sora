@@ -155,15 +155,32 @@ async def executar_rotina(
         usuario_id, agente_id = rotina.usuario_id, agente.id
         titulo, pedido, silencioso = rotina.titulo, rotina.pedido, rotina.silencioso
         exec_id, rid = execucao.id, rotina.id
-        modelos = (
-            [criar_modelo_falso("rotina")]
-            if modelo_falso_ativo()
-            else await modelos_do_papel(sessao, usuario_id, papel, dificuldade=1)
-        )
+        indisponivel: str | None = None
+        modelos: list[Any] = []
+        if modelo_falso_ativo():
+            modelos = [criar_modelo_falso("rotina")]
+        else:
+            from app.preferencias_conversa import ModeloEscolhidoIndisponivel, escolha_efetiva
+
+            # Modelo e raciocínio escolhidos (conversa do bot ou padrão do bot). A permissão da
+            # rotina é sempre a segura de hoje (``sem_supervisao``), qualquer que seja o modo.
+            escolha = await escolha_efetiva(
+                sessao, usuario_id, conversa_id=conversa_id, agente_id=agente_id
+            )
+            try:
+                modelos = await modelos_do_papel(
+                    sessao, usuario_id, papel, dificuldade=1, escolha=escolha
+                )
+            except ModeloEscolhidoIndisponivel as erro_escolha:
+                indisponivel = str(erro_escolha)
         await sessao.commit()
 
     status, erro, texto, mensagem_id = "enviada", None, "", None
     try:
+        if indisponivel is not None:
+            from app.preferencias_conversa import ModeloEscolhidoIndisponivel
+
+            raise ModeloEscolhidoIndisponivel(indisponivel)
         contexto = ContextoAgente(
             usuario_id=usuario_id,
             agente_id=agente_id,
@@ -213,11 +230,14 @@ async def executar_rotina(
     except Exception as falha:
         from app.agentes.middleware.limites import estourou_limite_de_passos
         from app.llm.limite import mensagem_de_limite
+        from app.preferencias_conversa import texto_da_falha
 
         registro.exception("a rotina %s falhou", rid)
         status = "falhou"
         if estourou_limite_de_passos(falha):
             erro = MENSAGEM_LIMITE_DE_PASSOS_ROTINA
+        elif (do_escolhido := texto_da_falha(modelos, falha)) is not None:
+            erro = do_escolhido
         elif (limite := mensagem_de_limite(falha)) is not None:
             erro = limite
         else:

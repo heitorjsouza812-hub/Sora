@@ -60,19 +60,32 @@ def criar_chat_model(
     max_tokens: int | None = None,
     timeout_s: float | None = None,
     streaming: bool = False,
+    raciocinio: str | None = None,
 ) -> BaseChatModel:
     """Cria o ``ChatLiteLLM`` de um modelo do usuário (nome no formato do LiteLLM).
 
     Não faz chamada de rede: só monta o objeto. Com ``SORA_MODELO_FALSO=1`` devolve o modelo
-    falso do papel (a chave nem é lida).
+    falso do papel (a chave nem é lida). ``raciocinio`` é um nível de ``app/llm/raciocinio.py``
+    que o modelo aceita (nível que ele não aceita, ou ``None``, não muda nada).
     """
     if modelo_falso_ativo():
         return criar_modelo_falso(papel or "")
 
     from app.llm.mensagens import aceita_raciocinio_no_historico
+    from app.llm.raciocinio import parametros_de_raciocinio
 
     politica = politica_de_rede()
     parametros = parametros_litellm(provedor, politica)
+    # O cliente da OpenAI por baixo refaz 429 sozinho (2 vezes, escondido); quem espera o
+    # limite e conta as tentativas é o MiddlewareLimiteDoProvedor.
+    extras: dict[str, Any] = {"max_retries": 0}
+    ajuste = parametros_de_raciocinio(modelo, raciocinio) if raciocinio else None
+    if ajuste is not None:
+        extras.update(ajuste.extras)
+        if ajuste.temperatura is not None:
+            temperatura = ajuste.temperatura
+        if ajuste.max_tokens_minimo is not None:
+            max_tokens = max(max_tokens or 0, ajuste.max_tokens_minimo)
     chat = _classe_do_chat()(
         enviar_raciocinio=aceita_raciocinio_no_historico(provedor.tipo),
         model=modelo,
@@ -81,9 +94,7 @@ def criar_chat_model(
         request_timeout=timeout_s,
         streaming=streaming,
         max_retries=0,
-        # O cliente da OpenAI por baixo refaz 429 sozinho (2 vezes, escondido); quem espera o
-        # limite e conta as tentativas é o MiddlewareLimiteDoProvedor.
-        model_kwargs={"max_retries": 0},
+        model_kwargs=extras,
         **parametros,
     )
     if "api_base" in parametros and not politica.rede_local:
@@ -98,11 +109,19 @@ def criar_modelos_na_ordem(
     papel: str | None = None,
     temperatura: float = 0.0,
     streaming: bool = False,
+    raciocinios: Sequence[str | None] | None = None,
 ) -> list[BaseChatModel]:
-    """Cria um ``ChatLiteLLM`` por candidato, mantendo a ordem do seletor (o 1º é o principal)."""
+    """Cria um ``ChatLiteLLM`` por candidato, mantendo a ordem do seletor (o 1º é o principal).
+    ``raciocinios`` traz o nível de cada candidato (mesma ordem); ``None`` = sem ajuste."""
+    niveis = list(raciocinios) if raciocinios is not None else [None] * len(candidatos)
     return [
         criar_chat_model(
-            modelo, provedor, papel=papel, temperatura=temperatura, streaming=streaming
+            modelo,
+            provedor,
+            papel=papel,
+            temperatura=temperatura,
+            streaming=streaming,
+            raciocinio=nivel,
         )
-        for modelo, provedor in candidatos
+        for (modelo, provedor), nivel in zip(candidatos, niveis, strict=True)
     ]

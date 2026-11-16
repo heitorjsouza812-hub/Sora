@@ -7,7 +7,11 @@ Peças do Rakazo (``docs/referencias/rakazo.md``): ``politica.py`` diz *o que* p
 - ``cartao_fixo``: sempre abre o cartão (nem a regra "sempre permitir" dispensa);
 - ``revisor``: uma regra "sempre permitir" do usuário libera; senão o juiz decide, e qualquer
   dúvida, erro ou prazo estourado vira cartão (falha fechada);
-- rotina sem supervisão: só roda o que ``pode_sem_supervisao`` aceita.
+- rotina sem supervisão: só roda o que ``pode_sem_supervisao`` aceita;
+- modo de permissão da conversa (seletor do campo de mensagem, Âncora-9): ``automatico`` aprova
+  sozinho o que é de risco baixo e ``total`` tudo o que a política deixaria aprovar, nunca os
+  bloqueios absolutos (``revisor/decisoes.py``). A aprovação automática fica em
+  ``registro_acoes`` e aparece no painel Trabalho como "Aprovado automaticamente (modo X)".
 
 O cartão usa a interrupção do LangGraph, como ``criar_agente``: o job termina, a etapa fica em
 ``aguardando_aprovacao`` e a decisão volta por ``Command(resume=…)``. Ao retomar, o nó roda de
@@ -246,6 +250,81 @@ async def _registrar(
         )
 
 
+async def modo_de_permissao(contexto: ContextoFerramenta) -> str:
+    """Modo da conversa (ou do grupo, ou o padrão do bot). Rotina sem supervisão: ``perguntar``."""
+    if contexto.sem_supervisao:
+        return "perguntar"
+    if contexto.permissao is not None:
+        return contexto.permissao
+    from app.preferencias_conversa import escolha_da_execucao
+
+    escolha = await escolha_da_execucao(
+        contexto.usuario_id, contexto.conversa_id, contexto.agente_id
+    )
+    return escolha.permissao
+
+
+async def perfil_do_bot_tem_login(contexto: ContextoFerramenta) -> bool:
+    """O navegador do bot tem login salvo? Na dúvida, ``True`` (falha fechada)."""
+    try:
+        from app.navegador.perfis import particao, perfil_tem_login
+        from app.navegador.repositorio import RepositorioNavegador
+
+        repositorio = RepositorioNavegador(abrir_sessao)
+        escolha = await repositorio.escolha_do_agente(contexto.agente_id, contexto.usuario_id)
+        if escolha is None:
+            return False  # perfil efêmero: nada salvo
+        estado = await repositorio.ler_estado(
+            particao(contexto.usuario_id, contexto.agente_id, escolha)
+        )
+        return perfil_tem_login(estado)
+    except Exception:
+        registro.warning("não consegui ler o perfil do navegador do bot", exc_info=True)
+        return True
+
+
+async def anunciar_aprovacao_automatica(
+    contexto: ContextoFerramenta,
+    nome: str,
+    modo: str,
+    resumo: str,
+    proposta: AcaoProposta | None = None,
+) -> None:
+    """Registra a ação aprovada pelo modo e mostra o passo "Aprovado automaticamente (modo X)"
+    no painel Trabalho. Falha ao publicar nunca derruba a ferramenta."""
+    from uuid import NAMESPACE_URL, uuid4, uuid5
+
+    from app.eventos.tipos import PassoEvento
+    from app.modelos.enumeracoes import StatusPasso, TipoPasso
+    from app.revisor.decisoes import texto_aprovado_automaticamente
+
+    texto = texto_aprovado_automaticamente(modo, resumo)
+    await _registrar(
+        contexto, proposta or AcaoProposta(ferramenta=nome, argumentos={}), texto, None
+    )
+    etapa = (
+        contexto.etapa_painel
+        or contexto.etapa_id
+        or uuid5(NAMESPACE_URL, f"sora:aprovacao-automatica:{contexto.conversa_id}")
+    )
+    try:
+        await emitir(
+            contexto,
+            PassoEvento(
+                passo_id=uuid4(),
+                etapa_id=etapa,
+                agente_id=contexto.agente_id,
+                tipo=TipoPasso.PENSAMENTO,
+                texto=texto,
+                ferramenta=nome,
+                status=StatusPasso.CONCLUIDO,
+                resultado={"aprovacao": "automatica", "modo": modo},
+            ),
+        )
+    except Exception:
+        registro.warning("não consegui publicar a aprovação automática", exc_info=True)
+
+
 async def conferir_acao(
     nome: str,
     argumentos: dict[str, Any],
@@ -280,7 +359,24 @@ async def conferir_acao(
     quem_recebe: str | None = None
 
     if existente is None:
-        if politica is Politica.REVISOR:
+        modo = await modo_de_permissao(contexto)
+        if modo != "perguntar":
+            from app.revisor.decisoes import aprova_sozinho
+
+            bruta = proposta.model_dump(mode="json")  # com o texto digitado (o cartão não tem)
+            com_login = (
+                await perfil_do_bot_tem_login(contexto) if nome.startswith("navegador_") else True
+            )
+            if aprova_sozinho(
+                modo, bruta, sem_supervisao=contexto.sem_supervisao, perfil_tem_login=com_login
+            ):
+                await anunciar_aprovacao_automatica(contexto, nome, modo, resumo, proposta)
+                return None
+        from app.revisor.decisoes import bloqueio_absoluto
+
+        # Nem regras anteriores nem o juiz podem liberar um bloqueio permanente sozinhos.
+        bloqueada = bloqueio_absoluto(proposta.model_dump(mode="json")) is not None
+        if politica is Politica.REVISOR and not bloqueada:
             async with abrir_sessao() as sessao:
                 liberada = await regra_permite(
                     sessao, contexto.usuario_id, contexto.agente_id, proposta

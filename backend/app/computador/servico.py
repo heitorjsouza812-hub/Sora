@@ -167,6 +167,18 @@ class ServicoComputador:
     async def _computador(self, contexto: ContextoFerramenta, alvo: Alvo) -> Computador:
         provedor = self._conferir(contexto, alvo)
         computador = await provedor.obter(contexto.usuario_id, contexto.agente_id)
+        if alvo is Alvo.PC_USUARIO and hasattr(computador, "modo_permissao"):
+            # Âncora-9: o modo da conversa vale para o cartão por programa do PC do usuário.
+            from app.revisor.execucao import anunciar_aprovacao_automatica, modo_de_permissao
+
+            computador.modo_permissao = await modo_de_permissao(contexto)
+
+            async def avisar(modo: str, resumo: str) -> None:
+                await anunciar_aprovacao_automatica(
+                    contexto, "computador_pc_programa", modo, resumo
+                )
+
+            computador.ao_aprovar_sozinho = avisar
         await self.redis.hset(CHAVE_USO, str(contexto.agente_id), str(time.time()))
         return computador
 

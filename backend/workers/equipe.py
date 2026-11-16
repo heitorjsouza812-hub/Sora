@@ -47,6 +47,12 @@ from app.llm.estruturada import com_saida_estruturada, instrucoes_json
 from app.llm.falso import modelo_falso_ativo
 from app.modelos.tabelas import Agente, CanalEquipe
 from app.orquestrador.modelos import modelos_do_papel
+from app.preferencias_conversa import (
+    FalhaDoModeloEscolhido,
+    ModeloEscolhidoIndisponivel,
+    escolha_efetiva,
+    texto_da_falha,
+)
 from workers.fila import enfileirar
 from workers.travados import batimento, batimento_vivo
 
@@ -198,12 +204,14 @@ async def _rotear_com_lider(ctx: dict[str, Any], canal_id: UUID) -> None:
         if modelo_falso_ativo():
             bruto = {"acao": "atribuir", "agentes": [str(canal.lider_id)]}
         else:
-            async with ctx["sessoes"]() as sessao:
-                modelos = await modelos_do_papel(
-                    sessao, canal.usuario_id, "individual", dificuldade=1
-                )
-            modelo = com_saida_estruturada(modelos[0], DecisaoLider)
             try:
+                async with ctx["sessoes"]() as sessao:
+                    # O líder usa o modelo e o raciocínio escolhidos para o grupo.
+                    escolha = await escolha_efetiva(sessao, canal.usuario_id, conversa_id=canal.id)
+                    modelos = await modelos_do_papel(
+                        sessao, canal.usuario_id, "individual", dificuldade=1, escolha=escolha
+                    )
+                modelo = com_saida_estruturada(modelos[0], DecisaoLider)
                 resposta = await modelo.ainvoke(
                     [
                         SystemMessage(INSTRUCOES_LIDER + "\n\n" + instrucoes_json(DecisaoLider)),
@@ -287,6 +295,10 @@ async def _turno_real(
             )
         )
         anexos_do_pedido = list(dict.fromkeys(a for lista in pedidos for a in lista))
+        # Seletor do campo de mensagem do grupo; sem escolha no grupo, o padrão do bot.
+        escolha = await escolha_efetiva(
+            sessao, canal.usuario_id, conversa_id=canal.id, agente_id=tarefa.dono_id
+        )
         entrada_usuario, modelos = await preparar_entrada(
             sessao,
             canal.usuario_id,
@@ -296,6 +308,7 @@ async def _turno_real(
             dificuldade=2,
             usuario_avisado=False,
             precisa_visao=any(f.startswith("computador_") for f in extras),
+            escolha=escolha,
         )
     thread = thread or thread_da_tarefa_canal(tarefa.id, tarefa.turno_seq)
     contexto = ContextoAgente(
@@ -339,7 +352,13 @@ async def _turno_real(
 
     from app.llm.limite import com_espera_de_limite
 
-    resultado = await com_espera_de_limite(chamar, ao_esperar=avisar_espera)
+    try:
+        resultado = await com_espera_de_limite(chamar, ao_esperar=avisar_espera)
+    except Exception as erro:
+        aviso = texto_da_falha(modelos, erro)
+        if aviso is not None:
+            raise FalhaDoModeloEscolhido(aviso) from erro  # sem troca automática
+        raise
     cartao = cartao_da_interrupcao(resultado or {})
     async with ctx["sessoes"]() as sessao:
         armazem = ArmazemCanaisSQL(sessao)
@@ -454,16 +473,17 @@ async def _concluir_turno(ctx: dict[str, Any], tarefa_id: UUID, canal, revisao: 
             await limpar_interrupcao(redis, tarefa_id)
             await enfileirar("despachar_equipe", canal_id=str(canal.id))
             return  # quem pediu já gravou o estado (parada/cancelada) e publicou o evento
-    except Exception:
+    except Exception as erro:
         registro.exception("turno do canal %s falhou", tarefa_id)
+        motivo = (
+            str(erro)
+            if isinstance(erro, FalhaDoModeloEscolhido | ModeloEscolhidoIndisponivel)
+            else "O provedor não permitiu concluir. Retome a tarefa para tentar novamente."
+        )
         async with ctx["sessoes"]() as sessao:
             armazem = ArmazemCanaisSQL(sessao)
             async with armazem.transacao_tarefa(tarefa_id):
-                mudancas = await ServicoCanais(armazem).falhar(
-                    tarefa_id,
-                    revisao,
-                    "O provedor não permitiu concluir. Retome a tarefa para tentar novamente.",
-                )
+                mudancas = await ServicoCanais(armazem).falhar(tarefa_id, revisao, motivo)
             await sessao.commit()
     await _publicar_mudancas(ctx, canal.usuario_id, mudancas)
     await enfileirar("despachar_equipe", canal_id=str(canal.id))

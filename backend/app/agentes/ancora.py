@@ -257,6 +257,7 @@ def _catalogo_revisado(
         cadeia_id=contexto.cadeia_id,
         etapa_id=contexto.etapa_id,
         sem_supervisao=contexto.sem_supervisao,
+        etapa_painel=contexto.etapa_id,
     )
 
     async def antes(ferramenta, argumentos) -> None:

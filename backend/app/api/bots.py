@@ -51,6 +51,16 @@ class RascunhoBotCriacao(BaseModel):
     descricao: str = Field(min_length=1, max_length=2_000)
 
 
+class BotPorDescricao(RascunhoBotCriacao):
+    """Novo bot direto: a descrição e, opcionalmente, o padrão do seletor do campo de mensagem."""
+
+    provedor_id: UUID | None = None
+    modelo: str | None = Field(default=None, max_length=200)
+    raciocinio: str | None = Field(default=None, max_length=20)
+    permissao: str | None = Field(default=None, max_length=20)
+    confirmar_total: bool = False
+
+
 def _aplicar_ajustes(rascunho, ajustes: RascunhoBotAjuste) -> None:
     dados = dict(rascunho.dados)
     serializados = ajustes.model_dump(mode="json", exclude_unset=True)
@@ -203,14 +213,29 @@ async def descartar(
 
 @roteador.post("/criar-por-descricao", status_code=status.HTTP_201_CREATED)
 async def criar_por_descricao(
-    dados: RascunhoBotCriacao, usuario_id: Usuario, sessao: Sessao
+    dados: BotPorDescricao, usuario_id: Usuario, sessao: Sessao
 ) -> AgenteSaida:
+    from app.api.agentes import aplicar_preferencia_no_bot
     from app.bot_por_descricao import sugerir_bot
+    from app.preferencias_conversa import (
+        AUTOMATICA,
+        ErroPreferencia,
+        aplicar_mudancas,
+        campos_enviados,
+        so_preferencia,
+    )
 
     descricao = dados.descricao.strip()
     if not descricao:
         raise HTTPException(422, "Descreva o bot que você quer criar.")
-    sugestao = await sugerir_bot(sessao, usuario_id, descricao)
+    escolha = AUTOMATICA
+    if campos_enviados(dados):
+        # Valida antes de gastar a chamada ao modelo: escolha inválida não cria bot.
+        try:
+            escolha = await aplicar_mudancas(sessao, usuario_id, AUTOMATICA, so_preferencia(dados))
+        except ErroPreferencia as erro:
+            raise HTTPException(422, str(erro)) from erro
+    sugestao = await sugerir_bot(sessao, usuario_id, descricao, escolha=escolha)
     rascunho = await criar_rascunho(
         sessao,
         usuario_id,
@@ -223,6 +248,7 @@ async def criar_por_descricao(
         **{k: v for k, v in sugestao.items() if k in ("instrucoes", "ferramentas")},
     }
     agente = await _materializar_rascunho(sessao, usuario_id, rascunho)
+    await aplicar_preferencia_no_bot(sessao, usuario_id, agente, dados)
     saida = _saida(agente)
     await sessao.commit()
     return saida

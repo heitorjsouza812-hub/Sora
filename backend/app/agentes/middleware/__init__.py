@@ -98,6 +98,7 @@ def montar_middleware(
                 corrigir=deps.corrigir_tokens,
             )
         )
+    etapa_painel = contexto.etapa_id
     if (
         contexto.etapa_id is not None
         and deps.iniciar_passo is not None
@@ -122,9 +123,10 @@ def montar_middleware(
         # mesmos eventos ``passo`` sob um id sintético estável por turno (não vai para o banco).
         from app.agentes.middleware.passos import PASSOS_DA_CONVERSA_IGNORADOS, id_do_turno
 
+        etapa_painel = id_do_turno(contexto)
         itens.append(
             MiddlewarePassos(
-                id_do_turno(contexto),
+                etapa_painel,
                 contexto.agente_id,
                 iniciar=deps.iniciar_passo,
                 finalizar=deps.finalizar_passo,
@@ -148,6 +150,7 @@ def montar_middleware(
                 cadeia_id=contexto.cadeia_id,
                 etapa_id=contexto.etapa_id,
                 sem_supervisao=contexto.sem_supervisao,
+                etapa_painel=etapa_painel,
             )
         )
     )
