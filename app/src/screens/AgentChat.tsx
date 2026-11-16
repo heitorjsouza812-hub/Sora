@@ -133,11 +133,13 @@ export default function AgentChat() {
           </div>
         ) });
       } else if (x.tarefaId) {
+        // Só mostra quando há entrega de verdade: um "Pronto!" genérico ao fim de todo turno fazia
+        // parecer que o bot tinha feito algo mesmo quando não fez (achado do Heitor, 2026-11-16).
         const proj = x.projetoId ? e.projetos.find(p => p.id === x.projetoId) : undefined;
         const ent = proj?.entregas[a.id];
-        itens.push({ t: fim, key: `e-${x.id}`, node: <>
-          <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="done" glow={false} decorative seed={4} /><p><strong className="agent-color">{a.nome}</strong>&nbsp; Pronto! {ent ? `${ent.titulo}: ${ent.resumo}.` : ''}</p></div>
-          {ent && <div className="agent-delivery"><EntregaCard entrega={ent} agente={a} /></div>}
+        if (ent) itens.push({ t: fim, key: `e-${x.id}`, node: <>
+          <div className="assistant-row agent-copy"><SoraOrb size={34} color={a.cor} movimento={a.tipoMovimento} state="done" glow={false} decorative seed={4} /><p><strong className="agent-color">{a.nome}</strong>&nbsp; entregou: {ent.titulo}{ent.resumo ? ` — ${ent.resumo}` : ''}.</p></div>
+          <div className="agent-delivery"><EntregaCard entrega={ent} agente={a} /></div>
         </> });
       }
     });
