@@ -32,12 +32,32 @@ from app.preferencias_conversa import (
 registro = logging.getLogger(__name__)
 
 
-def _texto_da_resposta(resultado: dict[str, Any]) -> str:
-    for mensagem in reversed(resultado.get("messages", [])):
-        if isinstance(mensagem, AIMessage) and isinstance(mensagem.content, str):
-            if mensagem.content.strip():
-                return mensagem.content.strip()
+def _texto_do_conteudo(conteudo: Any) -> str:
+    if isinstance(conteudo, str):
+        return conteudo.strip()
+    if isinstance(conteudo, list):  # blocos (Anthropic, Gemini): só os de texto
+        return "\n".join(
+            str(bloco.get("text", "")).strip()
+            for bloco in conteudo
+            if isinstance(bloco, dict) and bloco.get("type") == "text" and bloco.get("text")
+        ).strip()
     return ""
+
+
+def _texto_da_resposta(resultado: dict[str, Any]) -> str:
+    """Texto puro com que o modelo terminou ESTE turno (Engrenagem).
+
+    Só vale a última mensagem, se for do modelo e sem chamada de ferramenta. Antes a busca voltava
+    pelo histórico inteiro: um turno que terminava sem texto (resposta vazia, ou retomada depois
+    de um cartão) achava a resposta de um turno anterior e o worker a mandava de novo, duplicada.
+    """
+    mensagens = resultado.get("messages") or []
+    if not mensagens:
+        return ""
+    ultima = mensagens[-1]
+    if not isinstance(ultima, AIMessage) or ultima.tool_calls:
+        return ""
+    return _texto_do_conteudo(ultima.content)
 
 
 async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
@@ -281,6 +301,15 @@ async def _rodar_e_falar(
         conversa_id=contexto.conversa_id,
     )
     pedido_de_equipe, cartoes_antes = await _pedido_de_equipe(contexto, entrada)
+    if antes is None:
+        # Retomada (cartão ou pergunta): conta agora, para o texto puro do fim só ser falado se o
+        # turno retomado não falou nada (antes ele era falado sempre, repetindo o que já saiu).
+        async with ctx["sessoes"]() as sessao:
+            antes = await sessao.scalar(
+                select(func.count())
+                .select_from(Mensagem)
+                .where(Mensagem.conversa_id == contexto.conversa_id)
+            )
     try:
         resultado = await montar_e_rodar_agente(
             contexto=contexto,
