@@ -110,3 +110,22 @@ async def test_retomada_conta_as_mensagens_antes_de_rodar(
     ctx = {"sessoes": sessoes, "checkpointer": None, "redis_eventos": None}
     await conversa._rodar_e_falar(ctx, contexto, [], antes=None, resposta={"decisao": "x"})
     assert len(falas) == falas_esperadas
+
+
+async def test_item_sem_mensagem_roda_em_thread_propria(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Repetir: o item roda numa thread só dele, não na thread da conversa (onde cada execução
+    acrescentava o histórico inteiro de novo)."""
+    from types import SimpleNamespace
+
+    capturado: dict[str, Any] = {}
+
+    async def responder(ctx: Any, mensagem_id: Any, **kwargs: Any) -> None:
+        capturado.update(kwargs, mensagem_id=mensagem_id)
+
+    monkeypatch.setattr(conversa, "_responder_direto_sem_fila", responder)
+    item = SimpleNamespace(
+        id=uuid4(), chave=None, agente_id=uuid4(), usuario_id=uuid4(), texto="de novo", anexos=[]
+    )
+    await conversa.rodar_turno_do_item({}, item)
+    assert capturado["mensagem_id"] is None
+    assert capturado["item_id"] == item.id

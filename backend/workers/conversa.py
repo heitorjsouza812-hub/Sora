@@ -98,6 +98,7 @@ async def rodar_turno_do_item(ctx: dict[str, Any], item: Any) -> None:
             usuario_id=item.usuario_id,
             texto=item.texto,
             anexos=item.anexos,
+            item_id=item.id,
         )
 
 
@@ -109,6 +110,7 @@ async def _responder_direto_sem_fila(
     usuario_id: UUID | None = None,
     texto: str | None = None,
     anexos: Any = (),
+    item_id: UUID | None = None,
 ) -> None:
     """Roda a Sora (ou o agente individual) e manda o texto pelos eventos
     ``mensagem.*``, terminando com ``sugestoes``. Quem põe na fila: a API."""
@@ -192,7 +194,11 @@ async def _responder_direto_sem_fila(
         papel=papel,
         ferramentas_do_bot=list(agente.ferramentas or []),
         ferramentas_extras=list(agente.ferramentas or []),
-        thread_proprio=f"conversa:{conversa_id}:pedido:{mensagem_id}" if mensagem_id else None,
+        # Item sem mensagem (Repetir): thread só dele. Na thread da conversa cada execução
+        # acrescentava o histórico inteiro de novo (mensagens sem id), e o pedido ao modelo dobrava.
+        thread_proprio=f"conversa:{conversa_id}:pedido:{mensagem_id or item_id}"
+        if (mensagem_id or item_id)
+        else None,
         dependencias=dependencias_da_etapa(ctx, usuario_id=usuario_id, conversa_id=conversa_id),
     )
     if modelo_falso_ativo() and not any(
