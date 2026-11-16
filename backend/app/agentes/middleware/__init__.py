@@ -74,9 +74,12 @@ def montar_middleware(
         from app.agentes.middleware.encerra_depois_de_falar import (
             MiddlewareEncerraDepoisDeFalar,
         )
+        from app.agentes.middleware.fala_unica import MiddlewareFalaUnica
 
         itens.append(MiddlewareLembretes())
         itens.append(MiddlewareEncerraDepoisDeFalar())
+        # Por fora do painel e do revisor: a fala repetida não vira passo nem cartão.
+        itens.append(MiddlewareFalaUnica())
     if contexto.cadeia_id is not None and contexto.dependencias.esta_cancelada is not None:
         itens.append(
             MiddlewareCancelamento(

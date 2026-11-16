@@ -30,6 +30,11 @@ def deve_encerrar(mensagens: list[Any]) -> bool:
     nomes = [c.get("name") for c in (chamada.tool_calls or [])]
     if not nomes or set(nomes) != {"falar"}:
         return False
+    from app.agentes.middleware.fala_unica import JA_ENVIADA
+
+    if any(m.content == JA_ENVIADA for m in mensagens[inicio:]):
+        # O modelo repetiu uma fala já enviada (``fala_unica.py``): não há mais o que dizer.
+        return True
     # Há algo de ferramenta antes dela neste turno (desde a última mensagem do usuário)?
     anteriores = mensagens[: inicio - 1]
     for mensagem in reversed(anteriores):
