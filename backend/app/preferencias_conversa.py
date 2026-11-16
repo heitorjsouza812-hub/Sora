@@ -218,6 +218,10 @@ async def escolha_da_execucao(
 async def _conferir_modelo(
     sessao: AsyncSession, usuario_id: UUID, provedor_id: UUID, modelo: str
 ) -> None:
+    from app.llm.catalogo_chat import modelo_de_chat
+
+    if not modelo_de_chat(modelo):
+        raise ErroPreferencia("Escolha um modelo de conversa; esse modelo atende outra função.")
     provedor = await sessao.scalar(
         select(Provedor).where(
             Provedor.id == provedor_id,

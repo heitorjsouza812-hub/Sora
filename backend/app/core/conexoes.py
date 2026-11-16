@@ -120,7 +120,7 @@ def _novo_modelo(provedor_id: UUID, classificacao: ClassificacaoModelo) -> Model
         preco_saida=classificacao.preco_saida,
         velocidade_tps=classificacao.velocidade_tps,
         origem=classificacao.origem,
-        ativo=not classificacao.somente_se_escolhido,
+        ativo=True,
     )
 
 

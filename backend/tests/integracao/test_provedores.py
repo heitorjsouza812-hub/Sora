@@ -255,7 +255,7 @@ async def test_fluxo_completo_conecta_configura_sincroniza_e_apaga(api: Ambiente
         assert modelo.preco_saida == classificacao.preco_saida
         assert modelo.velocidade_tps == classificacao.velocidade_tps
         assert modelo.origem == classificacao.origem
-        assert modelo.ativo is (not classificacao.somente_se_escolhido)
+        assert modelo.ativo is True
 
     provedores = await api.cliente.get("/v1/provedores", headers=auth)
     modelos_http = await api.cliente.get("/v1/modelos", headers=auth)

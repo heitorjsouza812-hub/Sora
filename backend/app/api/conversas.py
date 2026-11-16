@@ -239,8 +239,7 @@ async def _encaminhar(
         sessao, usuario_id, conversa_id=conversa.id, agente_id=agente.id
     )
     if escolha.modelo_fixo:
-        # Modelo fixo no seletor do campo de mensagem: a triagem também usa só ele (sem raciocínio
-        # extra, para caber no prazo). Ele entra como apto ao JSON da triagem, que lê texto.
+        # A triagem também respeita o modelo fixo; entra como apto ao JSON, que lê texto.
         fixo = [
             m.model_copy(
                 update={
@@ -285,9 +284,32 @@ async def _encaminhar(
         }
     contexto = await _contexto_triagem(sessao, usuario_id, conversa.id)
     contexto.tem_modelo_de_imagem = any("imagem" in m.capacidades for m in seletor.modelos)
+    fabrica = None
+    if escolha.raciocinio != "auto":
+        from app.llm.fabrica import criar_chat_model
+        from app.llm.raciocinio import nivel_mais_proximo
+        from app.sistema1.triagem import MAX_TOKENS_TRIAGEM
+
+        def fabrica(candidato, config):
+            return criar_chat_model(
+                candidato.modelo,
+                config,
+                papel="sistema1",
+                max_tokens=MAX_TOKENS_TRIAGEM,
+                timeout_s=PRAZO_TRIAGEM_S,
+                raciocinio=nivel_mais_proximo(candidato.modelo, escolha.raciocinio),
+            )
+
     try:
         resultado = await asyncio.wait_for(
-            triar(mensagem.conteudo, contexto, seletor, configs), PRAZO_TRIAGEM_S
+            triar(
+                mensagem.conteudo,
+                contexto,
+                seletor,
+                configs,
+                **({"fabrica_de_chat": fabrica} if fabrica is not None else {}),
+            ),
+            PRAZO_TRIAGEM_S,
         )
     except Exception as erro:
         # Provedor fora do ar, chave inválida, limite estourado ou resposta ilegível: o texto

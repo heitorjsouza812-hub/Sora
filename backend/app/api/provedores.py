@@ -6,13 +6,15 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
+from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import conexoes
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
-from app.llm.provedores import ConfigProvedor, listar_modelos
+from app.llm.catalogo_chat import modelos_principais
+from app.llm.provedores import PREFIXO_LITELLM, ConfigProvedor, listar_modelos
 from app.llm.sonda import Sonda, sondar_capacidades
 from app.modelos.esquemas import (
     ModeloSaida,
@@ -21,6 +23,8 @@ from app.modelos.esquemas import (
     ProvedorCriacao,
     ProvedorSaida,
 )
+from app.seletor.catalogo import obter_catalogo
+from app.seletor.repositorio import config_do_provedor
 
 roteador = APIRouter(
     prefix="/provedores", tags=["provedores"], dependencies=[Depends(usuario_atual)]
@@ -67,8 +71,55 @@ async def conectar_provedor(
     provedor, modelos = await conexoes.conectar(sessao, redis, usuario_id, dados, listador, sonda)
     return ProvedorConexaoSaida(
         provedor=_saida(provedor),
-        modelos=[ModeloSaida.de_linha(modelo) for modelo in modelos],
+        modelos=[
+            ModeloSaida.de_linha(modelo).model_copy(
+                update={
+                    "principal": modelo.modelo in modelos_principais([m.modelo for m in modelos])
+                }
+            )
+            for modelo in modelos
+        ],
     )
+
+
+class ModeloAdicao(BaseModel):
+    id: str = Field(min_length=1, max_length=200)
+
+
+@roteador.post("/{provedor_id}/modelos", status_code=status.HTTP_201_CREATED)
+async def adicionar_modelo(
+    provedor_id: UUID,
+    dados: ModeloAdicao,
+    usuario_id: Usuario,
+    sessao: Sessao,
+    redis: RedisDep,
+    listador: ListadorDep,
+) -> ModeloSaida:
+    """Confere o catálogo remoto (sem geração paga), normaliza o ID e adiciona para o dono."""
+
+    provedor = await conexoes._provedor_do_usuario(sessao, usuario_id, provedor_id)
+    # Serializa adições para não disputar o limite e a restrição única.
+    await sessao.refresh(provedor, with_for_update=True)
+    prefixo = PREFIXO_LITELLM[provedor.tipo] + "/"
+    nome = dados.id.strip()
+    if not nome or any(c.isspace() for c in nome):
+        raise conexoes.ErroDadosProvedor("Informe um ID de modelo válido, sem espaços.")
+    if not nome.startswith(prefixo):
+        nome = prefixo + nome
+    existentes = await conexoes._modelos_do(sessao, provedor.id)
+    linha = next((m for m in existentes if m.modelo == nome), None)
+    if linha is None:
+        if len(existentes) >= conexoes.MAX_MODELOS:
+            raise conexoes.ErroDadosProvedor("Este provedor já tem o limite de 500 modelos.")
+        config = await config_do_provedor(sessao, usuario_id, provedor.id)
+        nomes = await conexoes._testar(redis, usuario_id, config, listador)
+        if nome not in nomes:
+            raise conexoes.ErroDadosProvedor("Esse modelo não está disponível neste provedor.")
+        linha = conexoes._novo_modelo(provedor.id, obter_catalogo().classificar(nome))
+        sessao.add(linha)
+        await sessao.flush()
+    principais = modelos_principais([m.modelo for m in existentes] + [nome])
+    return ModeloSaida.de_linha(linha).model_copy(update={"principal": nome in principais})
 
 
 @roteador.get("")

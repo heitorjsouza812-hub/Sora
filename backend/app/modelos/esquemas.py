@@ -241,6 +241,7 @@ class ModeloSaida(EsquemaBase):
     raciocinio: list[str] = Field(default_factory=list)
     """Níveis de raciocínio aceitos (``baixo`` … ``maximo``); vazio = sem ajuste (Âncora-9)."""
     rapido: bool = False
+    principal: bool = False
     """Indicado para resposta rápida (N1 ou 300 tokens/s ou mais)."""
 
     @classmethod

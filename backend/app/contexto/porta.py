@@ -78,8 +78,13 @@ class PortaContexto:
         from app.orquestrador.modelos import modelos_do_papel
 
         async with abrir_sessao() as sessao:
+            from app.preferencias_conversa import escolha_efetiva
+
+            escolha = await escolha_efetiva(
+                sessao, self.usuario_id, conversa_id=self.conversa_id, agente_id=self.agente_id
+            )
             modelos = await modelos_do_papel(
-                sessao, self.usuario_id, self.papel_do_resumo, dificuldade=1
+                sessao, self.usuario_id, self.papel_do_resumo, dificuldade=1, escolha=escolha
             )
         resposta = await asyncio.wait_for(modelos[0].ainvoke([HumanMessage(prompt)]), prazo_s)
         conteudo = resposta.content

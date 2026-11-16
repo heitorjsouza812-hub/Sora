@@ -1,3 +1,7 @@
+## Âncora-10 — seletor no backend (2026-11-16)
+
+Preferências de Sora/bot/grupo persistem o modelo, raciocínio e permissão; modelo fixo sem fallback silencioso. Catálogo só de chat com destaques; conexão ativa todos e POST adiciona por ID. Migrações 0015/0016 aplicadas. API 8200 e worker reiniciados por Start-Process; Vite/desktop preservados. QA HTTP Groq: 11 ativos, 4 chats, PATCH/GET e inclusão nova passaram; conversa/provedor QA limpos. Próximo: validar seletor no app e continuar PC com Vela-12. Diário `2026-11-16.md`.
+
 
 ## Heitor — Novo bot direto (2026-11-15)
 

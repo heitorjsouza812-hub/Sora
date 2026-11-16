@@ -44,9 +44,6 @@ async def compactar_historico(
         escolha = await escolha_efetiva(
             sessao, conversa.usuario_id, conversa_id=conversa.id, agente_id=agente.id
         )
-        if escolha.modelo_fixo:
-            # Resumo do histórico não é resposta: com modelo fixo usa ele, mas sem raciocínio.
-            escolha = replace(escolha, raciocinio="auto")
         modelos = await modelos_do_papel(
             sessao, conversa.usuario_id, papel, dificuldade=1, escolha=escolha
         )

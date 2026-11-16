@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.banco import obter_sessao
 from app.core.dependencias import usuario_atual
+from app.llm.catalogo_chat import modelo_de_chat, modelos_principais
 from app.modelos.esquemas import ModeloAtualizacao, ModeloSaida
 from app.modelos.tabelas import ModeloDisponivel, Provedor
 from app.seletor.tipos import Capacidade
@@ -36,7 +37,13 @@ async def listar_modelos(
     consulta = consulta_modelos_do_usuario(usuario_id).order_by(
         Provedor.criado_em, Provedor.id, ModeloDisponivel.modelo
     )
-    return [ModeloSaida.de_linha(m) for m in (await sessao.scalars(consulta)).all()]
+    linhas = (await sessao.scalars(consulta)).all()
+    principais = modelos_principais([m.modelo for m in linhas])
+    return [
+        ModeloSaida.de_linha(m).model_copy(update={"principal": m.modelo in principais})
+        for m in linhas
+        if modelo_de_chat(m.modelo)
+    ]
 
 
 @roteador.patch("/{modelo_id}")
