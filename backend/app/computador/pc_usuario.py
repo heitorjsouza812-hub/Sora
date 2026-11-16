@@ -15,6 +15,11 @@ Regras (``docs/computador-por-bot.md`` § C3), garantidas aqui **e** de novo na 
   permitir neste programa · Recusar), no sistema de aprovações (``pc_usuario_cartoes.py``);
 - **mexer no mouse ou no teclado pausa** (a ponte detecta entrada física) e vira cartão para
   retomar; **Parar** (borda na tela) tira a vez do bot;
+- **cartão pausa o turno** (Vela-12): no worker (com ``contexto``), o bot não espera o cartão
+  dentro da ferramenta; ele liga o cartão ao turno (``Cartoes.vincular``) e o turno pausa
+  (``interrupt``), como os cartões do revisor. "Permitir" põe na fila a retomada do mesmo turno,
+  a ferramenta roda de novo e encontra o cartão decidido. Só pausa quando nada foi feito ainda
+  nesta chamada (senão a retomada repetiria ações); aí devolve o erro e a próxima chamada pausa;
 - nunca digita senha nem mexe em campo de senha; programas de senha, segurança do Windows, UAC,
   terminais e a própria Sora são bloqueados; o texto digitado nunca vai para o rastro;
 - nada de arquivos do PC por aqui (só tela, mouse e teclado) e nunca em rotina sem supervisão
@@ -79,8 +84,26 @@ SENHA = (
     "essa parte ele mesmo."
 )
 ABRIR = (
-    "No computador do usuário eu não abro programas. Peça ao usuário para abrir o programa e "
-    "deixar a janela na tela; depois observe de novo."
+    "No computador do usuário a ação 'abrir' não existe: use computador_abrir_programa com o "
+    "nome (Excel, Word, PowerPoint, Bloco de Notas, Paint, LibreOffice Calc ou Writer). Outro "
+    "programa: peça ao usuário para abrir e deixar a janela na tela; depois observe de novo."
+)
+NAO_ABRIVEL = (
+    "Esse programa não está na lista que eu abro pelo nome (Excel, Word, PowerPoint, Bloco de "
+    "Notas, Paint, LibreOffice Calc ou Writer). Peça ao usuário para abrir e depois observe."
+)
+NAO_INSTALADO = (
+    "{programa} não está instalado neste computador. Tente outro da lista (o LibreOffice Calc ou "
+    "o Bloco de Notas servem para uma tabela simples) ou peça ao usuário."
+)
+PAUSOU_NO_MEIO = (
+    "Pausei: o usuário mexeu no mouse ou no teclado durante a ação, que pode ter ficado pela "
+    "metade. Chame computador_observar: eu espero o usuário mandar continuar e mostro a tela; "
+    "confira antes de repetir qualquer coisa."
+)
+CARTAO_NA_FILA = (
+    "Pedi ao usuário (cartão 'Precisa de você') para usar {programa}. As ações anteriores desta "
+    "chamada já foram feitas. Chame de novo a mesma ação depois: eu espero a resposta dele."
 )
 TECLA_PROIBIDA = (
     "Essa tecla não é permitida no computador do usuário (menu Iniciar, Executar, troca de "
@@ -104,6 +127,10 @@ ARQUIVOS = (
 
 PRAZO_OBSERVAR_S = 25.0
 PRAZO_AGIR_S = 60.0
+PRAZO_ABRIR_S = 30.0
+ESPERA_RAPIDA_S = 4.0
+"""No worker, antes de pausar o turno, o bot espera este pouco pelo cartão (o usuário costuma
+decidir em segundos): se veio, segue sem pausar."""
 PRAZO_CURTO_S = 15.0
 ESPERA_CARTAO_S = 90.0
 """Quanto o bot espera, no total, a resposta a um cartão antes de desistir deste turno."""
@@ -330,7 +357,15 @@ _MENSAGENS = {
     "invalido": "O app de desktop recusou o pedido (formato inválido).",
     "janela_sumiu": "Essa janela não existe mais. Observe a tela de novo.",
     "sem_foco": "Não consegui trazer a janela para a frente. Clique nela antes de digitar.",
+    "nao_abrivel": NAO_ABRIVEL,
 }
+
+
+def _interromper(valor: dict[str, Any]) -> Any:
+    """Pausa o turno do LangGraph até a decisão do cartão (testes trocam esta função)."""
+    from langgraph.types import interrupt
+
+    return interrupt(valor)
 
 
 @dataclass(slots=True)
@@ -350,6 +385,14 @@ class ComputadorPcUsuario:
     cartão; programa bloqueado, senha, pausa pelo mouse, Parar e borda continuam iguais."""
     ao_aprovar_sozinho: Callable[[str, str], Awaitable[None]] | None = None
     """Avisa o painel Trabalho (modo, resumo) quando o modo dispensou o cartão."""
+    contexto: Any = None
+    """``ContextoFerramenta`` do turno (o serviço preenche no worker). Com ele, cartão pendente
+    pausa o turno em vez de o bot esperar dentro da ferramenta (Vela-12)."""
+    feitas: int = 0
+    """Ações que já chegaram ao PC nesta chamada de ferramenta (um objeto por chamada)."""
+    so_programas: frozenset[str] | None = None
+    """Com o juiz dispensado (teclado em editor local, ``revisor/execucao.py``), a ponte só
+    aceita estes programas nesta chamada."""
 
     # ---------- comandos ----------
 
@@ -389,6 +432,9 @@ class ComputadorPcUsuario:
             raise ErroFerramenta(self._bloqueado(programa))
         if codigo == "processo_bloqueado":
             await self._parar_por_bloqueio(normalizar_programa(erro.get("programa")))
+        if codigo == "nao_instalado":
+            rotulo = _limpo(erro.get("titulo"), 40) or "Esse programa"
+            raise ErroFerramenta(NAO_INSTALADO.format(programa=rotulo))
         if codigo == "em_uso":
             nome = _limpo(erro.get("por"), 60) or "outro bot"
             raise ErroFerramenta(f"O PC está em uso por {nome}. Tente de novo quando ele terminar.")
@@ -428,11 +474,17 @@ class ComputadorPcUsuario:
                 aprovacao_id = None
             if aprovacao_id is not None:
                 status = await self.cartoes.status(u, aprovacao_id)
+        if status == "expirada" and guardado and guardado.get("vinculado"):
+            # o turno pausou neste cartão e ele venceu sem resposta: vale como recusa
+            await self.canal.esquecer_cartao(u, a, assunto)
+            return "negada"
         if aprovacao_id is None or status in (None, "expirada"):
             aprovacao_id = await self.cartoes.abrir(u, a, acao, motivo)
             desde = time.time()
             await self.canal.guardar_cartao(u, a, assunto, aprovacao_id, VALIDADE_CARTAO_S)
             status = "pendente"
+        if status == "pendente" and self.contexto is not None:
+            return await self._pausar_o_turno(assunto, aprovacao_id)
         while status == "pendente" and time.time() < desde + self.espera_cartao_s:
             await asyncio.sleep(self.intervalo_cartao_s)
             status = await self.cartoes.status(u, aprovacao_id)
@@ -442,6 +494,53 @@ class ComputadorPcUsuario:
         if status == "negada":
             return "negada"
         return "pendente"
+
+    async def _pausar_o_turno(self, assunto: str, aprovacao_id: UUID) -> str:
+        """No worker: espera um pouco; ainda pendente, liga o cartão ao turno e pausa (Vela-12).
+
+        Só pausa se nada foi feito nesta chamada (a retomada roda a ferramenta de novo, do
+        começo). Senão devolve ``fila``: quem chamou avisa o bot e a próxima chamada pausa."""
+        u, a = self.usuario_id, self.agente.id
+        limite = time.time() + ESPERA_RAPIDA_S
+        status = await self.cartoes.status(u, aprovacao_id)
+        while status == "pendente" and time.time() < limite:
+            await asyncio.sleep(min(self.intervalo_cartao_s, 0.5))
+            status = await self.cartoes.status(u, aprovacao_id)
+        if status != "pendente":
+            if status == "permitida":
+                await self.canal.esquecer_cartao(u, a, assunto)
+                return "permitida"
+            return "negada" if status == "negada" else "pendente"
+        if self.feitas:
+            return "fila"
+        ctx = self.contexto
+        expira_em = await self.cartoes.vincular(
+            u,
+            aprovacao_id,
+            conversa_id=ctx.conversa_id,
+            etapa_id=ctx.etapa_id,
+            grupo_id=ctx.canal_id,
+        )
+        if not expira_em:  # decidido entre a última leitura e agora
+            status = await self.cartoes.status(u, aprovacao_id)
+            if status == "permitida":
+                await self.canal.esquecer_cartao(u, a, assunto)
+                return "permitida"
+            return "negada" if status in ("negada", "expirada") else "pendente"
+        await self.canal.guardar_cartao(
+            u, a, assunto, aprovacao_id, VALIDADE_CARTAO_S, vinculado=True
+        )
+        if expira_em is not True:
+            from app.ferramentas.criar_agente import _agendar_expiracao
+
+            await _agendar_expiracao(aprovacao_id, expira_em)
+        decisao = str(_interromper({"tipo": "aprovacao", "aprovacao_id": str(aprovacao_id)}))
+        # A retomada roda a ferramenta de novo e o cartão já vem decidido do banco; este valor
+        # só chega aqui quando o LangGraph devolve a decisão na mesma execução.
+        if decisao in ("negar", "negada", "expirada"):
+            return "negada"
+        await self.canal.esquecer_cartao(u, a, assunto)
+        return "permitida"
 
     async def _pedir_programa(self, programa: str, titulo: str) -> None:
         if programa in PROGRAMAS_BLOQUEADOS:
@@ -488,6 +587,8 @@ class ComputadorPcUsuario:
                 f"O usuário não deixou usar {programa}. Não tente de novo; siga sem esse programa "
                 "e avise o usuário."
             )
+        if decisao == "fila":
+            raise ErroFerramenta(CARTAO_NA_FILA.format(programa=programa))
         raise ErroFerramenta(PROGRAMA_ESPERANDO.format(programa=programa))
 
     async def _parar_por_bloqueio(self, programa: str) -> None:
@@ -552,6 +653,8 @@ class ComputadorPcUsuario:
             await self.canal.marcar_parado(self.usuario_id, self.agente.id)
             await self.encerrar()
             raise ErroFerramenta(RECUSOU_RETOMAR)
+        if decisao == "fila":
+            raise ErroFerramenta(PAUSOU_NO_MEIO)
         raise ErroFerramenta(PAUSADO_ESPERANDO)
 
     async def encerrar(self) -> None:
@@ -569,12 +672,21 @@ class ComputadorPcUsuario:
     # ---------- interface Computador ----------
 
     async def observar(self) -> Observacao:
+        return await self._observar(estavel=False)
+
+    async def observar_estavel(self) -> Observacao:
+        """Conferência depois de agir: a ponte espera a tela parar de mudar e manda uma captura
+        só (antes eram até três observações completas, com ida e volta cada uma)."""
+        return await self._observar(estavel=True)
+
+    async def _observar(self, *, estavel: bool) -> Observacao:
         await self._preparar()
+        dados = {"estavel": True} if estavel else {}
         try:
-            resultado = await self._enviar("observar", {}, PRAZO_OBSERVAR_S)
+            resultado = await self._enviar("observar", dados, PRAZO_OBSERVAR_S)
         except _Pausado:
             await self._esperar_retomada()
-            resultado = await self._enviar("observar", {}, PRAZO_OBSERVAR_S)
+            resultado = await self._enviar("observar", dados, PRAZO_OBSERVAR_S)
         return observacao_do_app(resultado)
 
     @staticmethod
@@ -605,16 +717,21 @@ class ComputadorPcUsuario:
         await self._preparar()
         dados = self.acao_para_app(acao)
         for tentativa in range(2):
-            permitidos = await self.cartoes.programas_sempre(self.usuario_id, self.agente.id)
-            permitidos |= await self.canal.programas_uma_vez(self.usuario_id, self.agente.id)
+            permitidos = await self._permitidos()
             try:
                 await self._enviar(
                     "agir",
                     {"acao": dados, "programas_permitidos": sorted(permitidos)},
                     PRAZO_AGIR_S,
                 )
+                self.feitas += 1
                 return
             except _Pausado:
+                if self.contexto is not None:
+                    # a ação pode ter ficado pela metade: nada de pausar o turno aqui (a retomada
+                    # repetiria a chamada inteira); a próxima chamada espera o cartão
+                    self.feitas += 1
+                    raise ErroFerramenta(PAUSOU_NO_MEIO) from None
                 await self._esperar_retomada()
                 raise ErroFerramenta(RETOMADO) from None
             except _ProgramaNaoPermitido as pedido:
@@ -625,6 +742,42 @@ class ComputadorPcUsuario:
                 await self._pedir_programa(pedido.programa, pedido.titulo)
                 # a vez ficou solta enquanto o usuário decidia (``_cartao``): pegar de novo
                 await self.canal.pegar_vez(self.usuario_id, self.agente)
+
+    async def _permitidos(self) -> set[str]:
+        permitidos = await self.cartoes.programas_sempre(self.usuario_id, self.agente.id)
+        permitidos |= await self.canal.programas_uma_vez(self.usuario_id, self.agente.id)
+        if self.so_programas is not None:
+            permitidos &= self.so_programas
+        return permitidos
+
+    async def abrir_programa(self, nome: str) -> dict[str, Any]:
+        """Abre pelo nome um programa da lista fechada (a ponte confere de novo). A primeira vez
+        em cada programa passa pelo mesmo cartão de ``agir``."""
+        await self._preparar()
+        for tentativa in range(2):
+            permitidos = await self._permitidos()
+            try:
+                resultado = await self._enviar(
+                    "abrir_programa",
+                    {"programa": str(nome)[:60], "programas_permitidos": sorted(permitidos)},
+                    PRAZO_ABRIR_S,
+                )
+                self.feitas += 1
+                return resultado
+            except _Pausado:
+                if self.contexto is not None:
+                    self.feitas += 1
+                    raise ErroFerramenta(PAUSOU_NO_MEIO) from None
+                await self._esperar_retomada()
+                raise ErroFerramenta(RETOMADO) from None
+            except _ProgramaNaoPermitido as pedido:
+                if tentativa:
+                    raise ErroFerramenta(
+                        f"{pedido.programa} ainda não está liberado. Tente de novo."
+                    ) from None
+                await self._pedir_programa(pedido.programa, pedido.titulo)
+                await self.canal.pegar_vez(self.usuario_id, self.agente)
+        raise ErroFerramenta("Não consegui abrir o programa.")
 
     async def listar_arquivos(self, pasta: str) -> list[ArquivoArea]:
         raise ErroFerramenta(ARQUIVOS)

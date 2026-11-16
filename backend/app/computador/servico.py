@@ -13,6 +13,10 @@ Regras (``docs/computador-por-bot.md``):
   ``SANDBOX_DOCKER_HOST``);
 - agir exige uma observação deste worker (coordenadas e refs valem para a tela vista);
 - nunca digita o que parece senha ou chave; o texto digitado não vai para o evento.
+
+PC do usuário (Vela-12): a conferência depois de agir é uma observação só, com a ponte esperando a
+tela parar de mudar; a árvore vai ao modelo em linhas curtas (células preenchidas e o foco
+primeiro) e, depois de agir, só o que mudou em relação à leitura anterior.
 """
 
 from __future__ import annotations
@@ -59,6 +63,7 @@ MAX_ENTREGA_BYTES = 10 * 1024 * 1024
 """Tamanho máximo de um arquivo levado do computador para a conversa (vira anexo)."""
 ESPERA_DEPOIS_DE_AGIR_S = 0.4
 MAX_CAPTURAS_ESTAVEIS = 3
+MAX_TEXTO_ARVORE = 9_000
 
 SEM_SUPERVISAO = "O computador do bot não roda em rotinas sem supervisão."
 DESLIGADO = "O computador virtual está desligado neste servidor."
@@ -179,6 +184,12 @@ class ServicoComputador:
                 )
 
             computador.ao_aprovar_sozinho = avisar
+        if alvo is Alvo.PC_USUARIO and hasattr(computador, "contexto"):
+            # Vela-12: cartão pendente pausa o turno; teclado sem juiz só em editor local
+            from app.computador.teclado_local import programas_do_teclado_local
+
+            computador.contexto = contexto
+            computador.so_programas = programas_do_teclado_local()
         await self.redis.hset(CHAVE_USO, str(contexto.agente_id), str(time.time()))
         return computador
 
@@ -247,7 +258,9 @@ class ServicoComputador:
         )
 
     @staticmethod
-    def descrever(leitura: LeituraGuardada, alvo: Alvo) -> str:
+    def descrever(
+        leitura: LeituraGuardada, alvo: Alvo, anterior: LeituraGuardada | None = None
+    ) -> str:
         from app.agentes.prompts import cercar
 
         tela = leitura.observacao.tela
@@ -262,10 +275,8 @@ class ServicoComputador:
         janelas = "\n".join(linhas) or "(nenhuma janela aberta: use abrir navegador ou terminal)"
         arvore = ""
         if leitura.observacao.arvore:
-            arvore = (
-                "\n\nElementos:\n"
-                + json.dumps(leitura.observacao.arvore, ensure_ascii=False)[:8_000]
-            )
+            antes = anterior.observacao.arvore if anterior is not None else None
+            arvore = "\n\n" + texto_da_arvore(leitura.observacao.arvore, antes)
         return (
             f"{nome} ({tela.largura}x{tela.altura} px), leitura @c{leitura.geracao}. "
             "Coordenadas x/y são pixels desta captura; refs @cN:jM valem só para esta leitura.\n"
@@ -310,6 +321,9 @@ class ServicoComputador:
 
     async def _observar_estavel(self, computador: Computador) -> Observacao:
         """Espera a tela parar de mudar (até 3 capturas) e devolve a última."""
+        estavel = getattr(computador, "observar_estavel", None)
+        if estavel is not None:
+            return await estavel()  # PC do usuário: a ponte compara as capturas (Vela-12)
         await asyncio.sleep(ESPERA_DEPOIS_DE_AGIR_S)
         atual = await computador.observar()
         for _ in range(MAX_CAPTURAS_ESTAVEIS - 1):
@@ -352,8 +366,14 @@ class ServicoComputador:
                     )
                     break
                 feitas += 1
-                await asyncio.sleep(0.15)
-            depois = await self._observar_estavel(computador)
+                if alvo is Alvo.VIRTUAL:
+                    await asyncio.sleep(0.15)
+            try:
+                depois = await self._observar_estavel(computador)
+            except ErroFerramenta as erro:
+                # pausa ou Parar na conferência: diz o que foi feito sem inventar a tela
+                antes_do_erro = f"{falha} " if falha else f"{feitas} ação(ões) feita(s). "
+                raise ErroFerramenta(f"{antes_do_erro}{erro}") from None
             nova = self._guardar(contexto.agente_id, alvo, depois)
             mudou = depois.tela.assinatura != antes.tela.assinatura
             rotulo = "; ".join(rotulo_da_acao(r.acao) for r in resolvidas[: max(feitas, 1)])
@@ -365,10 +385,43 @@ class ServicoComputador:
                 "antes de repetir."
             )
             texto = f"{feitas} de {len(resolvidas)} ação(ões) feita(s). {conferencia}\n\n"
-            texto += self.descrever(nova, alvo)
+            texto += self.descrever(nova, alvo, leitura if alvo is Alvo.PC_USUARIO else None)
             if falha:
                 raise ErroFerramenta(f"{falha}\n\n{texto}")
             return texto
+
+    # ---------- abrir programa pelo nome (Vela-12) ----------
+
+    async def abrir_programa(
+        self, contexto: ContextoFerramenta, programa: str, alvo: Alvo = Alvo.PC_USUARIO
+    ) -> str:
+        """Abre um programa da lista fechada no PC do usuário e devolve a tela já com ele."""
+        if alvo is not Alvo.PC_USUARIO:
+            raise ErroFerramenta(
+                "No computador virtual use computador_agir com a ação abrir (navegador ou "
+                "terminal)."
+            )
+        async with self._trava(contexto.agente_id):
+            computador = await self._computador(contexto, alvo)
+            abrir = getattr(computador, "abrir_programa", None)
+            if abrir is None:
+                raise ErroFerramenta("Esse computador não abre programas pelo nome.")
+            resultado = await abrir(programa)
+            anterior = self.leituras.get((contexto.agente_id, alvo))
+            depois = await self._observar_estavel(computador)
+            nova = self._guardar(contexto.agente_id, alvo, depois)
+            await self._registrar_tela(contexto, alvo, nova, acao=f"Abriu {programa}", mudou=True)
+            na_frente = bool(resultado.get("na_frente"))
+            ativa = next((j for j in depois.janelas if j.ativa), None)
+            nome = programa
+            if na_frente and ativa is not None:
+                cabeca = f"Programa aberto e na frente: {nome}."
+            else:
+                cabeca = (
+                    f"{nome} abriu, mas a janela não veio para a frente. Clique na janela dele "
+                    "(ref na lista) antes de digitar."
+                )
+            return f"{cabeca}\n\n" + self.descrever(nova, alvo, anterior)
 
     # ---------- arquivos ----------
 
@@ -440,6 +493,56 @@ class ServicoComputador:
             if desligado
             else "O computador já estava desligado."
         )
+
+
+PAPEIS_COM_VALOR_PRIMEIRO = ("item de tabela", "campo de texto", "documento")
+
+
+def _linha_do_elemento(e: dict[str, Any]) -> str:
+    nome = json.dumps(e.get("nome", ""), ensure_ascii=False)
+    linha = f"{e.get('ref', '')} {e.get('papel', '')} {nome}"
+    if e.get("valor") not in (None, ""):
+        linha += f" = {json.dumps(e['valor'], ensure_ascii=False)}"
+    centro = e.get("centro")
+    if isinstance(centro, list) and len(centro) == 2:
+        linha += f" @{centro[0]},{centro[1]}"
+    if e.get("estados"):
+        linha += f" [{', '.join(e['estados'])}]"
+    return linha
+
+
+def _chave(e: dict[str, Any]) -> tuple[Any, ...]:
+    return (e.get("papel"), e.get("nome"), e.get("valor"), tuple(e.get("estados") or ()))
+
+
+def texto_da_arvore(
+    arvore: list[dict[str, Any]], anterior: list[dict[str, Any]] | None = None
+) -> str:
+    """Elementos em linhas curtas (``e12 botão "Negrito" @163,140``): o que tem valor ou foco
+    primeiro (células, campos), depois o resto. Com a leitura ``anterior``, os elementos sem valor
+    que não mudaram ficam de fora (só a contagem): a faixa de opções do Excel não volta inteira a
+    cada passo. Antes ia o JSON inteiro cortado em 8 mil caracteres, e as células nunca chegavam."""
+    com_valor = [
+        e for e in arvore if e.get("valor") not in (None, "") or "foco" in (e.get("estados") or [])
+    ]
+    resto = [e for e in arvore if e not in com_valor]
+    omitidos = 0
+    if anterior is not None:
+        vistos = {_chave(e) for e in anterior}
+        novos = [e for e in resto if _chave(e) not in vistos]
+        omitidos = len(resto) - len(novos)
+        resto = novos
+    linhas = ["Elementos com valor ou foco (células, campos):"]
+    linhas += [_linha_do_elemento(e) for e in com_valor] or ["(nenhum)"]
+    if resto or omitidos:
+        titulo = "Outros elementos" + (" que mudaram" if anterior is not None else "") + ":"
+        linhas += ["", titulo, *(_linha_do_elemento(e) for e in resto)]
+    if omitidos:
+        linhas.append(f"(+{omitidos} elementos iguais à leitura anterior, omitidos)")
+    texto = "\n".join(linhas)
+    if len(texto) > MAX_TEXTO_ARVORE:
+        texto = texto[:MAX_TEXTO_ARVORE].rsplit("\n", 1)[0] + "\n(… lista cortada)"
+    return texto
 
 
 async def marcar_desligado(

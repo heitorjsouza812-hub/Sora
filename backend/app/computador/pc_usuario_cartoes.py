@@ -52,9 +52,9 @@ class Cartoes(Protocol):
         conversa_id: UUID,
         etapa_id: UUID | None,
         grupo_id: UUID | None,
-    ) -> bool:
-        """Liga o cartão pendente ao turno que vai pausar. ``False`` se já foi decidido (ou
-        venceu) antes disso: aí o bot segue com a decisão, sem pausar."""
+    ) -> datetime | None:
+        """Liga o cartão pendente ao turno que vai pausar e devolve o prazo dele. ``None`` se já
+        foi decidido (ou venceu) antes disso: aí o bot segue com a decisão, sem pausar."""
         ...
 
 
@@ -115,7 +115,7 @@ class CartoesBanco:
         conversa_id: UUID,
         etapa_id: UUID | None,
         grupo_id: UUID | None,
-    ) -> bool:
+    ) -> datetime | None:
         from sqlalchemy import func, update
 
         from app.ferramentas.infra import abrir_sessao
@@ -140,8 +140,9 @@ class CartoesBanco:
                         func.jsonb_build_object("conversa_id", str(conversa_id))
                     ),
                 )
+                .returning(Aprovacao.expira_em)
             )
-            return bool(resultado.rowcount)
+            return resultado.scalar_one_or_none()
 
     async def status(self, usuario_id: UUID, aprovacao_id: UUID) -> str | None:
         from sqlalchemy import select

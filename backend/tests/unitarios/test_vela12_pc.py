@@ -156,3 +156,286 @@ async def test_middleware_troca_a_resposta_final_e_o_falar(monkeypatch) -> None:
     assert (await m.awrap_tool_call(pedido, handler)).startswith(AVISO)
     await m.aafter_agent({"messages": mensagens}, None)
     assert len(soltou) == 1
+
+
+# ---------- cartão pausa o turno e "Permitir" retoma (pc_usuario.py) ----------
+
+from uuid import UUID, uuid4  # noqa: E402
+
+from app.computador import pc_usuario as modulo_pc  # noqa: E402
+from app.computador.pc_usuario import NAO_ABRIVEL, PAUSOU_NO_MEIO  # noqa: E402
+from app.computador.pc_usuario_canal import CanalPc  # noqa: E402
+from app.ferramentas.base import ContextoFerramenta, ErroFerramenta  # noqa: E402
+from tests.unitarios.test_pc_usuario import (  # noqa: E402
+    AppFalso,
+    CartoesFalsos,
+    _conectar,
+    _erro,
+    _observacao,
+    _ok,
+    _pc,
+    _resolvida,
+)
+
+
+class CartoesComTurno(CartoesFalsos):
+    def __init__(self) -> None:
+        super().__init__()
+        self.vinculados: list[tuple[UUID, UUID]] = []
+
+    async def vincular(self, usuario_id, aprovacao_id, *, conversa_id, etapa_id, grupo_id):
+        from datetime import UTC, datetime, timedelta
+
+        if self.situacao.get(aprovacao_id) != "pendente":
+            return None
+        self.vinculados.append((aprovacao_id, conversa_id))
+        return datetime.now(UTC) + timedelta(minutes=10)
+
+
+class TurnoPausado(Exception):
+    def __init__(self, valor: dict) -> None:
+        super().__init__(valor)
+        self.valor = valor
+
+
+@pytest.fixture
+def redis():
+    import fakeredis.aioredis
+
+    return fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+
+@pytest.fixture
+def pausa_do_turno(monkeypatch):
+    """Faz o ``interrupt`` do LangGraph virar uma exceção que o teste pega (o turno pausou)."""
+
+    def interromper(valor: dict) -> None:
+        raise TurnoPausado(valor)
+
+    monkeypatch.setattr(modulo_pc, "_interromper", interromper)
+
+    async def sem_agendar(*_: object) -> None:
+        return None
+
+    import app.ferramentas.criar_agente as criar_agente
+
+    monkeypatch.setattr(criar_agente, "_agendar_expiracao", sem_agendar)
+
+
+def _contexto(usuario_id: UUID, bot: UUID) -> ContextoFerramenta:
+    return ContextoFerramenta(usuario_id=usuario_id, agente_id=bot, conversa_id=uuid4())
+
+
+async def test_pausa_cartao_permitir_retoma_o_mesmo_turno(redis, pausa_do_turno) -> None:
+    """Pausa pelo mouse → cartão → o turno pausa (sem desistir em 90 s) → Permitir → a ferramenta
+    roda de novo e segue: manda ``retomar`` à ponte e observa."""
+    cartoes = CartoesComTurno()
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    canal = CanalPc(redis)
+    with AppFalso(canal, usuario_id, sessao_id, lambda c: _ok(_observacao())) as app:
+        pc = await _pc(provedor, usuario_id, bot)
+        pc.contexto = _contexto(usuario_id, bot)
+        await canal.marcar_pausado(usuario_id, bot)  # a ponte viu o mouse (rota /pausar)
+        with pytest.raises(TurnoPausado) as pausa:
+            await pc.observar()
+        aprovacao_id = UUID(pausa.value.valor["aprovacao_id"])
+        assert cartoes.vinculados and cartoes.vinculados[0][0] == aprovacao_id
+        assert cartoes.abertos[0][1]["tipo"] == "pc_retomar"
+        assert await canal.quem_tem_a_vez(usuario_id) is None  # vez solta: o usuário decide
+
+        cartoes.situacao[aprovacao_id] = "permitida"  # o usuário clicou em Permitir
+        retomada = await _pc(provedor, usuario_id, bot)  # a retomada roda a ferramenta de novo
+        retomada.contexto = _contexto(usuario_id, bot)
+        observacao = await retomada.observar()
+        assert observacao.janelas[0].programa == "notepad.exe"
+        assert app.operacoes()[-2:] == ["retomar", "observar"]
+        assert not await canal.esta_pausado(usuario_id, bot)
+
+
+async def test_cartao_decidido_logo_nao_pausa_o_turno(redis, pausa_do_turno) -> None:
+    cartoes = CartoesComTurno()
+    cartoes.decidir_ao_abrir = "permitida"
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    canal = CanalPc(redis)
+    with AppFalso(canal, usuario_id, sessao_id, lambda c: _ok(_observacao())) as app:
+        pc = await _pc(provedor, usuario_id, bot)
+        pc.contexto = _contexto(usuario_id, bot)
+        await canal.marcar_pausado(usuario_id, bot)
+        await pc.observar()
+        assert not cartoes.vinculados and app.operacoes() == ["retomar", "observar"]
+
+
+async def test_cartao_vencido_com_turno_pausado_vale_recusa(redis, pausa_do_turno) -> None:
+    cartoes = CartoesComTurno()
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    canal = CanalPc(redis)
+    with AppFalso(canal, usuario_id, sessao_id, lambda c: _ok(_observacao())):
+        pc = await _pc(provedor, usuario_id, bot)
+        pc.contexto = _contexto(usuario_id, bot)
+        await canal.marcar_pausado(usuario_id, bot)
+        with pytest.raises(TurnoPausado) as pausa:
+            await pc.observar()
+        cartoes.situacao[UUID(pausa.value.valor["aprovacao_id"])] = "expirada"
+        retomada = await _pc(provedor, usuario_id, bot)
+        retomada.contexto = _contexto(usuario_id, bot)
+        with pytest.raises(ErroFerramenta, match="preferiu ficar com o computador"):
+            await retomada.observar()
+        assert len(cartoes.abertos) == 1  # não abre outro cartão em laço
+
+
+async def test_pausa_no_meio_da_acao_nao_pausa_o_turno(redis, pausa_do_turno) -> None:
+    """A ação pode ter ficado pela metade: a retomada repetiria a chamada inteira. O bot recebe o
+    aviso e a próxima chamada (observar) é que pausa."""
+    cartoes = CartoesComTurno()
+    cartoes.sempre.add("notepad.exe")
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    canal = CanalPc(redis)
+
+    def responder(comando):
+        if comando["operacao"] == "agir":
+            return _erro("pausado")
+        return _ok(_observacao())
+
+    with AppFalso(canal, usuario_id, sessao_id, responder):
+        pc = await _pc(provedor, usuario_id, bot)
+        pc.contexto = _contexto(usuario_id, bot)
+        with pytest.raises(ErroFerramenta) as erro:
+            await pc.agir(_resolvida(tipo="digitar", texto="Produto"))
+        assert str(erro.value) == PAUSOU_NO_MEIO and not cartoes.vinculados
+        proxima = await _pc(provedor, usuario_id, bot)
+        proxima.contexto = _contexto(usuario_id, bot)
+        with pytest.raises(TurnoPausado):
+            await proxima.observar()
+
+
+async def test_programa_novo_no_meio_do_lote_nao_pausa_o_turno(redis, pausa_do_turno) -> None:
+    cartoes = CartoesComTurno()
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    canal = CanalPc(redis)
+    await canal.permitir_uma_vez(usuario_id, bot, "notepad.exe")
+    respostas = iter(
+        [_ok(), _erro("programa_nao_permitido", programa="EXCEL.EXE", titulo="Pasta1 - Excel")]
+    )
+    with AppFalso(canal, usuario_id, sessao_id, lambda c: next(respostas)):
+        pc = await _pc(provedor, usuario_id, bot)
+        pc.contexto = _contexto(usuario_id, bot)
+        await pc.agir(_resolvida(tipo="tecla", tecla="Tab"))
+        with pytest.raises(ErroFerramenta, match="Chame de novo a mesma ação"):
+            await pc.agir(_resolvida(tipo="digitar", texto="Café"))
+        assert not cartoes.vinculados
+        assert cartoes.abertos[0][1]["condicao"]["programa"] == "excel.exe"
+
+
+# ---------- abrir programa pelo nome ----------
+
+
+async def test_abrir_programa_passa_pelo_cartao_e_pela_ponte(redis) -> None:
+    cartoes = CartoesFalsos()
+    cartoes.decidir_ao_abrir = "permitida"
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    canal = CanalPc(redis)
+    vistos: list = []
+
+    def responder(comando):
+        if comando["operacao"] != "abrir_programa":
+            return _ok(_observacao())
+        vistos.append(comando["dados"])
+        if "excel.exe" not in comando["dados"]["programas_permitidos"]:
+            return _erro("programa_nao_permitido", programa="excel.exe", titulo="Excel")
+        return _ok({"janela": "77", "programa": "excel.exe", "na_frente": True})
+
+    with AppFalso(canal, usuario_id, sessao_id, responder):
+        pc = await _pc(provedor, usuario_id, bot)
+        resultado = await pc.abrir_programa("Excel")
+        assert resultado["na_frente"] is True and pc.feitas == 1
+        assert [v["programa"] for v in vistos] == ["Excel", "Excel"]
+        assert cartoes.abertos[0][1]["condicao"]["programa"] == "excel.exe"
+
+
+async def test_abrir_programa_fora_da_lista_ou_nao_instalado(redis) -> None:
+    cartoes = CartoesFalsos()
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    canal = CanalPc(redis)
+    respostas = iter([_erro("nao_abrivel", mensagem="cmd"), _erro("nao_instalado", titulo="Excel")])
+    with AppFalso(canal, usuario_id, sessao_id, lambda c: next(respostas)):
+        pc = await _pc(provedor, usuario_id, bot)
+        with pytest.raises(ErroFerramenta) as erro:
+            await pc.abrir_programa("cmd")
+        assert str(erro.value) == NAO_ABRIVEL
+        with pytest.raises(ErroFerramenta, match="Excel não está instalado"):
+            await pc.abrir_programa("Excel")
+
+
+# ---------- teclado de edição sem o juiz (teclado_local.py) ----------
+
+from app.computador.teclado_local import (  # noqa: E402
+    EDITORES_LOCAIS,
+    dispensa_juiz,
+    marcar,
+    programas_do_teclado_local,
+)
+
+
+def test_teclado_de_edicao_dispensa_o_juiz_so_no_pc_e_so_teclado() -> None:
+    tabela = {"tipo": "digitar", "texto": "Produto\tQtd\tPreço\nCafé\t2\t10,50\n"}
+    assert dispensa_juiz("computador_agir", {"alvo": "pc_usuario", "acoes": [tabela]})
+    assert dispensa_juiz(
+        "computador_agir",
+        {"alvo": "pc_usuario", "acoes": [{"tipo": "tecla", "tecla": "Escape"}, tabela]},
+    )
+    for acoes in (
+        [{"tipo": "clicar", "x": 10, "y": 10}],  # clique pode apertar "Enviar"
+        [{"tipo": "tecla", "tecla": "ctrl+Return"}],  # envia e-mail em vários programas
+        [{"tipo": "tecla", "tecla": "alt+F4"}],
+        [{"tipo": "digitar", "texto": "S3nh@Forte!9"}],
+        [],
+    ):
+        assert not dispensa_juiz("computador_agir", {"alvo": "pc_usuario", "acoes": acoes})
+    assert not dispensa_juiz("computador_agir", {"alvo": "virtual", "acoes": [tabela]})
+    assert not dispensa_juiz("navegador_acao", {"alvo": "pc_usuario", "acoes": [tabela]})
+
+
+async def test_juiz_dispensado_restringe_a_ponte_aos_editores_locais(redis) -> None:
+    cartoes = CartoesFalsos()
+    cartoes.sempre |= {"excel.exe", "chrome.exe"}
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    canal = CanalPc(redis)
+    vistos: list = []
+
+    def responder(comando):
+        vistos.append(comando["dados"].get("programas_permitidos"))
+        return _ok()
+
+    with AppFalso(canal, usuario_id, sessao_id, responder):
+        marcar(True)
+        pc = await _pc(provedor, usuario_id, bot)
+        pc.so_programas = programas_do_teclado_local()
+        await pc.agir(_resolvida(tipo="tecla", tecla="Tab"))
+        marcar(False)
+        assert programas_do_teclado_local() is None
+    assert vistos == [["excel.exe"]] and "chrome.exe" not in EDITORES_LOCAIS
+
+
+# ---------- árvore compacta (servico.texto_da_arvore) ----------
+
+
+def test_arvore_em_linhas_celulas_primeiro_e_so_o_que_mudou() -> None:
+    from app.computador.servico import texto_da_arvore
+
+    faixa = [{"ref": f"e{i}", "papel": "botão", "nome": f"Botão {i}"} for i in range(1, 120)]
+    celula = {"ref": "e200", "papel": "item de tabela", "nome": "A1", "valor": "Produto"}
+    foco = {"ref": "e201", "papel": "item de tabela", "nome": "A2", "estados": ["foco"]}
+    texto = texto_da_arvore([*faixa, celula, foco])
+    assert texto.index('e200 item de tabela "A1" = "Produto"') < texto.index("Botão 1")
+    assert 'e201 item de tabela "A2" [foco]' in texto
+    depois = texto_da_arvore([*faixa, celula, foco], [*faixa, foco])
+    assert "Botão 7" not in depois and "+119 elementos iguais" in depois
+    assert '"A1" = "Produto"' in depois

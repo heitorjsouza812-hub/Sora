@@ -405,12 +405,21 @@ class CanalPc:
             return None
 
     async def guardar_cartao(
-        self, usuario_id: UUID, agente_id: UUID, assunto: str, aprovacao_id: UUID, validade_s: int
+        self,
+        usuario_id: UUID,
+        agente_id: UUID,
+        assunto: str,
+        aprovacao_id: UUID,
+        validade_s: int,
+        *,
+        vinculado: bool = False,
     ) -> None:
+        """``vinculado``: um turno pausou neste cartão (Vela-12); vencer vale como recusa."""
         chave = CHAVE_CARTAO.format(usuario_id=usuario_id, agente_id=agente_id, assunto=assunto)
-        await self.redis.set(
-            chave, json.dumps({"id": str(aprovacao_id), "desde": time.time()}), ex=validade_s
-        )
+        dados: dict[str, Any] = {"id": str(aprovacao_id), "desde": time.time()}
+        if vinculado:
+            dados["vinculado"] = True
+        await self.redis.set(chave, json.dumps(dados), ex=validade_s)
 
     async def esquecer_cartao(self, usuario_id: UUID, agente_id: UUID, assunto: str) -> None:
         await self.redis.delete(

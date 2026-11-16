@@ -59,6 +59,7 @@ NOME_EXIBIDO: dict[str, str] = {
     "consultar_cliente": "Ficha do cliente",
     "consultar_conhecimento": "Conhecimento da empresa",
     "computador_agir": "Computador",
+    "computador_abrir_programa": "Computador",
     "computador_arquivos": "Computador",
     "computador_escrever_arquivo": "Computador",
     "computador_entregar_arquivo": "Computador",
@@ -129,6 +130,7 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
         f"Consultando o conhecimento: {str(a.get('consulta', ''))[:60]}"
     ),
     "computador_agir": lambda _: "Usando o computador",
+    "computador_abrir_programa": lambda a: f"Abrindo {_detalhe(a.get('programa'))}",
     "computador_arquivos": lambda a: (
         f"Lendo no computador: {_detalhe(a.get('caminho'))}"
         if a.get("operacao") == "ler"

@@ -97,6 +97,9 @@ LIVRES: frozenset[str] = frozenset(
         "computador_escrever_arquivo",
         "computador_entregar_arquivo",  # só leva o que é do bot para a conversa do próprio dono
         "computador_desligar",
+        # abrir pelo nome um editor da lista fechada (Vela-12): no PC do usuário a primeira vez
+        # em cada programa já abre o cartão do C3
+        "computador_abrir_programa",
         # canais da empresa (Ponte): só leitura, e só para bots autorizados
         "consultar_cliente",
         "consultar_conhecimento",

@@ -91,9 +91,19 @@ async def chamar_modelo_revisor(contexto: ContextoFerramenta, sistema: str, prom
     from langchain_core.messages import HumanMessage, SystemMessage
 
     from app.orquestrador.modelos import modelos_do_papel
+    from app.preferencias_conversa import escolha_efetiva
 
     async with abrir_sessao() as sessao:
-        modelos = await modelos_do_papel(sessao, contexto.usuario_id, "revisor", dificuldade=1)
+        # contrato do seletor (Âncora-10): o juiz também respeita o modelo/raciocínio da conversa
+        escolha = await escolha_efetiva(
+            sessao,
+            contexto.usuario_id,
+            conversa_id=contexto.conversa_id,
+            agente_id=contexto.agente_id,
+        )
+        modelos = await modelos_do_papel(
+            sessao, contexto.usuario_id, "revisor", dificuldade=1, escolha=escolha
+        )
     resposta = await modelos[0].ainvoke([SystemMessage(sistema), HumanMessage(prompt)])
     conteudo = resposta.content
     return conteudo if isinstance(conteudo, str) else str(conteudo)
@@ -342,6 +352,10 @@ async def conferir_acao(
         return None
     if contexto.sem_supervisao and not pode_sem_supervisao(nome, somente_leitura=somente_leitura):
         return SEM_SUPERVISAO
+    if nome == "computador_agir":
+        from app.computador.teclado_local import marcar
+
+        marcar(False)  # vale só para esta chamada; quem dispensa o juiz marca de novo abaixo
     politica = politica_da_ferramenta(nome, somente_leitura=somente_leitura)
     if politica is Politica.LIVRE:
         return None
@@ -377,6 +391,14 @@ async def conferir_acao(
         # Nem regras anteriores nem o juiz podem liberar um bloqueio permanente sozinhos.
         bloqueada = bloqueio_absoluto(proposta.model_dump(mode="json")) is not None
         if politica is Politica.REVISOR and not bloqueada:
+            from app.computador.teclado_local import dispensa_juiz, marcar
+
+            if dispensa_juiz(nome, argumentos):
+                # Vela-12: teclado de edição no PC do usuário; a ponte só aceita editores locais
+                # nesta chamada (``app/computador/teclado_local.py``)
+                marcar(True)
+                await _registrar(contexto, proposta, resumo, None)
+                return None
             async with abrir_sessao() as sessao:
                 liberada = await regra_permite(
                     sessao, contexto.usuario_id, contexto.agente_id, proposta

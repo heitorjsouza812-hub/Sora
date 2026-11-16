@@ -541,7 +541,7 @@ async def test_servico_com_o_pc_nunca_guarda_o_texto_digitado(redis, cartoes, mo
     with AppFalso(CanalPc(redis), usuario_id, sessao_id, responder):
         texto = await servico.observar(contexto, Alvo.PC_USUARIO)
         assert "Computador do usuário" in texto and "@c1:j1" in texto
-        assert '"ref": "e1"' in texto and "segredo123" not in texto
+        assert 'e1 campo de texto "Texto"' in texto and "segredo123" not in texto
         texto = await servico.agir(
             contexto,
             [

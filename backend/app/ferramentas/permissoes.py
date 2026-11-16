@@ -38,11 +38,19 @@ FERRAMENTAS_COM_CERCA: frozenset[str] = frozenset({"buscar_web", "ler_pagina", "
 """Resultados que entram na cerca ``<dado_externo>`` (§4; ``chamar_conector`` na fase 3)."""
 
 
+IMPLICITAS: dict[str, tuple[str, ...]] = {
+    "computador_agir": ("computador_abrir_programa",),
+}
+"""Ferramenta que vem junto de outra que o bot já tem (Vela-12): quem age no computador também
+abre programa pelo nome (lista fechada; no PC do usuário passa pelo cartão do programa)."""
+
+
 def ferramentas_do_agente(papel: str, extras: list[str] | None = None) -> list[str]:
     """Nomes das ferramentas que o agente pode usar (papel + ``agentes.ferramentas``)."""
     base = FERRAMENTAS_POR_PAPEL.get(papel, [])
     nomes: list[str] = []
     for nome in [*base, *(extras or [])]:
-        if nome not in nomes:
-            nomes.append(nome)
+        for item in (nome, *IMPLICITAS.get(nome, ())):
+            if item not in nomes:
+                nomes.append(item)
     return nomes

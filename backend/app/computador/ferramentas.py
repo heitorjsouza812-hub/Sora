@@ -25,6 +25,7 @@ AlvoTexto = Literal["virtual", "pc_usuario"]
 NOMES = (
     "computador_observar",
     "computador_agir",
+    "computador_abrir_programa",
     "computador_arquivos",
     "computador_escrever_arquivo",
     "computador_entregar_arquivo",
@@ -50,6 +51,26 @@ class ComputadorAgir(BaseModel):
 
     acoes: list[AcaoComputador] = Field(min_length=1, max_length=MAX_ACOES_POR_CHAMADA)
     alvo: AlvoTexto = "virtual"
+
+
+ProgramaPeloNome = Literal[
+    "Excel",
+    "Word",
+    "PowerPoint",
+    "Bloco de Notas",
+    "Paint",
+    "LibreOffice Calc",
+    "LibreOffice Writer",
+]
+
+
+class ComputadorAbrirPrograma(BaseModel):
+    """Abre um programa no computador do usuário pelo nome e traz a janela para a frente; a
+    resposta já mostra a tela. Só estes programas. A primeira vez em cada programa pede
+    permissão ao usuário (cartão). Outro programa: peça ao usuário para abrir."""
+
+    programa: ProgramaPeloNome
+    alvo: Literal["pc_usuario"] = "pc_usuario"
 
 
 class ComputadorArquivos(BaseModel):
@@ -85,6 +106,7 @@ class ComputadorDesligar(BaseModel):
 ESQUEMAS: dict[str, type[BaseModel]] = {
     "computador_observar": ComputadorObservar,
     "computador_agir": ComputadorAgir,
+    "computador_abrir_programa": ComputadorAbrirPrograma,
     "computador_arquivos": ComputadorArquivos,
     "computador_escrever_arquivo": ComputadorEscreverArquivo,
     "computador_entregar_arquivo": ComputadorEntregarArquivo,
@@ -179,6 +201,12 @@ async def computador_observar(args: ComputadorObservar, contexto: ContextoFerram
 
 async def computador_agir(args: ComputadorAgir, contexto: ContextoFerramenta) -> str:
     return await obter_servico().agir(contexto, args.acoes, Alvo(args.alvo))
+
+
+async def computador_abrir_programa(
+    args: ComputadorAbrirPrograma, contexto: ContextoFerramenta
+) -> str:
+    return await obter_servico().abrir_programa(contexto, args.programa, Alvo(args.alvo))
 
 
 async def computador_arquivos(args: ComputadorArquivos, contexto: ContextoFerramenta) -> str:
