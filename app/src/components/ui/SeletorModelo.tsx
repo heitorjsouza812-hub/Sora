@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { nomeAmigavelDoModelo, PROVEDORES_MODELO, useModelos, type ModeloConfigurado } from '../../state/modelos';
+import { nomeCurtoDoModelo, separarPrincipais } from '../../state/nomeModelo';
+import { IconeProvedor } from './IconeProvedor';
 import { usePreferenciasConversa, type ControlePreferencias } from '../../state/preferenciasConversa';
 import type { PreferenciasConversa } from '../../api/preferenciasConversa';
 import { Popover } from '../overlay/Popover';
@@ -12,6 +14,8 @@ import './seletorModelo.css';
 // Modelos de fala, transcrição, moderação e vetores não conversam: ficam fora da lista.
 const naoConversa = /orpheus|playai|whisper|guard|tts|embed|moderation/i;
 const niveis = { auto: 'Automático', baixo: 'Baixo', medio: 'Médio', alto: 'Alto', extra_alto: 'Extra alto', maximo: 'Máximo' };
+/** Rótulo do nível ao lado do nome do modelo; vazio no Automático e em modelo sem ajuste de raciocínio. */
+const rotuloDoNivel = (nivel: PreferenciasConversa['raciocinio'] | undefined, tem: boolean) => tem && nivel && nivel !== 'auto' ? niveis[nivel] : '';
 export function SeletorModelo({ controle }: { controle?: ControlePreferencias }) {
   const contexto = usePreferenciasConversa();
   const { valor, mudar, ocupado, erro } = controle ?? contexto;
@@ -20,16 +24,26 @@ export function SeletorModelo({ controle }: { controle?: ControlePreferencias })
   const [confirmar, setConfirmar] = useState(false);
   const [busca, setBusca] = useState('');
   const [provedor, setProvedor] = useState<string | null>(null);
+  const [todos, setTodos] = useState(false);
   const ancora = useRef<HTMLButtonElement>(null);
   const conteudo = useRef<HTMLDivElement>(null);
   const celular = useCelular();
   const provedores = PROVEDORES_MODELO.flatMap(p => {
     const c = catalogo.provedores[p.id]?.conexao;
-    return c ? [{ id: c.id, nome: p.nome }] : [];
+    return c ? [{ id: c.id, nome: p.nome, visual: p.id, tipo: c.tipo }] : [];
   });
   const ativo = provedor ?? valor.provedor_id ?? provedores[0]?.id;
-  const modelos = catalogo.modelos.filter(m => m.ativo && !naoConversa.test(m.modelo) && m.provedor_id === ativo && nomeAmigavelDoModelo(m).toLocaleLowerCase('pt-BR').includes(busca.toLocaleLowerCase('pt-BR')));
+  const doProvedor = catalogo.modelos.filter(m => m.ativo && !naoConversa.test(m.modelo) && m.provedor_id === ativo && nomeAmigavelDoModelo(m).toLocaleLowerCase('pt-BR').includes(busca.toLocaleLowerCase('pt-BR')));
   const escolhido = catalogo.modelos.find(m => m.provedor_id === valor.provedor_id && m.modelo === valor.modelo);
+  const { principais, outros } = separarPrincipais(doProvedor, provedores.find(p => p.id === ativo)?.tipo === 'ollama');
+  // O modelo em uso nunca some atrás de "Mais modelos".
+  const fixos = !busca && escolhido && outros.includes(escolhido) ? [...principais, escolhido] : principais;
+  const resto = outros.filter(m => !fixos.includes(m));
+  const expandido = !!busca || todos;
+  const modelos = expandido ? [...fixos, ...resto] : fixos;
+  const nome = escolhido ? nomeAmigavelDoModelo(escolhido) : valor.modelo ? nomeCurtoDoModelo(valor.modelo) : 'Automático';
+  const nivel = rotuloDoNivel(valor.raciocinio, !!escolhido?.raciocinio?.length);
+  const iconeId = escolhido ? provedores.find(p => p.id === escolhido.provedor_id)?.visual ?? 'openai-compativel' : 'auto';
   const escolher = (m?: ModeloConfigurado) => mudar({ ...valor, provedor_id: m?.provedor_id ?? null, modelo: m?.modelo ?? null, raciocinio: 'auto' });
   useEffect(() => {
     if (!aberto) return;
@@ -64,11 +78,12 @@ export function SeletorModelo({ controle }: { controle?: ControlePreferencias })
   };
   const corpo = <div ref={conteudo} className="seletor-corpo" onKeyDown={teclado}>
     <div className="seletor-colunas">
-      <div data-coluna className="seletor-provedores" aria-label="Provedores conectados">{provedores.map(p => <button type="button" key={p.id} title={p.nome} aria-label={p.nome} aria-pressed={ativo === p.id} onClick={() => { setProvedor(p.id); setBusca(''); }}>{p.nome.slice(0, 2)}</button>)}</div>
+      <div data-coluna className="seletor-provedores" aria-label="Provedores conectados">{provedores.map(p => <button type="button" key={p.id} title={p.nome} aria-label={p.nome} aria-pressed={ativo === p.id} onClick={() => { setProvedor(p.id); setBusca(''); setTodos(false); }}><IconeProvedor id={p.visual} tamanho={20} /></button>)}</div>
       <div data-coluna className="seletor-modelos">
         <input aria-label="Buscar modelos" placeholder="Buscar modelos…" value={busca} onChange={e => setBusca(e.target.value)} onKeyDown={e => { if (e.key === 'ArrowDown') { e.preventDefault(); e.currentTarget.parentElement?.querySelector('button')?.focus(); } }} />
         <button type="button" disabled={ocupado} aria-pressed={!valor.modelo} onClick={() => escolher()}>Automático</button>
         {modelos.map((m, i) => <button type="button" key={m.id} disabled={ocupado} aria-pressed={escolhido?.id === m.id} onClick={() => escolher(m)}><span>{nomeAmigavelDoModelo(m)}</span><small>{[m.capacidades.includes('visao') && 'Visão', m.capacidades.includes('ferramentas') && 'Ferramentas', m.rapido && 'Rápido'].filter(Boolean).join(' · ')}{i < 4 && <kbd>Ctrl+{i + 1}</kbd>}</small></button>)}
+        {!busca && resto.length > 0 && <button type="button" className="seletor-mais" aria-expanded={todos} onClick={() => setTodos(!todos)}>{todos ? 'Só os principais' : `Mais modelos (${resto.length})`}</button>}
         {!modelos.length && <p className="seletor-ajuda">{catalogo.carregando ? 'Carregando modelos…' : 'Nenhum modelo encontrado.'}</p>}
       </div>
       {!!escolhido?.raciocinio?.length && <div data-coluna className="seletor-raciocinio"><strong>Raciocínio</strong>{(['auto', ...escolhido.raciocinio] as const).map(n => <button type="button" key={n} disabled={ocupado} aria-pressed={valor.raciocinio === n} onClick={() => mudar({ ...valor, raciocinio: n })}>{niveis[n]}</button>)}</div>}
@@ -76,7 +91,9 @@ export function SeletorModelo({ controle }: { controle?: ControlePreferencias })
     <footer className="seletor-permissao"><label>♢ Permissão <select aria-label="Permissão" disabled={ocupado} value={valor.permissao} onChange={e => { const p = e.target.value as PreferenciasConversa['permissao']; if (p === 'total') { setAberto(false); setConfirmar(true); } else mudar({ ...valor, permissao: p }); }}><option value="perguntar">Perguntar sempre</option><option value="automatico">Automático</option><option value="total">Acesso total</option></select></label><p className="seletor-ajuda">{valor.permissao === 'automatico' ? 'O bot aprova sozinho ações de baixo risco.' : valor.permissao === 'total' ? 'O bot age sem pedir, respeitando os bloqueios permanentes.' : 'O bot pede sua aprovação antes de agir.'}</p>{(erro || catalogo.erro) && <p role="alert">{erro || catalogo.erro}</p>}</footer>
   </div>;
   return <>
-    <button type="button" ref={ancora} className="tool-button seletor-gatilho" aria-haspopup="dialog" aria-expanded={aberto} onClick={() => setAberto(!aberto)}>{escolhido ? nomeAmigavelDoModelo(escolhido) : valor.modelo ?? 'Automático'} <span aria-hidden="true">⌄</span></button>
+    <button type="button" ref={ancora} className="tool-button seletor-gatilho" aria-haspopup="dialog" aria-expanded={aberto} onClick={() => setAberto(!aberto)}>
+      <IconeProvedor id={iconeId} /><span className="seletor-nome">{nome}</span>{nivel && <span className="seletor-nivel">{nivel}</span>}<span aria-hidden="true" className="seletor-seta">⌄</span>
+    </button>
     {celular ? <BottomSheet open={aberto} onClose={() => setAberto(false)} title="Modelo e permissão" className="seletor-folha">{corpo}</BottomSheet> : <Popover open={aberto} onClose={() => setAberto(false)} anchorRef={ancora} side="top" align="start" width={640} ariaLabel="Modelo e permissão" className="seletor-popover">{corpo}</Popover>}
     <Modal open={confirmar} onClose={() => { setConfirmar(false); ancora.current?.focus(); }} title="Ativar acesso total?" description="O bot poderá agir sem pedir sua aprovação." footer={<div className="seletor-botoes"><Button variante="secundario" onClick={() => { setConfirmar(false); ancora.current?.focus(); }}>Cancelar</Button><Button onClick={() => { mudar({ ...valor, permissao: 'total' }, true); setConfirmar(false); ancora.current?.focus(); }}>Ativar acesso total</Button></div>}><p>Continuam sempre bloqueados:</p><ul className="seletor-bloqueios"><li>senhas;</li><li>programas bloqueados;</li><li>envio pelos canais da empresa;</li><li>o bot mudar as próprias instruções;</li><li>pagamentos.</li></ul></Modal>
   </>;

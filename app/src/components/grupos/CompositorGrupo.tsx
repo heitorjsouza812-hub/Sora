@@ -11,13 +11,16 @@ import { completarMencao, opcoesDeMencao, type OpcaoMencao } from './mencoes';
 import './grupos.css';
 
 /** Campo do grupo: o mesmo compositor do chat 1:1 (Shift+Enter, colar e soltar arquivo, anexos) mais menções com teclado. */
-export function CompositorGrupo({ grupoId, botsDoGrupo, resposta, onCancelarResposta, onEnviado, aoSeguirFim }: {
+export function CompositorGrupo({ grupoId, botsDoGrupo, resposta, onCancelarResposta, onEnviado, aoSeguirFim, gerando, onParar }: {
   grupoId: string;
   botsDoGrupo: BotResumo[];
   resposta: MensagemGrupoApi | null;
   onCancelarResposta: () => void;
   onEnviado: () => void;
   aoSeguirFim?: () => void;
+  /** algum bot trabalha: Enviar vira Parar */
+  gerando?: boolean;
+  onParar?: () => void;
 }) {
   const [texto, setTexto] = useState('');
   const [erro, setErro] = useState('');
@@ -78,7 +81,7 @@ export function CompositorGrupo({ grupoId, botsDoGrupo, resposta, onCancelarResp
         <span>@{opcao.nome}</span>
       </button>)}
     </div>}
-    <MessageComposer placeholder="Mensagem para o grupo…" placeholderCurto="Mensagem ao grupo…" compact value={texto} onValueChange={valor => { setTexto(valor); setFechadoEm(null); setIndice(0); }} onSend={(conteudo, anexos) => void enviar(conteudo, anexos)}
+    <MessageComposer placeholder="Mensagem para o grupo…" placeholderCurto="Mensagem ao grupo…" compact value={texto} onValueChange={valor => { setTexto(valor); setFechadoEm(null); setIndice(0); }} onSend={(conteudo, anexos) => void enviar(conteudo, anexos)} gerando={gerando} onParar={onParar} enviarMesmoGerando
       acoesDireita={<button type="button" className="icon-button grp-arroba" aria-label="Mencionar um bot" title="Mencionar um bot (@)" onClick={abrirMencao}>@</button>} />
     {erro && <p className="grp-erro" role="alert">{erro}</p>}
   </div>;

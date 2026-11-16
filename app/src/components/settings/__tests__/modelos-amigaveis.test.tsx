@@ -65,7 +65,7 @@ describe('nomes amigáveis dos modelos', () => {
 
     render(<ProviderCard provedor={PROVEDORES_MODELO[0]} inicialmenteAberto />);
 
-    expect(screen.getByText('lince-grande')).toBeInTheDocument();
+    expect(screen.getByText('Lince Grande')).toBeInTheDocument();
     expect(screen.queryByText('openai/lince-grande')).not.toBeInTheDocument();
   });
 

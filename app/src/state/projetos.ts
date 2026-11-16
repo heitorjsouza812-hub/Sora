@@ -469,7 +469,11 @@ export function gerandoNa(e: EstadoProjetos, conversaOuAgenteId: string, agora: 
   const id = e.agentes[conversaOuAgenteId]?.conversaId ?? conversaOuAgenteId;
   const p = e.projetos.find(x => x.id === id);
   const ultima = mensagensDa(e, conversaOuAgenteId, agora).at(-1);
-  return !!(e.conversasOcupadas?.includes(id) || p?.mensagensPendentes || (!!p?.aguardaRespostaDesde && agora - p.aguardaRespostaDesde < ESPERA_RESPOSTA_DIRETA_MS) || ['planejando', 'executando', 'verificando'].includes(p?.cadeiaStatus ?? '') || ultima?.autor === 'usuario' && ultima.estado !== 'interrompida' && ultima.envio !== 'erro' || mensagensDa(e, conversaOuAgenteId, agora).some(m => m.gerando));
+  return !!(e.conversasOcupadas?.includes(id) || p?.mensagensPendentes || (!!p?.aguardaRespostaDesde && agora - p.aguardaRespostaDesde < ESPERA_RESPOSTA_DIRETA_MS) || ['planejando', 'executando', 'verificando'].includes(p?.cadeiaStatus ?? '') || ultima?.autor === 'usuario' && ultima.estado !== 'interrompida' && ultima.envio !== 'erro' || mensagensDa(e, conversaOuAgenteId, agora).some(m => m.gerando) || rodandoFerramenta(e, conversaOuAgenteId, id));
+}
+/** Etapa em execução ou passo (ferramenta, navegador, computador) ainda aberto: o bot trabalha mesmo sem texto sendo escrito. */
+function rodandoFerramenta(e: EstadoProjetos, agenteId: string, conversaId: string) {
+  return e.execucoes.some(x => (x.agenteId === agenteId || x.projetoId === conversaId) && (x.status === 'executando' || (x.status === 'pendente' && x.roteiro.some(passo => passo.status === 'executando'))));
 }
 export async function pararConversa(conversaOuAgenteId: string) {
   const sessao = geracaoSessao;

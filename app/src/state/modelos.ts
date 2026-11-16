@@ -1,6 +1,7 @@
 import type { NivelRaciocinio } from '../api/preferenciasConversa';
 import { useEffect, useSyncExternalStore } from 'react';
-import { api, mensagemDeErro } from '../api/cliente';
+import { api, ErroApi, mensagemDeErro } from '../api/cliente';
+import { nomeCurtoDoModelo } from './nomeModelo';
 import { recarregarSessao } from './sessao';
 
 export type ProvedorModeloId = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'xai' | 'deepseek' | 'mistral' | 'openrouter' | 'ollama' | 'openai-compativel';
@@ -32,16 +33,13 @@ export interface ModeloConfigurado {
   ativo: boolean;
   raciocinio?: NivelRaciocinio[];
   rapido?: boolean;
+  /** o servidor marca os modelos principais do provedor; sem o campo vale a lista local (`nomeModelo.ts`) */
+  principal?: boolean;
 }
 
-/** Nome voltado à interface; o identificador técnico completo continua em `modelo`. */
+/** Nome voltado à interface, curto e sem prefixo, data ou sufixo técnico; o identificador completo continua em `modelo`. */
 export function nomeAmigavelDoModelo(modelo: Pick<ModeloConfigurado, 'modelo' | 'nome_exibicao'>): string {
-  const nomeExibicao = modelo.nome_exibicao?.trim();
-  if (nomeExibicao) return nomeExibicao;
-  const separador = modelo.modelo.indexOf('/');
-  return separador >= 0 && separador < modelo.modelo.length - 1
-    ? modelo.modelo.slice(separador + 1)
-    : modelo.modelo;
+  return nomeCurtoDoModelo(modelo.nome_exibicao?.trim() || modelo.modelo);
 }
 
 export interface ConfiguracaoProvedor {
@@ -236,6 +234,19 @@ export async function atualizarModelo(id: string, patch: { nivel?: NivelModelo; 
   const atualizado = await api.patch<ModeloConfigurado>(`/v1/modelos/${id}`, patch);
   const modelos = estado.modelos.map(modelo => modelo.id === id ? atualizado : modelo);
   publicar({ modelos, provedores: montarProvedores(Object.values(estado.provedores).flatMap(p => p.conexao ? [p.conexao] : []), modelos) });
+}
+
+/** Adiciona um modelo que o provedor não listou. 404 = servidor ainda sem essa rota. */
+export async function adicionarModelo(provedorApiId: string, idModelo: string): Promise<void> {
+  const id = idModelo.trim();
+  if (!id) throw new ErroApi(422, 'Digite o id do modelo.');
+  try { await api.post(`/v1/provedores/${provedorApiId}/modelos`, { id }); }
+  catch (erro) {
+    if (erro instanceof ErroApi && (erro.status === 404 || erro.status === 405)) throw new ErroApi(404, 'Este servidor ainda não permite adicionar modelos por aqui. Atualize o servidor e tente de novo.');
+    throw erro;
+  }
+  publicar({ carregado: false });
+  await carregarModelos();
 }
 
 export async function definirPrioridade(prioridade: PrioridadeModelo): Promise<void> {

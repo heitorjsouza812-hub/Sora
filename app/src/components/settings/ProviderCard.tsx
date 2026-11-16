@@ -1,9 +1,10 @@
 import { Fragment, useState } from 'react';
 import { mensagemDeErro } from '../../api/cliente';
 import {
-  atualizarModelo, atualizarProvedor, CAPACIDADES_DO_MODELO, conectarProvedor, desconectarProvedor, useModelos,
+  adicionarModelo, atualizarModelo, atualizarProvedor, CAPACIDADES_DO_MODELO, conectarProvedor, desconectarProvedor, useModelos,
   nomeAmigavelDoModelo, type DefinicaoProvedor, type NivelModelo,
 } from '../../state/modelos';
+import { separarPrincipais } from '../../state/nomeModelo';
 import { Button } from '../base';
 import { SoraOrb } from '../mascot';
 import { ProviderIcon } from './ProviderIcon';
@@ -27,6 +28,10 @@ export function ProviderCard({ provedor, inicialmenteAberto = false, onConectado
   const [tetoEditado, setTetoEditado] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [retorno, setRetorno] = useState('');
+  const [verTodos, setVerTodos] = useState(false);
+  const [novoModelo, setNovoModelo] = useState('');
+  const { principais, outros } = separarPrincipais(configuracao.modelos, provedor.id === 'ollama');
+  const visiveis = verTodos ? [...principais, ...outros] : principais;
 
   const teto = tetoEditado ?? (conexao?.teto_mensal_usd == null ? '' : String(conexao.teto_mensal_usd));
   const urlExibida = conexao?.base_url ?? urlBase;
@@ -72,7 +77,7 @@ export function ProviderCard({ provedor, inicialmenteAberto = false, onConectado
         {conexao && <div className="cfg-provider-spend"><span>Gasto neste mês</span><strong>{moeda.format(Number(conexao.gasto_mes_usd))}</strong>{conexao.teto_mensal_usd != null && <small>de {moeda.format(Number(conexao.teto_mensal_usd))}</small>}</div>}
       </div>
       {conexao && <div className="cfg-model-list"><span className="cfg-eyebrow">Modelos disponíveis</span>
-        {configuracao.modelos.length ? configuracao.modelos.map(modelo => <Fragment key={modelo.id}><div className="cfg-model-row">
+        {visiveis.length ? visiveis.map(modelo => <Fragment key={modelo.id}><div className="cfg-model-row">
           <span className="cfg-model-name"><strong>{nomeAmigavelDoModelo(modelo)}</strong><small>{modelo.contexto.toLocaleString('pt-BR')} tokens{modelo.capacidades.length ? ` · ${modelo.capacidades.join(', ')}` : ''}</small></span>
           <label><span className="sr-only">Nível de {nomeAmigavelDoModelo(modelo)}</span><select value={modelo.nivel} disabled={ocupado} onChange={e => editarModelo(modelo.id, { nivel: e.target.value as NivelModelo })}><option value="N1">N1</option><option value="N2">N2</option><option value="N3">N3</option><option value="especial">Especial</option></select></label>
           <label className="cfg-switch"><input type="checkbox" checked={modelo.ativo} disabled={ocupado} onChange={e => editarModelo(modelo.id, { ativo: e.target.checked })} /><span /><em>{modelo.ativo ? 'Ativo' : 'Inativo'}</em></label>
@@ -86,6 +91,11 @@ export function ProviderCard({ provedor, inicialmenteAberto = false, onConectado
             </label>)}</div>
           </fieldset>}
         </Fragment>) : <small className="cfg-empty">Nenhum modelo foi informado por esta API.</small>}
+        {outros.length > 0 && <button type="button" className="cfg-ver-todos" aria-expanded={verTodos} onClick={() => setVerTodos(x => !x)}>{verTodos ? 'Só os principais' : `Ver todos (${configuracao.modelos.length})`}</button>}
+        <form className="cfg-add-modelo" onSubmit={e => { e.preventDefault(); const id = novoModelo.trim(); if (id) void executar(async () => { await adicionarModelo(conexao.id, id); setNovoModelo(''); }, 'Modelo adicionado.'); }}>
+          <label><span className="sr-only">Id do modelo</span><input value={novoModelo} onChange={e => setNovoModelo(e.target.value)} placeholder="Adicionar modelo: digite o id" autoComplete="off" spellCheck={false} disabled={ocupado} /></label>
+          <Button type="submit" disabled={ocupado || !novoModelo.trim()}>Adicionar modelo</Button>
+        </form>
       </div>}
       <div className="cfg-card-feedback" role="status" aria-live="polite">{ocupado ? <><SoraOrb size={28} state="thinking" seed={33} decorative />Falando com o servidor…</> : retorno}</div>
       <footer className="cfg-card-actions">

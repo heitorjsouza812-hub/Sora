@@ -20,7 +20,7 @@ describe('state/modelos', () => {
     const store = await import('../modelos');
     const tecnico = { modelo: 'openai/lince-grande' };
 
-    expect(store.nomeAmigavelDoModelo(tecnico)).toBe('lince-grande');
+    expect(store.nomeAmigavelDoModelo(tecnico)).toBe('Lince Grande');
     expect(tecnico.modelo).toBe('openai/lince-grande');
     expect(store.nomeAmigavelDoModelo({ ...tecnico, nome_exibicao: 'Lince Grande' })).toBe('Lince Grande');
   });

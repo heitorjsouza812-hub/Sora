@@ -62,6 +62,7 @@ function PaginaGrupo({ grupoId }: { grupoId: string }) {
   const lider = grupo.liderId ?? grupo.membros[0];
   const botsDoGrupo = bots.filter(bot => grupo.membros.includes(bot.id) && bot.id !== lider);
   const precisaDeBots = grupoPrecisaDeBots(grupo);
+  const trabalhando = botsDoGrupo.filter(bot => membros.situacaoDe(bot.id) === 'trabalhando');
   const escrevendo = botsDoGrupo.filter(bot => membros.situacaoDe(bot.id) === 'trabalhando' && !previas.some(p => p.botId === bot.id));
   const salvarNome = async () => {
     const valor = nome.trim();
@@ -100,7 +101,7 @@ function PaginaGrupo({ grupoId }: { grupoId: string }) {
             <ListaPedidos className="grp-atencao" pedidos={pedidos} semGrupo />
             {precisaDeBots
               ? <p className="grp-travado" role="status">O campo de mensagem volta quando o grupo tiver pelo menos 2 bots.</p>
-              : <CompositorGrupo grupoId={grupo.id} botsDoGrupo={botsDoGrupo} resposta={resposta} onCancelarResposta={() => setResposta(null)} onEnviado={() => setErro('')} aoSeguirFim={seguirFim} />}
+              : <CompositorGrupo grupoId={grupo.id} botsDoGrupo={botsDoGrupo} resposta={resposta} onCancelarResposta={() => setResposta(null)} onEnviado={() => setErro('')} aoSeguirFim={seguirFim} gerando={trabalhando.length > 0} onParar={() => { trabalhando.forEach(bot => void membros.parar(bot.id)); }} />}
             {erro && <p className="grp-erro grp-erro-faixa" role="alert">{erro}</p>}
           </div>
         </ZonaSoltar>

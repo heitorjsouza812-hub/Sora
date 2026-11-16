@@ -42,6 +42,8 @@ interface Props {
   /** resposta sendo gerada: Enviar vira Parar e Enter não envia */
   gerando?: boolean;
   onParar?: () => void;
+  /** grupo: com texto no campo o botão volta a ser Enviar mesmo com bots trabalhando (sem texto, é Parar) */
+  enviarMesmoGerando?: boolean;
   /** controles extras à esquerda, depois de "Ferramentas" */
   extras?: ReactNode;
   /** botões extras à direita, antes do microfone e do Enviar (ex.: @ no grupo, conversar por voz no bot) */
@@ -86,7 +88,7 @@ const avisoMic: Record<string, string> = {
 
 export function MessageComposer({
   placeholder, placeholderCurto, onSend, initialValue = '', value: controlado, onValueChange, processing = false,
-  grande = false, tools = false, onActivity, onMicChange, anexar = true, gerando = false, onParar, extras, acoesDireita, voz = false, focoSinal,
+  grande = false, tools = false, onActivity, onMicChange, anexar = true, gerando = false, onParar, enviarMesmoGerando = false, extras, acoesDireita, voz = false, focoSinal,
   preferencias,
 }: Props) {
   const campoRef = useRef<HTMLTextAreaElement>(null);
@@ -126,7 +128,9 @@ export function MessageComposer({
   const { online, tentarDeNovo } = useConexao();
   const bloqueado = !online;
   const podeEnviar = Boolean(onSend) && !bloqueado && (value.trim().length > 0 || anexos.length > 0);
-  const podeParar = gerando && Boolean(onParar);
+  const temConteudo = value.trim().length > 0 || anexos.length > 0;
+  const travado = gerando && !(enviarMesmoGerando && temConteudo);
+  const podeParar = travado && Boolean(onParar);
 
   // arquivos soltos na área do chat (<ZonaSoltar>) chegam por evento
   useEffect(() => {
@@ -185,7 +189,7 @@ export function MessageComposer({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (gerando) { onParar?.(); return; }
+    if (travado) { onParar?.(); return; }
     const text = value.trim();
     if (!onSend || bloqueado || (!text && !anexos.length)) return;
     onSend(text, entregar());
@@ -216,7 +220,7 @@ export function MessageComposer({
               }
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                if (!gerando) event.currentTarget.form?.requestSubmit();
+                if (!travado) event.currentTarget.form?.requestSubmit();
               }
             }}
           />
@@ -231,10 +235,10 @@ export function MessageComposer({
               <button type="button" ref={toolsRef} className="tool-button" aria-haspopup="dialog" aria-expanded={toolsOpen} onClick={() => setToolsOpen((v) => !v)}>Ferramentas</button>
               <ToolsPopover open={toolsOpen} onClose={() => setToolsOpen(false)} anchorRef={toolsRef} plugins={pluginsConectados} />
             </>}
-            <SeletorModelo controle={preferencias} />
             {extras}
           </div>
           <div className="composer-dir">
+            <SeletorModelo controle={preferencias} />
             {acoesDireita}
             {voz && <button
               type="button"
