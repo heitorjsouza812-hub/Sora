@@ -75,6 +75,13 @@ def montar_middleware(
     itens.extend(
         [middleware_de_conserto(), MiddlewareLoop(), MiddlewarePrazoFerramenta(), MiddlewareCerca()]
     )
+    if contexto.papel in {"pesquisador", "redator", "designer", "verificador"}:
+        from app.agentes.middleware.entrega import MiddlewareExigeEntrega
+
+        # Texto puro não termina a etapa: avisa uma vez para chamar a ferramenta de entrega.
+        itens.append(
+            MiddlewareExigeEntrega("veredito" if contexto.papel == "verificador" else "entregar")
+        )
     if contexto.papel in {"sora", "individual"} and not contexto.sem_supervisao:
         from app.agentes.middleware.encerra_depois_de_falar import (
             MiddlewareEncerraDepoisDeFalar,

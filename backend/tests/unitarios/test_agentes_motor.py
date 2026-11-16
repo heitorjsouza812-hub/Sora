@@ -124,7 +124,8 @@ async def test_funcao_publica_monta_e_roda_agente(
         objetivo="Criar campanha",
         resultados_anteriores="nenhum",
     )
-    modelo = GenericFakeChatModel(messages=iter([AIMessage("resultado")]))
+    # Texto puro de especialista ganha um aviso para entregar e uma nova chamada (Engrenagem).
+    modelo = GenericFakeChatModel(messages=iter([AIMessage("resultado"), AIMessage("resultado")]))
     resultado = await montar_e_rodar_agente(
         contexto=ctx,
         modelos=[modelo],
