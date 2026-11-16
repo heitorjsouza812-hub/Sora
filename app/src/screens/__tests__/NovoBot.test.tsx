@@ -2,9 +2,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
-const mocks = vi.hoisted(() => ({ criar: vi.fn(), adicionar: vi.fn(), registrar: vi.fn(), enviar: vi.fn() }));
+const mocks = vi.hoisted(() => ({ bots: [] as {id:string;nome:string;cor:string;criadoEm?:string}[], criar: vi.fn(), adicionar: vi.fn(), registrar: vi.fn(), enviar: vi.fn() }));
 vi.mock('../../api/bots', () => ({ criarBotPorDescricao: mocks.criar }));
-vi.mock('../../state/bots', () => ({ adicionarBot: mocks.adicionar }));
+vi.mock('../../state/bots', () => ({ adicionarBot: mocks.adicionar, useBots: () => mocks.bots }));
 vi.mock('../../state/projetos', () => ({ registrarBot: mocks.registrar, enviarParaAgente: mocks.enviar }));
 vi.mock('../../components/layout/AppShell', () => ({ AppShell: ({children}: {children: ReactNode}) => <>{children}</> }));
 vi.mock('../../components/mascot', () => ({ SoraOrb: () => null, SoraThinking: ({label}: {label: string}) => <span>{label}</span> }));
@@ -12,7 +12,18 @@ vi.mock('../../components/ui/MessageComposer', () => ({ MessageComposer: ({value
 import NovoBot from '../NovoBot';
 function Rota() { const l = useLocation(); const n = useNavigate(); return <><output>{l.pathname}</output><button onClick={() => n('/bots/novo')}>Novo bot</button></>; }
 function montar() { render(<MemoryRouter initialEntries={['/bots/novo']}><NovoBot /><Rota /></MemoryRouter>); }
-beforeEach(() => { vi.clearAllMocks(); });
+beforeEach(() => { vi.clearAllMocks(); mocks.bots = []; });
+it('lista os 3 bots mais recentes com Ver todos', () => {
+ mocks.bots = [1,2,3,4].map(n => ({ id: 'b'+n, nome: 'Bot '+n, cor: '#fff', criadoEm: '2026-11-0'+n }));
+ montar(); expect(screen.getByRole('link', { name: 'Ver todos' })).toHaveAttribute('href', '/bots');
+ expect(screen.getAllByRole('link', { name: /Bot [0-9]/ }).map(l => l.textContent)).toEqual(['Bot 4','Bot 3','Bot 2']);
+});
+it('sem bots não mostra Seus bots', () => { montar(); expect(screen.queryByText(/Seus bots/)).not.toBeInTheDocument(); });
+it('exemplos preenchem o campo sem criar nem enviar', () => {
+ montar(); fireEvent.click(screen.getByRole('button', { name: /Monitorar preços/ }));
+ expect(screen.getByRole('textbox')).toHaveValue('Monitore o preço de um produto em um site e me avise quando baixar.');
+ expect(mocks.criar).not.toHaveBeenCalled(); expect(mocks.enviar).not.toHaveBeenCalled();
+});
 it('comeca limpa e limpa novamente ao clicar Novo bot', () => {
  montar(); expect(screen.getByRole('textbox')).toHaveValue('');
  fireEvent.change(screen.getByRole('textbox'), {target: {value: 'rascunho'}});

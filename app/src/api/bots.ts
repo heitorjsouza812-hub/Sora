@@ -1,9 +1,11 @@
+import type { PreferenciasConversa } from './preferenciasConversa';
 import { api } from './cliente';
 import type { Movimento } from '../types';
 
 export type EstadoBotApi = 'livre' | 'trabalhando' | 'precisa_de_voce';
 
-export interface AgenteBotSaida {
+export interface AgenteBotSaida extends Partial<PreferenciasConversa> {
+  criado_em?: string;
   id: string;
   tipo: 'sora' | 'individual' | 'especialista';
   nome: string;
@@ -68,4 +70,4 @@ export function descartarRascunhoBot(id: string): Promise<void> {
   return api.delete<void>(`/v1/bots/rascunhos/${id}`);
 }
 
-export const criarBotPorDescricao = (descricao: string) => api.post<AgenteBotSaida>('/v1/bots/criar-por-descricao', { descricao });
+export const criarBotPorDescricao = (descricao: string, preferencias?: PreferenciasConversa) => api.post<AgenteBotSaida>('/v1/bots/criar-por-descricao', { descricao, ...preferencias, ...(preferencias?.permissao === 'total' ? { confirmar_total: true } : {}) });
