@@ -1,0 +1,6 @@
+[
+  {"op": "liberar", "programa": "excel.exe"},
+  {"op": "abrir", "programa": "Excel"},
+  {"op": "agir", "acoes": [{"tipo": "tecla", "tecla": "Escape"}]},
+  {"op": "agir", "acoes": [{"tipo": "digitar", "texto": "Produto\tQuantidade\tPreço\nCafé\t2\t10,50\nPão\t6\t0,80\nLeite\t3\t5,20\n"}], "mostrar": 2500}
+]

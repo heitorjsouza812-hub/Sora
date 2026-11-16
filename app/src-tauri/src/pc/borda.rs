@@ -68,6 +68,20 @@ pub fn pronta() -> bool {
     PRONTA.load(Ordering::SeqCst)
 }
 
+/// Espera a borda e os ganchos ficarem prontos (Vela-12). Pegar o controle manda acender a borda
+/// por mensagem à thread dela; o primeiro comando (agora pode ser `abrir_programa`, não só
+/// `observar`) chegava antes e era recusado. Nunca age sem eles: só espera um pouco.
+pub fn esperar_pronta(prazo: std::time::Duration) -> bool {
+    let inicio = std::time::Instant::now();
+    while !pronta() {
+        if inicio.elapsed() >= prazo {
+            return false;
+        }
+        thread::sleep(std::time::Duration::from_millis(15));
+    }
+    true
+}
+
 #[derive(Clone)]
 pub struct InfoBorda {
     pub visivel: bool,

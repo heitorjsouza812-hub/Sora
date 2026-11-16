@@ -509,7 +509,7 @@ fn programas_permitidos(dados: &Value) -> Vec<String> {
 /// depois de abrir valem as mesmas conferências de processo e janela bloqueada de `agir`.
 #[cfg(windows)]
 fn abrir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
-    if !borda::pronta() {
+    if !borda::esperar_pronta(Duration::from_secs(2)) {
         return Err(ErroPc::com_mensagem("falha", "a borda ou a pausa física não estão disponíveis; não abri o programa"));
     }
     let inicio = Instant::now();
@@ -590,7 +590,7 @@ fn interrupcao(c: &ControlePc) -> ErroPc {
 fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
     use regras::{Conferencia, Passo, conferir_alvo, planejar};
 
-    if !borda::pronta() {
+    if !borda::esperar_pronta(Duration::from_secs(2)) {
         return Err(ErroPc::com_mensagem("falha", "a borda ou a pausa física não estão disponíveis; não executei a ação"));
     }
     let inicio = Instant::now();
