@@ -68,9 +68,34 @@ def nomes_diretos(nomes: list[str], contexto: ContextoAgente) -> list[str]:
     else:
         habilitadas.update(ferramentas_do_agente("individual", contexto.ferramentas_do_bot))
     habilitadas.update(contexto.ferramentas_extras)
-    return [n for n in nomes if n in habilitadas]
+    from app.agentes.ancora import NAVEGADOR_DIRETO
+
+    # Do navegador só as quatro de sempre vão direto (é o que o prompt do navegador ensina); as
+    # outras nove ficam no catálogo. Antes, com o navegador ligado, as 13 iam direto e o prompt
+    # mandava usar um ``navegador_executar_ferramenta`` que este bot não tem.
+    return [
+        n
+        for n in nomes
+        if n in habilitadas and (not n.startswith("navegador_") or n in NAVEGADOR_DIRETO)
+    ]
 
 
 def nomes_escondidos(nomes: list[str], contexto: ContextoAgente) -> list[str]:
     diretos = set(nomes_diretos(nomes, contexto))
     return [n for n in nomes if n not in diretos]
+
+
+def prompt_do_navegador(papel: str) -> str:
+    """Prompt do navegador com os nomes do catálogo que este papel tem de verdade.
+
+    A Sora e o bot 1:1 têm um catálogo só (``conectores_*``); os outros papéis têm o catálogo
+    próprio do navegador (``navegador_*_ferramenta(s)``), que é o que o arquivo do prompt descreve.
+    """
+    from app.agentes.prompts import carregar_prompt
+
+    texto = carregar_prompt("navegador_arvore")
+    if papel not in PAPEIS_ENXUTOS:
+        return texto
+    for acao in ("buscar_ferramentas", "carregar_ferramenta", "executar_ferramenta"):
+        texto = texto.replace(f"navegador_{acao}", f"conectores_{acao}")
+    return texto.replace("catálogo do navegador", "catálogo `conectores` (grupo navegador)")

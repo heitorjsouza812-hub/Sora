@@ -182,7 +182,9 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     nomes = nomes_diretos(todos, contexto)
     instrucoes = montar_instrucoes(nomes)
     if any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes):
-        instrucoes += "\n\n" + carregar_prompt("navegador_arvore")
+        from app.agentes.ferramentas_do_turno import prompt_do_navegador
+
+        instrucoes += "\n\n" + prompt_do_navegador(contexto.papel)
     elif any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes_escondidos(todos, contexto)):
         instrucoes += "\n\nNavegador no catalogo conectores: carregue o esquema antes de usar."
     if "computador_agir" in nomes:

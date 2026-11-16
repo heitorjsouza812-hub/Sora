@@ -205,9 +205,8 @@ def catalogo_enxuto(escondidas: list, conectores: list, contexto: ContextoAgente
     """Um só catálogo (``conectores_*``) para o que o turno não manda direto ao modelo: navegador,
     histórico, pendências, habilidades, colegas… e os conectores MCP. Cada ferramenta ganha o
     grupo pelo nome; a cláusula de uso dela vai junto do esquema, na primeira carga."""
-    from app.agentes.ferramentas_do_turno import grupo_da_escondida
+    from app.agentes.ferramentas_do_turno import grupo_da_escondida, prompt_do_navegador
     from app.agentes.instrucoes import POR_FERRAMENTA
-    from app.agentes.prompts import carregar_prompt
 
     if not escondidas:
         return catalogo_dos_conectores(conectores, contexto)
@@ -223,7 +222,7 @@ def catalogo_enxuto(escondidas: list, conectores: list, contexto: ContextoAgente
         if any(f.name == nome for f in escondidas)
     }
     if any(f.name.startswith("navegador_") for f in escondidas):
-        guias["navegador"] = carregar_prompt("navegador_arvore")
+        guias["navegador"] = prompt_do_navegador(contexto.papel)
     return _catalogo_revisado(
         [*escondidas, *conectores],
         contexto,
