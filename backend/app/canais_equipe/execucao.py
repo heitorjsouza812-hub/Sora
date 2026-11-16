@@ -25,6 +25,9 @@ from app.ferramentas import ambiente
 from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
 from app.modelos.tabelas import Agente
 
+PAGINAS_DO_HISTORICO = 50
+"""Até 10.000 mensagens lidas por chamada (o resultado devolve só as ``limite`` últimas)."""
+
 
 def _ids(contexto: ContextoFerramenta) -> tuple[UUID, UUID, int]:
     if (
@@ -32,7 +35,7 @@ def _ids(contexto: ContextoFerramenta) -> tuple[UUID, UUID, int]:
         or contexto.tarefa_canal_id is None
         or contexto.revisao_canal is None
     ):
-        raise ErroFerramenta("Esta ferramenta so funciona dentro de uma tarefa de canal.")
+        raise ErroFerramenta("Esta ferramenta só funciona dentro de uma tarefa de canal.")
     return contexto.canal_id, contexto.tarefa_canal_id, contexto.revisao_canal
 
 
@@ -57,10 +60,21 @@ async def _publicar_tarefa(contexto: ContextoFerramenta, tarefa) -> None:
 
 async def canal_historico(args: CanalHistorico, contexto: ContextoFerramenta) -> str:
     canal_id, _, _ = _ids(contexto)
+    mensagens = []
     async with fabrica_sessoes()() as sessao:
-        mensagens = await ServicoCanais(ArmazemCanaisSQL(sessao)).historico(
-            canal_id, contexto.usuario_id, depois_de_seq=0, limite=200
-        )
+        servico = ServicoCanais(ArmazemCanaisSQL(sessao))
+        # O serviço devolve no máximo 200 por vez, das mais antigas para as mais novas: num canal
+        # longo uma só página mostrava só o começo. Anda de página em página até o fim.
+        for _ in range(PAGINAS_DO_HISTORICO):
+            pagina = await servico.historico(
+                canal_id,
+                contexto.usuario_id,
+                depois_de_seq=mensagens[-1].seq if mensagens else 0,
+                limite=200,
+            )
+            mensagens.extend(pagina)
+            if len(pagina) < 200:
+                break
     if args.antes_de_seq is not None:
         mensagens = [m for m in mensagens if m.seq < args.antes_de_seq]
     mensagens = mensagens[-args.limite :]

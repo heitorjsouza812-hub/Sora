@@ -682,3 +682,53 @@ async def test_catalogo_de_tarefas_so_lista_o_que_e_do_bot(mundo: Mundo) -> None
     await _pend(mundo.c.outro_usuario_id, mundo.bot_b, "PENDENCIA-ALHEIA")
     saida = await catalogo_tarefas(CatalogoTarefas(), mundo.ctx())
     assert "PENDENCIA-ALHEIA" not in saida
+
+
+# ------------------------------------------------------------------ canal, grupo e reações
+
+
+async def test_ferramentas_de_canal_so_funcionam_dentro_de_uma_tarefa(mundo: Mundo) -> None:
+    from app.canais_equipe.execucao import (
+        canal_delegar,
+        canal_historico,
+        canal_resultado,
+        canal_transferir,
+    )
+    from app.canais_equipe.ferramentas import (
+        CanalDelegar,
+        CanalHistorico,
+        CanalResultado,
+        CanalTransferir,
+    )
+
+    for chamada in (
+        canal_historico(CanalHistorico(), mundo.ctx()),
+        canal_delegar(CanalDelegar(agente_id=mundo.bot_a, instrucao="x"), mundo.ctx()),
+        canal_transferir(CanalTransferir(agente_id=mundo.bot_a), mundo.ctx()),
+        canal_resultado(CanalResultado(texto="pronto"), mundo.ctx()),
+    ):
+        with pytest.raises(ErroFerramenta, match="tarefa de canal"):
+            await chamada
+
+
+async def test_propor_grupo_com_grupo_existente_inexistente_ou_de_outro_usuario(
+    mundo: Mundo,
+) -> None:
+    from app.ferramentas.propor_grupo import ProporGrupo, propor_grupo
+
+    with pytest.raises(ErroFerramenta, match="único grupo"):
+        await propor_grupo(
+            ProporGrupo(pedido="faça isto", grupo_existente="Grupo que não existe"), mundo.ctx()
+        )
+
+
+async def test_reagir_so_em_mensagem_da_propria_conversa(mundo: Mundo) -> None:
+    from app.correio.reacoes import ReagirMensagem
+    from app.ferramentas.reagir import reagir
+
+    async with fabrica_sessoes()() as s:
+        alheia = await s.scalar(select(Mensagem.id).where(Mensagem.conversa_id == mundo.conversa_b))
+    with pytest.raises(ErroFerramenta, match="não pode reagir"):
+        await reagir(ReagirMensagem(mensagem_id=alheia, emoji="👍"), mundo.ctx())
+    with pytest.raises(ErroFerramenta, match="não pode reagir"):
+        await reagir(ReagirMensagem(mensagem_id=uuid4(), emoji="👍"), mundo.ctx())
