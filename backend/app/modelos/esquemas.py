@@ -89,6 +89,9 @@ class AgenteAtualizacao(EsquemaBase):
     cor: str | None = Field(default=None, max_length=32)
     movimento: Movimento | None = None
     modelo_padrao: str | None = Field(default=None, max_length=NOME_MAX)
+    # Lista completa nova (mesma validação da criação). Antes o campo era ignorado em silêncio e o
+    # formulário e o "Pode usar" do Computador não davam a ferramenta ao bot (2026-11-16).
+    ferramentas: list[str] | None = Field(default=None, max_length=50)
     # Padrão do bot no seletor do campo de mensagem (``app/preferencias_conversa.py``).
     provedor_id: UUID | None = None
     modelo: str | None = Field(default=None, max_length=200)

@@ -29,8 +29,12 @@ const ROTULOS: Record<string, string> = Object.fromEntries([...FERRAMENTAS_AGENT
 /** Nome amigável; o que não é do catálogo (plugin, conector) aparece como veio. */
 export const rotuloFerramenta = (id: string) => ROTULOS[id] ?? id;
 
+/** Ferramentas que o bot ganha por outra tela (navegador, Clientes, computador) e que o formulário
+ *  não mostra: o PATCH agora grava a lista inteira, então elas precisam ir junto para não sumirem. */
+const DE_OUTRAS_TELAS = /^(navegador_|consultar_|computador_)/;
+
 /** O que vai para o backend: as escolhidas do catálogo + as de base. Vazio = padrão do backend. */
 export function ferramentasParaSalvar(escolhidas: string[]): string[] {
-  const validas = escolhidas.filter(f => f in ROTULOS);
+  const validas = escolhidas.filter(f => f in ROTULOS || DE_OUTRAS_TELAS.test(f));
   return validas.length ? [...FERRAMENTAS_BASE, ...new Set(validas)] : [];
 }

@@ -413,6 +413,19 @@ async def test_agentes_limite_promocao_edicao_e_exclusao(api: Ambiente) -> None:
         headers=auth,
     )
     assert editado.status_code == 200 and editado.json()["nome"] == "Luma"
+    # Ferramentas editáveis (antes o campo era ignorado e o bot nunca ganhava o Computador).
+    com_pc = await api.cliente.patch(
+        f"/v1/agentes/{agente['id']}",
+        json={"ferramentas": ["falar", "perguntar", "computador_observar", "computador_agir"]},
+        headers=auth,
+    )
+    assert com_pc.status_code == 200, com_pc.text
+    assert {"computador_observar", "computador_agir"} <= set(com_pc.json()["ferramentas"])
+    assert (
+        await api.cliente.patch(
+            f"/v1/agentes/{agente['id']}", json={"ferramentas": ["apagar_tudo"]}, headers=auth
+        )
+    ).status_code == 422
     assert (
         await api.cliente.patch(f"/v1/agentes/{agente['id']}", json={"nome": "Rita"}, headers=auth)
     ).status_code == 409

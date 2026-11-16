@@ -332,6 +332,10 @@ async def atualizar_agente(
         agente.movimento = dados.movimento
     if "modelo_padrao" in campos:
         agente.modelo_padrao = (dados.modelo_padrao or "").strip() or None
+    if dados.ferramentas is not None:
+        agente.ferramentas = _validar_ferramentas(dados.ferramentas) or list(
+            FERRAMENTAS_POR_PAPEL["individual"]
+        )
     await aplicar_preferencia_no_bot(sessao, usuario_id, agente, dados)
     saida = _saida(agente)
     await sessao.commit()

@@ -4,7 +4,8 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../base';
 import { api, mensagemDeErro } from '../../api/cliente';
-import { useBots } from '../../state/bots';
+import { carregarBots, useBots } from '../../state/bots';
+import { ferramentasParaSalvar } from '../../data/ferramentas';
 import { alternarBotNoPc, reconectarPontePc, usePontePc } from '../../desktop/computadorPc';
 import { pcParar } from '../../desktop/ponte';
 import './pecas.css';
@@ -12,6 +13,7 @@ import './pecas.css';
 interface EstadoServidor { conectado: boolean; dispositivo: string | null; vez: { agente_id: string; nome: string } | null }
 
 const FERRAMENTAS_DO_COMPUTADOR = ['computador_observar', 'computador_agir'];
+const temComputador = (ferramentas: string[]) => FERRAMENTAS_DO_COMPUTADOR.every(f => ferramentas.includes(f));
 
 export function ComputadorPC() {
   const ponte = usePontePc();
@@ -27,15 +29,35 @@ export function ComputadorPC() {
     return () => { vivo = false; };
   }, [ponte.disponivel]);
 
-  const alternar = async (agenteId: string, ligado: boolean) => {
-    setOcupado(agenteId);
-    setErro('');
-    try { await alternarBotNoPc(agenteId, ligado); } catch (e) { setErro(mensagemDeErro(e)); } finally { setOcupado(null); }
-  };
-
   const local = ponte.local;
   const ligados = new Set(local?.autorizados ?? []);
   const controlando = local?.controlando;
+
+  // Ligar dá a ferramenta Computador ao bot: antes só autorizava, e o bot seguia dizendo
+  // "não tenho acesso ao seu PC" (achado do Heitor, 2026-11-16). Bot já ligado sem ela é
+  // consertado ao abrir a tela.
+  const darFerramenta = async (agenteId: string) => {
+    const bot = bots.find(b => b.id === agenteId);
+    if (!bot || temComputador(bot.ferramentas)) return;
+    await api.patch(`/v1/agentes/${agenteId}`, { ferramentas: ferramentasParaSalvar([...bot.ferramentas, ...FERRAMENTAS_DO_COMPUTADOR]) });
+    await carregarBots();
+  };
+
+  const semFerramenta = bots.filter(b => ligados.has(b.id) && !temComputador(b.ferramentas)).map(b => b.id).join(',');
+  useEffect(() => {
+    if (!semFerramenta) return;
+    void Promise.all(semFerramenta.split(',').map(darFerramenta)).catch(e => setErro(mensagemDeErro(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [semFerramenta]);
+
+  const alternar = async (agenteId: string, ligado: boolean) => {
+    setOcupado(agenteId);
+    setErro('');
+    try {
+      if (ligado) await darFerramenta(agenteId);
+      await alternarBotNoPc(agenteId, ligado);
+    } catch (e) { setErro(mensagemDeErro(e)); } finally { setOcupado(null); }
+  };
 
   return <>
     <header className="cfg-heading">
@@ -67,11 +89,10 @@ export function ComputadorPC() {
         <ul className="pc-lista" aria-label="Bots que podem usar este computador">
           {bots.map(bot => {
             const ligado = ligados.has(bot.id);
-            const temFerramenta = FERRAMENTAS_DO_COMPUTADOR.every(f => bot.ferramentas.includes(f));
             return <li key={bot.id} data-ativa={ligado ? 'true' : 'false'}>
               <span>
                 <strong><span aria-hidden="true" style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: bot.cor, marginRight: 8 }} />{bot.nome}</strong>
-                <small>{bot.funcao || 'Bot'}{!temFerramenta ? ' · Este bot ainda não tem a ferramenta Computador: peça à Sora para incluí-la.' : ''}</small>
+                <small>{bot.funcao || 'Bot'}</small>
               </span>
               <label className="cfg-switch">
                 <input type="checkbox" role="switch" aria-label={`${bot.nome} pode usar este computador`} checked={ligado} disabled={!local || ocupado === bot.id} onChange={e => void alternar(bot.id, e.target.checked)} />

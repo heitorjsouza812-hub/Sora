@@ -35,8 +35,9 @@ vi.mock('../ponte', () => ({
 vi.mock('../../state/bots', () => ({
   useBots: () => [
     { id: 'b1', nome: 'Atlas', cor: '#56A8FF', funcao: 'Pesquisa', estado: 'livre', ferramentas: ['computador_observar', 'computador_agir'] },
-    { id: 'b2', nome: 'Luna', cor: '#AC80FF', funcao: 'Arte', estado: 'livre', ferramentas: [] },
+    { id: 'b2', nome: 'Luna', cor: '#AC80FF', funcao: 'Arte', estado: 'livre', ferramentas: ['falar', 'perguntar', 'buscar_web', 'navegador_abrir'] },
   ],
+  carregarBots: vi.fn(async () => []),
 }));
 
 import { ErroApi } from '../../api/cliente';
@@ -126,7 +127,7 @@ describe('ponte do controle do PC', () => {
 });
 
 describe('Configurações → Computador no app de desktop', () => {
-  it('lista os bots desligados por padrão, avisa quem não tem a ferramenta e mostra o Parar', async () => {
+  it('lista os bots desligados por padrão, dá a ferramenta Computador ao ligar e mostra o Parar', async () => {
     f.api.post.mockResolvedValue({ sessao_id: 's4', usuario_id: 'u1', autorizados: [], validade_s: 60 });
     f.conta.mockResolvedValue({ ...LOCAL, autorizados: [], token_renovacao: 'credencial-desktop' });
     f.buscar.mockImplementation(() => new Promise(() => {}));
@@ -135,7 +136,13 @@ describe('Configurações → Computador no app de desktop', () => {
     render(<ComputadorPC />);
     const atlas = await screen.findByRole('switch', { name: 'Atlas pode usar este computador' });
     expect(atlas).not.toBeChecked();
-    expect(screen.getByText(/Luna/).closest('li')?.textContent).toContain('ainda não tem a ferramenta Computador');
+    // Ligar a Luna (sem a ferramenta) grava a ferramenta no bot antes de autorizar, sem perder as outras.
+    f.api.patch.mockResolvedValue({});
+    f.autorizar.mockResolvedValueOnce({ ...LOCAL, autorizados: ['b2'] });
+    fireEvent.click(screen.getByRole('switch', { name: 'Luna pode usar este computador' }));
+    await waitFor(() => expect(f.autorizar).toHaveBeenCalledWith('b2', true));
+    expect(f.api.patch).toHaveBeenCalledWith('/v1/agentes/b2', { ferramentas: ['falar', 'perguntar', 'buscar_web', 'navegador_abrir', 'computador_observar', 'computador_agir'] });
+    expect(f.api.patch.mock.invocationCallOrder[0]).toBeLessThan(f.autorizar.mock.invocationCallOrder[0]);
     fireEvent.click(atlas);
     await waitFor(() => expect(f.autorizar).toHaveBeenCalledWith('b1', true));
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Atlas pode usar este computador' })).toBeChecked());
