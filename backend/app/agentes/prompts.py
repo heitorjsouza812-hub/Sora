@@ -44,6 +44,8 @@ VERSOES: dict[str, int] = {
     "juiz_rapido": 1,
     # Navegador por árvore, adaptado do agent-desktop (docs/referencias/agent-desktop.md):
     "navegador_arvore": 1,
+    # Computador do usuário (C3, Vela-12): o caminho rápido e conferir antes de dizer que fez.
+    "computador_pc": 1,
 }
 """Versão em uso de cada prompt; o arquivo é ``{nome}.v{versao}.md``."""
 

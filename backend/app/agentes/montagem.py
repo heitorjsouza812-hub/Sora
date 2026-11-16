@@ -185,6 +185,9 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
         instrucoes += "\n\n" + carregar_prompt("navegador_arvore")
     elif any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes_escondidos(todos, contexto)):
         instrucoes += "\n\nNavegador no catalogo conectores: carregue o esquema antes de usar."
+    if "computador_agir" in nomes:
+        # Vela-12: o caminho rápido no computador e conferir antes de dizer que fez
+        instrucoes += "\n\n" + carregar_prompt("computador_pc")
     return f"{prompt}\n\n{instrucoes}"
 
 
@@ -292,11 +295,17 @@ async def montar_agente(
     else:
         ferramentas = navegador_preguicoso(ferramentas, contexto)
         ferramentas += catalogo_dos_conectores(conectores, contexto)
+    middleware = montar_middleware(contexto, modelos)
+    if "computador_agir" in {f.name for f in ferramentas}:
+        # Vela-12: não dizer que fez no PC sem conferir; soltar o PC no fim do turno
+        from app.agentes.middleware.conferencia_pc import MiddlewareConferenciaPc
+
+        middleware.append(MiddlewareConferenciaPc(contexto.usuario_id, contexto.agente_id))
     return create_agent(
         model=modelos[0],
         tools=ferramentas,
         system_prompt=await _prompt_do_turno(contexto),
-        middleware=montar_middleware(contexto, modelos),
+        middleware=middleware,
         checkpointer=checkpointer,
         name=f"sora_{contexto.papel}",
     )

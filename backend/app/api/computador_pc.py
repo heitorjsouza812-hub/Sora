@@ -172,7 +172,7 @@ class EstadoSaida(BaseModel):
 class ComandoSaida(BaseModel):
     id: str
     agente: dict[str, str]
-    operacao: Literal["observar", "agir", "retomar", "encerrar"]
+    operacao: Literal["observar", "agir", "abrir_programa", "retomar", "encerrar"]
     dados: dict[str, Any]
     prazo_ms: int
     prazo_em_ms: int

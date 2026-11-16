@@ -10,8 +10,12 @@ Dois assuntos, sempre um cartão por bot e assunto (``CanalPc.cartao``):
 - **retomar depois da pausa** (o usuário mexeu no mouse ou no teclado): ``tipo: "pc_retomar"``,
   sem ferramenta (não existe "sempre" aqui). Permitir = o bot retoma; Recusar = Parar.
 
-O cartão não leva conversa nem etapa: a decisão não reabre turno; o próprio bot, que espera o
-cartão dentro da ferramenta (até ``ESPERA_CARTAO_S``), lê a decisão no banco.
+Ligado ao turno (Vela-12): o cartão nasce sem conversa (a ponte abre o de "retomar" pela rota
+``/pausar``, entre um comando e outro). Quando o bot esbarra nele, ``vincular`` grava a etapa, o
+grupo e ``acao.conversa_id`` **só se ainda estiver pendente** e o turno pausa (``interrupt`` do
+LangGraph, como os cartões do revisor). A decisão, então, põe na fila a retomada daquele mesmo
+turno (``api/aprovacoes.py``). Antes o bot esperava 90 s dentro da ferramenta e desistia: o
+"Permitir" que chegava depois não retomava nada (teste do Heitor, 2026-11-15).
 """
 
 from __future__ import annotations
@@ -39,6 +43,19 @@ class Cartoes(Protocol):
         ...
 
     async def programas_sempre(self, usuario_id: UUID, agente_id: UUID) -> set[str]: ...
+
+    async def vincular(
+        self,
+        usuario_id: UUID,
+        aprovacao_id: UUID,
+        *,
+        conversa_id: UUID,
+        etapa_id: UUID | None,
+        grupo_id: UUID | None,
+    ) -> bool:
+        """Liga o cartão pendente ao turno que vai pausar. ``False`` se já foi decidido (ou
+        venceu) antes disso: aí o bot segue com a decisão, sem pausar."""
+        ...
 
 
 @dataclass(slots=True)
@@ -89,6 +106,42 @@ class CartoesBanco:
             aprovacao_id = cartao.id
         await publicar_estado_atencao_persistido(usuario_id, agente_id=agente_id, grupo_id=None)
         return aprovacao_id
+
+    async def vincular(
+        self,
+        usuario_id: UUID,
+        aprovacao_id: UUID,
+        *,
+        conversa_id: UUID,
+        etapa_id: UUID | None,
+        grupo_id: UUID | None,
+    ) -> bool:
+        from sqlalchemy import func, update
+
+        from app.ferramentas.infra import abrir_sessao
+        from app.modelos.enumeracoes import StatusAprovacao
+        from app.modelos.tabelas import Aprovacao
+
+        async with abrir_sessao() as sessao:
+            # Uma linha só e só pendente: a rota de decisão trava a mesma linha (FOR UPDATE), então
+            # ou a decisão vem antes (aqui não muda nada e o bot segue) ou depois (já com o turno).
+            resultado = await sessao.execute(
+                update(Aprovacao)
+                .where(
+                    Aprovacao.id == aprovacao_id,
+                    Aprovacao.usuario_id == usuario_id,
+                    Aprovacao.status == StatusAprovacao.PENDENTE,
+                    Aprovacao.expira_em > func.now(),
+                )
+                .values(
+                    etapa_id=etapa_id,
+                    grupo_id=grupo_id,
+                    acao=Aprovacao.acao.op("||")(
+                        func.jsonb_build_object("conversa_id", str(conversa_id))
+                    ),
+                )
+            )
+            return bool(resultado.rowcount)
 
     async def status(self, usuario_id: UUID, aprovacao_id: UUID) -> str | None:
         from sqlalchemy import select
