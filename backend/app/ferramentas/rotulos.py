@@ -101,6 +101,11 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "mensagem_especialista": lambda _: "Corrigindo a rota do especialista",
     "parar_especialista": lambda _: "Parando o especialista",
     "criar_agente": lambda a: f"Criando bot: {_detalhe(a.get('nome'))}",
+    "propor_grupo": lambda a: (
+        "Passando o pedido ao grupo"
+        if a.get("grupo_existente")
+        else "Montando a proposta de grupo"
+    ),
     "buscar_memoria": lambda a: f"Lembrando: {_detalhe(a.get('consulta'))}",
     "lembrar": lambda _: "Guardando na memória",
     "esquecer_memoria": lambda _: "Apagando uma memória",
@@ -127,7 +132,7 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "computador_observar": lambda _: "Olhando a tela do computador",
     "consultar_cliente": lambda _: "Consultando a ficha do cliente",
     "consultar_conhecimento": lambda a: (
-        f"Consultando o conhecimento: {str(a.get('consulta', ''))[:60]}"
+        f"Consultando o conhecimento: {_detalhe(a.get('consulta'))}"
     ),
     "computador_agir": lambda _: "Usando o computador",
     "computador_abrir_programa": lambda a: f"Abrindo {_detalhe(a.get('programa'))}",

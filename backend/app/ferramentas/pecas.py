@@ -21,7 +21,7 @@ from sqlalchemy import func, select, text
 from app.ferramentas.base import ContextoFerramenta, ErroFerramenta
 from app.ferramentas.infra import abrir_sessao
 from app.modelos.enumeracoes import AutorMensagem
-from app.modelos.tabelas import Agente, Conversa, Habilidade, Mensagem
+from app.modelos.tabelas import Agente, Anexo, Conversa, Habilidade, Mensagem
 from app.modelos.tabelas import Pendencia as LinhaPendencia
 
 # ---------------------------------------------------------------- memória
@@ -211,6 +211,8 @@ def _linha_json(p: LinhaPendencia) -> dict[str, Any]:
 async def adicionar_pendencia(args: Any, contexto: ContextoFerramenta) -> str:
     from app.pendencias import MAX_PENDENCIAS_ABERTAS, STATUS_ABERTOS, nova_pendencia
 
+    if not args.titulo.strip():
+        raise ErroFerramenta("O título da pendência está vazio.")
     async with abrir_sessao() as sessao:
         abertas = await sessao.scalar(
             select(func.count())
@@ -271,6 +273,8 @@ async def atualizar_pendencia(args: Any, contexto: ContextoFerramenta) -> str:
         linha = await _pendencia_do_agente(sessao, contexto, args.pendencia_id)
         if args.titulo is None and args.notas is None and args.status is None:
             raise ErroFerramenta("Nada para atualizar.")
+        if args.titulo is not None and not args.titulo.strip():
+            raise ErroFerramenta("O título da pendência está vazio.")
         if args.titulo is not None:
             linha.titulo = args.titulo.strip()
         if args.notas is not None:
@@ -408,12 +412,34 @@ async def enviar_para_agente(args: Any, contexto: ContextoFerramenta) -> str:
         )
         if conversa_destino is None:
             raise ErroFerramenta("Esse bot ainda não tem uma conversa para receber a mensagem.")
+        if envio.responde_a is not None:
+            # ``mensagens.responde_a`` é chave estrangeira: um id inventado pelo modelo (ou de
+            # outra conta) não pode virar IntegrityError nem apontar para conversa alheia.
+            existe = await sessao.scalar(
+                select(Mensagem.id).where(
+                    Mensagem.id == envio.responde_a,
+                    Mensagem.conversa_id.in_([contexto.conversa_id, conversa_destino.id]),
+                )
+            )
+            if existe is None:
+                raise ErroFerramenta("A mensagem a que você responde não existe nesta conversa.")
+        if envio.anexos:
+            achados = set(
+                await sessao.scalars(
+                    select(Anexo.id).where(
+                        Anexo.id.in_(envio.anexos), Anexo.usuario_id == contexto.usuario_id
+                    )
+                )
+            )
+            if achados != set(envio.anexos):
+                raise ErroFerramenta("Algum anexo não foi encontrado.")
         mensagem = Mensagem(
             id=uuid4(),
             conversa_id=conversa_destino.id,
             autor=AutorMensagem.AGENTE,
             agente_id=contexto.agente_id,
             conteudo=envio.texto,
+            anexos=[str(a) for a in envio.anexos],
             responde_a=envio.responde_a,
             salto=envio.salto,
             visivel=True,

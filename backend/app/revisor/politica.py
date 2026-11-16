@@ -83,6 +83,10 @@ LIVRES: frozenset[str] = frozenset(
         "navegador_elemento",
         "navegador_esperar",
         "reagir",
+        # só abre o cartão de proposta (o grupo nasce depois do "sim"); com ``grupo_existente``
+        # só manda o pedido a um grupo do próprio usuário. Cuida do próprio cartão
+        # (``CUIDAM_DO_PROPRIO_CARTAO`` em ``app/revisor/execucao.py``)
+        "propor_grupo",
         "canal_historico",
         "canal_delegar",
         "canal_transferir",
@@ -121,6 +125,9 @@ REVISADAS: frozenset[str] = frozenset(
         "chamar_conector",
         "executar_comando",
         "navegador_agir",
+        "navegador_acao",
+        "navegador_tecla",
+        "navegador_lote",
         "conectores_executar_ferramenta",
         "computador_agir",
     }

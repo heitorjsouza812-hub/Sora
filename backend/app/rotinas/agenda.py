@@ -136,6 +136,13 @@ def intervalo_do_cron(expressao: str, fuso: str = FUSO_PADRAO) -> timedelta:
 
 def planejar(args: Agendar, *, agora: datetime | None = None, fuso: str | None = None) -> Plano:
     """Valida o pedido e calcula a primeira execução."""
+    try:
+        return _planejar(args, agora=agora, fuso=fuso)
+    except OverflowError as erro:  # ``daqui_minutos=1e30``: o número não cabe em uma data
+        raise ErroFerramenta("O prazo é grande demais. Agendamentos vão até 1 ano.") from erro
+
+
+def _planejar(args: Agendar, *, agora: datetime | None, fuso: str | None) -> Plano:
     agora = (agora or datetime.now(UTC)).astimezone(UTC)
     fuso = fuso_valido(fuso)
     if args.cron is not None:

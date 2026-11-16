@@ -73,7 +73,8 @@ async def consultar_cliente(args: ConsultarCliente, contexto: ContextoFerramenta
         await _checar(sessao, contexto, "clientes")
         busca = args.cliente.strip()
         digitos = re.sub(r"\D", "", busca)
-        condicoes = [ContatoEmpresa.nome.ilike(f"%{busca}%")]
+        # ``%`` e ``_`` digitados pelo modelo são texto, não curinga (senão "%%" listaria todos)
+        condicoes = [ContatoEmpresa.nome.icontains(busca, autoescape=True)]
         if len(digitos) >= 6:
             condicoes.append(ContatoEmpresa.id_externo.contains(digitos))
         contatos = list(

@@ -39,7 +39,14 @@ RedisDep = Annotated[Redis, Depends(obter_redis)]
 
 FUNCAO_MAX = 80
 FERRAMENTAS_CONHECIDAS = frozenset(n for lista in FERRAMENTAS_POR_PAPEL.values() for n in lista) | {
+    # as 13 do navegador (as mesmas que o bot individual já recebe em ``montagem.py``): o app
+    # devolve a lista inteira do bot no PATCH, então nenhuma pode dar 422
     "navegador_abrir",
+    "navegador_abas",
+    "navegador_fechar_aba",
+    "navegador_capturar",
+    "navegador_console",
+    "navegador_pedir_ajuda",
     "navegador_observar",
     "navegador_acao",
     "navegador_procurar",
