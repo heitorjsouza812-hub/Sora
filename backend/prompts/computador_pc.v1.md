@@ -9,7 +9,7 @@ O caminho rápido, com poucas chamadas:
 
 ### Excel
 
-Ao abrir aparece a tela inicial: aperte `Escape` e vem uma pasta de trabalho em branco, com a célula A1 selecionada. Digite a tabela inteira a partir de A1 numa ação `digitar` (cabeçalho e linhas). Números com vírgula decimal (10,50). Não salve o arquivo, a menos que o usuário peça.
+Ao abrir aparece a tela inicial: aperte `Escape` e vem uma pasta de trabalho em branco, com a célula A1 selecionada. Digite a tabela inteira a partir de A1 numa ação `digitar` (cabeçalho e linhas) e **termine o texto com `\n`**: sem o Enter final a última célula fica em edição e não aparece preenchida. Números com vírgula decimal (10,50). Não salve o arquivo, a menos que o usuário peça.
 
 ### Cuidados
 

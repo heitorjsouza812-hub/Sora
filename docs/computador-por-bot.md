@@ -201,7 +201,7 @@ O C3 implementa **outro alvo da mesma interface** (`Alvo.PC_USUARIO`), sem ferra
 - Transporte implementado: `POST /v1/computador-pc/sessao`, `PUT/DELETE /sessao/{id}`, `GET /comandos?sessao_id=…&espera=20`, `POST /comandos/{id}/resultado`, `POST /parar`, `POST /pausar` e `GET /estado`. Todas exigem login; mutações e long-poll exigem `X-Sora-Cliente: desktop`. O cabeçalho identifica o cliente, não é uma credencial: a autorização final ocorre no Rust, na janela principal, com conta e bot habilitados localmente.
 - Canal Redis em `pc_usuario_canal.py`: sessão expira em 60 s sem polling, comandos têm id, prazo absoluto `prazo_em_ms` e resposta única. O Rust também recusa repetição, comando vencido e interrompe a ação ao vencer o prazo. Outra sessão substitui a anterior; indisponibilidade da API solta o controle local.
 - **Observar**: captura GDI da tela principal (máximo 1280 px) + **árvore de UI Automation** da janela em foco em `Observacao.arvore` (papel, nome, valor, estados e centro). Campos com `IsPassword` saem sem valor. A imagem passa pelo middleware de visão do Farol-2, sem acumular telas no histórico.
-- **Agir**: `SendInput` com conferência de programa, foco e UI Automation antes da entrada; falha ao consultar campo de senha recusa a ação. Padrões Invoke/Value por ref ainda não estão implementados. Arquivos locais e abertura direta por comando são recusados; o bot **não abre programas** (menu Iniciar, Executar e busca são bloqueados): pede ao usuário para abrir.
+- **Agir**: `SendInput` com conferência de programa, foco e UI Automation antes da entrada; falha ao consultar campo de senha recusa a ação. Padrões Invoke/Value por ref ainda não estão implementados. Arquivos locais e abertura por comando livre são recusados; menu Iniciar, Executar e busca continuam bloqueados. Desde a Vela-12 o bot **abre pelo nome** só os programas de uma lista fechada (`computador_abrir_programa`, ver abaixo); qualquer outro, ele pede ao usuário.
 
 ### Regras obrigatórias
 
@@ -219,7 +219,7 @@ O C3 implementa **outro alvo da mesma interface** (`Alvo.PC_USUARIO`), sem ferra
 - **Revisão Vela-7 (2026-11-15):** o rastro do PC usa somente o executável em `janela_ativa`, sem títulos de documentos (inclusive textos curtos). A primeira movimentação física já pausa; falha ao ler `IsPassword` também oculta o valor na árvore. Backend commitado separadamente; evidências e limite do teste ao vivo em `.maestri/relatorios/vela7.md`.
 
 - Autorizações de bot ficam em `computador-pc.json`, por conta e PC. A primeira ação por executável usa o sistema existente de aprovações e atenção; “Permitir uma vez” vale 5 min, com prazo absoluto (Vela-11), “Sempre permitir” fica por bot/programa. Parar bloqueia nova aquisição por 120 s; sem comandos a vez vence em 90 s.
-- Borda nativa transparente com passagem de cliques e botão Parar; atalho `Ctrl+Shift+F12`. Entrada física pausa sem carência e a ponte abre cartão mesmo entre comandos. O bot retoma na próxima chamada após aprovação.
+- Borda nativa transparente com passagem de cliques e botão Parar; atalho `Ctrl+Shift+F12`. Entrada física pausa sem carência e a ponte abre cartão mesmo entre comandos. Com o cartão pendente o turno do bot **pausa** e o "Permitir" retoma o mesmo turno (Vela-12, ver abaixo).
 - Bloqueados: credenciais/UAC, configurações e segurança do Windows, gerenciadores de senha, terminais, lançadores e executores de script, a própria Sora e a Sora web. Rotina sem supervisão é recusada pelo serviço existente. O rastro registra quantidade de caracteres, nunca o texto digitado.
 - Testes: `test_pc_usuario.py`, integração HTTP com Postgres/Redis em `test_computador_pc.py`, testes da ponte React e testes Rust `pc::`. A integração simula o cliente desktop: não comprova ganchos físicos, borda nativa ou IsPassword em aplicativo real.
 - Ainda sem teste interativo: abrir/digitar/conferir no Bloco de Notas via bot, mover mouse físico para pausar, recusar um campo real de senha, múltiplos monitores/DPI e falha na instalação de ganchos. Captura e coordenadas limitam-se ao monitor principal.
@@ -241,7 +241,47 @@ O C3 implementa **outro alvo da mesma interface** (`Alvo.PC_USUARIO`), sem ferra
 - **Ilha (B4).** A janela `ilha` não tem `core:event:allow-emit`; o comando `ilha_emitir` só repassa `sora-armazenamento` e `sora-sessao-pedir` para a janela `main`. `pc-estado` e `pc-parar` saem só do Rust (`emit_to("main")`).
 - **Testes.** `tests/unitarios/test_vela8_seguranca.py`, `tests/integracao/test_vela8_aprovacoes.py`, `test_computador_pc.py`, Rust `pc::regras::testes` (`ataques_vela9_recusados`, `sora_no_titulo_e_caixa_executar_sao_bloqueadas`, `processo_bloqueado_filho_da_acao_e_pego`, `tarja_so_a_parte_visivel_das_bloqueadas`, `quem_nao_cobre_nao_esconde_nada`, `muitos_pedacos_tarjam_a_janela_inteira`) e `testes_eventos_pc::ilha_nao_forja_eventos_pc`. Teste real da tarja no Windows: `app/qa/pc-tarja.mjs` (janela magenta com "Sora" no título parcialmente coberta, totalmente coberta e na frente; nenhum pixel magenta pode sair). O fechamento de processo ainda depende de teste manual.
 
+### Vela-12 (2026-11-16): retomar de verdade, mais rápido e sem mentir que terminou
+
+O teste do Heitor (2026-11-15) mostrou três defeitos: "Permitir" no cartão de retomar não fazia o bot voltar, o bot era lento demais para abrir o Excel e montar uma tabela, e dizia que tinha terminado sem ter feito nada.
+
+**Causas achadas.**
+- O cartão "Retomar?" nasce na rota `/pausar`, sem conversa nem etapa. O bot esperava 90 s **dentro da ferramenta** e desistia; o "Permitir" que vinha depois (no banco do Heitor: 1,5 a 2 min depois) não tinha turno para retomar. Não era a Cerca A2: a pausa já libera a decisão.
+- O usuário pede pelo chat **na janela da Sora**, então a Sora estava sempre na frente: captura omitida e ação recusada (Cerca A2/A3). O bot pedia "minimize a Sora".
+- `Café\t2\t10,50\n` era recusado como **senha** (Tab e Enter não separavam palavras).
+- A árvore do Excel tem ~726 elementos, 551 deles células vazias; o servidor cortava o JSON em 8 mil caracteres e **nenhuma célula** chegava ao modelo, que não tinha como conferir.
+- Cada ação: até 3 observações completas na conferência e uma chamada ao **juiz do revisor** (que no PC do usuário nunca aceita "Sempre permitir"); a digitação conferia UI Automation a cada caractere, criando um `CUIAutomation` novo a cada vez.
+- A borda ficava acesa até 90 s depois do turno: mexer no mouse abria "Retomar?" de um bot que já tinha terminado.
+- O "Pronto!" que aparece a cada turno no chat do bot é da tela (`app/src/screens/AgentChat.tsx`: todo turno encerrado mostra "Pronto!"), não do bot. **Aberto**: é do Vitral (app).
+
+**O que mudou.**
+- **Cartão pausa o turno** (`pc_usuario.py`): no worker, cartão pendente (retomar ou primeira ação num programa) espera 4 s; ainda pendente, `Cartoes.vincular` grava etapa, grupo e `acao.conversa_id` **só se ainda estiver pendente** (a mesma linha que a decisão trava) e o turno pausa com `interrupt`, como os cartões do revisor. A decisão põe na fila `executar_etapa`/`retomar_conversa`/`retomar_tarefa_canal`; a ferramenta roda de novo, acha o cartão decidido, manda `retomar` à ponte (que **traz de volta a janela em que o bot trabalhava**) e segue. Cartão vencido com o turno pausado vale recusa (sem novo cartão em laço); a expiração é agendada. Só pausa se nada foi feito ainda na chamada (a retomada repete a chamada inteira); pausa pelo mouse no meio de uma ação devolve "Pausei…" e a próxima chamada é que pausa.
+- **A Sora sai da frente** (`sistema::afastar_a_sora`): quando um bot vai usar o PC e a janela principal da Sora está na frente, a ponte a minimiza (a ilha aparece fora do app); se a frente é a ilha, volta a janela do bot. Sem tecla injetada.
+- **`computador_abrir_programa`** (lista fechada em `regras::PROGRAMAS_ABRIVEIS`: Excel, Word, PowerPoint, Bloco de Notas, Paint, LibreOffice Calc e Writer). Executável pelo registro App Paths (ou `System32` para Bloco de Notas e Paint), conferido pelo nome (App Paths adulterado que aponte para terminal é recusado), aberto com `ShellExecuteW` direto e argumentos fixos. Exige o programa liberado no cartão da primeira ação e roda as mesmas conferências de processo e janela bloqueada depois de agir. Vem junto com `computador_agir` (`permissoes.IMPLICITAS`).
+- **Teclado de edição sem o juiz** (`teclado_local.py`): chamada só com digitar (sem cara de senha), rolar e teclas de edição (Tab, Enter, setas, Esc, F2, ctrl+n/z/y…) no alvo `pc_usuario` dispensa o juiz, e **nessa chamada a ponte só aceita editores locais** (Excel, Word, PowerPoint, Bloco de Notas, Paint, LibreOffice) liberados no cartão. Clique, arrastar e outras teclas continuam com o juiz. O juiz respeita o modelo escolhido na conversa.
+- **Conferência e árvore**: depois de agir, uma observação `estavel` (a ponte compara as capturas localmente e codifica um PNG só). A ponte lê até 3.000 elementos e escolhe 250: foco e valores primeiro, sem célula vazia nem cabeçalho de grade. O modelo recebe linhas curtas (`e136 item de tabela "A1" = "Produto" @94,217`), células primeiro; depois de agir, só o que mudou.
+- **Digitação**: janela da frente conferida a cada passo; senha e programa depois de Tab/Enter/setas, a cada 8 passos e quando a janela muda; UI Automation em cache por thread.
+- **Senha por célula**: texto com Tab/Enter é julgado célula por célula, com a mesma regra (igual a digitar uma célula por vez).
+- **Não mentir** (`conferencia.py` + `MiddlewareConferenciaPc`): se o turno termina afirmando que fez algo no computador sem nenhuma ação conferida na tela (ou sem nem ter tentado), a mensagem vira "Não consegui confirmar que fiz isso no seu computador…", com o último erro. No fim do turno o bot devolve a vez e a borda apaga.
+- **Prompt** `computador_pc.v1`: abrir pelo nome, Esc na tela inicial do Excel, a tabela inteira numa ação `digitar` terminada com `\n`, conferir pelos `item de tabela`, só dizer que terminou depois de ver. Nenhum atalho de sistema.
+- **Borda pronta**: com `abrir_programa` o primeiro comando pode ser uma ação; ela espera até 2 s pela borda e pelos ganchos (antes era recusada por corrida).
+
+**Medição** (PC do Heitor, 1920×1080, Excel instalado; `app/qa/pc_medir.py`, mesmo caminho do bot, sem modelo):
+
+| | Antes | Depois |
+|---|---|---|
+| Observar | 2,4–3,1 s | dentro de abrir/agir |
+| Uma ação + conferência | 3,9–6,3 s | 1,8–3,2 s |
+| Texto ao modelo por passo | ~8.400 caracteres, sem células | 0,6–2,4 mil, com as 12 células |
+| Tabela 3×4 no Excel | 26,4 s (e 3 linhas recusadas como "senha" sem a correção) | 12,3 s (abrir 6,3 s, Esc 2,8 s, tabela 3,2 s) |
+
+**Aceitação ao vivo** (`app/qa/pc-excel-live.mjs`, conta `qa-desktop-real@sora.local`, bot "Piloto do PC", Groq): pedido pelo chat na janela da Sora → a Sora minimizou, o bot abriu o Excel, preencheu Produto/Quantidade/Preço com 3 produtos e respondeu "Planilha criada e preenchida" em **97 s com 5 chamadas ao modelo** (nenhuma do juiz). Desses 97 s, ~59 s foram espera de limite do plano grátis da Groq; latência do modelo somada 6,4 s; o PC ~12 s. A última célula ficou em edição (o modelo não terminou com Enter): o prompt agora pede o `\n` final. **Pausa ao vivo**: `/pausar` com o bot no PC → cartão "Retomar?" → o turno pausou (job encerrado em 14,6 s) → "Permitir" 16 s depois → `retomar_conversa` → a ferramenta rodou de novo e observou o Excel. Em seguida a cota diária da Groq acabou. A pausa pelo **mouse físico** só o Heitor testa (entrada sintética conta como do bot).
+
+**Testes.** `test_vela12_pc.py` (senha por célula, não mentir, middleware, pausa → cartão → permitir → retoma, cartão vencido, pausa no meio, programa novo no meio do lote, abrir programa, teclado local, árvore), integração `test_vela12_retomar.py` (API + Postgres + Redis: `/pausar` → turno pausado com o cartão ligado → `POST /decidir` → job `retomar_conversa` → `retomar` + `observar`) e Rust `abrir_pelo_nome_so_na_lista_e_nunca_bloqueado`, `arvore_mostra_primeiro_o_que_tem_valor`, `teclas_que_mudam_o_foco`, `retomar_so_devolve_a_janela_do_proprio_bot_e_encerrar_esquece`.
+
 ## Pendências
+
+- **Vela-12:** o "Pronto!" de todo turno no chat do bot (`AgentChat.tsx`, do Vitral); modelo pequeno às vezes encerra o turno com resposta vazia (visto ao vivo depois de duas esperas de limite); pausa pelo mouse físico e Permitir clicado pelo Heitor; com o painel "Recuperação de documentos" aberto o Excel só expõe esse painel à UI Automation (as células somem da árvore até fechá-lo).
 
 - **Árvore de acessibilidade no virtual** (AT-SPI): hoje o alvo virtual só tem janelas e pixels.
 - **Produção**: construir as duas imagens no host do sandbox e conferir que ele alcança a internet só pela rede `sora-pc-saida`.
