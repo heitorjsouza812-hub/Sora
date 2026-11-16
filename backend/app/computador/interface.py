@@ -255,11 +255,18 @@ def parece_senha(texto: str) -> bool:
     maiúscula, dígito, símbolo), que não é endereço, e-mail nem **código de negócio** (veja
     ``parece_codigo_de_negocio``). Os padrões da redação (chaves de API, tokens, JWT) recusam
     sempre. Na dúvida, recusa digitar. Não é barreira: quem divide o texto em dois pedaços passa;
-    é rede de segurança contra o bot digitar sem querer um segredo que ouviu na conversa."""
+    é rede de segurança contra o bot digitar sem querer um segredo que ouviu na conversa.
+
+    Texto com Tab ou Enter (linhas de planilha, ``"Café\\t2\\t10,50\\n"``) é julgado **célula por
+    célula** com a mesma regra (Vela-12): antes a linha inteira contava como uma palavra só e toda
+    tabela com preço virava "senha". Igual a digitar cada célula numa chamada."""
     from app.core.redacao import limpar_texto_sensivel
 
     if limpar_texto_sensivel(texto) != texto:
         return True  # chave de API, token, JWT… (padrões da redação)
+    celulas = re.split(r"[\t\r\n]+", texto)
+    if len(celulas) > 1:
+        return any(parece_senha(celula) for celula in celulas if celula.strip())
     palavra = texto.strip()
     if " " in palavra or not 8 <= len(palavra) <= 128:
         return False
