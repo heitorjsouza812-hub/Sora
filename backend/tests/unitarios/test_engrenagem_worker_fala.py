@@ -60,6 +60,77 @@ def test_texto_em_blocos_tambem_conta() -> None:
     assert _texto_da_resposta({"messages": [HumanMessage("x"), final]}) == "Oi\nali"
 
 
+def _turno_com_aviso(final: str, *, trabalho_depois: bool = True) -> dict[str, Any]:
+    mensagens: list[Any] = [
+        HumanMessage("antiga"),
+        AIMessage("Resposta antiga."),
+        HumanMessage("pesquise o preço do café"),
+        _chamada("falar", {"texto": "Vou pesquisar."}, "c1"),
+        ToolMessage("Mensagem enviada ao usuário.", tool_call_id="c1", name="falar"),
+    ]
+    if trabalho_depois:
+        mensagens += [
+            _chamada("buscar_web", {"consulta": "café"}, "c2"),
+            ToolMessage("R$ 30", tool_call_id="c2", name="buscar_web"),
+        ]
+    return {"messages": [*mensagens, AIMessage(final)]}
+
+
+def test_resposta_em_texto_solto_depois_do_trabalho_e_entregue() -> None:
+    """Heitor (2026-11-18): o bot avisa por falar, trabalha e termina em texto puro: o texto final
+    era perdido, porque o turno já tinha falado."""
+    from workers.conversa import _texto_final_depois_de_trabalho
+
+    resultado = _turno_com_aviso("O café está R$ 30 o quilo.")
+    assert _texto_final_depois_de_trabalho(resultado, "O café está R$ 30 o quilo.")
+
+
+def test_sobra_logo_depois_de_falar_e_repeticao_nao_saem() -> None:
+    from workers.conversa import _texto_final_depois_de_trabalho
+
+    # sem trabalho entre o falar e o texto: é sobra ("Pronto, mandei acima")
+    sobra = _turno_com_aviso("Pronto.", trabalho_depois=False)
+    assert not _texto_final_depois_de_trabalho(sobra, "Pronto.")
+    # o texto final repete a última fala
+    repetida = _turno_com_aviso("vou   PESQUISAR.")
+    assert not _texto_final_depois_de_trabalho(repetida, "vou   PESQUISAR.")
+    # turno sem falar nenhum: quem cuida é a contagem de mensagens (depois == antes)
+    sem_fala = {"messages": [HumanMessage("x"), AIMessage("Oi")]}
+    assert not _texto_final_depois_de_trabalho(sem_fala, "Oi")
+
+
+async def test_worker_entrega_o_texto_final_depois_do_aviso(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    falas: list[str] = []
+
+    @asynccontextmanager
+    async def sessoes():  # type: ignore[no-untyped-def]
+        yield _Sessao([5])  # o aviso já entrou: 4 → 5 mensagens
+
+    async def montar_e_rodar_agente(**_: Any) -> dict[str, Any]:
+        return _turno_com_aviso("O café está R$ 30 o quilo.")
+
+    async def falar(args: Any, _contexto: Any) -> str:
+        falas.append(args.texto)
+        return "ok"
+
+    async def publicar(*_: Any, **__: Any) -> None:
+        return None
+
+    monkeypatch.setattr("app.agentes.montar_e_rodar_agente", montar_e_rodar_agente)
+    monkeypatch.setattr("app.ferramentas.falar.falar", falar)
+    monkeypatch.setattr(conversa, "publicar_evento", publicar)
+    from types import SimpleNamespace
+
+    contexto = SimpleNamespace(
+        usuario_id=uuid4(), agente_id=uuid4(), conversa_id=uuid4(), papel="individual"
+    )
+    ctx = {"sessoes": sessoes, "checkpointer": None, "redis_eventos": None}
+    await conversa._rodar_e_falar(ctx, contexto, [], antes=4, resposta=None)
+    assert falas == ["O café está R$ 30 o quilo."]
+
+
 class _Sessao:
     def __init__(self, contagens: list[int]) -> None:
         self._contagens = contagens

@@ -60,6 +60,37 @@ def _texto_da_resposta(resultado: dict[str, Any]) -> str:
     return _texto_do_conteudo(ultima.content)
 
 
+def _normalizar(texto: str) -> str:
+    return " ".join(texto.split()).casefold()
+
+
+def _texto_final_depois_de_trabalho(resultado: dict[str, Any], texto: str) -> bool:
+    """O turno já falou, mas só como aviso: depois do último ``falar`` vieram outras ferramentas e
+    o modelo terminou a resposta em texto puro, que se perdia (decisão do Heitor, 2026-11-18).
+
+    Fica de fora o texto que vem logo depois de um ``falar`` sem trabalho no meio (sobra do tipo
+    "Pronto, mandei acima") e o que repete a última fala. Olha só o turno atual (desde a última
+    mensagem do usuário).
+    """
+    mensagens = resultado.get("messages") or []
+    inicio = max((i for i, m in enumerate(mensagens) if isinstance(m, HumanMessage)), default=-1)
+    ultimo_falar = ultimo_trabalho = -1
+    ultima_fala = ""
+    for i, m in enumerate(mensagens[inicio + 1 :], start=inicio + 1):
+        if isinstance(m, AIMessage):
+            for chamada in m.tool_calls or []:
+                if chamada.get("name") == "falar":
+                    ultima_fala = str((chamada.get("args") or {}).get("texto") or "")
+        elif isinstance(m, ToolMessage):
+            if m.name == "falar":
+                ultimo_falar = i
+            else:
+                ultimo_trabalho = i
+    if ultimo_falar < 0 or ultimo_trabalho < ultimo_falar:
+        return False
+    return _normalizar(texto) != _normalizar(ultima_fala)
+
+
 async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
     """Põe o pedido na fila persistida do agente e manda despachar. Quem roda o turno é
     ``executar_item_fila`` (workers/equipe.py), para que a 2ª mensagem a um agente ocupado, a
@@ -366,7 +397,9 @@ async def _rodar_e_falar(
                 .where(Mensagem.conversa_id == contexto.conversa_id)
             )
         texto = _texto_da_resposta(resultado)
-        if (antes is None or depois == antes) and texto:
+        if texto and (
+            antes is None or depois == antes or _texto_final_depois_de_trabalho(resultado, texto)
+        ):
             # O modelo respondeu em texto puro: o worker fala por ele.
             from app.agentes.middleware.conversa import coletar_fontes, fontes_do_turno
 
