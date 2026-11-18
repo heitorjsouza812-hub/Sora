@@ -63,8 +63,6 @@ LIVRES: frozenset[str] = frozenset(
         "concluir_pendencia",
         "remover_pendencia",
         "ler_habilidade",
-        "criar_habilidade",
-        "atualizar_habilidade",
         "gerar_grafico",
         # fase 3: navegar e ler não enviam nada
         "navegador_abrir",
@@ -115,6 +113,10 @@ CARTAO_FIXO: frozenset[str] = frozenset(
         "criar_agente",
         "propor_instrucoes",
         "esquecer_memoria",
+        # Habilidade vale para todos os bots do usuário: um bot que leu uma página maliciosa não
+        # pode criar nem reescrever uma sozinho (decisão do Heitor, 2026-11-18).
+        "criar_habilidade",
+        "atualizar_habilidade",
         "apagar_habilidade",
         "adicionar_servidor_mcp",
     }

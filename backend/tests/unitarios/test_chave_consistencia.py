@@ -98,6 +98,8 @@ def test_ferramentas_com_efeito_nunca_sao_livres() -> None:
         assert politica_da_ferramenta(nome) is Politica.REVISOR, nome
     for nome in (
         "esquecer_memoria",
+        "criar_habilidade",
+        "atualizar_habilidade",
         "apagar_habilidade",
         "adicionar_servidor_mcp",
         "propor_instrucoes",

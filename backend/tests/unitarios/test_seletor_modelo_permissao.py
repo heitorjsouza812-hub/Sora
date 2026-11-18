@@ -238,8 +238,8 @@ def test_programas_bloqueados_do_pc_estao_todos_cobertos() -> None:
 
 @pytest.mark.parametrize(
     "ferramenta",
-    ["criar_agente", "propor_instrucoes", "esquecer_memoria", "apagar_habilidade",
-     "adicionar_servidor_mcp"],
+    ["criar_agente", "propor_instrucoes", "esquecer_memoria", "criar_habilidade",
+     "atualizar_habilidade", "apagar_habilidade", "adicionar_servidor_mcp"],
 )  # fmt: skip
 def test_cartao_fixo_nunca_passa_sozinho(ferramenta: str) -> None:
     for modo in MODOS:

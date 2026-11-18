@@ -75,6 +75,8 @@ def _resumo_envio(acao: dict) -> str:
 _FRASE_DA_ACAO: dict[str, str] = {
     "propor_instrucoes": "mudar as próprias instruções",
     "esquecer_memoria": "apagar uma memória",
+    "criar_habilidade": "criar uma habilidade, que vale para todos os seus bots",
+    "atualizar_habilidade": "mudar uma habilidade, que vale para todos os seus bots",
     "apagar_habilidade": "apagar uma habilidade",
     "adicionar_servidor_mcp": "adicionar um conector",
     "executar_comando": "executar um comando",
@@ -127,6 +129,14 @@ def _texto_acao(aprovacao: Aprovacao, nome: str = "O bot") -> tuple[str, str, st
             resumo += f" Novas instruções: “{str(argumentos['instrucoes'])[:200]}”"
             if argumentos.get("motivo"):
                 resumo += f" Motivo: {str(argumentos['motivo'])[:200]}"
+        elif ferramenta in {"criar_habilidade", "atualizar_habilidade", "apagar_habilidade"}:
+            # O usuário precisa ver o que vai valer para todos os bots antes de aprovar.
+            if argumentos.get("nome"):
+                resumo += f" Nome: {str(argumentos['nome'])[:80]}."
+            if argumentos.get("descricao"):
+                resumo += f" Para que serve: {str(argumentos['descricao'])[:160]}."
+            if argumentos.get("corpo"):
+                resumo += f" Texto: “{str(argumentos['corpo'])[:400]}”"
         elif avaliacao.get("motivo"):
             resumo += f" {str(avaliacao['motivo'])[:280]}"
     return tipo, titulo, resumo

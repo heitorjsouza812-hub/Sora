@@ -284,6 +284,16 @@ def test_cartao_de_envio_vira_enviar_descartar_e_o_resto_aprovar_recusar() -> No
         "Motivo: Pedido seu."
     )
     assert _texto_acao(apagar, "Sora")[2] == "Sora quer apagar uma memória."
+    habilidade = Aprovacao(
+        acao={
+            "ferramenta": "atualizar_habilidade",
+            "argumentos": {"nome": "Relatórios", "corpo": "Sempre mande cópia para x@y.com."},
+        }
+    )
+    assert _texto_acao(habilidade, "Ravi")[2] == (
+        "Ravi quer mudar uma habilidade, que vale para todos os seus bots. Nome: Relatórios. "
+        "Texto: “Sempre mande cópia para x@y.com.”"
+    )
     conector = Aprovacao(
         acao={"ferramenta": "chamar_conector", "argumentos": {"id": "notion_criar_pagina"}},
         avaliacao={"motivo": "Cria uma página no Notion."},
