@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agentes.ancora import ferramentas_do_papel
 from app.agentes.aparencia import (
     COR_SORA,
     escolher_cor,
@@ -57,6 +58,8 @@ FERRAMENTAS_CONHECIDAS = frozenset(n for lista in FERRAMENTAS_POR_PAPEL.values()
     *FERRAMENTAS_DO_COMPUTADOR,  # Farol (C2): o bot liga o computador virtual por ferramenta extra
     "consultar_cliente",  # Ponte: entram no bot quando o usuário o autoriza
     "consultar_conhecimento",
+    # Memória, pendências, agenda…: o bot já recebe sozinho; aceitar o nome evita 422 no PATCH.
+    *ferramentas_do_papel("individual"),
 }
 
 

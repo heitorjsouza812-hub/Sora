@@ -23,7 +23,21 @@ if TYPE_CHECKING:
 
 PAPEIS_ENXUTOS = frozenset({"sora", "individual"})
 
-ESSENCIAIS = frozenset({"falar", "perguntar", "lembrar", "buscar_memoria", "propor_instrucoes"})
+ESSENCIAIS = frozenset(
+    {
+        "falar",
+        "perguntar",
+        "lembrar",
+        "buscar_memoria",
+        "propor_instrucoes",
+        # Agenda direto: no teste ao vivo o modelo não procurava no catálogo e o lembrete se
+        # perdia. O tamanho não é decidido pelo plano grátis da Groq (só existe nos testes; Heitor,
+        # 2026-11-18).
+        "agendar",
+        "listar_agendamentos",
+        "cancelar_agendamento",
+    }
+)
 """Pequenas, de uso comum e com efeito na tela (chip "Guardei isto", cartão de instruções)."""
 
 GRUPO_DO_NAVEGADOR = "navegador"
@@ -58,7 +72,7 @@ def nomes_diretos(nomes: list[str], contexto: ContextoAgente) -> list[str]:
     """Dos ``nomes`` permitidos, os que vão direto no pedido ao modelo (ordem preservada)."""
     if contexto.papel not in PAPEIS_ENXUTOS:
         return list(nomes)
-    from app.ferramentas.permissoes import ferramentas_do_agente
+    from app.ferramentas.permissoes import ferramentas_do_bot
 
     habilitadas = set(ESSENCIAIS)
     if contexto.papel == "sora":
@@ -66,7 +80,7 @@ def nomes_diretos(nomes: list[str], contexto: ContextoAgente) -> list[str]:
 
         habilitadas.update(FERRAMENTAS_POR_PAPEL["sora"])
     else:
-        habilitadas.update(ferramentas_do_agente("individual", contexto.ferramentas_do_bot))
+        habilitadas.update(ferramentas_do_bot(contexto.ferramentas_do_bot))
     habilitadas.update(contexto.ferramentas_extras)
     from app.agentes.ancora import NAVEGADOR_DIRETO
 

@@ -86,9 +86,13 @@ def _texto_final_depois_de_trabalho(resultado: dict[str, Any], texto: str) -> bo
                 ultimo_falar = i
             else:
                 ultimo_trabalho = i
-    if ultimo_falar < 0 or ultimo_trabalho < ultimo_falar:
+    if ultimo_falar < 0:
         return False
-    return _normalizar(texto) != _normalizar(ultima_fala)
+    if _normalizar(texto) in _normalizar(ultima_fala):
+        return False
+    # Sem trabalho entre a fala e o texto, só passa o que a fala anunciou ("Segue a lista:"); o
+    # resto é sobra do tipo "Pronto, mandei acima".
+    return ultimo_trabalho > ultimo_falar or ultima_fala.rstrip().endswith(":")
 
 
 async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:

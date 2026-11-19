@@ -94,6 +94,18 @@ def test_sobra_logo_depois_de_falar_e_repeticao_nao_saem() -> None:
     # o texto final repete a última fala
     repetida = _turno_com_aviso("vou   PESQUISAR.")
     assert not _texto_final_depois_de_trabalho(repetida, "vou   PESQUISAR.")
+    # a fala anunciou o que vem ("Segue a lista:") e a lista veio em texto puro: entrega
+    anuncio = {
+        "messages": [
+            HumanMessage("minhas pendências"),
+            _chamada("listar_pendencias", {}, "c1"),
+            ToolMessage("1. Pagar luz", tool_call_id="c1", name="listar_pendencias"),
+            _chamada("falar", {"texto": "Segue a lista atual:"}, "c2"),
+            ToolMessage("Mensagem enviada ao usuário.", tool_call_id="c2", name="falar"),
+            AIMessage("1. Pagar luz"),
+        ]
+    }
+    assert _texto_final_depois_de_trabalho(anuncio, "1. Pagar luz")
     # turno sem falar nenhum: quem cuida é a contagem de mensagens (depois == antes)
     sem_fala = {"messages": [HumanMessage("x"), AIMessage("Oi")]}
     assert not _texto_final_depois_de_trabalho(sem_fala, "Oi")

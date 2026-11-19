@@ -39,6 +39,11 @@ _CONVERSA = (
     "enviar_para_agente",
     "consultar_cliente",
     "consultar_conhecimento",
+    # Agenda (Relógio): estava registrada mas nenhum papel a recebia; a Sora dizia "vou lembrar
+    # você" e só gravava memória (Faro-3, 2026-11-18).
+    "agendar",
+    "listar_agendamentos",
+    "cancelar_agendamento",
 )
 
 # Conjunto enxuto: cada esquema vai em toda chamada, e planos gratuitos limitam os tokens por

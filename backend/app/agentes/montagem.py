@@ -58,6 +58,10 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "mensagem_especialista",
         "parar_especialista",
         "ler_anexo",
+        # O prompt manda usar as duas em pedido simples; sem elas a Sora inventava uma recusa
+        # (Faro-3, 2026-11-18). Mesma lista de ``app/ferramentas/permissoes.py``.
+        "buscar_web",
+        "ler_pagina",
     ),
     "pesquisador": ("buscar_web", "ler_pagina", "ler_anexo", *FERRAMENTAS_NAVEGADOR, "entregar"),
     "redator": ("ler_anexo", "escrever_arquivo", "entregar"),
@@ -130,9 +134,9 @@ def nomes_das_ferramentas(contexto: ContextoAgente) -> list[str]:
 
     base = FERRAMENTAS_POR_PAPEL[contexto.papel]
     if contexto.papel == "individual" and contexto.ferramentas_do_bot is not None:
-        from app.ferramentas.permissoes import ferramentas_do_agente
+        from app.ferramentas.permissoes import ferramentas_do_bot
 
-        base = tuple(ferramentas_do_agente("individual", contexto.ferramentas_do_bot))
+        base = tuple(ferramentas_do_bot(contexto.ferramentas_do_bot))
     return list(
         dict.fromkeys(
             (

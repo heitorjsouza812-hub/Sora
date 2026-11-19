@@ -15,6 +15,10 @@ FERRAMENTAS_POR_PAPEL: dict[str, list[str]] = {
         "mensagem_especialista",
         "parar_especialista",
         "ler_anexo",
+        # O prompt da Sora manda usar as duas em pedido simples, mas ela não as tinha e inventava
+        # uma recusa (Faro-3, 2026-11-18).
+        "buscar_web",
+        "ler_pagina",
     ],
     "pesquisador": ["buscar_web", "ler_pagina", "ler_anexo", "entregar"],
     "redator": ["ler_anexo", "escrever_arquivo", "entregar"],
@@ -43,6 +47,18 @@ IMPLICITAS: dict[str, tuple[str, ...]] = {
 }
 """Ferramenta que vem junto de outra que o bot já tem (Vela-12): quem age no computador também
 abre programa pelo nome (lista fechada; no PC do usuário passa pelo cartão do programa)."""
+
+
+def ferramentas_do_bot(lista_do_bot: list[str] | None) -> list[str]:
+    """Ferramentas de um bot 1:1: a lista dele (o que o app mostra) mais falar e perguntar.
+
+    Antes a lista padrão do papel ``individual`` era sempre somada: tirar ``buscar_web`` do bot
+    não adiantava e ele pesquisava mesmo assim (Faro-3, 2026-11-18). Bot sem lista gravada (os
+    antigos, ``{}``) continua com o padrão.
+    """
+    if not lista_do_bot:
+        return ferramentas_do_agente("individual")
+    return ferramentas_do_agente("individual_minimo", ["falar", "perguntar", *lista_do_bot])
 
 
 def ferramentas_do_agente(papel: str, extras: list[str] | None = None) -> list[str]:
