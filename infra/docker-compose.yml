@@ -34,7 +34,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
     networks: [interna]
 
@@ -45,6 +46,13 @@ services:
       --proxy-headers --forwarded-allow-ips=172.28.0.0/16
     volumes:
       - anexos:/srv/sora/arquivos
+    healthcheck:
+      # /health/pronto: banco e Redis respondem (o /health só diz que o processo está vivo).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/pronto', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 6
+      start_period: 20s
 
   worker:
     <<: *backend
@@ -164,7 +172,12 @@ services:
 
   redis:
     image: redis:7.4.7-alpine@sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf
-    command: redis-server --appendonly yes
+    # Com senha: a rede "interna" também tem o Caddy; um contêiner comprometido não lê nem apaga
+    # a fila, os eventos e os limites de login. O REDIS_URL do .env leva a mesma senha.
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_SENHA\""]
+    environment:
+      REDIS_SENHA: ${REDIS_SENHA:?defina REDIS_SENHA no .env}
+      REDISCLI_AUTH: ${REDIS_SENHA}
     volumes:
       - redis_data:/data
     healthcheck:

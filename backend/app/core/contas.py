@@ -6,6 +6,7 @@ banco para poderem ser testadas sem PostgreSQL.
 
 import asyncio
 import json
+import logging
 import shutil
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -14,7 +15,18 @@ from typing import Literal
 from uuid import UUID
 
 from redis.asyncio import Redis
-from sqlalchemy import Select, delete, func, select, text, update
+from sqlalchemy import (
+    ColumnElement,
+    ForeignKey,
+    Select,
+    Table,
+    delete,
+    func,
+    or_,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,41 +39,40 @@ from app.core.redis import (
 )
 from app.eventos.streams import canal_conversa, canal_usuario
 from app.ferramentas.arquivos import CaminhoInseguro, caminho_do_anexo, dentro_da_pasta
+from app.modelos.base import Base
 from app.modelos.enumeracoes import TipoAgente
 from app.modelos.esquemas import CadastroEntrada, LoginEntrada
 from app.modelos.tabelas import (
     Agente,
     Anexo,
-    Aprovacao,
     Cadeia,
-    ChamadaModelo,
     Conversa,
     Convite,
-    Entrega,
     Etapa,
-    Evidencia,
-    Memoria,
-    Mensagem,
-    ModeloDisponivel,
-    Passo,
-    Pergunta,
     Provedor,
-    RegistroAcao,
-    RegraPermissao,
-    Roteamento,
     Sessao,
-    TokenEmail,
     Usuario,
 )
+
+registro = logging.getLogger(__name__)
 
 CABECALHO_CLIENTE = "X-Sora-Cliente"
 CLIENTE_WEB = "web"
 CLIENTE_DESKTOP = "desktop"
 JANELA_TOLERANCIA_RENOVACAO = timedelta(seconds=30)
+"""Tempo para recuperar uma resposta de renovação perdida devolvendo o MESMO par (idempotente:
+várias abas renovando juntas recebem o mesmo token)."""
+JANELA_REEMISSAO = timedelta(minutes=5)
+"""Depois dos 30 s e até aqui, o token imediatamente anterior ainda pode pedir um par NOVO, se o
+atual nunca foi usado (resposta perdida em F5 seguidos). Passado isso, é reuso: a família cai."""
+MAX_REEMISSOES = 3
+"""Quantas reemissões seguidas a partir do mesmo token anterior. Cada uma joga o token atual (nunca
+usado) no histórico: se ele aparecer depois, havia duas cópias da sessão e a família é revogada."""
 MAX_HISTORICO_HASHES = 20
 """Gerações antigas de token lembradas por sessão (para detectar reuso). Mais velhas que isso são
 esquecidas: o token antigo continua recusado (``invalido``), só deixa de revogar a família."""
-"""Tempo para recuperar uma resposta de renovação perdida sem tratar o token como roubado."""
+RETENCAO_SESSOES_VENCIDAS = timedelta(days=30)
+"""Sessões encerradas ou vencidas há mais que isto são apagadas pela rotina do worker."""
 
 # Login: só **falhas** contam (API-04). O limite curto é por e-mail + IP, então quem não está no
 # IP da vítima não a tranca; o teto por e-mail (todas as origens) só segura força bruta
@@ -140,8 +151,15 @@ def cliente_da_requisicao(cabecalho: str | None) -> str:
 
 def classificar_token(
     sessao: Sessao | None, token_hash: str, agora: datetime
-) -> Literal["valido", "tolerado", "reutilizado", "invalido"]:
-    """Tolera apenas o anterior dentro da janela fixa da rotação original."""
+) -> Literal["valido", "tolerado", "reemitir", "reutilizado", "invalido"]:
+    """Classifica o token de renovação apresentado.
+
+    - ``tolerado``: o anterior, até 30 s depois da rotação (devolve o mesmo par guardado).
+    - ``reemitir``: o anterior, de 30 s a 5 min depois, com o atual nunca usado (se fosse usado, o
+      anterior já estaria no histórico) e no máximo ``MAX_REEMISSOES`` vezes: é a resposta da
+      renovação que se perdeu (F5 seguidos), não roubo. O atual vai para o histórico.
+    - ``reutilizado``: qualquer outro uso de token velho; a família inteira é revogada.
+    """
     if sessao is None or sessao.encerrada_em is not None or sessao.expira_em <= agora:
         return "invalido"
     if sessao.token_hash == token_hash:
@@ -152,6 +170,8 @@ def classificar_token(
         desde_rotacao = agora - sessao.anterior_rotacionado_em
         if timedelta(0) <= desde_rotacao <= JANELA_TOLERANCIA_RENOVACAO:
             return "tolerado"
+        if desde_rotacao <= JANELA_REEMISSAO and (sessao.reemissoes or 0) < MAX_REEMISSOES:
+            return "reemitir"
         return "reutilizado"
     return "reutilizado" if token_hash in (sessao.historico_hashes or []) else "invalido"
 
@@ -195,7 +215,9 @@ async def cadastrar(
     if await sessao.scalar(select(Usuario.id).where(func.lower(Usuario.email) == email)):
         raise ErroEmailEmUso()
     usuario = Usuario(
-        email=email, nome=dados.nome.strip(), senha_hash=seguranca.gerar_hash_senha(dados.senha)
+        email=email,
+        nome=dados.nome.strip(),
+        senha_hash=await seguranca.gerar_hash_senha_em_thread(dados.senha),
     )
     sessao.add(usuario)
     try:
@@ -218,18 +240,17 @@ async def _abrir_sessao(
     sessao: AsyncSession, usuario_id: UUID, cliente: str, ip: str | None, agente_usuario: str | None
 ) -> tuple[str, str]:
     token, token_hash = seguranca.gerar_token_renovacao()
-    sessao.add(
-        Sessao(
-            usuario_id=usuario_id,
-            token_hash=token_hash,
-            cliente=cliente,
-            expira_em=datetime.now(UTC) + seguranca.RENOVACAO_VALIDADE,
-            ip=ip,
-            agente_usuario=agente_usuario,
-        )
+    nova = Sessao(
+        usuario_id=usuario_id,
+        token_hash=token_hash,
+        cliente=cliente,
+        expira_em=datetime.now(UTC) + seguranca.RENOVACAO_VALIDADE,
+        ip=ip,
+        agente_usuario=agente_usuario,
     )
+    sessao.add(nova)
     await sessao.flush()
-    return token, seguranca.criar_token_acesso({"sub": str(usuario_id)})
+    return token, _token_acesso_da_sessao(nova)
 
 
 async def entrar(
@@ -257,7 +278,7 @@ async def entrar(
             raise ErroLimite(espera)
         reservas[chave] = membro
     usuario = await sessao.scalar(select(Usuario).where(func.lower(Usuario.email) == email))
-    senha_ok = seguranca.verificar_senha(
+    senha_ok = await seguranca.verificar_senha_em_thread(
         dados.senha, usuario.senha_hash if usuario else _HASH_FALSO
     )
     if usuario is None or not senha_ok:
@@ -310,12 +331,51 @@ async def limpar_pares_vencidos(sessao: AsyncSession, agora: datetime | None = N
     return resultado.rowcount or 0
 
 
-async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, str]:
+def chave_revogacao_sessao(sessao_id: UUID | str) -> str:
+    return f"auth:revogada:sessao:{sessao_id}"
+
+
+def chave_revogacao_usuario(usuario_id: UUID | str) -> str:
+    return f"auth:revogada:usuario:{usuario_id}"
+
+
+async def revogar_acessos(
+    redis: Redis | None, *, sessao_id: UUID | None = None, usuario_id: UUID | None = None
+) -> None:
+    """Derruba na hora os tokens de ACESSO já emitidos (eles valem 15 min e não ficam no banco).
+
+    Grava uma marca no Redis com a mesma validade do token de acesso; ``usuario_atual`` recusa
+    tokens da sessão (ou do usuário) marcados. Falha do Redis não impede sair/apagar."""
+    if redis is None:
+        return
+    validade = int(seguranca.ACESSO_VALIDADE.total_seconds()) + 60
+    chaves = []
+    if sessao_id is not None:
+        chaves.append(chave_revogacao_sessao(sessao_id))
+    if usuario_id is not None:
+        chaves.append(chave_revogacao_usuario(usuario_id))
+    try:
+        for chave in chaves:
+            await redis.set(chave, "1", ex=validade)
+    except Exception:  # revogação é reforço; a sessão já foi encerrada no banco
+        registro.warning("não consegui marcar a revogação dos tokens de acesso", exc_info=True)
+
+
+def _token_acesso_da_sessao(existente: Sessao) -> str:
+    dados = {"sub": str(existente.usuario_id), "sid": str(existente.id)}
+    return seguranca.criar_token_acesso(dados)
+
+
+async def renovar(
+    sessao: AsyncSession, token: str | None, redis: Redis | None = None
+) -> tuple[str, str, str]:
     """Rotaciona uma vez e recupera o mesmo par por 30 s, sob FOR UPDATE.
 
-    A janela não se estende nas recuperações. Hashes de gerações antigas (as últimas
-    ``MAX_HISTORICO_HASHES``) permitem revogar a família mesmo quando o token já não é o
-    imediatamente anterior. O par cifrado some assim que a janela fecha.
+    A janela não se estende nas recuperações. De 30 s a 5 min, o token anterior ainda ganha um
+    par novo se o atual nunca foi usado (``reemitir``: a resposta se perdeu, ex. F5 seguidos).
+    Hashes de gerações antigas (as últimas ``MAX_HISTORICO_HASHES``) permitem revogar a família
+    mesmo quando o token já não é o imediatamente anterior. O par cifrado some assim que a janela
+    fecha.
     """
     if not token:
         raise ErroCredenciais("Sessão expirada. Entre de novo.")
@@ -330,7 +390,8 @@ async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, st
         existente.encerrada_em = agora
         existente.par_atual_cifrado = None
         await sessao.commit()  # o encerramento precisa sobreviver ao erro que sai daqui
-    if veredito not in ("valido", "tolerado") or existente is None:
+        await revogar_acessos(redis, sessao_id=existente.id)
+    if veredito not in ("valido", "tolerado", "reemitir") or existente is None:
         raise ErroCredenciais("Sessão expirada. Entre de novo.")
     if veredito == "tolerado":
         if existente.par_atual_cifrado is None:
@@ -344,15 +405,21 @@ async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, st
         )
         return par[0], par[1], existente.cliente
     novo, novo_hash = seguranca.gerar_token_renovacao()
+    # O token atual vai para o histórico nos dois casos: na rotação normal ele vira o anterior;
+    # na reemissão ele nunca foi usado e é abandonado (se aparecer depois, havia duas cópias).
     existente.historico_hashes = [*(existente.historico_hashes or []), existente.token_hash][
         -MAX_HISTORICO_HASHES:
     ]
+    if veredito == "reemitir":
+        existente.reemissoes = (existente.reemissoes or 0) + 1  # o anterior continua o mesmo
+    else:
+        existente.anterior_hash = existente.token_hash
+        existente.reemissoes = 0
     existente.anterior_rotacionado_em = agora
-    existente.anterior_hash = existente.token_hash
     existente.token_hash = novo_hash
     existente.expira_em = agora + seguranca.RENOVACAO_VALIDADE
     await sessao.flush()
-    acesso = seguranca.criar_token_acesso({"sub": str(existente.usuario_id)})
+    acesso = _token_acesso_da_sessao(existente)
     existente.par_atual_cifrado = seguranca.cifrar_segredo(
         json.dumps([novo, acesso]),
         usuario_id=existente.usuario_id,
@@ -362,15 +429,37 @@ async def renovar(sessao: AsyncSession, token: str | None) -> tuple[str, str, st
     return novo, acesso, existente.cliente
 
 
-async def sair(sessao: AsyncSession, token: str | None) -> None:
-    """Encerra a sessão do token (atual ou anterior). Idempotente."""
+async def sair(
+    sessao: AsyncSession, token: str | None, redis: Redis | None = None
+) -> Sessao | None:
+    """Encerra a sessão do token (atual ou anterior) e derruba os tokens de acesso dela.
+    Idempotente. Devolve a sessão que acabou de encerrar (``None`` se não havia o que encerrar)."""
     if not token:
-        return
+        return None
     existente = await _sessao_do_token(sessao, seguranca.hash_token(token))
-    if existente is not None and existente.encerrada_em is None:
-        existente.encerrada_em = datetime.now(UTC)
-        existente.par_atual_cifrado = None
-        await sessao.flush()
+    if existente is None or existente.encerrada_em is not None:
+        return None
+    existente.encerrada_em = datetime.now(UTC)
+    existente.par_atual_cifrado = None
+    await sessao.flush()
+    await revogar_acessos(redis, sessao_id=existente.id)
+    return existente
+
+
+async def apagar_sessoes_vencidas(sessao: AsyncSession, agora: datetime | None = None) -> int:
+    """Apaga sessões encerradas ou vencidas há mais de ``RETENCAO_SESSOES_VENCIDAS``.
+
+    Sem isso a tabela ``sessoes`` só cresce (cada login e cada aparelho deixam uma linha). Roda
+    como rotina do worker, junto da limpeza dos pares cifrados."""
+    limite = (agora or datetime.now(UTC)) - RETENCAO_SESSOES_VENCIDAS
+    resultado = await sessao.execute(
+        delete(Sessao).where(
+            (Sessao.expira_em < limite)
+            | (Sessao.encerrada_em.is_not(None) & (Sessao.encerrada_em < limite))
+        )
+    )
+    await sessao.commit()
+    return resultado.rowcount or 0
 
 
 async def tem_provedor_validado(sessao: AsyncSession, usuario_id: UUID) -> bool:
@@ -428,6 +517,68 @@ async def _apagar_checkpoints(sessao: AsyncSession, threads: list[str]) -> None:
         )
 
 
+def _quebra_ciclo(fk: ForeignKey) -> bool:
+    """FK criada depois das tabelas (``use_alter``): existe para fechar um ciclo entre tabelas."""
+    return bool(fk.use_alter or (fk.constraint is not None and fk.constraint.use_alter))
+
+
+def _tabelas_do_banco() -> list[Table]:
+    """Todas as tabelas do modelo, pais antes dos filhos (``sorted_tables``)."""
+    from app.canais_empresa import tabelas as _canais_empresa  # noqa: F401 - registra no metadata
+    from app.modelos import tabelas as _tabelas  # noqa: F401
+
+    return list(Base.metadata.sorted_tables)
+
+
+TABELAS_SEM_DONO = frozenset({"usuarios", "convites"})
+"""Tabelas que não pertencem a um usuário (``convites`` é do sistema)."""
+
+
+def condicoes_do_usuario(usuario_id: UUID) -> dict[Table, ColumnElement[bool]]:
+    """Para cada tabela, a condição SQL que acha as linhas que pertencem ao usuário.
+
+    Derivada das chaves estrangeiras, não de uma lista escrita à mão: uma linha é do usuário se
+    aponta para ``usuarios`` ou para uma linha (de outra tabela) que é do usuário. Tabela nova
+    entra sozinha; ``test_apagar_conta_cobre_todas_as_tabelas`` falha se alguma ficar sem dono.
+    As FKs que só quebram ciclos (``use_alter``) não contam: elas são zeradas antes.
+    """
+    tabelas = _tabelas_do_banco()
+    usuarios = Base.metadata.tables["usuarios"]
+    condicoes: dict[Table, ColumnElement[bool]] = {}
+    for tabela in tabelas:
+        if tabela.name in TABELAS_SEM_DONO:
+            continue
+        partes: list[ColumnElement[bool]] = []
+        for fk in sorted(tabela.foreign_keys, key=lambda f: f.parent.name):
+            if _quebra_ciclo(fk):
+                continue
+            alvo = fk.column.table
+            if alvo is usuarios:
+                partes.append(fk.parent == usuario_id)
+            elif alvo is not tabela and alvo in condicoes:
+                partes.append(fk.parent.in_(select(fk.column).where(condicoes[alvo])))
+        if partes:
+            condicoes[tabela] = or_(*partes)
+    return condicoes
+
+
+async def apagar_linhas_do_usuario(sessao: AsyncSession, usuario_id: UUID) -> None:
+    """Apaga, no banco, tudo o que é do usuário e o próprio usuário (sem commit).
+
+    1. zera as FKs que fecham ciclos (``agentes.cadeia_id``, ``mensagens_canal.tarefa_id``…);
+    2. apaga os filhos antes dos pais (ordem inversa de ``sorted_tables``);
+    3. apaga o usuário.
+    """
+    condicoes = condicoes_do_usuario(usuario_id)
+    for tabela, condicao in condicoes.items():
+        for fk in tabela.foreign_keys:
+            if _quebra_ciclo(fk):
+                await sessao.execute(update(tabela).where(condicao).values({fk.parent.name: None}))
+    for tabela in reversed(list(condicoes)):
+        await sessao.execute(delete(tabela).where(condicoes[tabela]))
+    await sessao.execute(delete(Usuario).where(Usuario.id == usuario_id))
+
+
 async def apagar_conta(
     sessao: AsyncSession,
     usuario_id: UUID,
@@ -449,7 +600,7 @@ async def apagar_conta(
         espera, membro = await reservar_vaga(redis, chave_limite, *LIMITE_APAGAR_CONTA)
         if espera:
             raise ErroLimite(espera)
-    if not seguranca.verificar_senha(senha, usuario.senha_hash):
+    if not await seguranca.verificar_senha_em_thread(senha, usuario.senha_hash):
         raise ErroSenhaIncorreta()
     if redis is not None:
         await devolver_vaga(redis, chave_limite, membro)
@@ -461,9 +612,6 @@ async def apagar_conta(
     conversas = select(Conversa.id).where(Conversa.usuario_id == usuario_id)
     cadeias = select(Cadeia.id).where(Cadeia.usuario_id == usuario_id)
     etapas = select(Etapa.id).where(Etapa.cadeia_id.in_(cadeias))
-    mensagens = select(Mensagem.id).where(Mensagem.conversa_id.in_(conversas))
-    agentes = select(Agente.id).where(Agente.usuario_id == usuario_id)
-    provedores = select(Provedor.id).where(Provedor.usuario_id == usuario_id)
 
     ids_conversas: list[UUID] = list((await sessao.scalars(conversas)).all())
     ids_etapas: list[UUID] = list((await sessao.scalars(etapas)).all())
@@ -471,40 +619,11 @@ async def apagar_conta(
         sessao,
         [thread_da_conversa(c) for c in ids_conversas] + [thread_da_etapa(e) for e in ids_etapas],
     )
-
-    await sessao.execute(
-        update(Agente).where(Agente.usuario_id == usuario_id).values(cadeia_id=None)
-    )
-    passos_do_usuario = delete(Passo).where(
-        (Passo.etapa_id.in_(etapas)) | (Passo.agente_id.in_(agentes))
-    )
-    for comando in (
-        delete(RegistroAcao).where(RegistroAcao.usuario_id == usuario_id),
-        delete(Aprovacao).where(Aprovacao.usuario_id == usuario_id),
-        delete(RegraPermissao).where(RegraPermissao.usuario_id == usuario_id),
-        delete(Evidencia).where(Evidencia.usuario_id == usuario_id),
-        delete(Memoria).where(Memoria.usuario_id == usuario_id),
-        delete(Pergunta).where(Pergunta.conversa_id.in_(conversas)),
-        delete(ChamadaModelo).where(ChamadaModelo.usuario_id == usuario_id),
-        delete(Entrega).where(Entrega.usuario_id == usuario_id),
-        passos_do_usuario,
-        delete(Etapa).where(Etapa.cadeia_id.in_(cadeias)),
-        delete(Cadeia).where(Cadeia.usuario_id == usuario_id),
-        delete(Roteamento).where(Roteamento.mensagem_id.in_(mensagens)),
-        delete(Mensagem).where(Mensagem.conversa_id.in_(conversas)),
-        delete(Conversa).where(Conversa.usuario_id == usuario_id),
-        delete(Agente).where(Agente.usuario_id == usuario_id),
-        delete(ModeloDisponivel).where(ModeloDisponivel.provedor_id.in_(provedores)),
-        delete(Provedor).where(Provedor.usuario_id == usuario_id),
-        delete(Anexo).where(Anexo.usuario_id == usuario_id),
-        delete(TokenEmail).where(TokenEmail.usuario_id == usuario_id),
-        delete(Sessao).where(Sessao.usuario_id == usuario_id),
-        delete(Usuario).where(Usuario.id == usuario_id),
-    ):
-        await sessao.execute(comando)
+    await apagar_linhas_do_usuario(sessao, usuario_id)
     # Commit ANTES de apagar Redis e arquivos: se o banco falhar, nada irreversível foi feito;
     # se o processo cair depois, sobram só arquivos órfãos, nunca uma conta sem arquivos.
     await sessao.commit()
+    await revogar_acessos(redis, usuario_id=usuario_id)
     if redis is not None:
         await redis.delete(chave_limite)
 

@@ -39,6 +39,7 @@ from app.computador.interface import (
     Tela,
     caminho_relativo,
 )
+from app.computador.processo import rodar_limitado
 from app.ferramentas.base import ErroFerramenta
 
 registro = logging.getLogger(__name__)
@@ -57,6 +58,9 @@ MAX_PROCESSOS = 512
 TMP_TAMANHO = "256m"
 HOME_TAMANHO = "512m"
 SHM_TAMANHO = "256m"
+LIMITE_SAIDA_BYTES = 64 * 1024 * 1024
+"""Teto da saída de um ``docker`` (capturas de tela PNG, leitura de arquivos já limitada por
+``head -c``): nada que o worker guarde na memória passa disto."""
 PRAZO_COMANDO_S = 30
 PRAZO_PRONTO_S = 40
 MAX_ARQUIVOS_LISTADOS = 200
@@ -85,18 +89,24 @@ class ClienteDocker:
     ) -> subprocess.CompletedProcess[bytes]:
         if shutil.which(self.docker) is None:
             raise ErroDocker("O computador virtual não está disponível neste servidor.")
-        try:
-            return subprocess.run(
-                [self.docker, *args],
-                env=self._ambiente(),
-                input=entrada,
-                stdin=None if entrada is not None else subprocess.DEVNULL,
-                capture_output=True,
-                check=False,
-                timeout=prazo,
-            )
-        except subprocess.TimeoutExpired as erro:
-            raise ErroDocker("O computador virtual demorou demais para responder.") from erro
+        argv = [self.docker, *args]
+        resultado = rodar_limitado(
+            argv,
+            env=self._ambiente(),
+            entrada=entrada,
+            prazo=prazo,
+            limite_bytes=LIMITE_SAIDA_BYTES,
+        )
+        if resultado.estourou_prazo:
+            raise ErroDocker("O computador virtual demorou demais para responder.")
+        if resultado.cortado:
+            raise ErroDocker("O computador virtual devolveu dados demais.")
+        return subprocess.CompletedProcess(
+            argv,
+            -1 if resultado.codigo is None else resultado.codigo,
+            resultado.stdout,
+            resultado.stderr,
+        )
 
     async def rodar(
         self, *args: str, entrada: bytes | None = None, prazo: float = PRAZO_COMANDO_S
@@ -106,6 +116,81 @@ class ClienteDocker:
 
 def nome_do_computador(agente_id: UUID) -> str:
     return f"{PREFIXO}{agente_id.hex}"
+
+
+async def inspecionar_container(cliente: ClienteDocker, nome: str) -> tuple[bool, str] | None:
+    """(rodando?, usuário do rótulo) ou ``None`` se o contêiner não existe."""
+    resultado = await cliente.rodar(
+        "inspect",
+        "--type",
+        "container",
+        "--format",
+        '{{.State.Running}}|{{index .Config.Labels "sora.usuario"}}',
+        nome,
+    )
+    if resultado.returncode != 0:
+        return None
+    rodando, _, usuario = resultado.stdout.decode().strip().partition("|")
+    return rodando == "true", usuario
+
+
+async def garantir_proxy_de_saida(cliente: ClienteDocker, imagem_proxy: str) -> None:
+    """Sobe (se preciso) o proxy de egresso, a única saída de rede dos computadores virtuais e
+    do ``executar_comando`` com internet. Idempotente; corrida de criação vira "Conflict"."""
+    estado = await inspecionar_container(cliente, NOME_PROXY)
+    if estado is not None and estado[0]:
+        return
+    if estado is not None:
+        await cliente.rodar("start", NOME_PROXY)
+        estado = await inspecionar_container(cliente, NOME_PROXY)
+        if estado is not None and estado[0]:
+            return
+        await cliente.rodar("rm", "-f", NOME_PROXY)
+    rede = await cliente.rodar("network", "inspect", REDE_SAIDA)
+    if rede.returncode != 0:
+        await cliente.rodar("network", "create", "--label", f"{ROTULO}.saida=1", REDE_SAIDA)
+    criado = await cliente.rodar(
+        "run",
+        "--detach",
+        "--name",
+        NOME_PROXY,
+        "--network",
+        REDE_SAIDA,
+        "--restart",
+        "unless-stopped",
+        "--read-only",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,size=16m",
+        "--memory",
+        "128m",
+        "--cpus",
+        "0.5",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--label",
+        f"{ROTULO}.proxy=1",
+        imagem_proxy,
+    )
+    if criado.returncode != 0 and b"Conflict" not in criado.stderr:
+        registro.warning("proxy do computador: %s", criado.stderr.decode(errors="replace"))
+        raise ErroDocker(
+            f"A saída de rede do computador virtual não subiu (imagem {imagem_proxy} construída?)."
+        )
+
+
+async def garantir_rede_interna(
+    cliente: ClienteDocker, nome: str, *, rotulo: str = f"{ROTULO}=1"
+) -> None:
+    """Rede ``--internal`` (sem rota para fora), com o proxy de egresso ligado nela."""
+    if (await cliente.rodar("network", "inspect", nome)).returncode != 0:
+        criada = await cliente.rodar("network", "create", "--internal", "--label", rotulo, nome)
+        if criada.returncode != 0 and b"already exists" not in criada.stderr:
+            raise ErroDocker("Não consegui criar a rede do computador virtual.")
+    ligado = await cliente.rodar("network", "connect", "--alias", ALIAS_PROXY, nome, NOME_PROXY)
+    if ligado.returncode != 0 and b"already exists" not in ligado.stderr:
+        raise ErroDocker("Não consegui ligar a saída de rede ao computador virtual.")
 
 
 def argumentos_do_container(
@@ -383,78 +468,14 @@ class GerenteComputadoresDocker:
     _trava_proxy: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def _inspecionar(self, nome: str) -> tuple[bool, str] | None:
-        resultado = await self.cliente.rodar(
-            "inspect",
-            "--type",
-            "container",
-            "--format",
-            '{{.State.Running}}|{{index .Config.Labels "sora.usuario"}}',
-            nome,
-        )
-        if resultado.returncode != 0:
-            return None
-        rodando, _, usuario = resultado.stdout.decode().strip().partition("|")
-        return rodando == "true", usuario
+        return await inspecionar_container(self.cliente, nome)
 
     async def _garantir_proxy(self) -> None:
         async with self._trava_proxy:
-            estado = await self._inspecionar(NOME_PROXY)
-            if estado is not None and estado[0]:
-                return
-            if estado is not None:
-                await self.cliente.rodar("start", NOME_PROXY)
-                estado = await self._inspecionar(NOME_PROXY)
-                if estado is not None and estado[0]:
-                    return
-                await self.cliente.rodar("rm", "-f", NOME_PROXY)
-            rede = await self.cliente.rodar("network", "inspect", REDE_SAIDA)
-            if rede.returncode != 0:
-                await self.cliente.rodar(
-                    "network", "create", "--label", f"{ROTULO}.saida=1", REDE_SAIDA
-                )
-            criado = await self.cliente.rodar(
-                "run",
-                "--detach",
-                "--name",
-                NOME_PROXY,
-                "--network",
-                REDE_SAIDA,
-                "--restart",
-                "unless-stopped",
-                "--read-only",
-                "--tmpfs",
-                "/tmp:rw,noexec,nosuid,size=16m",
-                "--memory",
-                "128m",
-                "--cpus",
-                "0.5",
-                "--cap-drop",
-                "ALL",
-                "--security-opt",
-                "no-new-privileges",
-                "--label",
-                f"{ROTULO}.proxy=1",
-                self.imagem_proxy,
-            )
-            if criado.returncode != 0 and b"Conflict" not in criado.stderr:
-                registro.warning("proxy do computador: %s", criado.stderr.decode(errors="replace"))
-                raise ErroDocker(
-                    "A saída de rede do computador virtual não subiu "
-                    f"(imagem {self.imagem_proxy} construída?)."
-                )
+            await garantir_proxy_de_saida(self.cliente, self.imagem_proxy)
 
     async def _garantir_rede(self, nome: str) -> None:
-        if (await self.cliente.rodar("network", "inspect", nome)).returncode != 0:
-            criada = await self.cliente.rodar(
-                "network", "create", "--internal", "--label", f"{ROTULO}=1", nome
-            )
-            if criada.returncode != 0 and b"already exists" not in criada.stderr:
-                raise ErroDocker("Não consegui criar a rede do computador virtual.")
-        ligado = await self.cliente.rodar(
-            "network", "connect", "--alias", ALIAS_PROXY, nome, NOME_PROXY
-        )
-        if ligado.returncode != 0 and b"already exists" not in ligado.stderr:
-            raise ErroDocker("Não consegui ligar a saída de rede ao computador virtual.")
+        await garantir_rede_interna(self.cliente, nome)
 
     async def _esperar_pronto(self, nome: str) -> None:
         limite = time.monotonic() + PRAZO_PRONTO_S

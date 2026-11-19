@@ -23,6 +23,7 @@ Playwright e para as regras da Sora.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 import unicodedata
 from collections import deque
@@ -30,6 +31,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
@@ -61,6 +63,15 @@ PASSO_ROLAGEM_PX = 100
 MAX_PASSOS_LOTE = 20
 ATRASO_SOLTAR_S = 0.15
 PAUSA_CURSOR_S = 0.28
+ESPERA_ABA_NOVA_S = 0.4
+ESPERA_NAVEGACAO_S = 8.0
+"""Teto da espera pela URL nova quando a ação começou uma navegação (site lento)."""
+MAX_QUADROS = 4
+"""Iframes visíveis lidos junto com a página em cada observação (pagamento, formulário, banner)."""
+MAX_NOS_QUADRO = 400
+QUADRO_MINIMO = (30, 20)
+"""Iframe menor que isto (largura, altura em px) é de rastreamento ou anúncio: fica de fora."""
+"""Quanto o clique que "não mudou nada" espera por uma aba nova (o evento chega uns ms depois)."""
 
 Acao = Literal[
     "clicar",
@@ -236,12 +247,44 @@ class NavegadorArvore:
         self.cursor = cursor
         self.rastro = rastro or Rastro()
         self.leituras = ArmazemLeituras()
+        self._quadro: Any = None
+        """Iframe onde roda o próximo ``_js`` (o da ref resolvida); ``None`` = a página."""
         self._trava = asyncio.Lock()
         self._dialogos: deque[dict[str, str]] = deque(maxlen=20)
         self._dialogos_vistos = 0
+        self._abas_novas: deque[Any] = deque(maxlen=5)
+        self._abas_novas_vistas = 0
+        self._navegacoes = 0
+        self._navegacoes_falhas = 0
         pagina.on("dialog", self._ao_dialogo)
+        pagina.on("popup", self._ao_abrir_aba)
+        pagina.on("request", self._ao_pedido)
+        pagina.on("requestfailed", self._ao_pedido_falhou)
 
     # ---------- infraestrutura ----------
+
+    @staticmethod
+    def _navegacao_da_pagina(pedido: Any) -> bool:
+        try:
+            return bool(pedido.is_navigation_request()) and pedido.frame.parent_frame is None
+        except Exception:
+            return False
+
+    def _ao_pedido(self, pedido: Any) -> None:
+        """Navegação da página principal começou (o clique num link leva centenas de ms para a
+        URL mudar num site de verdade: sem isto a ação voltava "sem confirmar")."""
+        if self._navegacao_da_pagina(pedido):
+            self._navegacoes += 1
+
+    def _ao_pedido_falhou(self, pedido: Any) -> None:
+        if self._navegacao_da_pagina(pedido):
+            self._navegacoes_falhas += 1
+
+    def _ao_abrir_aba(self, nova: Any) -> None:
+        """Link ``target=_blank`` ou ``window.open``: a ação conta que abriu uma aba nova (o motor
+        persistente passa a aba do bot para ela; ``app/navegador/persistente.py``)."""
+        self._abas_novas.append(nova)
+        self._abas_novas_vistas += 1
 
     async def _ao_dialogo(self, dialogo: Any) -> None:
         """alert/confirm/prompt nativos: anota e dispensa (o agente vê em ``dialogos``)."""
@@ -253,9 +296,10 @@ class NavegadorArvore:
             pass
 
     async def _js(self, op: str, arg: dict[str, Any] | None = None) -> Any:
+        alvo = self._quadro if self._quadro is not None else self._pagina
         for tentativa in range(2):
             try:
-                return await self._pagina.evaluate(SCRIPT, {"op": op, "arg": arg or {}})
+                return await alvo.evaluate(SCRIPT, {"op": op, "arg": arg or {}})
             except Exception as erro:  # navegação no meio da leitura destrói o contexto
                 texto = str(erro)
                 if tentativa == 0 and ("context was destroyed" in texto or "navigat" in texto):
@@ -277,6 +321,7 @@ class NavegadorArvore:
     ) -> Resposta:
         inicio = time.monotonic()
         senha = False
+        self._quadro = None  # cada comando começa na página; resolver uma ref leva ao iframe dela
         try:
             dados = await corpo()
             resposta = Resposta.sucesso(comando, dados)
@@ -314,6 +359,11 @@ class NavegadorArvore:
     async def _resolver(self, ref: str) -> tuple[Leitura, EntradaRef]:
         """Reencontra o elemento da ref e o deixa como alvo na página. Falha fechado."""
         leitura, entrada = self.leituras.resolver(ref)
+        if leitura.quadro is not None and _quadro_sumiu(leitura.quadro):
+            raise ErroNavegador(
+                Codigo.REF_VELHA, f"O iframe de {ref} saiu da página. Leia a página de novo."
+            )
+        self._quadro = leitura.quadro
         chave = f"{leitura.id}:{entrada.numero}"
         bruto = await self._js("localizar", {"chave": chave, "evidencia": entrada.evidencia()})
         camadas = {
@@ -422,9 +472,87 @@ class NavegadorArvore:
             superficies = await self._superficies()
             if superficies:
                 dados["superficies"] = superficies
+            if not esqueleto:
+                blocos = await self._ler_quadros(opcoes)
+                if blocos:
+                    dados["arvore"] = [*dados["arvore"], *blocos]
+                    dados["refs"] += sum(b.pop("_refs") for b in blocos)
+                    dados["iframes"] = [b["nome"] for b in blocos]
             return dados
 
         return await self._executar("observar", args, corpo)
+
+    async def _quadros_visiveis(self) -> list[tuple[Any, str]]:
+        """Iframes filhos da página com tamanho de conteúdo, cada um com um nome para o modelo."""
+        achados: list[tuple[Any, str]] = []
+        try:
+            filhos = list(self._pagina.main_frame.child_frames)
+        except Exception:
+            return achados
+        for quadro in filhos:
+            if len(achados) >= MAX_QUADROS:
+                break
+            try:
+                elemento = await quadro.frame_element()
+                caixa = await elemento.bounding_box()
+                if not caixa:
+                    continue
+                if caixa["width"] < QUADRO_MINIMO[0] or caixa["height"] < QUADRO_MINIMO[1]:
+                    continue
+                nome = (
+                    await elemento.get_attribute("title")
+                    or await elemento.get_attribute("aria-label")
+                    or await elemento.get_attribute("name")
+                    or urlsplit(str(quadro.url)).hostname
+                    or "iframe"
+                )
+            except Exception:  # iframe sumindo no meio da leitura
+                continue
+            achados.append((quadro, str(nome)[:80]))
+        return achados
+
+    async def _ler_quadros(self, opcoes: dict[str, Any]) -> list[dict[str, Any]]:
+        """Lê cada iframe visível como uma leitura própria (as refs dele levam ao iframe).
+
+        Antes o conteúdo de iframe não aparecia: pagamento embutido, formulário, banner de
+        cookies e login de outro site eram invisíveis e impossíveis de clicar."""
+        blocos: list[dict[str, Any]] = []
+        for quadro, nome in await self._quadros_visiveis():
+            leitura = self.leituras.nova(url=str(quadro.url), completa=True)
+            leitura.quadro, leitura.nome_quadro = quadro, nome
+            self._quadro = quadro
+            try:
+                bruto = await self._js(
+                    "observar",
+                    {**opcoes, "id_leitura": leitura.id, "max_nos": MAX_NOS_QUADRO},
+                )
+            except ErroNavegador:
+                continue
+            finally:
+                self._quadro = None
+            leitura.completa = bool(bruto.get("completo"))
+            entradas = [EntradaRef.do_json(r) for r in bruto.get("refs") or []]
+            self.leituras.registrar(leitura, entradas)
+            if not bruto.get("arvore"):
+                continue
+            blocos.append(
+                {"papel": "iframe", "nome": nome, "filhos": bruto["arvore"], "_refs": len(entradas)}
+            )
+        return blocos
+
+    async def _no_topo(self, ponto: tuple[int, int]) -> tuple[int, int]:
+        """Ponto do iframe atual → ponto da página (o mouse do Playwright usa o da página)."""
+        if self._quadro is None:
+            return ponto
+        elemento = await self._quadro.frame_element()
+        caixa = await elemento.bounding_box()
+        if not caixa:
+            raise ErroNavegador(Codigo.ACAO_FALHOU, "O iframe não está visível na tela.")
+        borda = await elemento.evaluate(
+            "e => { const s = getComputedStyle(e); return [e.clientLeft + parseFloat(s.paddingLeft"
+            " || 0), e.clientTop + parseFloat(s.paddingTop || 0)]; }"
+        )
+        return round(caixa["x"] + borda[0] + ponto[0]), round(caixa["y"] + borda[1] + ponto[1])
 
     async def _perfurar(self, raiz: str, opcoes: dict[str, Any]) -> dict[str, Any]:
         leitura, entrada = await self._resolver(raiz)
@@ -528,6 +656,10 @@ class NavegadorArvore:
             }
             if "papeis_presentes" in bruto:
                 dados["papeis_presentes"] = bruto["papeis_presentes"]
+            if not dados["total"] and raiz is None:
+                no_iframe = await self._procurar_nos_quadros(filtro)
+                if no_iframe is not None:
+                    return no_iframe
             if not dados["total"]:
                 dados["url"] = bruto.get("url") or self._pagina.url
                 dados["dica"] = (
@@ -537,6 +669,31 @@ class NavegadorArvore:
             return dados
 
         return await self._executar("procurar", args, corpo)
+
+    async def _procurar_nos_quadros(self, filtro: dict[str, Any]) -> dict[str, Any] | None:
+        """Nada na página: procura nos iframes visíveis (o primeiro que achar responde)."""
+        for quadro, nome in await self._quadros_visiveis():
+            leitura = self.leituras.nova(url=str(quadro.url), completa=False)
+            leitura.quadro, leitura.nome_quadro = quadro, nome
+            self._quadro = quadro
+            try:
+                bruto = await self._js("procurar", {**filtro, "id_leitura": leitura.id})
+            except ErroNavegador:
+                continue
+            finally:
+                self._quadro = None
+            if not bruto.get("total"):
+                continue
+            entradas = [EntradaRef.do_json(r) for r in bruto.get("refs") or []]
+            self.leituras.registrar(leitura, entradas)
+            return {
+                "leitura": leitura.id,
+                "total": bruto.get("total", 0),
+                "correspondencias": bruto.get("correspondencias") or [],
+                "completa": bool(bruto.get("completo")),
+                "iframe": nome,
+            }
+        return None
 
     # ---------- ler um elemento ----------
 
@@ -642,6 +799,8 @@ class NavegadorArvore:
             antes = await self._js("estado")
             url_antes = self._pagina.url
             dialogos_antes = self._dialogos_vistos
+            abas_antes = self._abas_novas_vistas
+            navegacoes_antes = (self._navegacoes, self._navegacoes_falhas)
             retrato_antes = await self._retrato()
             try:
                 feito = await self._despachar(
@@ -667,7 +826,9 @@ class NavegadorArvore:
             dados["_senha"] = True
         if rolou_antes:
             dados["rolagem_preparatoria"] = True
-        await self._assentar(url_antes, dados, dialogos_antes, retrato_antes)
+        await self._assentar(
+            url_antes, dados, dialogos_antes, retrato_antes, abas_antes, navegacoes_antes
+        )
         return dados
 
     async def _retrato(self) -> dict[str, Any] | None:
@@ -683,10 +844,13 @@ class NavegadorArvore:
             await self._resolver_esperando(ref, fim)
             evidencia = await self._js("evidencia", {"ponteiro": exigencia.ponteiro})
             if evidencia.get("conectado"):
+                # fora da tela, ou na beirada sem nenhum ponto alcançável (1 px à mostra no fim
+                # da janela: o clique de mouse era pulado e caía no click() do DOM)
+                fora = not evidencia.get("na_tela") or evidencia.get("pontos") == []
                 precisa_rolar = (
                     exigencia.ponteiro
                     and evidencia.get("visivel")
-                    and not evidencia.get("na_tela")
+                    and fora
                     and not evidencia.get("desabilitado")
                 )
                 if precisa_rolar and not rolou:
@@ -725,7 +889,8 @@ class NavegadorArvore:
         if self.politica is Politica.FISICA and ponto is not None:
             await self._mostrar_cursor(ponto, clique=True)
             passos.append(Passo("ponteiro", "tentado", "fisico"))
-            await self._pagina.mouse.click(ponto[0], ponto[1], button=botao, click_count=vezes)
+            x, y = await self._no_topo(ponto)
+            await self._pagina.mouse.click(x, y, button=botao, click_count=vezes)
             passos[-1].resultado = "sucesso"
             return
         if botao != "left" or vezes != 1:
@@ -790,7 +955,8 @@ class NavegadorArvore:
                     raise ErroNavegador(Codigo.ACAO_FALHOU, "Sem ponto da tela no elemento.")
                 await self._mostrar_cursor(ponto, clique=False)
                 passos.append(Passo("ponteiro_mover", "sucesso", "fisico"))
-                await self._pagina.mouse.move(ponto[0], ponto[1])
+                x, y = await self._no_topo(ponto)
+                await self._pagina.mouse.move(x, y)
                 return _Feito(Entrega.ENTREGUE_SEM_CONFIRMAR, passos)
             if acao == "focar":
                 passos.append(Passo("focar_dom", "sucesso", "semantico"))
@@ -864,7 +1030,8 @@ class NavegadorArvore:
         raise argumentos_invalidos(f"Ação desconhecida: {acao!r}.")  # pragma: no cover
 
     async def _preencher_fisico(self, valor: str) -> None:
-        alca = await self._pagina.evaluate_handle("() => window.__soraArvore.alvo_atual()")
+        alvo = self._quadro if self._quadro is not None else self._pagina
+        alca = await alvo.evaluate_handle("() => window.__soraArvore.alvo_atual()")
         try:
             elemento = alca.as_element()
             if elemento is None:
@@ -1052,13 +1219,15 @@ class NavegadorArvore:
             raise ErroNavegador(Codigo.ACAO_FALHOU, "Sem ponto da tela no destino.")
         mouse = self._pagina.mouse
         await self._mostrar_cursor(ponto, clique=False)
-        await mouse.move(ponto[0], ponto[1])
+        de_x, de_y = await self._no_topo(ponto)
+        para_x, para_y = await self._no_topo(alvo)
+        await mouse.move(de_x, de_y)
         passos.append(Passo("ponteiro_arrastar", "tentado", "fisico"))
         segurando = False
         try:
             await mouse.down()
             segurando = True
-            await mouse.move(alvo[0], alvo[1], steps=12)
+            await mouse.move(para_x, para_y, steps=12)
             await self._mostrar_cursor(alvo, clique=False)
             await asyncio.sleep(ATRASO_SOLTAR_S)
             await mouse.up()
@@ -1098,13 +1267,25 @@ class NavegadorArvore:
         dados: dict[str, Any],
         dialogos_antes: int,
         retrato_antes: dict[str, Any] | None = None,
+        abas_antes: int | None = None,
+        navegacoes_antes: tuple[int, int] | None = None,
     ) -> None:
         """Depois da ação: espera a navegação começar/terminar e diz o que abriu.
 
         Sem espera pedida, é aqui que a ação se confere, rápido: URL nova confirma a entrega;
-        senão, ``pagina_mudou`` diz se o DOM mudou (contagem de elementos/texto)."""
+        aba nova (``target=_blank``) também; senão, ``pagina_mudou`` diz se o DOM mudou."""
         await asyncio.sleep(0.05)
         sem_confirmar = Entrega.ENTREGUE_SEM_CONFIRMAR.value
+        if navegacoes_antes is not None and self._pagina.url == url_antes:
+            # a ação começou uma navegação: espera a URL mudar (ou a navegação falhar/ser barrada)
+            fim = time.monotonic() + ESPERA_NAVEGACAO_S
+            while (  # noqa: ASYNC110 - os eventos podem chegar pela thread do Playwright
+                self._navegacoes > navegacoes_antes[0]
+                and self._navegacoes_falhas == navegacoes_antes[1]
+                and self._pagina.url == url_antes
+                and time.monotonic() < fim
+            ):
+                await asyncio.sleep(0.05)
         if self._pagina.url != url_antes:
             try:
                 await self._pagina.wait_for_load_state("domcontentloaded", timeout=5_000)
@@ -1118,6 +1299,23 @@ class NavegadorArvore:
             depois = await self._retrato()
             if depois is not None:
                 dados["pagina_mudou"] = depois != retrato_antes
+            if abas_antes is not None and not dados.get("pagina_mudou"):
+                # nada mudou aqui: talvez o clique tenha aberto uma aba nova (chega uns ms depois)
+                fim = time.monotonic() + ESPERA_ABA_NOVA_S
+                # polling: no Windows o evento chega pela thread do Playwright (sem asyncio.Event)
+                while self._abas_novas_vistas == abas_antes and time.monotonic() < fim:  # noqa: ASYNC110
+                    await asyncio.sleep(0.05)
+        if abas_antes is not None and self._abas_novas_vistas > abas_antes:
+            nova = self._abas_novas[-1]
+            with contextlib.suppress(Exception):
+                await nova.wait_for_load_state("domcontentloaded", timeout=5_000)
+            dados["aba_nova"] = {
+                "url": str(getattr(nova, "url", "") or ""),
+                "aviso": "O clique abriu uma aba nova; as próximas ações já acontecem nela.",
+            }
+            if dados.get("entrega", {}).get("entrega") == sem_confirmar:
+                dados["entrega"] = Disposicao(Entrega.ENTREGUE_CONFIRMADA).para_json()
+                dados["confirmado_por"] = "abriu_aba"
         superficies = await self._superficies()
         if superficies:
             dados["superficies"] = superficies
@@ -1144,6 +1342,7 @@ class NavegadorArvore:
             async with self._trava:
                 url_antes = self._pagina.url
                 dialogos_antes = self._dialogos_vistos
+                navegacoes_antes = (self._navegacoes, self._navegacoes_falhas)
                 try:
                     await self._pagina.keyboard.press(combinacao)
                 except Exception as erro:
@@ -1154,7 +1353,9 @@ class NavegadorArvore:
                 "tecla": combinacao,
                 "entrega": Disposicao(Entrega.ENTREGUE_SEM_CONFIRMAR).para_json(),
             }
-            await self._assentar(url_antes, dados, dialogos_antes)
+            await self._assentar(
+                url_antes, dados, dialogos_antes, navegacoes_antes=navegacoes_antes
+            )
             await self._esperar_depois(dados, esperar_por, esperar_sumir, prazo_espera_ms)
             return dados
 
@@ -1465,6 +1666,13 @@ def _feito_rolagem(r: dict[str, Any], passos: list[Passo]) -> _Feito:
         passos[-1].resultado = "pulado"
         return _Feito(Entrega.NAO_ENTREGUE, passos, {"ja_no_limite": True, "posicao": depois})
     return _Feito(Entrega.ENTREGUE_CONFIRMADA, passos, {"posicao": depois})
+
+
+def _quadro_sumiu(quadro: Any) -> bool:
+    try:
+        return bool(quadro.is_detached())
+    except Exception:
+        return True
 
 
 def _centro(evidencia: dict[str, Any]) -> tuple[int, int] | None:

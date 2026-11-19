@@ -59,6 +59,9 @@ class Janela:
     altura: int
     ativa: bool = False
     programa: str | None = None
+    outro_monitor: bool = False
+    """PC do usuário: a janela está noutro monitor (o bot só vê o principal). Agir pela ref dela
+    a traz para o principal; as coordenadas valem depois de observar de novo."""
 
     @property
     def centro(self) -> tuple[int, int]:

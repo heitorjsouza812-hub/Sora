@@ -445,6 +445,8 @@ class Sessao(Base):
     anterior_rotacionado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     par_atual_cifrado: Mapped[bytes | None] = mapped_column(LargeBinary)
     historico_hashes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    reemissoes: Mapped[int] = mapped_column(default=0, server_default="0")
+    """Reemissões seguidas a partir do mesmo token anterior (`contas.classificar_token`)."""
     cliente: Mapped[str] = mapped_column(Text, default="web", server_default="web")
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     encerrada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

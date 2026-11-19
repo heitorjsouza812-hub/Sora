@@ -143,6 +143,19 @@ class CanalPc:
         )
         return True
 
+    async def encerrar_da_sessao_de_login(self, usuario_id: UUID, login_sessao_id: UUID) -> bool:
+        """Solta o PC preso a esta sessão de login (o usuário saiu no app de desktop).
+
+        Antes o PC só soltava na próxima consulta do desktop (``/comandos`` respondia 409); com o
+        token de acesso revogado ao sair, essa consulta para no 401 e não chega lá."""
+        dados = await self.sessao(usuario_id)
+        if not dados or dados.get("login_sessao_id") != str(login_sessao_id):
+            return False
+        if await self.encerrar_sessao(usuario_id, dados["sessao_id"]):
+            await self.soltar_vez(usuario_id)
+            return True
+        return False
+
     async def encerrar_sessao(self, usuario_id: UUID, sessao_id: str) -> bool:
         if await self.sessao_atual(usuario_id, sessao_id) is None:
             return False

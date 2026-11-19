@@ -265,6 +265,12 @@ def para_modelo(resposta: Resposta, limite: int = LIMITE_RESULTADO_CARACTERES) -
             cabecalho.append(
                 "Abertos agora: " + json.dumps(dados["superficies"], ensure_ascii=False)
             )
+        if dados.get("iframes"):
+            cabecalho.append(
+                "Inclui o conteúdo de iframe: "
+                + ", ".join(json.dumps(n, ensure_ascii=False) for n in dados["iframes"])
+                + " (as refs de dentro funcionam igual às da página)."
+            )
         corpo = _linhas_arvore(arvore) or ["(nenhum elemento)"]
         return _cortar("\n".join([*cabecalho, "", *corpo]), limite)
     return _cortar(json.dumps(dados, ensure_ascii=False, separators=(",", ":")), limite)

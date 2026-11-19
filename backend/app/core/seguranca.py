@@ -1,5 +1,6 @@
 """Senha argon2id, JWT de acesso, cifra AES-GCM e token de renovação; especificação §8.2."""
 
+import asyncio
 import hashlib
 import os
 import secrets
@@ -49,6 +50,20 @@ def verificar_senha(senha: str, senha_hash: str) -> bool:
         return _hasher.verify(senha, senha_hash)
     except Exception:
         return False
+
+
+async def gerar_hash_senha_em_thread(senha: str) -> str:
+    """``gerar_hash_senha`` fora do loop: o argon2id gasta dezenas de ms de CPU e ~64 MB.
+
+    Chamado direto numa rota ``async``, cada login travaria o servidor inteiro (SSE incluído)
+    enquanto o hash roda."""
+    validar_senha(senha)  # erro de senha fraca sai na hora, sem ocupar uma thread
+    return await asyncio.to_thread(_hasher.hash, senha)
+
+
+async def verificar_senha_em_thread(senha: str, senha_hash: str) -> bool:
+    """``verificar_senha`` fora do loop (mesmo motivo de ``gerar_hash_senha_em_thread``)."""
+    return await asyncio.to_thread(verificar_senha, senha, senha_hash)
 
 
 def criar_token_acesso(dados: dict[str, Any], validade: timedelta = ACESSO_VALIDADE) -> str:

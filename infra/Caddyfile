@@ -33,7 +33,12 @@
         reverse_proxy api:8000
     }
 
+    # Teto geral do corpo (anexo e áudio aceitam 20 MB; a folga é do multipart). Sem isto o
+    # upload inteiro chegava na API e enchia o /tmp (tmpfs de 64 MB) antes de ser recusado.
     handle /v1/* {
+        request_body {
+            max_size 25MB
+        }
         encode zstd gzip
         reverse_proxy api:8000
     }

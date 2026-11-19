@@ -305,7 +305,7 @@ async def ajustar_proposta(
         )
         if validos != set(ids):
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "Use bots ativos da sua conta."
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Use bots ativos da sua conta."
             )
         proposta.bots_reaproveitados = ids
     if dados.bots_novos is not None:
@@ -313,12 +313,12 @@ async def ajustar_proposta(
         for ajuste in dados.bots_novos:
             if ajuste.id is None:
                 raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY, "Informe o id do rascunho."
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, "Informe o id do rascunho."
                 )
             rascunho = await obter_rascunho_para_atualizar(sessao, usuario_id, ajuste.id)
             if rascunho is None or rascunho.status != "rascunho":
                 raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY, "Rascunho de bot inválido."
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, "Rascunho de bot inválido."
                 )
             _aplicar_ajustes(rascunho, ajuste)
             novos.append(saida_do_rascunho(rascunho).model_dump(mode="json"))

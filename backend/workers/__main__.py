@@ -8,7 +8,6 @@ No Linux (Docker) ``arq workers.configuracao.WorkerSettings`` continua valendo.
 from __future__ import annotations
 
 import asyncio
-import logging
 import signal
 import sys
 
@@ -22,23 +21,13 @@ def preparar_windows() -> None:
         signal.SIGUSR1 = signal.SIGTERM  # type: ignore[attr-defined]
 
 
-FORMATO_LOG = "%(levelname)s:     %(name)s: %(message)s"
-"""Mesmo desenho do log da API (uvicorn): ``INFO:     mensagem``, com o nome do logger."""
-
-
-def configurar_log(nivel: int = logging.INFO) -> None:
-    """O ``run_worker`` não configura ``logging`` (só o CLI do ``arq`` faz). Sem isto o worker
-    não escreve nada. A saída vai em UTF-8: os ``→``/``←`` do ARQ quebram em cp1252 no Windows."""
-    for fluxo in (sys.stdout, sys.stderr):
-        reconfigurar = getattr(fluxo, "reconfigure", None)
-        if reconfigurar is not None:
-            reconfigurar(encoding="utf-8", errors="replace")
-    logging.basicConfig(level=nivel, format=FORMATO_LOG, stream=sys.stderr, force=True)
-
-
 def main() -> None:
+    from app.core.observabilidade import configurar_log
+
     preparar_windows()
-    configurar_log()
+    # O ``run_worker`` não configura ``logging`` (só o CLI do ``arq`` faz): sem isto o worker não
+    # escreve nada. ``forcar``: aqui somos o processo principal.
+    configurar_log(forcar=True)
     from arq.worker import run_worker
 
     from workers.configuracao import WorkerSettings

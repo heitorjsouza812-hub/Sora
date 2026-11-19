@@ -617,6 +617,11 @@ async def executar_item_fila(ctx: dict[str, Any], item_id: str, agente_id: str) 
                 registro.exception("turno do item %s falhou", item_id)
                 await enfileirar("despachar_equipe", agente_id=agente_id)
                 return
+            # Cancelado (prazo do job, worker desligando): o item falhou, mas os próximos da fila
+            # do bot não podem ficar esperando outro despacho que talvez nunca venha.
+            registro.warning("turno do item %s interrompido (%s)", item_id, type(erro).__name__)
+            with suppress(Exception):
+                await enfileirar("despachar_equipe", agente_id=agente_id)
             raise
         async with ctx["sessoes"]() as sessao:
             await FilaAgente(ArmazemFilaSQL(sessao)).concluir(item.id, item.agente_id)

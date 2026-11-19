@@ -67,6 +67,17 @@ pub const PROGRAMAS_BLOQUEADOS: &[&str] = &[
     "msbuild.exe",
     "installutil.exe",
     "control.exe",
+    // interpretadores e binários que rodam comando, baixam ou instalam (LOLBAS): com um deles na
+    // frente, "digitar" vira código. Espelho em `PROGRAMAS_BLOQUEADOS` do backend (há teste).
+    "python.exe", "pythonw.exe", "py.exe", "pyw.exe", "node.exe", "java.exe",
+    "javaw.exe", "perl.exe", "ruby.exe", "php.exe", "dotnet.exe", "sh.exe",
+    "mintty.exe", "git-bash.exe", "wmic.exe", "forfiles.exe", "pcalua.exe", "msdt.exe",
+    "cmstp.exe", "hh.exe", "odbcconf.exe", "regasm.exe", "regsvcs.exe", "csc.exe",
+    "vbc.exe", "jsc.exe", "presentationhost.exe", "scriptrunner.exe", "syncappvpublishingserver.exe", "ieexec.exe",
+    "infdefaultinstall.exe", "mavinject.exe", "winget.exe", "curl.exe", "ftp.exe", "tftp.exe",
+    "reg.exe", "sc.exe", "net.exe", "net1.exe", "netsh.exe", "bcdedit.exe",
+    "vssadmin.exe", "wevtutil.exe", "takeown.exe", "icacls.exe", "runas.exe", "psexec.exe",
+    "psexec64.exe",
     // a própria Sora
     "sora.exe",
 ];
@@ -84,6 +95,19 @@ const TITULOS_BLOQUEADOS: &[&str] = &[
     "user account control",
     "credential manager",
     "gerenciador de credenciais",
+    // editores de macro rodam código DENTRO de um programa liberado (excel.exe, soffice.bin): o
+    // alt+F11 do Office abre o VBA, e a janela Imediata executa qualquer coisa sem processo novo
+    "microsoft visual basic",
+    "visual basic for applications",
+    "editor do visual basic",
+    "macros do libreoffice",
+    "libreoffice basic",
+    "organizador de macros",
+    "basic macro organizer",
+    // ferramentas do desenvolvedor do navegador (rodam JavaScript na página)
+    "devtools",
+    "developer tools",
+    "ferramentas do desenvolvedor",
 ];
 
 /// Programa (executável) de uma janela, como o servidor vê: só o nome, em minúsculas.
@@ -104,7 +128,7 @@ pub fn programa_bloqueado(programa: &str) -> bool {
 }
 
 /// Títulos exatos de janelas que executam comandos (a caixa Executar do Windows).
-const TITULOS_EXATOS_BLOQUEADOS: &[&str] = &["executar", "run"];
+const TITULOS_EXATOS_BLOQUEADOS: &[&str] = &["executar", "run", "macro", "macros"];
 
 pub fn titulo_bloqueado(titulo: &str) -> bool {
     let titulo = titulo.trim().to_lowercase();
@@ -264,10 +288,13 @@ pub fn interpretar_tecla(texto: &str) -> Result<(Vec<Tecla>, Tecla), ErroPc> {
     if tem(VK_CONTROL) && tem(VK_MENU) && matches!(base_tecla.vk, 0x2E | 0x08) {
         return Err(invalida());
     }
+    // Esc com ctrl/alt (Iniciar, troca de janela), alt+Tab, F12 e ctrl+shift+I/J/C/K (DevTools),
+    // alt+F11 (editor VBA do Office / macros do LibreOffice) e alt+F8 (lista de macros para rodar)
     if (base_tecla.vk == 0x1B && (tem(VK_CONTROL) || tem(VK_MENU)))
         || (base_tecla.vk == VK_TAB && tem(VK_MENU))
         || base_tecla.vk == 0x7B
-        || (tem(VK_CONTROL) && tem(VK_SHIFT) && matches!(base_tecla.vk, 0x49 | 0x4A | 0x43))
+        || (tem(VK_MENU) && matches!(base_tecla.vk, 0x7A | 0x77))
+        || (tem(VK_CONTROL) && tem(VK_SHIFT) && matches!(base_tecla.vk, 0x49 | 0x4A | 0x43 | 0x4B))
     {
         return Err(invalida());
     }
@@ -486,6 +513,13 @@ const LANCADORES: &[&str] = &[
 /// denuncia a ação.
 const SO_HOSPEDEIROS: &[&str] = &["conhost.exe", "openconsole.exe", "explorer.exe"];
 
+/// Interpretadores que editores liberados abrem sozinhos como ajudantes (o VS Code abre `node.exe`,
+/// servidores de linguagem abrem `python.exe`/`java.exe`). Continuam bloqueados como janela (o bot
+/// nunca digita num REPL), mas nascer durante a ação não derruba o editor do usuário.
+const SO_JANELA: &[&str] = &[
+    "node.exe", "python.exe", "pythonw.exe", "py.exe", "pyw.exe", "java.exe", "javaw.exe", "dotnet.exe",
+];
+
 /// Processos bloqueados que nasceram durante a ação, filhos de um programa liberado, de um
 /// lançador ou de outro processo novo (cadeia `explorer → cmd → powershell`). Devolve (pid,
 /// programa). Processos de serviços do sistema ficam de fora: não foram abertos pela ação.
@@ -505,7 +539,11 @@ pub fn processos_suspeitos(
     novos
         .into_iter()
         .filter(|p| {
-            programa_bloqueado(&p.2) && !SO_HOSPEDEIROS.contains(&p.2.as_str()) && p.2 != "sora.exe" && vigiados.contains(&p.1)
+            programa_bloqueado(&p.2)
+                && !SO_HOSPEDEIROS.contains(&p.2.as_str())
+                && !SO_JANELA.contains(&p.2.as_str())
+                && p.2 != "sora.exe"
+                && vigiados.contains(&p.1)
         })
         .map(|p| (p.0, p.2.clone()))
         .collect()
@@ -523,6 +561,14 @@ pub fn tarjar_rgb(rgb: &mut [u8], largura: usize, altura: usize, r: [i32; 4]) {
 
 /// Retângulo `[esquerda, topo, direita, baixo)` em pixels físicos.
 pub type Retangulo = [i32; 4];
+
+/// Onde uma janela de outro monitor fica no monitor principal (a captura e as coordenadas do bot
+/// são só dele): mesmo tamanho, cortado à área de trabalho, no canto de cima à esquerda dela.
+pub fn posicao_no_principal(janela: Retangulo, area: Retangulo) -> Retangulo {
+    let largura = (janela[2] - janela[0]).clamp(1, (area[2] - area[0]).max(1));
+    let altura = (janela[3] - janela[1]).clamp(1, (area[3] - area[1]).max(1));
+    [area[0], area[1], area[0] + largura, area[1] + altura]
+}
 
 /// Uma janela de topo na pilha da tela (Cerca A3, D1 do teste real).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -971,6 +1017,30 @@ mod testes {
     }
 
     #[test]
+    fn janela_de_outro_monitor_cabe_no_principal() {
+        let area = [0, 0, 1920, 1040]; // 1080 menos a barra de tarefas
+        // segundo monitor à direita, janela menor que a área: mantém o tamanho
+        assert_eq!(posicao_no_principal([2000, 100, 2800, 700], area), [0, 0, 800, 600]);
+        // janela maior que a área (4K no outro monitor): cortada à área de trabalho
+        assert_eq!(posicao_no_principal([-3840, 0, 0, 2160], area), [0, 0, 1920, 1040]);
+        // área que não começa em 0 (barra de tarefas em cima ou à esquerda)
+        assert_eq!(posicao_no_principal([2000, 0, 2400, 300], [60, 40, 1920, 1080]), [60, 40, 460, 340]);
+    }
+
+    #[test]
+    fn editor_de_macros_interpretadores_e_devtools_sao_bloqueados() {
+        assert!(titulo_bloqueado("Microsoft Visual Basic for Applications - Pasta1.xlsx"));
+        assert!(titulo_bloqueado("Macro"));
+        assert!(titulo_bloqueado("Macros do LibreOffice Basic"));
+        assert!(titulo_bloqueado("DevTools - exemplo.com.br"));
+        assert!(!titulo_bloqueado("Pasta1.xlsx - Excel"));
+        assert!(!titulo_bloqueado("Relatório de macroeconomia"));
+        for programa in ["python.exe", "node.exe", "wmic.exe", "winget.exe", "reg.exe"] {
+            assert!(programa_bloqueado(programa), "{programa}");
+        }
+    }
+
+    #[test]
     fn teclas_da_lista_e_proibidas() {
         let (mods, base) = interpretar_tecla("ctrl+l").unwrap();
         assert_eq!(mods, vec![t(VK_CONTROL)]);
@@ -982,6 +1052,11 @@ mod testes {
         assert!(interpretar_tecla("super+r").is_err());
         assert!(interpretar_tecla("ctrl+alt+Delete").is_err());
         assert!(interpretar_tecla("F13").is_err());
+        // editor de macros e DevTools rodam código dentro de um programa liberado
+        assert!(interpretar_tecla("alt+F11").is_err());
+        assert!(interpretar_tecla("alt+F8").is_err());
+        assert!(interpretar_tecla("ctrl+shift+k").is_err());
+        assert!(interpretar_tecla("F11").is_ok(), "tela cheia continua liberada");
         assert!(interpretar_tecla("").is_err());
     }
 

@@ -29,7 +29,9 @@ from app.navegador.arvore.resposta import (
     argumentos_invalidos,
 )
 
-MAX_LEITURAS_POR_ABA = 8
+MAX_LEITURAS_POR_ABA = 16
+"""Cada observação pode criar uma leitura por iframe visível (até ``MAX_QUADROS``), além da da
+página: o teto dobrou para as refs de uma leitura não expirarem antes de usar."""
 _ALFABETO = string.ascii_lowercase + string.digits
 _REF_QUALIFICADA = re.compile(r"^@?(s[a-z0-9]{7}):e([1-9][0-9]{0,5})$")
 _REF_SOLTA = re.compile(r"^@?e[0-9]+$")
@@ -138,6 +140,9 @@ class Leitura:
     completa: bool
     refs: dict[int, EntradaRef] = field(default_factory=dict)
     proximo_numero: int = 1
+    quadro: Any = None
+    """Iframe de onde a leitura veio (``Frame`` do Playwright); ``None`` = a página principal."""
+    nome_quadro: str | None = None
 
     def entrada(self, numero: int) -> EntradaRef:
         entrada = self.refs.get(numero)

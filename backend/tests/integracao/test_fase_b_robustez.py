@@ -851,7 +851,9 @@ async def test_worker_morto_no_meio_da_etapa_e_retomado_pelo_reconciliador(
         [sys.executable, str(script)],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
+        # o worker escreve o log em UTF-8 (``configurar_log``); no Windows o padrão seria cp1252
+        encoding="utf-8",
+        errors="replace",
         env={**os.environ, "PYTHONUNBUFFERED": "1"},
     )
     try:

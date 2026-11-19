@@ -194,7 +194,7 @@ def _validar_ferramentas(ferramentas: list[str]) -> list[str]:
     desconhecidas = sorted(set(ferramentas) - FERRAMENTAS_CONHECIDAS)
     if desconhecidas:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Ferramentas desconhecidas: " + ", ".join(desconhecidas),
         )
     return list(dict.fromkeys(ferramentas))
@@ -207,9 +207,9 @@ def _validar_cor(cor: str) -> str:
     except ValueError:
         valida = False
     if not valida:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Use uma cor como #46E8A8.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Use uma cor como #46E8A8.")
     if cor.upper() == COR_SORA:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Essa cor é da Sora.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Essa cor é da Sora.")
     return cor.upper()
 
 
@@ -265,7 +265,7 @@ async def criar_agente(dados: AgenteCriacao, usuario_id: UsuarioId, sessao: Sess
     if isinstance(dados, AgentePorDescricao):
         descricao = dados.descricao.strip()
         if not descricao:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Descreva o bot.")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Descreva o bot.")
         agente = Agente(
             usuario_id=usuario_id,
             tipo=TipoAgente.INDIVIDUAL,
@@ -279,7 +279,7 @@ async def criar_agente(dados: AgenteCriacao, usuario_id: UsuarioId, sessao: Sess
     else:
         nome = dados.nome.strip()
         if not nome or nome.casefold() == "sora":
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Escolha outro nome.")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Escolha outro nome.")
         if nome.casefold() in {n.casefold() for n in nomes}:
             raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um bot com esse nome.")
         agente = Agente(
@@ -327,7 +327,7 @@ async def atualizar_agente(
     if "nome" in campos:
         nome = (dados.nome or "").strip()
         if not nome or nome.casefold() == "sora":
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Escolha outro nome.")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Escolha outro nome.")
         nomes, _ = await _em_uso(sessao, usuario_id)
         if nome.casefold() in {n.casefold() for n in nomes} - {agente.nome.casefold()}:
             raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um bot com esse nome.")

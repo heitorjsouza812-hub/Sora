@@ -47,7 +47,37 @@ def test_tolerancia_inclui_30_segundos_mas_nao_um_instante_a_mais() -> None:
         anterior_rotacionado_em=no_limite.anterior_rotacionado_em - timedelta(microseconds=1)
     )
     assert contas.classificar_token(no_limite, "antigo", AGORA) == "tolerado"
+    # passou dos 30 s: não devolve mais o mesmo par, mas ainda pode reemitir (resposta perdida)
+    assert contas.classificar_token(fora, "antigo", AGORA) == "reemitir"
+
+
+def test_anterior_depois_da_janela_reemite_ate_5_minutos() -> None:
+    """Decisão 6: F5 seguidos com a resposta perdida não derrubam mais o login."""
+    dentro = _sessao(anterior_rotacionado_em=AGORA - contas.JANELA_REEMISSAO)
+    fora = _sessao(
+        anterior_rotacionado_em=AGORA - contas.JANELA_REEMISSAO - timedelta(microseconds=1)
+    )
+    assert contas.classificar_token(dentro, "antigo", AGORA) == "reemitir"
     assert contas.classificar_token(fora, "antigo", AGORA) == "reutilizado"
+
+
+def test_reemissao_tem_teto() -> None:
+    perto = AGORA - timedelta(minutes=1)
+    no_teto = _sessao(anterior_rotacionado_em=perto, reemissoes=contas.MAX_REEMISSOES)
+    abaixo = _sessao(anterior_rotacionado_em=perto, reemissoes=contas.MAX_REEMISSOES - 1)
+    assert contas.classificar_token(abaixo, "antigo", AGORA) == "reemitir"
+    assert contas.classificar_token(no_teto, "antigo", AGORA) == "reutilizado"
+
+
+def test_token_abandonado_na_reemissao_e_reuso() -> None:
+    """O atual que a reemissão abandonou vai para o histórico: se aparecer, havia duas cópias."""
+    sessao = _sessao(
+        token_hash="novo",
+        anterior_rotacionado_em=AGORA,
+        historico_hashes=["abandonado"],
+        reemissoes=1,
+    )
+    assert contas.classificar_token(sessao, "abandonado", AGORA) == "reutilizado"
 
 
 @pytest.mark.parametrize(
@@ -131,7 +161,7 @@ def test_renovar_aceita_cookie_ou_corpo(
 ) -> None:
     recebidos: list[str | None] = []
 
-    async def renovar(_sessao: object, token: str | None) -> tuple[str, str, str]:
+    async def renovar(_sessao: object, token: str | None, *_: object) -> tuple[str, str, str]:
         recebidos.append(token)
         return "novo", "acesso", "desktop" if token == "do-corpo" else "web"
 
@@ -231,7 +261,7 @@ async def test_renovar_fora_da_janela_nao_devolve_o_par_e_o_apaga(monkeypatch) -
         id=uuid4(),
         token_hash="outro-atual",
         anterior_hash=token_hash,
-        anterior_rotacionado_em=agora - contas.JANELA_TOLERANCIA_RENOVACAO - timedelta(seconds=1),
+        anterior_rotacionado_em=agora - contas.JANELA_REEMISSAO - timedelta(seconds=1),
         historico_hashes=[],
         par_atual_cifrado=b"segredo",
         expira_em=agora + timedelta(days=30),
@@ -241,6 +271,34 @@ async def test_renovar_fora_da_janela_nao_devolve_o_par_e_o_apaga(monkeypatch) -
     with pytest.raises(contas.ErroCredenciais):
         await contas.renovar(banco, token)
     assert registro.par_atual_cifrado is None and registro.encerrada_em is not None
+
+
+async def test_reemissao_gera_par_novo_e_abandona_o_atual(monkeypatch) -> None:
+    """Entre 30 s e 5 min: par novo (não o guardado), o atual nunca usado vai para o histórico e
+    o anterior continua o mesmo; o token de acesso leva o id da sessão (``sid``)."""
+    from unittest.mock import AsyncMock
+
+    token, token_hash = seguranca.gerar_token_renovacao()
+    agora = datetime.now(UTC)
+    registro = _sessao(
+        id=uuid4(),
+        token_hash="atual-nunca-usado",
+        anterior_hash=token_hash,
+        anterior_rotacionado_em=agora - timedelta(minutes=1),
+        historico_hashes=[],
+        par_atual_cifrado=b"segredo",
+        expira_em=agora + timedelta(days=30),
+        reemissoes=0,
+    )
+    monkeypatch.setattr(contas, "_sessao_do_token", AsyncMock(return_value=registro))
+    novo, acesso, _cliente = await contas.renovar(AsyncMock(), token)
+    assert seguranca.hash_token(novo) == registro.token_hash
+    assert registro.anterior_hash == token_hash
+    assert registro.historico_hashes == ["atual-nunca-usado"]
+    assert registro.reemissoes == 1
+    assert registro.encerrada_em is None
+    assert registro.par_atual_cifrado not in (None, b"segredo")
+    assert seguranca.decodificar_token_acesso(acesso)["sid"] == str(registro.id)
 
 
 async def test_sair_apaga_o_par_cifrado(monkeypatch) -> None:
@@ -260,3 +318,37 @@ def test_par_vencido_so_depois_da_janela() -> None:
     assert not contas.par_vencido(dentro, AGORA)
     assert contas.par_vencido(fora, AGORA)
     assert contas.par_vencido(_sessao(anterior_rotacionado_em=None), AGORA)
+
+
+async def test_token_de_sessao_encerrada_ou_conta_apagada_e_recusado() -> None:
+    """Sair (ou reuso detectado, ou apagar a conta) derruba na hora o token de acesso: antes ele
+    continuava valendo os 15 min que faltavam."""
+    from fakeredis import FakeAsyncRedis
+    from fastapi import HTTPException
+    from fastapi.security import HTTPAuthorizationCredentials
+    from starlette.requests import Request
+
+    from app.core.dependencias import usuario_atual
+
+    redis = FakeAsyncRedis(decode_responses=True)
+    app = FastAPI()
+    app.state.redis = redis
+    usuario, sessao_id = uuid4(), uuid4()
+    token = seguranca.criar_token_acesso({"sub": str(usuario), "sid": str(sessao_id)})
+    credenciais = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+    def requisicao() -> Request:
+        return Request({"type": "http", "headers": [], "state": {}, "app": app})
+
+    assert await usuario_atual(requisicao(), credenciais) == usuario
+    await contas.revogar_acessos(redis, sessao_id=sessao_id)
+    with pytest.raises(HTTPException) as erro:
+        await usuario_atual(requisicao(), credenciais)
+    assert erro.value.status_code == 401
+
+    outro = seguranca.criar_token_acesso({"sub": str(usuario), "sid": str(uuid4())})
+    outras = HTTPAuthorizationCredentials(scheme="Bearer", credentials=outro)
+    assert await usuario_atual(requisicao(), outras) == usuario  # outra sessão segue valendo
+    await contas.revogar_acessos(redis, usuario_id=usuario)  # conta apagada: todas caem
+    with pytest.raises(HTTPException):
+        await usuario_atual(requisicao(), outras)

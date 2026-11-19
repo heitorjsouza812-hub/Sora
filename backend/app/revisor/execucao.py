@@ -373,7 +373,10 @@ async def conferir_acao(
     quem_recebe: str | None = None
 
     if existente is None:
-        modo = await modo_de_permissao(contexto)
+        from app.revisor.contaminacao import modo_efetivo
+
+        # Conteúdo de fora lido neste turno: o "total" vale como "automático" (prompt injection).
+        modo = modo_efetivo(await modo_de_permissao(contexto), contexto)
         if modo != "perguntar":
             from app.revisor.decisoes import aprova_sozinho
 

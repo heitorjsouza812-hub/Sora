@@ -146,11 +146,11 @@ async def test_renovacao_tolera_resposta_perdida_e_reuso_tardio_encerra(
     assert t3 == t2
     assert recuperada.json() == r2.json()
 
-    # Simula a última rotação fora da tolerância sem esperar a janela no teste.
+    # Simula a última rotação fora da janela de reemissão (5 min) sem esperar no teste.
     async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
         sessao = await s.scalar(select(Sessao).where(Sessao.token_hash == seguranca.hash_token(t3)))
         assert sessao is not None
-        sessao.anterior_rotacionado_em -= contas.JANELA_TOLERANCIA_RENOVACAO + timedelta(seconds=1)
+        sessao.anterior_rotacionado_em -= contas.JANELA_REEMISSAO + timedelta(seconds=1)
         await s.commit()
 
     reuso = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
@@ -161,6 +161,43 @@ async def test_renovacao_tolera_resposta_perdida_e_reuso_tardio_encerra(
     async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
         encerradas = await s.scalar(select(Sessao.encerrada_em).where(Sessao.token_hash != ""))
     assert encerradas is not None
+
+
+async def test_f5_seguidos_reemitem_e_o_token_abandonado_derruba_a_sessao(
+    cliente: AsyncClient,
+) -> None:
+    """Decisão 6: três F5 com a resposta da renovação perdida não derrubam mais o login. Entre
+    30 s e 5 min o token anterior ganha um par NOVO; o atual (nunca usado) fica abandonado e, se
+    aparecer depois, havia duas cópias da sessão: ela cai inteira."""
+    await _cadastrar(cliente)
+    login = await cliente.post(
+        "/v1/auth/entrar",
+        json={"email": "ana@exemplo.com", "senha": SENHA},
+        headers={"X-Sora-Cliente": "desktop"},
+    )
+    t1 = login.json()["token_renovacao"]
+    t2 = (await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})).json()[
+        "token_renovacao"
+    ]  # resposta "perdida": o app continua só com t1
+
+    async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
+        sessao = await s.scalar(select(Sessao).where(Sessao.token_hash == seguranca.hash_token(t2)))
+        assert sessao is not None
+        sessao.anterior_rotacionado_em -= contas.JANELA_TOLERANCIA_RENOVACAO + timedelta(seconds=1)
+        await s.commit()
+
+    reemitida = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t1})
+    assert reemitida.status_code == 200
+    t3 = reemitida.json()["token_renovacao"]
+    assert t3 not in (t1, t2)
+    # o par novo funciona normalmente
+    t4_resposta = await cliente.post("/v1/auth/renovar", json={"token_renovacao": t3})
+    assert t4_resposta.status_code == 200
+    t4 = t4_resposta.json()["token_renovacao"]
+
+    # t2 foi abandonado na reemissão: aparecer agora é reuso e derruba a sessão inteira
+    assert (await cliente.post("/v1/auth/renovar", json={"token_renovacao": t2})).status_code == 401
+    assert (await cliente.post("/v1/auth/renovar", json={"token_renovacao": t4})).status_code == 401
 
 
 async def test_tres_renovacoes_concorrentes_usam_uma_unica_sessao(
@@ -322,3 +359,123 @@ async def test_par_cifrado_some_quando_a_janela_fecha_e_historico_tem_teto(
         await contas.sair(s, atual)
         await s.commit()
     assert (await sessao_atual(atual)).par_atual_cifrado is None
+
+
+async def test_apagar_conta_com_dados_em_todas_as_tabelas(cliente: AsyncClient) -> None:
+    """Uma linha em CADA tabela do modelo, ligada ao usuário (inclusive as FKs que fecham ciclo,
+    como ``agentes.perfil_navegador_id``), e o DELETE /v1/conta apaga tudo.
+
+    Antes, ``apagar_conta`` listava ~21 tabelas à mão: com uma rotina, um grupo, a fila, o
+    navegador ou os canais da empresa, o ``DELETE FROM usuarios`` falhava por chave estrangeira
+    e a conta não era apagada (LGPD)."""
+    import enum
+    import uuid
+    from datetime import UTC, date, datetime
+
+    from sqlalchemy import (
+        ARRAY,
+        JSON,
+        Boolean,
+        Date,
+        DateTime,
+        Enum,
+        Float,
+        Integer,
+        LargeBinary,
+        Numeric,
+        String,
+        Text,
+        Uuid,
+        insert,
+        update,
+    )
+    from sqlalchemy.dialects.postgresql import INET, JSONB
+
+    from app.core.contas import TABELAS_SEM_DONO, _quebra_ciclo, _tabelas_do_banco
+
+    await _cadastrar(cliente)
+    login = await cliente.post("/v1/auth/entrar", json={"email": "ana@exemplo.com", "senha": SENHA})
+    auth = {"Authorization": f"Bearer {login.json()['token_acesso']}"}
+    fabrica = cliente.app_state.fabrica  # type: ignore[attr-defined]
+
+    def valor(coluna):
+        tipo = coluna.type
+        if isinstance(tipo, Enum):
+            primeiro = tipo.enums[0]
+            classe = getattr(tipo, "enum_class", None)
+            if classe is not None and issubclass(classe, enum.Enum):
+                return next(m for m in classe if m.value == primeiro or m.name == primeiro)
+            return primeiro
+        if isinstance(tipo, Uuid):
+            return uuid.uuid4()
+        if isinstance(tipo, (Text, String)):
+            return "x"
+        if isinstance(tipo, Boolean):
+            return False
+        if isinstance(tipo, (Integer, Numeric, Float)):
+            return 1
+        if isinstance(tipo, DateTime):
+            return datetime.now(UTC)
+        if isinstance(tipo, Date):
+            return date.today()
+        if isinstance(tipo, (JSONB, JSON)):
+            return {}
+        if isinstance(tipo, ARRAY):
+            return []
+        if isinstance(tipo, INET):
+            return "127.0.0.1"
+        if isinstance(tipo, LargeBinary):
+            return b"x"
+        if getattr(tipo, "dim", None):  # pgvector
+            return [0.0] * tipo.dim
+        raise AssertionError(f"tipo sem valor de teste: {coluna.table.name}.{coluna.name} {tipo}")
+
+    async with fabrica() as s:
+        usuario_id = await s.scalar(select(Usuario.id))
+        criados: dict[str, dict[str, object]] = {"usuarios": {"id": usuario_id}}
+        for tabela in _tabelas_do_banco():
+            if tabela.name in TABELAS_SEM_DONO:
+                continue
+            linha: dict[str, object] = {}
+            for coluna in tabela.columns:
+                fks = [fk for fk in coluna.foreign_keys if not _quebra_ciclo(fk)]
+                alvo = fks[0].column if fks else None
+                if alvo is not None and alvo.table.name in criados:
+                    linha[coluna.name] = criados[alvo.table.name][alvo.name]
+                elif alvo is not None and alvo.table is tabela:
+                    continue  # autorreferência: fica nula
+                elif (
+                    not coluna.nullable and coluna.default is None and coluna.server_default is None
+                ):
+                    linha[coluna.name] = valor(coluna)
+                elif coluna.primary_key and coluna.default is None:
+                    linha[coluna.name] = valor(coluna)
+            colunas = list(tabela.primary_key.columns) + [
+                c for c in tabela.columns if not c.primary_key
+            ]
+            devolvido = (
+                (await s.execute(insert(tabela).values(linha).returning(*colunas))).mappings().one()
+            )
+            criados[tabela.name] = dict(devolvido)
+        # FKs que fecham ciclo (agentes.cadeia_id, agentes.perfil_navegador_id, ...)
+        for tabela in _tabelas_do_banco():
+            for fk in tabela.foreign_keys:
+                if _quebra_ciclo(fk) and tabela.name in criados and fk.column.table.name in criados:
+                    pk = list(tabela.primary_key.columns)
+                    await s.execute(
+                        update(tabela)
+                        .where(*[c == criados[tabela.name][c.name] for c in pk])
+                        .values({fk.parent.name: criados[fk.column.table.name][fk.column.name]})
+                    )
+        await s.commit()
+
+    resposta = await cliente.request("DELETE", "/v1/conta", json={"senha": SENHA}, headers=auth)
+    assert resposta.status_code == 204, resposta.text
+    async with fabrica() as s:
+        sobrou = {
+            t.name: n
+            for t in _tabelas_do_banco()
+            if t.name not in TABELAS_SEM_DONO
+            and (n := await s.scalar(text(f"select count(*) from {t.name}")))
+        }
+    assert sobrou == {}

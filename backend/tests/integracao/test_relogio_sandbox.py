@@ -63,6 +63,20 @@ async def test_prazo_estourado_remove_o_conteiner(docker_ligado) -> None:
     assert vivos == ""
 
 
+async def test_saida_sem_fim_e_cortada_e_o_conteiner_some(docker_ligado) -> None:
+    """``yes`` no contêiner: antes a saída inteira ia para a memória do worker até o prazo."""
+    saida = await executar_comando(ExecutarComando(comando="yes", prazo_segundos=120), _ctx())
+    assert "interrompido" in saida
+    assert len(saida) < 30_000  # o modelo recebe só o começo cortado
+    vivos = subprocess.run(  # noqa: ASYNC221
+        ["docker", "ps", "-q", "--filter", "label=sora.sandbox=1"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert vivos == ""
+
+
 async def test_rotina_sem_supervisao_nao_usa(docker_ligado) -> None:
     with pytest.raises(ErroFerramenta, match="sem supervisão"):
         await executar_comando(ExecutarComando(comando="echo x"), _ctx(sem_supervisao=True))

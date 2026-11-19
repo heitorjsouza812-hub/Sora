@@ -7,8 +7,12 @@ from redis.asyncio import Redis
 
 
 def criar_cliente_redis(url: str) -> Redis:
-    """Cria o cliente Redis assíncrono compartilhado pelo processo."""
-    return Redis.from_url(url, decode_responses=True)
+    """Cria o cliente Redis assíncrono compartilhado pelo processo.
+
+    ``socket_connect_timeout``: com o Redis fora do ar a conexão falha em segundos em vez de
+    prender a requisição. Sem ``socket_timeout`` de leitura: o SSE faz leituras bloqueantes longas.
+    """
+    return Redis.from_url(url, decode_responses=True, socket_connect_timeout=5)
 
 
 def _chave(chave: str) -> str:

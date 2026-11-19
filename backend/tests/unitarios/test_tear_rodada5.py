@@ -24,14 +24,14 @@ def test_openapi_tem_uma_operacao_por_metodo_e_caminho(caplog) -> None:
 
 
 def test_worker_configura_log_em_utf8(monkeypatch) -> None:
-    from workers.__main__ import configurar_log
+    from app.core.observabilidade import configurar_log
 
     saida = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
     monkeypatch.setattr(sys, "stderr", saida)
     raiz = logging.getLogger()
     antes = (raiz.handlers[:], raiz.level)
     try:
-        configurar_log()
+        configurar_log(forcar=True)
         logging.getLogger("arq.worker").info("job → ok ← fim")
         saida.flush()
         texto = saida.buffer.getvalue().decode("utf-8")
