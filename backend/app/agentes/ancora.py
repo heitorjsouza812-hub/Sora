@@ -46,8 +46,8 @@ _CONVERSA = (
     "cancelar_agendamento",
 )
 
-# Conjunto enxuto: cada esquema vai em toda chamada, e planos gratuitos limitam os tokens por
-# minuto. Histórico, habilidades e edição de pendência ficam com a Sora e o agente individual.
+# Conjunto do especialista de cadeia, pelo papel (não pelo plano grátis): ele faz uma etapa e
+# entrega. Histórico, habilidades e edição de pendência ficam com a Sora e o bot 1:1.
 _ESPECIALISTA = (
     "buscar_memoria",
     "lembrar",

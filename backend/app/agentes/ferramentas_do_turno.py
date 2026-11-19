@@ -1,15 +1,14 @@
 """Quais ferramentas vão no pedido ao modelo e quais ficam atrás do catálogo (Motor, A4 do Prumo-3).
 
-Cada ferramenta que vai direto custa o esquema inteiro em TODA chamada ao modelo. No plano
-grátis da Groq (6 a 8 mil tokens por minuto) 32 ferramentas de um bot simples (17 mil caracteres)
-não cabiam. Regra para a Sora e para o bot de conversa 1:1:
+Decidido pelo produto, não pelo plano grátis da Groq, que só existe nos testes (Heitor,
+2026-11-18). Regra para a Sora e para o bot de conversa 1:1:
 
-- **vão direto**: as que o bot tem habilitadas (o que o app mostra no perfil dele), mais o
-  essencial de qualquer conversa: falar, perguntar, lembrar, buscar na memória e propor
-  instruções (cartão);
-- **ficam no catálogo** (três meta-ferramentas, ``conectores_*``): navegador, histórico,
-  pendências, habilidades, enviar a colegas… O modelo vê os nomes por grupo, carrega o esquema de
-  uma e a executa pelo id. A política e o revisor continuam decidindo pelo nome de verdade.
+- **vão direto**: as que o bot tem habilitadas (o que o app mostra no perfil dele), as de
+  conversa do papel (memória, agenda, pendências, histórico, habilidades, colegas, clientes) e o
+  essencial (falar, perguntar, propor instruções);
+- **ficam no catálogo** (três meta-ferramentas, ``conectores_*``): conectores MCP (podem ser
+  centenas) e as ferramentas extras do navegador. O modelo vê os nomes por grupo, carrega o
+  esquema de uma e a executa pelo id. A política e o revisor decidem pelo nome de verdade.
 
 Os outros papéis (especialistas da cadeia, bot de grupo) já têm conjuntos pequenos e não mudam.
 """
@@ -72,9 +71,14 @@ def nomes_diretos(nomes: list[str], contexto: ContextoAgente) -> list[str]:
     """Dos ``nomes`` permitidos, os que vão direto no pedido ao modelo (ordem preservada)."""
     if contexto.papel not in PAPEIS_ENXUTOS:
         return list(nomes)
+    from app.agentes.ancora import ferramentas_do_papel
     from app.ferramentas.permissoes import ferramentas_do_bot
 
-    habilitadas = set(ESSENCIAIS)
+    # Produto, não plano grátis (Heitor, 2026-11-18): as ferramentas de conversa (memória,
+    # pendências, histórico, habilidades, colegas, clientes) vão direto; no teste ao vivo o modelo
+    # não as procurava no catálogo. O catálogo fica para o que é grande de verdade: conectores e as
+    # ferramentas extras do navegador.
+    habilitadas = set(ESSENCIAIS) | set(ferramentas_do_papel(contexto.papel))
     if contexto.papel == "sora":
         from app.agentes.montagem import FERRAMENTAS_POR_PAPEL
 

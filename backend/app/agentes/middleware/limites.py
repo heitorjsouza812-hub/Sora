@@ -21,10 +21,12 @@ from langchain_core.messages import SystemMessage
 if TYPE_CHECKING:
     from app.agentes.montagem import ContextoAgente
 
-LIMITE_PADRAO = (10, 10)
-"""(chamadas do modelo, chamadas de ferramenta) por execução, sem navegador."""
-LIMITE_COM_NAVEGADOR = (25, 40)
-"""O mesmo, quando o agente tem ferramentas do navegador."""
+LIMITE_PADRAO = (20, 30)
+"""(chamadas do modelo, chamadas de ferramenta) por execução, sem navegador nem computador.
+Era (10, 10), pensado no plano grátis; o teste ao vivo estourou numa conversa comum (2026-11-18).
+É proteção contra laço e custo, não economia de cota."""
+LIMITE_COM_NAVEGADOR = (40, 64)
+"""O mesmo, quando o agente usa navegador ou computador (cada clique é uma chamada)."""
 
 MENSAGEM_LIMITE_DE_PASSOS = (
     "A etapa usou o máximo de passos permitido sem terminar. "
@@ -51,7 +53,8 @@ def limites_do_agente(contexto: ContextoAgente) -> tuple[int, int]:
     ``SORA_MAX_CHAMADAS_MODELO_NAVEGADOR`` (a de ferramenta acompanha em 1,6x)."""
     from app.agentes.montagem import FERRAMENTAS_NAVEGADOR, nomes_das_ferramentas
 
-    if any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes_das_ferramentas(contexto)):
+    nomes = nomes_das_ferramentas(contexto)
+    if any(nome in FERRAMENTAS_NAVEGADOR or nome.startswith("computador_") for nome in nomes):
         modelo = _inteiro_do_ambiente("SORA_MAX_CHAMADAS_MODELO_NAVEGADOR", LIMITE_COM_NAVEGADOR[0])
         return modelo, max(modelo, round(modelo * 1.6))
     modelo = _inteiro_do_ambiente("SORA_MAX_CHAMADAS_MODELO", LIMITE_PADRAO[0])

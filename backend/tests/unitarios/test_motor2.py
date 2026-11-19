@@ -32,9 +32,11 @@ def test_bot_simples_tem_esquemas_enxutos_e_navegador_sob_demanda():
     oferecidas = [f for f in ferramentas if f.name in diretos] + catalogo_enxuto(escondidas, [], c)
     esquemas = json.dumps([convert_to_openai_tool(f) for f in oferecidas], ensure_ascii=False)
     # Teto contra crescimento sem querer, não amarrado ao plano grátis da Groq (que só existe nos
-    # testes; Heitor, 2026-11-18). A agenda vai direto: o modelo não a achava no catálogo.
-    assert len(esquemas) < 9000
+    # testes; Heitor, 2026-11-18). Agenda e ferramentas de conversa vão direto: o modelo não as
+    # achava no catálogo. ~3 mil tokens por chamada num bot simples.
+    assert len(esquemas) < 16000
     assert {"agendar", "listar_agendamentos", "cancelar_agendamento"} <= diretos
+    assert {"listar_pendencias", "buscar_historico", "enviar_para_agente"} <= diretos
     assert "navegador_acao" not in diretos
     assert "navegador_acao" not in {f.name for f in escondidas}
     assert len(montar_prompt_de_sistema(c)) < 9000  # mesmo critério do teto acima

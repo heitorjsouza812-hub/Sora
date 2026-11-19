@@ -34,6 +34,13 @@ def test_lista_do_bot_sempre_tem_falar_e_perguntar_e_as_implicitas() -> None:
     assert {"falar", "perguntar", "computador_agir", "computador_abrir_programa"} <= set(nomes)
 
 
+def test_bot_com_computador_tem_folga_de_passos() -> None:
+    from app.agentes.middleware.limites import LIMITE_COM_NAVEGADOR, limites_do_agente
+
+    c = _contexto("individual", ["falar", "computador_observar", "computador_agir"])
+    assert limites_do_agente(c)[0] == LIMITE_COM_NAVEGADOR[0]
+
+
 def test_sora_e_bot_tem_agenda_direto_e_sora_pesquisa() -> None:
     for papel, lista in (("sora", None), ("individual", ["falar"])):
         c = _contexto(papel, lista)

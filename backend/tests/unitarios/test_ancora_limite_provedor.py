@@ -496,9 +496,10 @@ def _contexto(papel: str):
 def test_limite_de_chamadas_cabe_numa_tarefa_de_navegador() -> None:
     from app.agentes.middleware.limites import limites_do_agente
 
-    assert limites_do_agente(_contexto("redator")) == (10, 10)
+    # Produto, não plano grátis (2026-11-18): (10, 10) estourava numa conversa comum.
+    assert limites_do_agente(_contexto("redator")) == (20, 30)
     modelo, ferramenta = limites_do_agente(_contexto("pesquisador"))
-    assert modelo >= 25 and ferramenta >= 40
+    assert modelo >= 40 and ferramenta >= 64
 
 
 def test_limite_configuravel_por_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:
