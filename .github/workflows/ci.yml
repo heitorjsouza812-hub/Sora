@@ -1,11 +1,11 @@
-# Testes de cada push e pull request. Antes, as suítes (backend, app e ponte do desktop) só
-# rodavam à mão na máquina de quem mexia.
+# Testes do backend, do app e da ponte do desktop.
+# Desde 2026-11-20 rodam só à mão (Actions → CI → Run workflow), a pedido do Heitor: envio na
+# main e PR não esperam mais o CI. Para voltar a rodar sozinho, devolver os gatilhos push e
+# pull_request abaixo.
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

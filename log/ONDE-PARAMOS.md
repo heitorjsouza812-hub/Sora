@@ -4,7 +4,7 @@ Feita a Onda 1 do comparativo, enviada direto na `main` sem PR: senha nova por l
 meus dados (.zip), relatar problema (diagnóstico mascarado, CLI do time), chaves extras por
 conexão e modelos reserva da conta (troca sempre avisada), atualização do desktop (desligada até
 haver chave de assinatura). Migrações 0018 e 0019. Testes verdes no backend, app e Rust; detalhes
-em `log/2026-11-20.md`. **Próximo:** conferir o CI desse envio; no servidor, migrações 0017 a 0019 e
+em `log/2026-11-20.md`. **Próximo:** no servidor, migrações 0017 a 0019 e
 `EMAIL_PROVEDOR`; chaves do atualizador (`app/docs/atualizacao-desktop.md`).
 
 
