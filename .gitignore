@@ -17,3 +17,6 @@ app/qa/ref/
 
 # Arquivos enviados no desenvolvimento (PASTA_ARQUIVOS do backend/.env).
 backend/arquivos*/
+
+# Configurações locais do Claude Code (permissões e URLs da máquina de cada um).
+.claude/settings.local.json

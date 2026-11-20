@@ -624,3 +624,38 @@ def test_passo_do_painel_trabalho_nao_guarda_o_texto_digitado() -> None:
     assert argumentos["acoes"][1]["texto"] == "Lista de compras"  # o original não muda
     # outras ferramentas seguem como antes
     assert parametros_sem_segredos({"consulta": "café"}, "buscar_web") == {"consulta": "café"}
+
+
+# ---------- janelas em outro monitor ----------
+
+
+def test_janela_de_outro_monitor_aparece_marcada_para_o_bot() -> None:
+    from app.computador.servico import LeituraGuardada, ServicoComputador
+
+    bruta = _observacao()
+    bruta["janelas"].append(
+        {"id": "1003", "titulo": "Planilha - Excel", "programa": "EXCEL.EXE", "outro_monitor": True}
+    )
+    observacao = observacao_do_app(bruta)
+    excel = next(j for j in observacao.janelas if j.id_nativo == "1003")
+    assert excel.outro_monitor and (excel.largura, excel.altura) == (0, 0)
+    refs = {f"@c1:j{i}": j for i, j in enumerate(observacao.janelas, start=1)}
+    texto = ServicoComputador.descrever(LeituraGuardada(1, observacao, refs), Alvo.PC_USUARIO)
+    assert "'Planilha - Excel' em outro monitor" in texto
+    assert "a traz para a tela principal" in texto
+
+
+async def test_acao_em_janela_de_outro_monitor_pede_para_observar_de_novo(redis, cartoes) -> None:
+    """A ponte traz a janela para o monitor principal e responde janela_trazida: as coordenadas
+    que o bot mandou eram de uma janela fora da captura."""
+    bot = uuid4()
+    usuario_id, sessao_id, provedor = await _conectar(redis, cartoes, bot)
+    computador = await _pc(provedor, usuario_id, bot)
+    excel = Janela("1003", "Planilha", 0, 0, 0, 0, programa="excel.exe", outro_monitor=True)
+    acao = AcaoResolvida(
+        acao=AcaoComputador(tipo="clicar", ref="@c1:j3"), janela=excel, ponto=(0, 0)
+    )
+    with AppFalso(CanalPc(redis), usuario_id, sessao_id, lambda _c: _erro("janela_trazida")) as app:
+        with pytest.raises(ErroFerramenta, match="outro monitor; trouxe para a tela principal"):
+            await computador.agir(acao)
+    assert app.recebidos[0]["dados"]["acao"]["janela"] == "1003"

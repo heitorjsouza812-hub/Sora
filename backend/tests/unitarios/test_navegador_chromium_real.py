@@ -35,9 +35,22 @@ class _Servidor(BaseHTTPRequestHandler):
             self.send_header("Location", f"http://beta.test:{porta}/destino")
             self.end_headers()
             return
+        host = self.headers.get("Host")
+        extra = {
+            # aba nova pelo próprio site: link target=_blank (mesmo domínio e outro domínio)
+            "/nova-aba": (
+                f'<a id="nova" target="_blank" href="http://{host}/destino">nova</a>'
+                f'<a id="nova-fora" target="_blank" href="http://beta.test:{porta}/destino">fora</a>'
+            ),
+            # janela que fecha sozinha (como o login com Google): o bot volta para a anterior
+            "/popup-fecha": (
+                '<button id="fecha" onclick="window.open(\'/fecha-sozinha\')">x</button>'
+            ),
+            "/fecha-sozinha": "<script>setTimeout(() => window.close(), 300)</script>",
+        }.get(self.path, "")
         corpo = (
-            f"<title>{self.headers.get('Host')}{self.path}</title>"
-            f'<a id="ir" href="http://beta.test:{porta}/destino">ir</a>'
+            f"<title>{host}{self.path}</title>"
+            f'<a id="ir" href="http://beta.test:{porta}/destino">ir</a>{extra}'
         ).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -265,3 +278,45 @@ async def test_primeiro_uso_com_duas_navegacoes_juntas_cria_um_so_navegador(
         with contextlib.suppress(Exception):
             await asyncio.wait_for(motor.encerrar(), timeout=20)
         servidor.shutdown()
+
+
+# ------------------------------------------------------------ aba nova aberta pelo site
+
+
+async def _clicar(motor: MotorPlaywright, aba: Aba, seletor: str, espera_ms: int = 900) -> None:
+    pagina = motor.pagina(aba)
+    await pagina.click(seletor)
+    await pagina.wait_for_timeout(espera_ms)
+
+
+async def test_aba_nova_do_clique_vira_a_aba_do_bot(ambiente: _Ambiente) -> None:
+    """Antes, ``target=_blank`` abria uma página solta: o bot seguia na antiga, sem ver a nova."""
+    aba, agente = await ambiente.aba(logado=False)
+    await ambiente.gerente.navegar(aba.id, agente, ambiente.url("alpha", "/nova-aba"))
+    antiga = ambiente.motor.pagina(aba)
+    await _clicar(ambiente.motor, aba, "#nova")
+    atual = ambiente.motor.pagina(aba)
+    assert atual is not antiga
+    assert atual.url == ambiente.url("alpha", "/destino")
+    assert ambiente.motor._anteriores[aba.id] == [antiga]
+
+
+async def test_aba_nova_que_fecha_sozinha_devolve_a_anterior(ambiente: _Ambiente) -> None:
+    aba, agente = await ambiente.aba(logado=False)
+    await ambiente.gerente.navegar(aba.id, agente, ambiente.url("alpha", "/popup-fecha"))
+    antiga = ambiente.motor.pagina(aba)
+    await _clicar(ambiente.motor, aba, "#fecha", espera_ms=1_500)
+    assert ambiente.motor.pagina(aba) is antiga
+    assert ambiente.motor.pagina(aba).url.endswith("/popup-fecha")
+
+
+async def test_aba_nova_para_dominio_nao_aprovado_no_perfil_logado_pede_revisao(
+    ambiente: _Ambiente,
+) -> None:
+    """A aba nova passa pelo mesmo filtro: perfil logado não abre domínio novo sem o cartão."""
+    aba, agente = await ambiente.aba(logado=True, aprovados=("alpha.test",))
+    await ambiente.gerente.navegar(aba.id, agente, ambiente.url("alpha", "/nova-aba"))
+    await _clicar(ambiente.motor, aba, "#nova-fora")
+    revisao = ambiente.motor.consumir_revisao(aba)
+    assert revisao is not None and revisao.dominio == "beta.test"
+    assert "beta.test" not in ambiente.motor.pagina(aba).url

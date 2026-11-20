@@ -23,11 +23,18 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from app.computador.processo import SaidaProcesso, rodar_limitado
 from app.core.redacao import redigir
 from app.ferramentas.base import LIMITE_RESULTADO_CARACTERES, ErroFerramenta
 
 PRAZO_PADRAO_SEGUNDOS = 60
 PRAZO_MAXIMO_SEGUNDOS = 300
+LIMITE_SAIDA_BYTES = 1024 * 1024
+"""Teto de cada fluxo (saída e erros) lido do contêiner. O modelo só vê uns 6 mil caracteres
+(``cortar``); o teto existe para a saída nunca encher a memória do worker."""
+REDE_COM_INTERNET = "sora-sbx-internet"
+"""Rede interna (sem rota para fora) do comando com internet: a única saída é o proxy de egresso,
+que recusa IP privado e de metadados da nuvem depois do DNS (o mesmo do computador virtual)."""
 MEMORIA = "512m"
 CPUS = "1"
 MAX_PROCESSOS = 128
@@ -56,11 +63,17 @@ class ResultadoComando:
     saida: str
     erro: str
     estourou_prazo: bool = False
+    cortado: bool = False
 
     def para_modelo(self) -> str:
         partes = [
             f"código de saída: {'prazo estourado' if self.estourou_prazo else self.codigo_saida}"
         ]
+        if self.cortado:
+            partes.append(
+                f"a saída passou de {LIMITE_SAIDA_BYTES // 1024} KB: o comando foi interrompido "
+                "e só o começo está abaixo (redirecione para um arquivo ou filtre com head/grep)"
+            )
         if self.saida:
             partes.append(f"saída:\n{self.saida}")
         if self.erro:
@@ -85,11 +98,18 @@ class SandboxDocker:
     docker: str = "docker"
     docker_host: str | None = None
     """Host Docker separado (``DOCKER_HOST``); ``None`` usa o Docker local (só desenvolvimento)."""
+    imagem_proxy: str = "sora-proxy-egresso:1"
+    """Proxy de egresso (``infra/proxy-egresso``) do comando com internet."""
     nome: str = field(default_factory=lambda: f"sora-sbx-{uuid4().hex[:12]}")
     rotulos: dict[str, str] = field(default_factory=lambda: {"sora.sandbox": "1"})
 
     def montar_argumentos(self, args: ExecutarComando) -> list[str]:
-        """``docker run`` com tudo travado. O comando vai como um único argumento do ``sh -c``."""
+        """``docker run`` com tudo travado. O comando vai como um único argumento do ``sh -c``.
+
+        Com internet, o contêiner fica numa rede interna cuja única saída é o proxy de egresso
+        (``--network bridge`` alcançaria a rede do host e o 169.254.169.254 da nuvem)."""
+        from app.computador.virtual import ALIAS_PROXY, PORTA_PROXY
+
         argv = [
             self.docker,
             "run",
@@ -98,7 +118,7 @@ class SandboxDocker:
             self.nome,
             "-i",
             "--network",
-            "bridge" if args.com_internet else "none",
+            REDE_COM_INTERNET if args.com_internet else "none",
             "--memory",
             MEMORIA,
             "--memory-swap",
@@ -123,6 +143,10 @@ class SandboxDocker:
             "--env",
             "HOME=/trabalho",
         ]
+        if args.com_internet:
+            proxy = f"http://{ALIAS_PROXY}:{PORTA_PROXY}"
+            for variavel in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+                argv += ["--env", f"{variavel}={proxy}"]
         for chave, valor in self.rotulos.items():
             argv += ["--label", f"{chave}={valor}"]
         return [*argv, self.imagem, "sh", "-c", args.comando]
@@ -143,33 +167,44 @@ class SandboxDocker:
             timeout=30,
         )
 
-    def _rodar(self, args: ExecutarComando) -> tuple[int | None, bytes, bytes, bool]:
+    def _rodar(self, args: ExecutarComando) -> SaidaProcesso:
         # subprocess em thread: o loop "selector" do Windows (usado pelo worker) não cria
-        # subprocessos assíncronos.
-        try:
-            r = subprocess.run(
-                self.montar_argumentos(args),
-                env=self._ambiente(),
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                check=False,
-                timeout=args.prazo_segundos + 10,
-            )
-        except subprocess.TimeoutExpired:
+        # subprocessos assíncronos. A saída tem teto (``rodar_limitado``).
+        resultado = rodar_limitado(
+            self.montar_argumentos(args),
+            env=self._ambiente(),
+            prazo=args.prazo_segundos + 10,
+            limite_bytes=LIMITE_SAIDA_BYTES,
+        )
+        if resultado.estourou_prazo or resultado.cortado:
             self._remover()
-            return None, b"", b"", True
-        return r.returncode, r.stdout, r.stderr, False
+        return resultado
+
+    async def _preparar_rede(self) -> None:
+        """Rede interna + proxy de egresso para o comando com internet (idempotente)."""
+        from app.computador.virtual import (
+            ClienteDocker,
+            garantir_proxy_de_saida,
+            garantir_rede_interna,
+        )
+
+        cliente = ClienteDocker(docker=self.docker, docker_host=self.docker_host)
+        await garantir_proxy_de_saida(cliente, self.imagem_proxy)
+        await garantir_rede_interna(cliente, REDE_COM_INTERNET, rotulo="sora.sandbox=1")
 
     async def executar(self, args: ExecutarComando, segredos: list[str]) -> ResultadoComando:
         if shutil.which(self.docker) is None:
             raise ErroFerramenta("O computador isolado não está disponível neste servidor.")
-        codigo, saida, erro, estourou = await asyncio.to_thread(self._rodar, args)
-        if estourou:
+        if args.com_internet:
+            await self._preparar_rede()
+        resultado = await asyncio.to_thread(self._rodar, args)
+        if resultado.estourou_prazo:
             return ResultadoComando(None, "", "", estourou_prazo=True)
         return ResultadoComando(
-            codigo,
-            cortar(redigir(saida.decode(errors="replace"), segredos)),
-            cortar(redigir(erro.decode(errors="replace"), segredos)),
+            resultado.codigo,
+            cortar(redigir(resultado.stdout.decode(errors="replace"), segredos)),
+            cortar(redigir(resultado.stderr.decode(errors="replace"), segredos)),
+            cortado=resultado.cortado,
         )
 
 
@@ -185,7 +220,14 @@ class SandboxFalso:
         return self.respostas.get(args.comando, ResultadoComando(0, "", ""))
 
 
-def obter_sandbox(provedor: str, imagem: str, docker_host: str | None = None) -> ProvedorSandbox:
+def obter_sandbox(
+    provedor: str,
+    imagem: str,
+    docker_host: str | None = None,
+    imagem_proxy: str = "sora-proxy-egresso:1",
+) -> ProvedorSandbox:
     if provedor == "docker":
-        return SandboxDocker(imagem=imagem, docker_host=docker_host or None)
+        return SandboxDocker(
+            imagem=imagem, docker_host=docker_host or None, imagem_proxy=imagem_proxy
+        )
     raise ErroFerramenta("O computador isolado está desligado (SANDBOX_PROVEDOR=nenhum).")

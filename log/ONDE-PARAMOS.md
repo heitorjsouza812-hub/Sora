@@ -1,3 +1,16 @@
+## Revisão geral — ramo `fix/revisao-geral` (2026-11-19)
+
+Análise do repositório e correção de tudo o que apareceu: apagar conta (LGPD) quebrava para quem
+usou rotinas, grupos, navegador ou canais da empresa; `executar_comando` podia derrubar o worker
+com saída sem fim; macro do Office (alt+F11) e interpretadores escapavam do controle do PC;
+prompt injection podia usar o modo "total"; F5 seguidos derrubavam o login (decisão 6, migração
+0017); token de acesso valia 15 min depois de sair; sem Sentry/log, sem teto de upload, Redis sem
+senha, sem CI. Também `api/canais_empresa` virou pacote e as funções puras da cadeia foram para
+`app/orquestrador`. Validação: 2130 unitários, 31/32 arquivos de integração (o MCP já falhava na
+`main`), clippy + 32 testes Rust. Detalhes em `log/2026-11-19.md`. **Próximo:** revisar e juntar o
+ramo, `alembic upgrade head` (0017), `REDIS_SENHA` no `.env` do servidor, push para o CI rodar.
+
+
 ## Âncora-10 — seletor no backend (2026-11-16)
 
 Preferências de Sora/bot/grupo persistem o modelo, raciocínio e permissão; modelo fixo sem fallback silencioso. Catálogo só de chat com destaques; conexão ativa todos e POST adiciona por ID. Migrações 0015/0016 aplicadas. API 8200 e worker reiniciados por Start-Process; Vite/desktop preservados. QA HTTP Groq: 11 ativos, 4 chats, PATCH/GET e inclusão nova passaram; conversa/provedor QA limpos. Próximo: validar seletor no app e continuar PC com Vela-12. Diário `2026-11-16.md`.

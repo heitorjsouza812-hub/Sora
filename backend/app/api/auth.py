@@ -4,6 +4,7 @@ Web: o token de renovação vai num cookie httpOnly. Desktop (`X-Sora-Cliente: d
 corpo, porque o cookie `Lax` não acompanha pedidos de `http://tauri.localhost`.
 """
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Header, Request, Response, status
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import contas, seguranca
 from app.core.banco import obter_sessao
 from app.core.config import obter_configuracao
-from app.core.dependencias import obter_redis
+from app.core.dependencias import obter_redis, obter_redis_opcional
 from app.modelos.esquemas import CadastroEntrada, LoginEntrada, RenovacaoEntrada, TokensSaida
 
 roteador = APIRouter(prefix="/auth", tags=["auth"])
@@ -25,6 +26,7 @@ CAMINHO_COOKIE = "/v1/auth"
 # requisição, o cliente recebia 201/200 e o commit vinha depois (e podia falhar).
 Sessao = Annotated[AsyncSession, Depends(obter_sessao, scope="function")]
 RedisDep = Annotated[Redis, Depends(obter_redis)]
+RedisOpcional = Annotated[Redis | None, Depends(obter_redis_opcional)]
 ClienteCabecalho = Annotated[str | None, Header(alias=contas.CABECALHO_CLIENTE)]
 
 
@@ -78,12 +80,13 @@ async def entrar(
 async def renovar(
     resposta: Response,
     sessao: Sessao,
+    redis: RedisOpcional,
     dados: RenovacaoEntrada | None = None,
     cookie_renovacao: Annotated[str | None, Cookie(alias=COOKIE_RENOVACAO)] = None,
 ) -> TokensSaida:
     """Rotaciona o token de renovação e emite novo acesso."""
     token = (dados.token_renovacao if dados else None) or cookie_renovacao
-    renovacao, acesso, cliente = await contas.renovar(sessao, token)
+    renovacao, acesso, cliente = await contas.renovar(sessao, token, redis)
     return _responder_tokens(resposta, cliente, renovacao, acesso)
 
 
@@ -91,10 +94,19 @@ async def renovar(
 async def sair(
     resposta: Response,
     sessao: Sessao,
+    redis: RedisOpcional,
     dados: RenovacaoEntrada | None = None,
     cookie_renovacao: Annotated[str | None, Cookie(alias=COOKIE_RENOVACAO)] = None,
 ) -> None:
     """Encerra a sessão atual e remove o cookie quando aplicável."""
     token = (dados.token_renovacao if dados else None) or cookie_renovacao
-    await contas.sair(sessao, token)
+    encerrada = await contas.sair(sessao, token, redis)
     resposta.delete_cookie(COOKIE_RENOVACAO, path=CAMINHO_COOKIE)
+    if encerrada is not None and redis is not None:
+        # O controle do PC preso a este login (app de desktop) solta na hora (Cerca B3).
+        from app.computador.pc_usuario_canal import CanalPc
+
+        try:
+            await CanalPc(redis).encerrar_da_sessao_de_login(encerrada.usuario_id, encerrada.id)
+        except Exception:  # o PC solta também quando a sessão dele vence; sair não falha por isso
+            logging.getLogger(__name__).warning("não consegui soltar o PC ao sair", exc_info=True)

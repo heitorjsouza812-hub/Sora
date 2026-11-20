@@ -104,7 +104,7 @@ async def _conferir_entrada(
     sessao: AsyncSession, usuario_id: UUID, texto: str, anexos: list[UUID]
 ) -> None:
     if not texto.strip() and not anexos:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Escreva uma mensagem.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Escreva uma mensagem.")
     if not await repositorio.conferir_anexos(sessao, usuario_id, anexos):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Anexo não encontrado.")
 
@@ -535,7 +535,7 @@ async def listar_mensagens(
 ) -> list[MensagemSaida]:
     if not 1 <= limite <= 100:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "Limite deve ficar entre 1 e 100."
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Limite deve ficar entre 1 e 100."
         )
     mensagens = await repositorio.listar_mensagens(
         sessao, usuario_id, conversa_id, antes=antes, limite=limite
@@ -653,7 +653,7 @@ async def pedir_ajuste(
     if conversa is None:
         raise _nao_encontrada()
     if not dados.texto.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Descreva o ajuste.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Descreva o ajuste.")
     if dados.agente_id is not None:
         agente = await repositorio.obter_agente(sessao, usuario_id, dados.agente_id)
         if agente is None:

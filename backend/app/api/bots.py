@@ -76,7 +76,7 @@ async def _materializar_rascunho(sessao: AsyncSession, usuario_id: UUID, rascunh
     funcao = str(dados.get("funcao") or "").strip()
     instrucoes = str(dados.get("instrucoes") or "").strip()
     if not nome or nome.casefold() == "sora" or not funcao:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Informe nome e função do bot.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Informe nome e função do bot.")
     nomes, _ = await _em_uso(sessao, usuario_id)
     if nome.casefold() in {existente.casefold() for existente in nomes}:
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um bot com esse nome.")
@@ -113,7 +113,7 @@ async def _materializar_rascunho(sessao: AsyncSession, usuario_id: UUID, rascunh
                 fuso=rotina["fuso"],
             )
         except (ErroFerramenta, KeyError, ValueError) as erro:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(erro)) from erro
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(erro)) from erro
     resolver(rascunho, "confirmado")
     rascunho.agente_id = agente.id
     return agente

@@ -200,6 +200,56 @@ PROGRAMAS_BLOQUEADOS = frozenset(
         "msbuild.exe",
         "installutil.exe",
         "control.exe",
+        # interpretadores e binários que rodam comando, baixam ou instalam (LOLBAS)
+        "python.exe",
+        "pythonw.exe",
+        "py.exe",
+        "pyw.exe",
+        "node.exe",
+        "java.exe",
+        "javaw.exe",
+        "perl.exe",
+        "ruby.exe",
+        "php.exe",
+        "dotnet.exe",
+        "sh.exe",
+        "mintty.exe",
+        "git-bash.exe",
+        "wmic.exe",
+        "forfiles.exe",
+        "pcalua.exe",
+        "msdt.exe",
+        "cmstp.exe",
+        "hh.exe",
+        "odbcconf.exe",
+        "regasm.exe",
+        "regsvcs.exe",
+        "csc.exe",
+        "vbc.exe",
+        "jsc.exe",
+        "presentationhost.exe",
+        "scriptrunner.exe",
+        "syncappvpublishingserver.exe",
+        "ieexec.exe",
+        "infdefaultinstall.exe",
+        "mavinject.exe",
+        "winget.exe",
+        "curl.exe",
+        "ftp.exe",
+        "tftp.exe",
+        "reg.exe",
+        "sc.exe",
+        "net.exe",
+        "net1.exe",
+        "netsh.exe",
+        "bcdedit.exe",
+        "vssadmin.exe",
+        "wevtutil.exe",
+        "takeown.exe",
+        "icacls.exe",
+        "runas.exe",
+        "psexec.exe",
+        "psexec64.exe",
         # a própria Sora (o bot não aprova os próprios cartões)
         "sora.exe",
     }
@@ -216,8 +266,9 @@ def tecla_proibida(tecla: str | None) -> bool:
     """Atalhos que abrem outros programas ou trocam para janela não liberada (Cerca A1).
 
     A ponte recusa de novo (``regras.rs``): tecla Windows, ctrl+Esc (Iniciar), ctrl+shift+Esc
-    (Gerenciador de Tarefas), alt+Tab/alt+Esc, ctrl+alt+Delete e as ferramentas do
-    desenvolvedor do navegador (F12, ctrl+shift+I/J/C), que rodam código na página.
+    (Gerenciador de Tarefas), alt+Tab/alt+Esc, ctrl+alt+Delete, as ferramentas do
+    desenvolvedor do navegador (F12, ctrl+shift+I/J/C/K), que rodam código na página, e o editor
+    e a lista de macros do Office/LibreOffice (alt+F11, alt+F8), que rodam código no programa.
     """
     partes = [p.strip().lower() for p in str(tecla or "").split("+") if p.strip()]
     if not partes:
@@ -238,6 +289,8 @@ def tecla_proibida(tecla: str | None) -> bool:
     if base in {"delete", "backspace"} and ctrl and alt:
         return True
     if base == "f12":
+        return True
+    if alt and base in {"f11", "f8"}:
         return True
     return ctrl and shift and base in {"i", "j", "c", "k"}
 
@@ -305,6 +358,7 @@ def observacao_do_app(resultado: dict[str, Any]) -> Observacao:
                 altura=_inteiro(bruta.get("altura"), 0),
                 ativa=bool(bruta.get("ativa")),
                 programa=programa,
+                outro_monitor=bool(bruta.get("outro_monitor")),
             )
         )
     arvore: list[dict[str, Any]] = []
@@ -357,6 +411,10 @@ _MENSAGENS = {
     "invalido": "O app de desktop recusou o pedido (formato inválido).",
     "janela_sumiu": "Essa janela não existe mais. Observe a tela de novo.",
     "sem_foco": "Não consegui trazer a janela para a frente. Clique nela antes de digitar.",
+    "janela_trazida": (
+        "Essa janela estava em outro monitor; trouxe para a tela principal. Observe de novo e "
+        "repita a ação com as coordenadas da tela nova."
+    ),
     "nao_abrivel": NAO_ABRIVEL,
 }
 

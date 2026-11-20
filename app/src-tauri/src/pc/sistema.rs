@@ -579,8 +579,53 @@ pub fn alvo_da_ref(hwnd: isize) -> Option<AlvoJanela> {
     visivel.then(|| alvo_da_janela(h(hwnd)))
 }
 
-/// Traz uma janela para a frente (para digitar nela). Falso se o Windows não deixou.
+/// A janela está (pelo centro) no monitor principal? A captura e as coordenadas do bot são só dele.
+pub fn no_monitor_principal(hwnd: isize) -> bool {
+    use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY, MonitorFromPoint, MonitorFromWindow};
+    // SAFETY: só leitura; HWND inválido devolve o monitor mais próximo.
+    unsafe { MonitorFromWindow(h(hwnd), MONITOR_DEFAULTTONEAREST) == MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) }
+}
+
+/// Janela em outro monitor vem para o principal (mesmo tamanho, cortado à área de trabalho), para o
+/// bot enxergar e clicar nela. Maximizada continua maximizada. Devolve se moveu. Só é chamada para a
+/// janela em que o bot vai trabalhar (abrir programa, digitar, retomar, trazer pela ref).
+pub fn trazer_ao_monitor_principal(hwnd: isize) -> bool {
+    use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromPoint};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        IsZoomed, SW_MAXIMIZE, SW_RESTORE, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos, ShowWindow,
+    };
+    if no_monitor_principal(hwnd) {
+        return false;
+    }
+    // SAFETY: HWND do servidor (inválido só falha); estruturas locais com o tamanho certo.
+    unsafe {
+        let principal = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
+        let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..Default::default() };
+        if !GetMonitorInfoW(principal, &mut info).as_bool() {
+            return false;
+        }
+        let maximizada = IsZoomed(h(hwnd)).as_bool();
+        if maximizada || IsIconic(h(hwnd)).as_bool() {
+            let _ = ShowWindow(h(hwnd), SW_RESTORE);
+        }
+        let mut r = RECT::default();
+        if GetWindowRect(h(hwnd), &mut r).is_err() {
+            return false;
+        }
+        let area = info.rcWork;
+        let [x, y, direita, baixo] = super::regras::posicao_no_principal([r.left, r.top, r.right, r.bottom], [area.left, area.top, area.right, area.bottom]);
+        let moveu = SetWindowPos(h(hwnd), None, x, y, direita - x, baixo - y, SWP_NOZORDER | SWP_NOACTIVATE).is_ok();
+        if maximizada {
+            let _ = ShowWindow(h(hwnd), SW_MAXIMIZE);
+        }
+        moveu
+    }
+}
+
+/// Traz uma janela para a frente (para digitar nela). Falso se o Windows não deixou. Janela em
+/// outro monitor vem antes para o principal (o bot só vê o principal).
 pub fn trazer_para_frente(hwnd: isize) -> bool {
+    let _ = trazer_ao_monitor_principal(hwnd);
     // SAFETY: HWND do servidor; inválido só falha.
     unsafe {
         use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -648,9 +693,12 @@ pub fn janelas(t: &Tela, pid_proprio: u32) -> Vec<Value> {
     }
     let frente = unsafe { GetForegroundWindow() };
     let mut saida = Vec::new();
+    let mut de_outro_monitor = Vec::new();
     for (hwnd, r) in coleta.janelas {
         if r.right <= 0 || r.bottom <= 0 || r.left >= t.largura_fisica || r.top >= t.altura_fisica {
-            continue; // em outro monitor
+            // em outro monitor: o bot não vê, mas sabe que existe e pode trazer pela ref
+            de_outro_monitor.push(hwnd);
+            continue;
         }
         let texto = titulo(hwnd);
         if texto.trim().is_empty() {
@@ -675,6 +723,28 @@ pub fn janelas(t: &Tela, pid_proprio: u32) -> Vec<Value> {
         if saida.len() >= MAX_JANELAS {
             break;
         }
+    }
+    for hwnd in de_outro_monitor {
+        if saida.len() >= MAX_JANELAS {
+            break;
+        }
+        let texto = titulo(hwnd);
+        if texto.trim().is_empty() {
+            continue;
+        }
+        let alvo = alvo_da_janela(hwnd);
+        let propria = alvo.pid == pid_proprio;
+        let programa = if propria { "sora.exe".to_string() } else { alvo.programa.clone() };
+        let bloqueada = propria || programa_bloqueado(&programa) || titulo_bloqueado(&texto);
+        saida.push(json!({
+            "id": (hwnd.0 as isize).to_string(),
+            "titulo": if bloqueada { String::new() } else { texto.chars().take(200).collect() },
+            "x": 0, "y": 0, "largura": 0, "altura": 0,
+            "ativa": hwnd == frente,
+            "programa": programa,
+            "bloqueado": bloqueada,
+            "outro_monitor": true,
+        }));
     }
     saida
 }
@@ -1085,4 +1155,31 @@ pub fn abrir_programa(caminho: &str, argumentos: &str, programa_da_janela: &str,
             let _ = trazer_para_frente(*h);
         })
         .ok_or_else(|| "o programa não abriu a tempo".into())
+}
+
+/// Conferência na máquina de verdade (só leitura: captura e árvore ficam na memória do teste).
+/// `cargo test -- --ignored ao_vivo`
+#[cfg(test)]
+mod ao_vivo {
+    use super::*;
+
+    #[test]
+    #[ignore = "lê a tela de verdade; rode com --ignored"]
+    fn ao_vivo_observar_a_tela_e_a_janela_em_foco() {
+        let t = tela();
+        assert!(t.largura_fisica >= 640 && t.altura_fisica >= 480, "tela {t:?}");
+        let (obs, _) = observar(std::process::id(), false).expect("observar");
+        let janelas = obs["janelas"].as_array().map_or(0, Vec::len);
+        let elementos = obs["arvore"].as_array().map_or(0, Vec::len);
+        let omitida = obs["captura_omitida"].as_bool().unwrap_or(false);
+        let png = obs["png"].as_str().unwrap_or("").len();
+        println!(
+            "tela física {}x{}, captura {}x{} (escala {:.2}); png base64 {} bytes; omitida={omitida}; janelas {janelas}; elementos da janela em foco {elementos}; ms {}",
+            t.largura_fisica, t.altura_fisica, t.largura, t.altura, t.escala, png, obs["ms"]
+        );
+        assert!(janelas > 0, "nenhuma janela listada");
+        assert!(omitida || png > 1000, "captura vazia");
+        let frente = janela_da_frente().expect("janela da frente");
+        println!("janela da frente no monitor principal: {}", no_monitor_principal(frente));
+    }
 }

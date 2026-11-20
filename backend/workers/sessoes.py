@@ -21,3 +21,18 @@ async def limpar_pares_de_renovacao(ctx: dict[str, Any]) -> int:
     if limpas:
         registro.info("%d par(es) de renovação vencidos apagados", limpas)
     return limpas
+
+
+async def apagar_sessoes_vencidas(ctx: dict[str, Any]) -> int:
+    """Apaga as sessões vencidas ou encerradas há mais de 30 dias (a tabela não cresce sem fim)."""
+    from app.core import contas
+
+    try:
+        async with ctx["sessoes"]() as sessao:
+            apagadas = await contas.apagar_sessoes_vencidas(sessao)
+    except Exception:
+        registro.warning("não consegui apagar as sessões vencidas", exc_info=True)
+        return 0
+    if apagadas:
+        registro.info("%d sessão(ões) vencida(s) apagada(s)", apagadas)
+    return apagadas

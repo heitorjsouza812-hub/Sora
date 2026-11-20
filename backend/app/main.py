@@ -12,7 +12,10 @@ from app.api import roteador_v1
 from app.busca.provedor import verificar_busca_permitida
 from app.core.config import obter_configuracao
 from app.core.contas import ErroConta
+from app.core.corpo import LimiteDeCorpo
+from app.core.observabilidade import configurar_log, iniciar_sentry
 from app.core.redis import criar_cliente_redis
+from app.core.saude import verificar_prontidao
 from app.llm.falso import verificar_modelo_falso_permitido
 
 
@@ -22,6 +25,8 @@ async def ciclo_de_vida(aplicacao: FastAPI) -> AsyncIterator[None]:
     config = obter_configuracao()
     verificar_modelo_falso_permitido(config.ambiente, config.sora_modelo_falso)
     verificar_busca_permitida(config.busca_provedor, config.ambiente)
+    configurar_log()
+    iniciar_sentry(config, "api")
     aplicacao.state.redis = criar_cliente_redis(config.redis_url)
     try:
         yield
@@ -55,11 +60,21 @@ def criar_aplicacao() -> FastAPI:
         allow_headers=["*"],
         expose_headers=["Last-Event-ID"],
     )
+    # Por último = mais por fora: o corpo grande é recusado antes de qualquer rota ler o multipart.
+    aplicacao.add_middleware(LimiteDeCorpo)
     aplicacao.include_router(roteador_v1, prefix="/v1")
 
     @aplicacao.get("/health", tags=["saude"])
     async def health() -> dict[str, str]:
+        """Vivo: o processo responde (não toca no banco nem no Redis)."""
         return {"status": "ok"}
+
+    @aplicacao.get("/health/pronto", tags=["saude"])
+    async def pronto(requisicao: Request) -> JSONResponse:
+        """Pronto para atender: banco e Redis respondem em até 3 s. 503 se algum não responder
+        (o healthcheck do Compose e o balanceador usam esta; ``/health`` não derruba o
+        contêiner por um banco lento)."""
+        return await verificar_prontidao(requisicao.app)
 
     return aplicacao
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urljoin
@@ -32,7 +33,11 @@ from app.navegador.ponte_loop import (
 )
 from app.revisor.politica import dominio_registravel, navegacao_exige_revisao
 
+registro = logging.getLogger(__name__)
+
 PRAZO_NAVEGACAO_MS = 20_000
+MAX_ANTERIORES = 5
+"""Quantas páginas de onde saíram abas novas ficam guardadas por aba (as mais velhas fecham)."""
 
 LerEstado = Callable[[str], Awaitable[dict[str, Any] | None]]
 GravarEstado = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -59,6 +64,8 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
         """Partições cujo perfil o usuário apagou: o login em memória não volta para o banco."""
         """Último domínio barrado por revisão em cada partição (para o erro certo no goto)."""
         self._paginas: dict[UUID, Any] = {}
+        self._anteriores: dict[UUID, list[Any]] = {}
+        """Páginas de onde saiu uma aba nova (``target=_blank``): voltam quando a nova fecha."""
 
     async def _iniciar(self) -> None:
         if self._navegador is not None:
@@ -159,9 +166,50 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
     async def abrir_pagina(self, aba: Aba) -> None:
         contexto = await self._contexto(aba.particao, efemero=aba.perfil_efemero)
         pagina = await contexto.new_page()
+        await self._preparar_pagina(aba, pagina)
+
+    async def _preparar_pagina(self, aba: Aba, pagina: Any) -> None:
+        """Liga a página à aba: console, aba nova aberta por ela e o filtro de redirecionamento."""
         pagina.on("console", lambda m: self._ao_console(aba.id, m.type, m.text))
+        pagina.on("popup", lambda nova: self._adotar_aba_nova(aba, pagina, nova))
         self._paginas[aba.id] = pagina
         await self._vigiar_redirecionamentos(aba, pagina)
+
+    async def _adotar_aba_nova(self, aba: Aba, aberta_por: Any, nova: Any) -> None:
+        """Link ``target=_blank`` ou ``window.open``: a aba do bot passa a ser a página nova.
+
+        Antes ela nascia solta no contexto: o bot seguia na página antiga ("nada mudou"), sem
+        como usar a nova, e o filtro de redirecionamento não valia nela. A anterior fica guardada
+        (até ``MAX_ANTERIORES``) e volta quando a nova fecha sozinha (login com Google, por
+        exemplo, abre uma janela que fecha ao terminar)."""
+        try:
+            if self._loop_proprio is not None:
+                nova = embrulhar(nova, self._loop_proprio)  # o evento chega com o objeto cru
+            atual = self._paginas.get(aba.id)
+            if atual is None or desembrulhar(atual) is not desembrulhar(aberta_por):
+                return  # a aba já mudou de página ou foi fechada: a página nova não é do bot
+            anteriores = self._anteriores.setdefault(aba.id, [])
+            anteriores.append(atual)
+            while len(anteriores) > MAX_ANTERIORES:
+                with contextlib.suppress(Exception):
+                    await anteriores.pop(0).close()
+            nova.on("close", lambda _p: self._ao_fechar_aba_nova(aba.id, nova))
+            await self._preparar_pagina(aba, nova)
+        except Exception:  # evento do Playwright: erro aqui não pode sumir em silêncio nem subir
+            registro.warning("não consegui adotar a aba nova aberta pela página", exc_info=True)
+
+    def _ao_fechar_aba_nova(self, aba_id: UUID, fechada: Any) -> None:
+        atual = self._paginas.get(aba_id)
+        if atual is None or desembrulhar(atual) is not desembrulhar(fechada):
+            return
+        anteriores = self._anteriores.get(aba_id) or []
+        while anteriores:
+            anterior = anteriores.pop()
+            with contextlib.suppress(Exception):
+                if not anterior.is_closed():
+                    self._paginas[aba_id] = anterior
+                    return
+        self._paginas.pop(aba_id, None)  # nada para voltar: a aba se recarrega no próximo uso
 
     async def _vigiar_redirecionamentos(self, aba: Aba, pagina: Any) -> None:
         """Barra redirecionamento (3xx) de documento para domínio não aprovado, antes de seguir.
@@ -262,6 +310,9 @@ class MotorPlaywright:  # pragma: no cover - depende do Chromium instalado
 
     async def descarregar(self, aba: Aba) -> None:
         pagina = self._paginas.pop(aba.id, None)
+        for anterior in self._anteriores.pop(aba.id, []):
+            with contextlib.suppress(Exception):
+                await anterior.close()
         if pagina is not None:
             await pagina.close()
 

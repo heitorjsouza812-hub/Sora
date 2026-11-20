@@ -1,0 +1,101 @@
+# Testes de cada push e pull request. Antes, as suítes (backend, app e ponte do desktop) só
+# rodavam à mão na máquina de quem mexia.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (ruff + unitários)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --python 3.12
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest tests/unitarios -q
+
+  backend-integracao:
+    name: Backend (integração com Postgres e Redis)
+    runs-on: ubuntu-latest
+    needs: backend
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      SORA_MODELO_FALSO: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --python 3.12
+      # Os testes sobem os próprios contêineres (Docker do runner). Arquivo por arquivo, como no
+      # CLAUDE.md §7.4: cada arquivo tem o seu banco limpo.
+      - name: Integração
+        run: |
+          falhou=0
+          for arquivo in tests/integracao/test_*.py; do
+            echo "::group::$arquivo"
+            uv run pytest "$arquivo" -q || falhou=1
+            echo "::endgroup::"
+          done
+          exit $falhou
+
+  app:
+    name: App (build, lint e testes)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx oxlint
+      - run: npm test
+
+  desktop:
+    name: Desktop (clippy e testes da ponte do PC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      # O Tauri lê o app compilado (app/dist) na compilação do Rust.
+      - run: npm ci && npm run build
+        working-directory: app
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - run: cargo clippy -- -D warnings
+        working-directory: app/src-tauri
+      - run: cargo test
+        working-directory: app/src-tauri

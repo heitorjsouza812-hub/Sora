@@ -174,9 +174,12 @@ class ServicoComputador:
         computador = await provedor.obter(contexto.usuario_id, contexto.agente_id)
         if alvo is Alvo.PC_USUARIO and hasattr(computador, "modo_permissao"):
             # Âncora-9: o modo da conversa vale para o cartão por programa do PC do usuário.
+            from app.revisor.contaminacao import modo_efetivo
             from app.revisor.execucao import anunciar_aprovacao_automatica, modo_de_permissao
 
-            computador.modo_permissao = await modo_de_permissao(contexto)
+            # Depois de ler página, anexo ou mensagem de cliente, o "total" não libera programa
+            # do PC sozinho: o cartão aparece (``app/revisor/contaminacao.py``).
+            computador.modo_permissao = modo_efetivo(await modo_de_permissao(contexto), contexto)
 
             async def avisar(modo: str, resumo: str) -> None:
                 await anunciar_aprovacao_automatica(
@@ -268,6 +271,12 @@ class ServicoComputador:
         linhas = []
         for ref, janela in leitura.refs.items():
             ativa = " (ativa)" if janela.ativa else ""
+            if janela.outro_monitor:
+                linhas.append(
+                    f"- {ref} {janela.titulo!r} em outro monitor (não aparece na captura; "
+                    f"uma ação com ref={ref} a traz para a tela principal){ativa}"
+                )
+                continue
             linhas.append(
                 f"- {ref} {janela.titulo!r} em ({janela.x},{janela.y}) "
                 f"{janela.largura}x{janela.altura}{ativa}"

@@ -56,10 +56,10 @@ async def responder_pergunta(
         raise HTTPException(status.HTTP_409_CONFLICT, "Esta pergunta já foi respondida.")
     valor = dados.valor.strip()
     if not valor:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Responda a pergunta.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responda a pergunta.")
     valores = {str(o.get("valor")) for o in pergunta.opcoes if isinstance(o, dict)}
     if not pergunta.resposta_livre and valores and valor not in valores:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Escolha uma das opções.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Escolha uma das opções.")
 
     etapa_id: UUID | None = None
     if pergunta.cadeia_id is not None:

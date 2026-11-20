@@ -19,7 +19,10 @@ async def executar_comando(args: ExecutarComando, contexto: ContextoFerramenta) 
     if not config.sandbox_ativo:
         raise ErroFerramenta("O computador isolado está desligado neste servidor.")
     sandbox = obter_sandbox(
-        config.sandbox_provedor, config.sandbox_imagem, config.sandbox_docker_host
+        config.sandbox_provedor,
+        config.sandbox_imagem,
+        config.sandbox_docker_host,
+        config.computador_proxy_imagem,
     )
     resultado = await sandbox.executar(args, [])
     return resultado.para_modelo()

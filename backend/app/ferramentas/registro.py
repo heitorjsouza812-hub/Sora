@@ -179,10 +179,16 @@ def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[Ba
         funcao = getattr(import_module(modulo), nome)
 
         async def executar(**argumentos):
+            from app.revisor.contaminacao import marcar_se_externo
+
             try:
-                return await funcao(esquema(**argumentos), contexto)
+                resultado = await funcao(esquema(**argumentos), contexto)
             except ErroFerramenta as erro:
                 return f"Erro: {erro}"
+            # Página, busca, anexo, tela, mensagem de cliente: daqui em diante o modo "total"
+            # não aprova sozinho o que tem risco (``app/revisor/contaminacao.py``).
+            marcar_se_externo(nome, contexto)
+            return resultado
 
         return StructuredTool.from_function(
             coroutine=executar,

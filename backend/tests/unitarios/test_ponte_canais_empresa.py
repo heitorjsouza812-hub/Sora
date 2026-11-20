@@ -320,7 +320,9 @@ def test_chave_ignora_ordem_acento_e_palavras_vazias() -> None:
 
 def test_nao_ha_caminho_de_envio_no_codigo() -> None:
     fonte = "\n".join(p.read_text(encoding="utf-8") for p in RAIZ.glob("*.py"))
-    fonte += (RAIZ.parent / "api" / "canais_empresa.py").read_text(encoding="utf-8")
+    rotas = sorted((RAIZ.parent / "api" / "canais_empresa").glob("*.py"))
+    assert rotas, "as rotas dos canais da empresa mudaram de lugar"
+    fonte += "\n".join(p.read_text(encoding="utf-8") for p in rotas)
     assert "chat.postMessage" not in fonte
     assert not re.search(r"/messages[\"'?/{]", fonte)
     assert "responder_cliente" not in fonte.replace("não há `responder_cliente`", "")

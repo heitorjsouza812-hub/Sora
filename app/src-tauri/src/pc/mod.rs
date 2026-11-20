@@ -597,6 +597,18 @@ fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
     let pid = std::process::id();
     let permitidos = programas_permitidos(dados);
     let acao = dados.get("acao").cloned().unwrap_or(Value::Null);
+    // Janela de outro monitor (o bot não a vê): vem para o principal e o bot observa de novo antes
+    // de agir, porque as coordenadas que ele mandou eram de uma janela que não estava na tela.
+    if let Some(hwnd) = acao.get("janela").and_then(Value::as_str).and_then(|j| j.parse::<isize>().ok())
+        && !sistema::no_monitor_principal(hwnd)
+    {
+        let alvo = sistema::alvo_da_ref(hwnd).ok_or_else(|| ErroPc::novo("janela_sumiu"))?;
+        conferir_alvo(&alvo, &permitidos, pid)?;
+        if !sistema::trazer_para_frente(hwnd) {
+            return Err(ErroPc::novo("sem_foco"));
+        }
+        return Err(ErroPc::novo("janela_trazida"));
+    }
     let t = sistema::tela();
     let plano = planejar(&acao, t.escala, (t.largura_fisica, t.altura_fisica))?;
     let falha = || ErroPc::com_mensagem("falha", "não achei a janela que receberia a ação");

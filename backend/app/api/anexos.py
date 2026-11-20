@@ -66,7 +66,7 @@ async def enviar_anexo(arquivo: UploadFile, usuario_id: Usuario, sessao: Sessao)
     try:
         validar_nome_arquivo(nome)
     except CaminhoInseguro as erro:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(erro)) from None
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(erro)) from None
     extensao = Path(nome).suffix.lower()
     if extensao not in EXTENSOES:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Tipo de arquivo não aceito.")
@@ -77,7 +77,7 @@ async def enviar_anexo(arquivo: UploadFile, usuario_id: Usuario, sessao: Sessao)
             raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "O arquivo passa de 20 MB.")
     dados = bytes(buffer)
     if not dados:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "O arquivo está vazio.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "O arquivo está vazio.")
     if not _conteudo_confere(extensao, dados):
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "O conteúdo não confere com a extensão."

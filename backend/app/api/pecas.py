@@ -105,7 +105,7 @@ async def criar_memoria(
     try:
         registro = await servico.lembrar(usuario_id, dados.agente_id, dados.conteudo)
     except ErroFerramenta as erro:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(erro)) from erro
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(erro)) from erro
     if registro.id in existentes:
         resposta.status_code = status.HTTP_200_OK
     linha = await sessao.get(Memoria, registro.id)
@@ -131,7 +131,7 @@ async def editar_memoria(
     try:
         registro = await servico.editar(usuario_id, memoria_id, dados.conteudo)
     except ErroFerramenta as erro:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(erro)) from erro
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(erro)) from erro
     if registro is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Memória não encontrada.")
     await sessao.commit()

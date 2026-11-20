@@ -1,15 +1,19 @@
 """Dependências compartilhadas pelas rotas protegidas; especificação §§2 e 8.2."""
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.banco import obter_sessao
 from app.core.seguranca import ErroToken, decodificar_token_acesso
+
+registro = logging.getLogger(__name__)
 
 esquema_bearer = HTTPBearer(
     scheme_name="BearerAuth",
@@ -38,18 +42,51 @@ async def usuario_atual(
         carga = decodificar_token_acesso(credenciais.credentials)
         usuario_id = UUID(carga["sub"])
         requisicao.state.token_expira_em = float(carga["exp"])
-        return usuario_id
     except (ErroToken, KeyError, ValueError, TypeError) as erro:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Token de acesso inválido ou expirado.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from erro
+    if await _acesso_revogado(requisicao, usuario_id, carga.get("sid")):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "Sessão encerrada. Entre de novo.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return usuario_id
+
+
+async def _acesso_revogado(requisicao: Request, usuario_id: UUID, sessao_id: object) -> bool:
+    """O token é de uma sessão encerrada (sair, reuso detectado) ou de uma conta apagada?
+
+    O JWT de acesso vale 15 min e não fica no banco; ``contas.revogar_acessos`` marca no Redis
+    quem não pode mais usá-lo. Sem Redis (testes sem o ciclo de vida) ou com o Redis fora do ar,
+    deixa passar: a sessão já foi encerrada no banco e o token vence sozinho."""
+    from app.core.contas import chave_revogacao_sessao, chave_revogacao_usuario
+
+    aplicacao = requisicao.scope.get("app")
+    redis: Redis | None = getattr(getattr(aplicacao, "state", None), "redis", None)
+    if redis is None:
+        return False
+    chaves = [chave_revogacao_usuario(usuario_id)]
+    if isinstance(sessao_id, str) and sessao_id:
+        chaves.append(chave_revogacao_sessao(sessao_id))
+    try:
+        return bool(await redis.exists(*chaves))
+    except RedisError:
+        registro.warning("Redis fora do ar: revogação de acesso não conferida", exc_info=True)
+        return False
 
 
 def obter_redis(requisicao: Request) -> Redis:
     """Cliente Redis criado no lifespan da aplicação (`app.state.redis`)."""
     return requisicao.app.state.redis
+
+
+def obter_redis_opcional(requisicao: Request) -> Redis | None:
+    """O mesmo cliente, ou ``None`` quando o Redis é só um reforço (revogar tokens ao sair)."""
+    return getattr(requisicao.app.state, "redis", None)
 
 
 async def exigir_provedor_validado(

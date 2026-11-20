@@ -149,6 +149,10 @@ class Configuracao(BaseSettings):
     """Computador virtual sem uso por este tempo é desligado (a área de arquivos some)."""
     navegador_cdp_url: str | None = None
     """CDP remoto do Chromium isolado. Em produção não há fallback para navegador local."""
+    worker_max_jobs: int = 10
+    """Jobs simultâneos por processo do worker (o padrão do ARQ). Turnos longos ocupam a vaga até
+    6 min: para mais usuários ao mesmo tempo, mais réplicas do worker (``docker compose up
+    --scale worker=N``) em vez de um número alto aqui (navegador e Docker CLI rodam no processo)."""
 
     @field_validator("sora_modelo_falso", mode="before")
     @classmethod

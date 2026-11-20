@@ -32,9 +32,9 @@ async def obter_uso(
     fim = ate or hoje
     inicio = de or fim - timedelta(days=JANELA_PADRAO_DIAS - 1)
     if inicio > fim:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "'de' vem depois de 'ate'.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "'de' vem depois de 'ate'.")
     if (fim - inicio).days >= JANELA_MAXIMA_DIAS:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Período máximo: 1 ano.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Período máximo: 1 ano.")
     dia = cast(func.timezone("UTC", ChamadaModelo.criado_em), Date)
     consulta = (
         select(

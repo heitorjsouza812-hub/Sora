@@ -17,6 +17,7 @@ from app.agentes.checkpointer import abrir_checkpointer, fechar_checkpointer
 from app.busca.provedor import verificar_busca_permitida
 from app.core.banco import fabrica_sessoes
 from app.core.config import obter_configuracao
+from app.core.observabilidade import configurar_log, iniciar_sentry
 from app.core.redis import criar_cliente_redis
 from app.llm.falso import verificar_modelo_falso_permitido
 from workers.ancora import compactar_historico
@@ -49,7 +50,7 @@ from workers.equipe import (
 from workers.fila import configurar_fila
 from workers.navegador import abrir_aba_de_perfil, fechar_navegador, iniciar_navegador
 from workers.rotinas import disparar_rotinas, executar_rotina
-from workers.sessoes import limpar_pares_de_renovacao
+from workers.sessoes import apagar_sessoes_vencidas, limpar_pares_de_renovacao
 from workers.travados import reconciliar_travados
 
 
@@ -67,6 +68,8 @@ async def ao_iniciar(ctx: dict[str, Any]) -> None:
     Antes de tudo, a trava de produção (é o worker quem chama os modelos)."""
     verificar_trava_de_producao()
     config = obter_configuracao()
+    configurar_log()
+    iniciar_sentry(config, "worker")
     ctx["sessoes"] = fabrica_sessoes()
     ctx["redis_eventos"] = criar_cliente_redis(config.redis_url)
     ctx["checkpointer"] = await abrir_checkpointer(config.database_url)
@@ -120,6 +123,7 @@ class WorkerSettings:
         cron(disparar_rotinas, second={0, 10, 20, 30, 40, 50}, run_at_startup=True),
         cron(desligar_computadores_ociosos, second={5}, run_at_startup=False),
         cron(limpar_pares_de_renovacao, second={45}, run_at_startup=False),
+        cron(apagar_sessoes_vencidas, hour={4}, minute={23}, second={0}),
         cron(processar_pendentes_canais_empresa, minute=set(range(0, 60, 5)), second={20}),
         cron(apagar_mensagens_vencidas, minute={17}, second={0}),
         cron(analisar_aprendizado_periodico, minute={42}, second={0}),
@@ -127,5 +131,6 @@ class WorkerSettings:
     on_startup = ao_iniciar
     on_shutdown = ao_desligar
     max_tries = 3
+    max_jobs = obter_configuracao().worker_max_jobs
     job_timeout = 360
     """5 minutos da etapa + folga para gravar o erro."""

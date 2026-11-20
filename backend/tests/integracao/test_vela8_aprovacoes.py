@@ -223,6 +223,8 @@ async def test_sessao_do_pc_presa_ao_login_do_desktop(mundo: Mundo) -> None:
         )
         assert sair.status_code == 204
         depois = await cliente.get("/v1/computador-pc/comandos", params=espera, headers=desktop)
-        assert depois.status_code == 409
+        # O token de acesso do desktop morre junto com a sessão (antes valia até vencer e a
+        # rota respondia 409 por a sessão do PC ter caído); o estado abaixo confere o PC.
+        assert depois.status_code == 401
         estado = (await cliente.get("/v1/computador-pc/estado", headers=web)).json()
         assert estado["conectado"] is False

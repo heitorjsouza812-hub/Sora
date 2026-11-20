@@ -436,7 +436,10 @@ def test_argumentos_do_docker_travados() -> None:
     assert argv[argv.index("--network") + 1] == "none"
     assert argv[-3:] == ["sh", "-c", "echo $HOME; rm -rf /"]
     com_rede = SandboxDocker().montar_argumentos(ExecutarComando(comando="pip", com_internet=True))
-    assert com_rede[com_rede.index("--network") + 1] == "bridge"
+    # com internet: rede interna cuja única saída é o proxy de egresso (nunca a bridge do host)
+    assert com_rede[com_rede.index("--network") + 1] == "sora-sbx-internet"
+    assert "HTTPS_PROXY=http://sora-proxy:3128" in com_rede
+    assert "bridge" not in com_rede
     with pytest.raises(ValidationError):
         ExecutarComando(comando="x", prazo_segundos=301)
 

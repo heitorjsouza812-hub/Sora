@@ -17,3 +17,4 @@ Ao abrir aparece a tela inicial: aperte `Escape` e vem uma pasta de trabalho em 
 - Programas de senha, terminais, segurança do Windows e a própria Sora são bloqueados para você. Se aparecerem, peça ao usuário.
 - Se o usuário mexer no mouse ou no teclado, o controle pausa até ele mandar continuar. Ao voltar, observe a tela antes de repetir qualquer ação.
 - Coordenadas x/y são da última leitura. Prefira o teclado a cliques quando der.
+- Você só vê o monitor principal. Janela marcada "em outro monitor" não aparece na captura: uma ação com a ref dela a traz para a tela principal; depois observe de novo antes de clicar.
