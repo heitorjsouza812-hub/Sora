@@ -389,13 +389,15 @@ async def test_pedidos_de_bots_e_grupos_nao_criam_especialistas_ocultos(pedido):
 
 
 def test_prompt_da_sora_cita_os_nomes_exatos_dos_catalogos() -> None:
+    """Os nomes exatos continuam no prompt, mas os de conectores_* só quando o catálogo existe
+    (``montagem.com_regra_do_catalogo``): com até 20 ferramentas de conector elas vão direto."""
+    from app.agentes.montagem import REGRA_CATALOGO_CONECTORES
     from app.agentes.prompts import carregar_prompt
 
-    texto = carregar_prompt("sora_base")
+    assert "navegador_buscar_ferramentas" in carregar_prompt("sora_base")
     for nome in (
         "conectores_buscar_ferramentas",
         "conectores_carregar_ferramenta",
         "conectores_executar_ferramenta",
-        "navegador_buscar_ferramentas",
     ):
-        assert nome in texto
+        assert nome in REGRA_CATALOGO_CONECTORES
