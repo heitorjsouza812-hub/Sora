@@ -1,10 +1,10 @@
-## Onda 1 — ramo `onda1-base-producao` (2026-11-20, tarde)
+## Onda 1 — `main` (`d7dc113`) (2026-11-20, tarde)
 
-Feita a Onda 1 do comparativo, sem commit: senha nova por link no e-mail e trocar senha, baixar
+Feita a Onda 1 do comparativo, enviada direto na `main` sem PR: senha nova por link no e-mail e trocar senha, baixar
 meus dados (.zip), relatar problema (diagnóstico mascarado, CLI do time), chaves extras por
 conexão e modelos reserva da conta (troca sempre avisada), atualização do desktop (desligada até
 haver chave de assinatura). Migrações 0018 e 0019. Testes verdes no backend, app e Rust; detalhes
-em `log/2026-11-20.md`. **Próximo:** commit e PR; no servidor, migrações 0017 a 0019 e
+em `log/2026-11-20.md`. **Próximo:** conferir o CI desse envio; no servidor, migrações 0017 a 0019 e
 `EMAIL_PROVEDOR`; chaves do atualizador (`app/docs/atualizacao-desktop.md`).
 
 

@@ -29,7 +29,7 @@ compromissos.
 
 ### Onda 1: base de produção (antes de abrir para clientes)
 
-> **Feita em 2026-11-20** no ramo `onda1-base-producao` (`log/2026-11-20.md`). Diferenças do que
+> **Feita em 2026-11-20**, na `main` (`d7dc113`, `log/2026-11-20.md`). Diferenças do que
 > está abaixo: a recuperação de senha é por **link** (como a especificação §8.2 já previa), não
 > por código; os modelos reserva valem para a **conta inteira** (por bot fica para depois); a
 > atualização do desktop está pronta, mas **desligada** até o time gerar a chave de assinatura.
