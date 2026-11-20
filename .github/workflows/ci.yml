@@ -26,7 +26,9 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync --frozen --python 3.12
+      # Com o navegador (Playwright + Chromium): sem ele os testes do navegador de verdade pulam
+      - run: uv sync --frozen --python 3.12 --group navegador
+      - run: uv run playwright install --with-deps chromium
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest tests/unitarios -q
@@ -45,7 +47,9 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - run: uv sync --frozen --python 3.12
+      # test_navegador_worker abre o Chromium de verdade
+      - run: uv sync --frozen --python 3.12 --group navegador
+      - run: uv run playwright install --with-deps chromium
       # Os testes sobem os próprios contêineres (Docker do runner). Arquivo por arquivo, como no
       # CLAUDE.md §7.4: cada arquivo tem o seu banco limpo.
       - name: Integração
