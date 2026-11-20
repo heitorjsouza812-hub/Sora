@@ -48,3 +48,21 @@ def test_sora_e_bot_tem_agenda_direto_e_sora_pesquisa() -> None:
         assert {"agendar", "listar_agendamentos", "cancelar_agendamento"} <= diretos, papel
     sora = _contexto("sora", None)
     assert {"buscar_web", "ler_pagina"} <= set(nomes_diretos(nomes_das_ferramentas(sora), sora))
+
+
+def test_regra_do_catalogo_de_conectores_so_quando_ele_existe() -> None:
+    """Com até 20 ferramentas de conector elas vão direto e ``conectores_*`` não existe: o prompt
+    não pode mandar o modelo chamar uma ferramenta que não está na lista (CI de 2026-11-19)."""
+    from app.agentes.montagem import (
+        REGRA_CATALOGO_CONECTORES,
+        com_regra_do_catalogo,
+        montar_prompt_de_sistema,
+    )
+
+    base = montar_prompt_de_sistema(_contexto("sora", None))
+    assert "conectores_buscar_ferramentas" not in base
+    direto = {"falar", "mcp__clima__buscar_clima"}
+    assert com_regra_do_catalogo(base, direto) == base
+    com_catalogo = com_regra_do_catalogo(base, direto | {"conectores_buscar_ferramentas"})
+    assert com_catalogo.endswith(REGRA_CATALOGO_CONECTORES)
+    assert "conectar_buscar_ferramentas" in com_catalogo  # o aviso do nome errado continua

@@ -7,8 +7,11 @@ prompt injection podia usar o modo "total"; F5 seguidos derrubavam o login (deci
 0017); token de acesso valia 15 min depois de sair; sem Sentry/log, sem teto de upload, Redis sem
 senha, sem CI. Também `api/canais_empresa` virou pacote e as funções puras da cadeia foram para
 `app/orquestrador`. Validação: 2130 unitários, 31/32 arquivos de integração (o MCP já falhava na
-`main`), clippy + 32 testes Rust. Detalhes em `log/2026-11-19.md`. **Próximo:** revisar e juntar o
-ramo, `alembic upgrade head` (0017), `REDIS_SENHA` no `.env` do servidor, push para o CI rodar.
+`main`), clippy + 32 testes Rust. Detalhes em `log/2026-11-19.md`. Juntado na `main` (PR #1); o
+CI achou o catálogo de conectores no prompt sem existir e um teste instável do app, corrigidos no
+PR #2 (auto-merge: junta quando o CI passa). A `main` agora exige os 4 jobs do CI; em
+2026-11-20 os jobs do backend passaram a instalar o Chromium (a integração reprovava sem ele). **Próximo:**
+`alembic upgrade head` (0017) e `REDIS_SENHA` no `.env` do servidor.
 
 
 ## Âncora-10 — seletor no backend (2026-11-16)

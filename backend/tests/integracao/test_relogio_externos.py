@@ -94,18 +94,19 @@ async def test_conectores_mcp_de_ponta_a_ponta(
         lista = (await cliente.get("/v1/conectores", headers=auth)).json()
         assert lista[0]["estado"] == "ok" and lista[0]["n_ferramentas"] == 2
 
-        # rotina sem supervisão: a de leitura funciona; a que escreve nem é oferecida
+        # rotina sem supervisão: a de leitura funciona; a que escreve nem é oferecida. Com até 20
+        # ferramentas de conector elas vão direto ao modelo (sem o catálogo ``conectores_*``)
         leitura = await criar(
             cliente,
             auth,
             titulo="Clima",
-            pedido='[catalogo:mcp__clima__buscar_clima|{"cidade": "Recife"}]',
+            pedido='[chamar:mcp__clima__buscar_clima|{"cidade": "Recife"}]',
         )
         escrita = await criar(
             cliente,
             auth,
             titulo="Email",
-            pedido='[catalogo:mcp__clima__enviar_email|{"para": "a@b.com", "texto": "oi"}]',
+            pedido='[chamar:mcp__clima__enviar_email|{"para": "a@b.com", "texto": "oi"}]',
             daqui_segundos=2,
         )
 
@@ -118,7 +119,7 @@ async def test_conectores_mcp_de_ponta_a_ponta(
         await esperar(terminou)
         feita = (await execucoes(cliente, auth, leitura["id"]))[0]
         assert feita["status"] == "enviada" and "Sol em Recife" in feita["resumo"]
-        # o caminho novo: busca → carrega o esquema → executa pelo id (conectores_*)
+        # chamada direta pelo nome da ferramenta do conector (o catálogo só passa de 20)
         assert (
             "Sol em Recife" in feita["resumo"]
             and "Retorno de mcp__clima__buscar_clima" in (feita["resumo"])
@@ -127,7 +128,9 @@ async def test_conectores_mcp_de_ponta_a_ponta(
         assert "buscar_clima:Recife" in anotado
         assert "enviar_email" not in anotado  # a ferramenta de escrita nunca foi chamada
         recusada = (await execucoes(cliente, auth, escrita["id"]))[0]
-        assert "desconhecida ou não autorizada" in recusada["resumo"]  # nem entrou no catálogo
+        # a ferramenta que escreve nem é oferecida à rotina; chamada mesmo assim (o modelo falso
+        # segue o roteiro), o revisor recusa antes de qualquer coisa chegar ao servidor MCP
+        assert "não pode rodar numa rotina" in recusada["resumo"]
 
         # desativar tira as ferramentas; remover apaga
         off = await cliente.patch(

@@ -233,6 +233,27 @@ async def _com_ferramenta_de_imagem(contexto: ContextoAgente) -> ContextoAgente:
     return replace(contexto, ferramentas_extras=[*contexto.ferramentas_extras, "gerar_imagem"])
 
 
+REGRA_CATALOGO_CONECTORES = (
+    "## Catálogo de ferramentas\n"
+    "- `conectores_buscar_ferramentas`, `conectores_carregar_ferramenta` e "
+    '`conectores_executar_ferramenta` (com "conectores" no plural). Não existe '
+    "`conectar_buscar_ferramentas`.\n"
+    "- Fluxo do catálogo: buscar, carregar o esquema, executar pelo id."
+)
+
+
+def com_regra_do_catalogo(prompt: str, nomes_das_ferramentas: set[str]) -> str:
+    """A regra do catálogo ``conectores_*`` só vai no prompt quando o catálogo existe.
+
+    Desde que as ferramentas de conversa passaram a ir direto (2026-11-18), até 20 ferramentas de
+    conector também vão direto e as três meta-ferramentas nem existem. O prompt base citava as três
+    sempre: o modelo (e o modelo falso das rotinas) chamava uma ferramenta que não estava na lista
+    ("conectores_executar_ferramenta is not a valid tool")."""
+    if "conectores_buscar_ferramentas" not in nomes_das_ferramentas:
+        return prompt
+    return f"{prompt}\n\n{REGRA_CATALOGO_CONECTORES}"
+
+
 async def _prompt_do_turno(contexto: ContextoAgente) -> str:
     """Prompt do papel + instruções próprias, memórias, pendências, habilidades e colegas."""
     from app.agentes.ancora import blocos_do_turno
@@ -307,10 +328,11 @@ async def montar_agente(
         from app.agentes.middleware.conferencia_pc import MiddlewareConferenciaPc
 
         middleware.append(MiddlewareConferenciaPc(contexto.usuario_id, contexto.agente_id))
+    prompt = com_regra_do_catalogo(await _prompt_do_turno(contexto), {f.name for f in ferramentas})
     return create_agent(
         model=modelos[0],
         tools=ferramentas,
-        system_prompt=await _prompt_do_turno(contexto),
+        system_prompt=prompt,
         middleware=middleware,
         checkpointer=checkpointer,
         name=f"sora_{contexto.papel}",

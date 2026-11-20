@@ -8,6 +8,14 @@ vi.mock('../../mascot', () => ({ SoraOrb: () => <span /> }));
 import { SecaoConectores, SecaoMemoria, SecaoNavegador, SecaoRotinas } from '../SecoesPecas';
 afterEach(() => Object.values(api).forEach(f => f.mockReset()));
 
+// Depois de uma ação (guardar, criar) a seção recarrega a lista e os botões ficam desabilitados
+// até terminar: clicar antes disso não faz nada. Numa máquina lenta (o CI) o clique caía nessa
+// janela e o teste falhava sem defeito no app.
+async function clicarQuandoLiberar(nome: string) {
+  await waitFor(() => expect((screen.getByRole('button', { name: nome }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button', { name: nome }));
+}
+
 describe('seções de Configurações da etapa 4', () => {
   it('Memória lista, guarda e esquece pelas rotas do contrato', async () => {
     api.get.mockResolvedValue([{ id: 'm1', agente_id: null, conteudo: 'Fecha às segundas', tipo: 'fato', origem: 'usuario', travada: false, criada_em: '2026-11-02T10:00:00Z' }]);
@@ -17,7 +25,7 @@ describe('seções de Configurações da etapa 4', () => {
     fireEvent.change(screen.getByLabelText('Nova lembrança'), { target: { value: 'Moro em Curitiba' } });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/memorias', { conteudo: 'Moro em Curitiba' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Esquecer' }));
+    await clicarQuandoLiberar('Esquecer');
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/v1/memorias/m1'));
   });
 
@@ -41,7 +49,7 @@ describe('seções de Configurações da etapa 4', () => {
     fireEvent.change(screen.getByLabelText('O que fazer'), { target: { value: 'Mande as notícias' } });
     fireEvent.click(screen.getByRole('button', { name: 'Criar rotina' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/rotinas', { titulo: 'Bom dia', pedido: 'Mande as notícias', a_cada: 1, unidade: 'horas' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+    await clicarQuandoLiberar('Pausar');
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith('/v1/rotinas/r1', { ativa: false }));
   });
 
