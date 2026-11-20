@@ -40,10 +40,14 @@ class SessaoFalsa:
         self.escalares = list(escalares or [])
         self.listas = list(listas or [])
         self.adicionados: list[Any] = []
+        self.executados: list[Any] = []
         self.flushes = 0
 
     async def scalar(self, _consulta: Any) -> Any:
         return self.escalares.pop(0) if self.escalares else None
+
+    async def execute(self, consulta: Any) -> None:
+        self.executados.append(consulta)
 
     async def scalars(self, _consulta: Any) -> ResultadoEscalares:
         return ResultadoEscalares(self.listas.pop(0) if self.listas else [])
@@ -314,6 +318,8 @@ async def test_delete_apaga_chave_e_desativa_modelos() -> None:
     assert provedor.apagado_em is not None
     assert provedor.chave_cifrada is None and provedor.chave_final is None
     assert modelo.ativo is False
+    # as chaves extras e os modelos reserva da conexão também somem (migração 0019)
+    assert {str(c.table) for c in sessao.executados} == {"chaves_provedor", "modelos_reserva"}
 
 
 async def test_outro_usuario_ou_apagado_parece_inexistente() -> None:

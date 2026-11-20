@@ -11,7 +11,7 @@ vi.mock('../../desktop/ponte', () => ({
 }));
 
 import { _reiniciarClienteParaTestes, api, MSG_SEM_REDE } from '../../api/cliente';
-import { _reiniciarSessaoParaTestes, apagarConta, cadastrar, entrar, iniciarSessao, lerSessao, sair } from '../sessao';
+import { _reiniciarSessaoParaTestes, apagarConta, cadastrar, entrar, iniciarSessao, lerSessao, baixarMeusDados, pedirLinkDeSenha, redefinirSenha, sair, tokenDoLink, trocarSenha } from '../sessao';
 
 const json = (status: number, corpo?: unknown) =>
   new Response(corpo === undefined ? null : JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } });
@@ -112,5 +112,69 @@ describe('sessão', () => {
     rotas['POST /v1/auth/renovar'] = () => json(401);
     await expect(api.get('/v1/modelos')).rejects.toMatchObject({ status: 401 });
     expect(lerSessao().estado).toBe('anonimo');
+  });
+
+  it('pedirLinkDeSenha manda o e-mail sem espaços e sem login', async () => {
+    rotas['POST /v1/auth/esqueci-senha'] = () => json(202);
+    await pedirLinkDeSenha('  ana@exemplo.com ');
+    const { init } = chamadas.at(-1)!;
+    expect(JSON.parse(init.body as string)).toEqual({ email: 'ana@exemplo.com' });
+    expect(new Headers(init.headers).get('Authorization')).toBeNull();
+  });
+
+  it('redefinirSenha manda token e senha nova e tira quem estava entrado', async () => {
+    rotas['POST /v1/auth/entrar'] = () => json(200, { token_acesso: 'tok' });
+    rotas['GET /v1/eu'] = () => json(200, ANA);
+    await entrar('ana@exemplo.com', 'x');
+    rotas['POST /v1/auth/redefinir-senha'] = () => json(204);
+    await redefinirSenha('tok-link', 'senha-nova-longa');
+    expect(JSON.parse(chamadas.at(-1)!.init.body as string)).toEqual({ token: 'tok-link', senha_nova: 'senha-nova-longa' });
+    expect(lerSessao().estado).toBe('anonimo');
+  });
+
+  it('link vencido mostra a mensagem do backend', async () => {
+    rotas['POST /v1/auth/redefinir-senha'] = () => json(400, { detail: 'Este link de senha nova não vale mais.' });
+    await expect(redefinirSenha('t', 'senha-nova-longa')).rejects.toMatchObject({ status: 400, mensagem: 'Este link de senha nova não vale mais.' });
+  });
+
+  it('trocarSenha usa POST /v1/conta/senha e continua entrado', async () => {
+    rotas['POST /v1/auth/entrar'] = () => json(200, { token_acesso: 'tok' });
+    rotas['GET /v1/eu'] = () => json(200, ANA);
+    await entrar('ana@exemplo.com', 'x');
+    rotas['POST /v1/conta/senha'] = () => json(204);
+    await trocarSenha('atual-atual', 'nova-nova-nova');
+    expect(JSON.parse(chamadas.at(-1)!.init.body as string)).toEqual({ senha_atual: 'atual-atual', senha_nova: 'nova-nova-nova' });
+    expect(lerSessao().estado).toBe('logado');
+  });
+
+  it('tokenDoLink lê o token do fragmento', () => {
+    expect(tokenDoLink('#token=abc-123')).toBe('abc-123');
+    expect(tokenDoLink('')).toBe('');
+    expect(tokenDoLink('#outra=1')).toBe('');
+  });
+
+  it('baixarMeusDados manda a senha e baixa o zip com o nome do servidor', async () => {
+    rotas['POST /v1/auth/entrar'] = () => json(200, { token_acesso: 'tok' });
+    rotas['GET /v1/eu'] = () => json(200, ANA);
+    await entrar('ana@exemplo.com', 'x');
+    rotas['POST /v1/conta/exportar'] = () => new Response(new Blob(['zip']), {
+      status: 200, headers: { 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="sora-meus-dados-2026-11-20.zip"' },
+    });
+    const criar = vi.fn(() => 'blob:x');
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: criar, revokeObjectURL: vi.fn() }));
+    const clique = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      expect(this.download).toBe('sora-meus-dados-2026-11-20.zip');
+    });
+    await baixarMeusDados('minha-senha');
+    const { init } = chamadas.at(-1)!;
+    expect(JSON.parse(init.body as string)).toEqual({ senha: 'minha-senha' });
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer tok');
+    expect(clique).toHaveBeenCalledOnce();
+    clique.mockRestore();
+  });
+
+  it('baixarMeusDados com senha errada lança a mensagem do backend', async () => {
+    rotas['POST /v1/conta/exportar'] = () => json(403, { detail: 'A senha está incorreta.' });
+    await expect(baixarMeusDados('x')).rejects.toMatchObject({ status: 403, mensagem: 'A senha está incorreta.' });
   });
 });

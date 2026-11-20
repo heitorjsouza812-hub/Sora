@@ -147,3 +147,15 @@
 .cfg-add-modelo input { width: 100%; height: 42px; padding: 0 var(--sp-3); color: var(--text-1); background: var(--surface-3); border: 1px solid var(--white-a10); border-radius: var(--r-10); box-sizing: border-box; font: inherit; font-size: var(--fs-14); }
 .cfg-add-modelo input:focus { border-color: var(--focus); outline: 0; }
 @media (max-width: 767px) { .cfg-add-modelo { grid-template-columns: 1fr; } .cfg-add-modelo input { height: 44px; } }
+/* Conta → Senha e Seus dados (Onda 1, 2026-11-20) */
+.cfg-account--neutra { margin-top: var(--sp-4); }
+.cfg-senha { display: grid; gap: var(--sp-4); }
+.cfg-senha .cfg-senha__ajuda { color: var(--text-3); }
+.cfg-senha__erro { margin: 0; color: var(--danger); font-size: var(--fs-13); line-height: 1.45; }
+/* Chaves extras e modelos reserva (Onda 1, 2026-11-20) */
+.cfg-chaves-extras { display: grid; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.cfg-chaves-extras > small { color: var(--text-2); font-size: var(--fs-13); line-height: 1.5; }
+.cfg-chaves-extras ul { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
+.cfg-chaves-extras li { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line); color: var(--text-1); font-size: var(--fs-14); }
+.cfg-reservas { margin-top: var(--sp-4); }
+.cfg-reservas__acoes { display: flex; justify-content: flex-end; }

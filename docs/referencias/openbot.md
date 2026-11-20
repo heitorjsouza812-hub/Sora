@@ -13,6 +13,9 @@ O OpenBot usa a **PolyForm Noncommercial 1.0.0**. Ela só permite uso **sem fins
 
 Isso é diferente do [Rakazo](rakazo.md), que é Apache 2.0 e permite adaptar código com aviso.
 
+> **Comparativo atualizado (2026-11-20, OpenBot 0.75.0):** tudo o que o OpenBot tem hoje e a Sora
+> não tem, com prioridade e esforço, está em [openbot-comparativo.md](openbot-comparativo.md).
+
 > Se um dia a equipe quiser usar código do OpenBot de verdade, precisa da licença comercial antes.
 
 ## Estado na etapa 4 (passo 6)

@@ -30,6 +30,8 @@ from app.api import (
     perguntas,
     preferencias,
     provedores,
+    relatos,
+    reservas,
     rotinas,
     uso,
     voz,
@@ -39,6 +41,8 @@ roteador_v1 = APIRouter()
 for roteador in (
     auth.roteador,
     conta.roteador,
+    relatos.roteador,
+    reservas.roteador,
     agentes.roteador,
     bots.roteador,
     atencao.roteador,

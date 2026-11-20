@@ -13,6 +13,7 @@ import { empilharCamada } from '../overlay/camadas';
 import { normalizar } from '../projetos/util';
 import { ATALHOS, MOD, fecharPaleta } from './atalhos';
 import { usePrecisaDeVoce } from '../../state/atencao';
+import { abrirRelatarProblema } from '../relatos/estado';
 import './comandos.css';
 
 interface Item {
@@ -94,6 +95,7 @@ export function PaletaComandos({ onAbrirCentral }: { onAbrirCentral: () => void 
     }));
     const atencao: Item = { id: 'atencao', grupo: 'Ações', rotulo: pendentes ? `Precisa de você (${pendentes})` : 'Precisa de você', icone: <Icone d={IC.agente} />, busca: 'pendencias aprovacoes pedidos', executar: onAbrirCentral };
     acoes.push({ id: 'atalhos', grupo: 'Ações', rotulo: 'Ver atalhos', icone: <Icone d={IC.mais} />, busca: 'teclado ajuda', executar: () => setAtalhos(true) });
+    acoes.push({ id: 'relatar', grupo: 'Ações', rotulo: 'Relatar problema', icone: <Icone d={IC.mais} />, busca: 'erro bug problema ajuda suporte relato', executar: () => { fecharPaleta(); abrirRelatarProblema(); } });
     return [...(pendentes ? [atencao, ...acoes] : [...acoes, atencao]), ...itensBots, ...itensGrupos];
   // ir/navigate são estáveis o bastante para a vida curta da paleta
   // eslint-disable-next-line react-hooks/exhaustive-deps

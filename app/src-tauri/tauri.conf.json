@@ -54,7 +54,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -67,12 +70,25 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["PortugueseBR"]
+        "languages": [
+          "PortugueseBR"
+        ]
       },
       "wix": {
         "language": "pt-BR"
       }
+    },
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/heitorjsouza812-hub/Sora/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
-

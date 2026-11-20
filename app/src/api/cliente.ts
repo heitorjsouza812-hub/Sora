@@ -9,6 +9,7 @@
 //   cofre do sistema (cofreLer/cofreGravar/cofreApagar em desktop/ponte.ts).
 // • Erros viram ErroApi { status, mensagem } com a mensagem PT-BR do backend (`detail`).
 import { cofreApagar, cofreGravar, cofreLer, emitirSessao, janelaAtual, noDesktop, pedirSessaoAoPrincipal } from '../desktop/ponte';
+import { registrarErroRecente } from '../diagnostico';
 
 export const API_BASE: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') ?? '';
 
@@ -126,10 +127,15 @@ async function erroDaResposta(resp: Response): Promise<ErroApi> {
 }
 
 async function buscar(caminho: string, init: RequestInit): Promise<Response> {
+  // Para o "Relatar problema": método, caminho (sem consulta) e status; nunca corpo nem cabeçalho.
+  const pedido = `${init.method ?? 'GET'} ${caminho.split('?')[0]}`;
   try {
-    return await fetch(`${API_BASE}${caminho}`, init);
+    const resp = await fetch(`${API_BASE}${caminho}`, init);
+    if (!resp.ok && resp.status !== 401) registrarErroRecente('api', `${pedido} → ${resp.status}`);
+    return resp;
   } catch (e) {
     if ((e as { name?: string })?.name === 'AbortError') throw e;
+    registrarErroRecente('api', `${pedido} → sem conexão`);
     throw new ErroApi(0, MSG_SEM_REDE);
   }
 }

@@ -10,6 +10,13 @@
 .sessao-abas button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .sessao-erro { margin: 0; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--danger-line); border-radius: var(--r-md); background: var(--danger-bg); color: var(--text); font-size: var(--fs-14); line-height: 1.45; }
 .sessao-nota { margin: 0; color: var(--text-3); font-size: var(--fs-13); text-align: center; }
+.sessao-link { align-self: flex-end; margin: -8px 0 0; padding: 4px 2px; border: 0; background: none; color: var(--text-2); font: inherit; font-size: var(--fs-13); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.sessao-link:hover { color: var(--text); }
+.sessao-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.sessao-link--centro { align-self: center; margin: 0; }
+.sessao-confirmacao { display: flex; flex-direction: column; gap: var(--sp-4); }
+.sessao-confirmacao p:not(.sessao-erro) { margin: 0; color: var(--text-2); font-size: var(--fs-14); line-height: 1.5; }
+.sessao-confirmacao strong { color: var(--text); font-weight: 600; word-break: break-all; }
 
 .onboarding { justify-content: flex-start; padding-top: max(var(--sp-12), 8vh); }
 .onboarding-lista { width: min(720px, 100%); display: flex; flex-direction: column; gap: var(--sp-3); }

@@ -7,6 +7,7 @@ import {
 import { separarPrincipais } from '../../state/nomeModelo';
 import { Button } from '../base';
 import { SoraOrb } from '../mascot';
+import { ChavesExtras } from './ChavesExtras';
 import { ProviderIcon } from './ProviderIcon';
 
 export interface ProviderCardProps {
@@ -76,6 +77,7 @@ export function ProviderCard({ provedor, inicialmenteAberto = false, onConectado
         {conexao && <label><span>Teto mensal (USD)</span><input type="number" min="0" step="0.01" value={teto} onChange={e => setTetoEditado(e.target.value)} placeholder="Sem teto" /><small>Vazio remove o teto.</small></label>}
         {conexao && <div className="cfg-provider-spend"><span>Gasto neste mês</span><strong>{moeda.format(Number(conexao.gasto_mes_usd))}</strong>{conexao.teto_mensal_usd != null && <small>de {moeda.format(Number(conexao.teto_mensal_usd))}</small>}</div>}
       </div>
+      {conexao && provedor.pedeChave && <ChavesExtras provedorId={conexao.id} prefixo={provedor.prefixo} />}
       {conexao && <div className="cfg-model-list"><span className="cfg-eyebrow">Modelos disponíveis</span>
         {visiveis.length ? visiveis.map(modelo => <Fragment key={modelo.id}><div className="cfg-model-row">
           <span className="cfg-model-name"><strong>{nomeAmigavelDoModelo(modelo)}</strong><small>{modelo.contexto.toLocaleString('pt-BR')} tokens{modelo.capacidades.length ? ` · ${modelo.capacidades.join(', ')}` : ''}</small></span>

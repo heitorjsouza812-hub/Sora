@@ -19,11 +19,15 @@ from app.seletor.tipos import Capacidade, PapelModelo
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
+    from app.llm.provedores import ConfigProvedor
     from app.preferencias_conversa import EscolhaModelo
     from app.seletor.tipos import ContextoSeletor, ModeloCandidato
 
 # Nome do papel do agente (montagem) -> chave da política do seletor.
 _PAPEL_DO_SELETOR = {"individual": "agente_individual"}
+
+MAX_MODELOS_NA_LISTA = 12
+"""Teto da lista (modelos x chaves): cada item que falha é uma chamada a mais."""
 
 
 class SemModeloDisponivel(RuntimeError):
@@ -96,7 +100,13 @@ async def modelos_do_papel(
     fixo = escolha is not None and escolha.modelo_fixo
     if fixo:
         assert escolha is not None
-        selecionados = [_candidato_escolhido(contexto, escolha, conversa_privada)]
+        escolhido = _candidato_escolhido(contexto, escolha, conversa_privada)
+        selecionados = [
+            escolhido,
+            *await _reservas_validas(
+                sessao, usuario_id, contexto, escolhido, set(precisa), conversa_privada
+            ),
+        ]
     else:
         resultado = escolher_modelos(
             contexto,
@@ -109,20 +119,32 @@ async def modelos_do_papel(
         if not resultado.modelos:
             raise SemModeloDisponivel(f"Nenhum modelo conectado serve para o papel {nome}.")
         selecionados = resultado.modelos
+    from app.core.reservas import configs_extras
+
     configs = {
         m.provedor.id: await config_do_provedor(sessao, usuario_id, m.provedor.id)
         for m in selecionados
     }
+    extras = {pid: await configs_extras(sessao, usuario_id, pid) for pid in configs}
+    # Cada modelo com a chave principal e, logo depois, com cada chave extra da mesma conexão:
+    # no limite da chave, o MESMO modelo continua com a próxima antes de passar a outro modelo.
+    pares: list[tuple[ModeloCandidato, ConfigProvedor, int]] = []
+    for m in selecionados:
+        pares.append((m, configs[m.provedor.id], 0))
+        pares.extend((m, extra, i) for i, extra in enumerate(extras[m.provedor.id], start=1))
+    pares = pares[:MAX_MODELOS_NA_LISTA]
     nivel = escolha.raciocinio if escolha is not None else None
     chats = criar_modelos_na_ordem(
-        [(m.modelo, configs[m.provedor.id]) for m in selecionados],
+        [(m.modelo, config) for m, config, _ in pares],
         papel=nome,
         streaming=streaming,
-        raciocinios=[nivel_mais_proximo(m.modelo, nivel) if nivel else None for m in selecionados],
+        raciocinios=[nivel_mais_proximo(m.modelo, nivel) if nivel else None for m, _, _ in pares],
     )
     from app.agentes.middleware.custo import marcar_custo
+    from app.llm.troca import marcar_chave
 
-    for chat, candidato in zip(chats, selecionados, strict=True):
+    for chat, (candidato, _, chave) in zip(chats, pares, strict=True):
+        marcar_chave(chat, chave)
         marcar_custo(
             chat,
             modelo=candidato.modelo,
@@ -135,6 +157,44 @@ async def modelos_do_papel(
     if fixo:
         from app.preferencias_conversa import marcar_escolhido
 
-        escolhido = selecionados[0]
         marcar_escolhido(chats[0], escolhido.modelo, [str(c) for c in escolhido.capacidades])
     return chats
+
+
+async def _reservas_validas(
+    sessao: AsyncSession,
+    usuario_id: UUID,
+    contexto: ContextoSeletor,
+    escolhido: ModeloCandidato,
+    precisa: set[Capacidade],
+    conversa_privada: bool,
+) -> list[ModeloCandidato]:
+    """Modelos reserva da conta que servem agora: ativos, dentro do teto, com as capacidades que o
+    papel precisa e (em conversa privada) locais. Os que não servem ficam de fora em silêncio:
+    reserva é um extra, não um erro."""
+    from app.core.reservas import listar_reservas
+    from app.modelos.enumeracoes import TipoProvedor
+
+    validos: list[ModeloCandidato] = []
+    for reserva in await listar_reservas(sessao, usuario_id):
+        candidato = next(
+            (
+                m
+                for m in contexto.modelos
+                if m.provedor.id == reserva.provedor_id and m.modelo == reserva.modelo
+            ),
+            None,
+        )
+        if (
+            candidato is None
+            or candidato is escolhido
+            or (candidato.modelo, candidato.provedor.id)
+            == (escolhido.modelo, escolhido.provedor.id)
+            or not candidato.ativo
+            or candidato.provedor.passou_do_teto()
+            or not precisa <= set(candidato.capacidades)
+            or (conversa_privada and candidato.provedor.tipo is not TipoProvedor.OLLAMA)
+        ):
+            continue
+        validos.append(candidato)
+    return validos

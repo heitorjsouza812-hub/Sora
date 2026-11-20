@@ -1,3 +1,21 @@
+## Onda 1 — ramo `onda1-base-producao` (2026-11-20, tarde)
+
+Feita a Onda 1 do comparativo, sem commit: senha nova por link no e-mail e trocar senha, baixar
+meus dados (.zip), relatar problema (diagnóstico mascarado, CLI do time), chaves extras por
+conexão e modelos reserva da conta (troca sempre avisada), atualização do desktop (desligada até
+haver chave de assinatura). Migrações 0018 e 0019. Testes verdes no backend, app e Rust; detalhes
+em `log/2026-11-20.md`. **Próximo:** commit e PR; no servidor, migrações 0017 a 0019 e
+`EMAIL_PROVEDOR`; chaves do atualizador (`app/docs/atualizacao-desktop.md`).
+
+
+## Comparativo OpenBot × Sora (2026-11-20)
+
+Análise do OpenBot 0.75.0 contra a `main`: `docs/referencias/openbot-comparativo.md` (lista por
+área, o que não trazer, três ondas). Achados de base: sem recuperação de senha e sem e-mail, sem
+exportar dados (LGPD), desktop sem atualização automática. Nenhum código alterado. **Próximo:**
+Heitor escolher os itens (sugestão: Onda 1 + webhooks nas rotinas + notificação no celular).
+
+
 ## Revisão geral — ramo `fix/revisao-geral` (2026-11-19)
 
 Análise do repositório e correção de tudo o que apareceu: apagar conta (LGPD) quebrava para quem

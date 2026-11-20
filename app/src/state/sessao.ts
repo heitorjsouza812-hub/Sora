@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { toast } from '../components/base';
 import {
-  aoAvisoDeSessao, aoSessaoEncerrada, api, corpoRenovacaoDesktop, ehErroApi, guardarTokens, limparSessaoLocal,
+  aoAvisoDeSessao, aoSessaoEncerrada, api, buscarAutenticado, corpoRenovacaoDesktop, ehErroApi, guardarTokens, limparSessaoLocal,
   renovarSessao, temTokenAcesso, type TokensSaida,
 } from '../api/cliente';
 
@@ -104,6 +104,46 @@ export async function sair(): Promise<void> {
   } catch { /* sair sempre funciona do lado do app */ }
   await limparSessaoLocal();
   definir({ estado: 'anonimo' });
+}
+
+/** POST /v1/auth/esqueci-senha. O servidor responde igual exista a conta ou não. Lança ErroApi
+ *  (429 = muitos pedidos; 503 = e-mail desligado no servidor). */
+export async function pedirLinkDeSenha(email: string): Promise<void> {
+  await api.post<void>('/v1/auth/esqueci-senha', { email: email.trim() }, { semAuth: true });
+}
+
+/** POST /v1/auth/redefinir-senha. Encerra todas as sessões da conta; quem estava entrado aqui sai. */
+export async function redefinirSenha(token: string, senhaNova: string): Promise<void> {
+  await api.post<void>('/v1/auth/redefinir-senha', { token, senha_nova: senhaNova }, { semAuth: true });
+  if (atual.estado === 'logado') {
+    await limparSessaoLocal();
+    definir({ estado: 'anonimo' });
+  }
+}
+
+/** POST /v1/conta/senha. Os outros aparelhos saem; este continua entrado. Lança ErroApi. */
+export async function trocarSenha(senhaAtual: string, senhaNova: string): Promise<void> {
+  await api.post<void>('/v1/conta/senha', { senha_atual: senhaAtual, senha_nova: senhaNova });
+}
+
+/** POST /v1/conta/exportar {senha} → baixa o .zip com todos os dados da conta (LGPD). Lança ErroApi. */
+export async function baixarMeusDados(senha: string): Promise<void> {
+  const resposta = await buscarAutenticado('/v1/conta/exportar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ senha }),
+  });
+  const disposicao = resposta.headers.get('content-disposition') ?? '';
+  const nome = disposicao.match(/filename="?([^";]+)"?/i)?.[1] ?? 'sora-meus-dados.zip';
+  const url = URL.createObjectURL(await resposta.blob());
+  const link = document.createElement('a');
+  link.href = url; link.download = nome; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Token do link de senha nova: vem no fragmento (`#token=…`), que o navegador não manda ao servidor. */
+export function tokenDoLink(hash: string): string {
+  try { return new URLSearchParams(hash.replace(/^#/, '')).get('token') ?? ''; } catch { return ''; }
 }
 
 /** DELETE /v1/conta {senha}. Lança ErroApi (ex.: senha errada). */

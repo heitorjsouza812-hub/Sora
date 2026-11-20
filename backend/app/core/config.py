@@ -17,6 +17,7 @@ from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.busca.provedor import NomeProvedor
+from app.emails import ProvedorEmail, SegurancaSmtp, remetente_valido
 
 _PREFIXO_URL = re.compile(r"^(postgres|postgresql)(\+\w+)?://")
 
@@ -153,6 +154,18 @@ class Configuracao(BaseSettings):
     """Jobs simultâneos por processo do worker (o padrão do ARQ). Turnos longos ocupam a vaga até
     6 min: para mais usuários ao mesmo tempo, mais réplicas do worker (``docker compose up
     --scale worker=N``) em vez de um número alto aqui (navegador e Docker CLI rodam no processo)."""
+    email_provedor: ProvedorEmail = "nenhum"
+    """Envio de e-mail (``app/emails``): ``nenhum``, ``console`` (só desenvolvimento), ``smtp`` ou
+    ``resend``. Sem e-mail, "Esqueci minha senha" responde 503."""
+    email_remetente: str | None = None
+    """``Sora <nao-responda@seu-dominio.com.br>``. Obrigatório com ``smtp`` e ``resend``."""
+    smtp_host: str | None = None
+    smtp_porta: int = 587
+    smtp_usuario: str | None = None
+    smtp_senha: SecretStr | None = None
+    smtp_seguranca: SegurancaSmtp = "starttls"
+    """``starttls`` (587), ``ssl`` (465) ou ``nenhuma`` (só desenvolvimento)."""
+    resend_chave: SecretStr | None = None
 
     @field_validator("sora_modelo_falso", mode="before")
     @classmethod
@@ -169,6 +182,7 @@ class Configuracao(BaseSettings):
     @model_validator(mode="after")
     def _seguranca(self) -> Self:
         self.chaveiro()
+        self._validar_email()
         if ambiente_local(self.ambiente):
             return self
         segredo = self.jwt_segredo.get_secret_value()
@@ -182,6 +196,30 @@ class Configuracao(BaseSettings):
             raise ValueError("CORS_ORIGENS não pode ter localhost em produção.")
         _ = self.endpoint_navegador  # produção sem NAVEGADOR_CDP_URL falha já na inicialização
         return self
+
+    def _validar_email(self) -> None:
+        """Cada provedor de e-mail com o que precisa; ``console`` e SMTP sem TLS só fora de
+        produção (o link de senha nova não pode ir para o log nem passar em texto aberto)."""
+        provedor = self.email_provedor
+        if provedor == "nenhum":
+            return
+        if provedor == "console":
+            if self.producao:
+                raise ValueError("EMAIL_PROVEDOR=console é só para desenvolvimento.")
+            return
+        if not remetente_valido(self.email_remetente or ""):
+            raise ValueError("Informe EMAIL_REMETENTE (ex.: Sora <nao-responda@seu-dominio>).")
+        if provedor == "smtp":
+            if not (self.smtp_host or "").strip():
+                raise ValueError("EMAIL_PROVEDOR=smtp precisa de SMTP_HOST.")
+            if self.producao and self.smtp_seguranca == "nenhuma":
+                raise ValueError("SMTP sem TLS não é aceito em produção.")
+        if provedor == "resend" and not self.resend_chave:
+            raise ValueError("EMAIL_PROVEDOR=resend precisa de RESEND_CHAVE.")
+
+    @property
+    def email_ligado(self) -> bool:
+        return self.email_provedor != "nenhum"
 
     def chaveiro(self) -> dict[int, bytes]:
         """Versão → chave mestra (a atual + as antigas), validado no boot."""

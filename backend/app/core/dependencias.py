@@ -54,7 +54,17 @@ async def usuario_atual(
             "Sessão encerrada. Entre de novo.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    requisicao.state.sessao_id = carga.get("sid")
     return usuario_id
+
+
+def sessao_de_login_atual(requisicao: Request) -> UUID | None:
+    """Sessão de login do token desta requisição (depois de ``usuario_atual``), ou ``None``."""
+    bruto = getattr(requisicao.state, "sessao_id", None)
+    try:
+        return UUID(bruto) if isinstance(bruto, str) and bruto else None
+    except ValueError:
+        return None
 
 
 async def _acesso_revogado(requisicao: Request, usuario_id: UUID, sessao_id: object) -> bool:

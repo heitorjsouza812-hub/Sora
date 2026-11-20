@@ -69,10 +69,12 @@ Modelo de entrada:
 ### 👤 Heitor
 
 - **Papel:** _(preencher — ex.: produto / design / front-end)_
-- **Onde parou (2026-11-19):** revisão geral juntada na `main` (PR #1); correções do CI no ramo `fix/ci-mcp-e-teste-instavel`. Antes: apagar conta cobre todas as tabelas, saída do sandbox com teto, macros/DevTools/interpretadores bloqueados no PC, proteção contra prompt injection no modo total, F5 não derruba mais o login (migração 0017), Sentry/log, teto de upload, Redis com senha, CI no GitHub Actions. Detalhes em `log/2026-11-19.md`.
-- **Próximo passo:** PR #2 junta sozinho na `main` quando o CI passar (auto-merge; a `main` agora exige os 4 jobs do CI). Depois: aplicar a migração 0017, pôr `REDIS_SENHA` no `.env` do servidor e seguir as pendências de desktop/produção já registradas.
+- **Onde parou (2026-11-20):** Onda 1 do comparativo com o OpenBot pronta no ramo `onda1-base-producao` (sem commit): senha nova por link no e-mail e trocar senha, exportar meus dados, relatar problema, chaves extras por conexão e modelos reserva, atualização automática do desktop (desligada até haver chave de assinatura). Migrações 0018 e 0019. Detalhes em `log/2026-11-20.md`.
+- **Próximo passo:** revisar e commitar o ramo, abrir o PR. No servidor: `alembic upgrade head` (0017 a 0019), `REDIS_SENHA` e `EMAIL_PROVEDOR`/`EMAIL_REMETENTE` no `.env`. Para ligar a atualização do desktop: gerar as chaves (`app/docs/atualizacao-desktop.md`). Depois, Onda 2 (`docs/referencias/openbot-comparativo.md`).
 
 **Histórico**
+- **2026-11-20 (tarde)** — Onda 1 do comparativo, no ramo `onda1-base-producao`: "Esqueci minha senha" com link de uso único (30 min, `app/emails` com SMTP/Resend/console, job `enviar_link_de_senha_nova`), trocar senha em Configurações → Conta (os outros aparelhos saem), "Baixar meus dados" (.zip com tudo, sem segredos), "Relatar problema" (diagnóstico mascarado, Retirar, `python -m app.cli relatos listar`), chaves extras por conexão e modelos reserva da conta (avisados na linha do tempo), atualização do desktop (`src-tauri/src/atualizacao.rs`, fluxo `desktop-versao.yml`). Migrações 0018 (`relatos`) e 0019 (`chaves_provedor`, `modelos_reserva`). Arquivos: `backend/app/{emails,core/{contas,exportacao,reservas},api/{auth,conta,relatos,reservas,provedores}}`, `backend/app/orquestrador/modelos.py`, `backend/app/llm/troca.py`, `app/src/{screens/{Entrar,RedefinirSenha},components/{settings,relatos},diagnostico,desktop/atualizacao.ts}`, `app/src-tauri/**`, `log/2026-11-20.md`. Pendente: commit e PR, e-mail real em produção, chaves do atualizador, reservas por bot.
+- **2026-11-20** — Comparativo OpenBot 0.75.0 × Sora: lista por área do que eles têm e a Sora não, o que não trazer e três ondas de prioridade. Achados de base: sem recuperação de senha nem e-mail, sem exportar dados (LGPD), desktop sem atualização automática. Arquivos: `docs/referencias/openbot-comparativo.md`, `docs/referencias/openbot.md`, `log/2026-11-20.md`. Nenhum código alterado.
 - **2026-11-20** — CI: os dois jobs do backend instalam o Playwright e o Chromium (a integração do PR #2 reprovava em `test_navegador_worker.py` e os testes do navegador de verdade eram pulados nos unitários). Arquivos: `.github/workflows/ci.yml`, `log/2026-11-20.md`.
 - **2026-11-19** — Revisão geral (Claude Code) no ramo `fix/revisao-geral`: apagar conta derivado das FKs (antes falhava para quem tinha rotina, grupo, navegador ou canais), `rodar_limitado` no sandbox e no computador virtual, bloqueio de alt+F11/alt+F8/ctrl+shift+K, títulos de macro/DevTools e LOLBAS no PC (com teste de paridade Rust↔Python), `contaminacao.py` (modo total vira automático depois de ler conteúdo de fora), argon2 em thread, despacho da fila após cancelamento, reemissão de token (decisão 6, migração 0017), revogação do token de acesso ao sair/apagar conta, limpeza de sessões vencidas, Sentry/log, `LimiteDeCorpo` + Caddy 25 MB, Redis com senha, `/health/pronto`, `WORKER_MAX_JOBS`, sandbox com internet atrás do proxy, CI (`.github/workflows/ci.yml`), `.claude/settings.local.json` fora do git, `api/canais_empresa` em pacote e funções puras da cadeia em `app/orquestrador`. Arquivos: `backend/**`, `app/src-tauri/src/pc/regras.rs`, `infra/**`, `.github/**`, `log/2026-11-19.md`. Pendente: CSP com domínio real, push e CI no GitHub. **Tarde:** conferência do PC e do navegador: aba nova aberta pelo site vira a do bot, iframes lidos e clicáveis, clique na beirada rola antes, navegação lenta confirmada, janelas de outros monitores para o PC (`docs/computador-por-bot.md`, "Revisão de 2026-11-19"). Falta: ação de mouse/teclado ao vivo no PC (com o app de desktop). **Noite:** README com prints reais e diagramas; PR #1 juntado na `main`; CI acusou o catálogo de conectores citado no prompt sem existir (regressão de `2c643d1`) e um teste instável do app, corrigidos no ramo `fix/ci-mcp-e-teste-instavel` (PR #2). `main` protegida com os 4 jobs do CI obrigatórios e auto-merge ligado.
 - **2026-11-16** — Seletor no compositor (provedor com ícone próprio, nome limpo, raciocínio, permissão Perguntar/Automático/Acesso total com bloqueios absolutos), tela Novo bot com exemplos, Enviar vira Parar enquanto trabalha, modelos ativos por padrão com principais e "Adicionar modelo" (`b9f16e1`, `d871433`, `bb53fda`, `337f8ea`, `32ed37c`, migrações 0015/0016). Controle do PC: "Permitir" retoma o turno, abrir programa pelo nome, tabela no Excel de 26 s para 12 s, bot não afirma que fez sem conferir, Sora minimiza ao usar o PC (`6a0063b`…`d78105d`); chat do bot sem "Pronto!" genérico (`97bda39`). Docs: `docs/seletor-modelo-permissao.md`, `docs/computador-por-bot.md`, `log/2026-11-16.md`. Pendente: pausa pelo mouse físico (Heitor), Excel com modelo depois do ajuste de Enter (cota Groq).
@@ -299,7 +301,7 @@ npm install
 npm run dev          # http://localhost:5173 (outra porta: PORT=5174 npm run dev)
 npm run build        # checagem de tipos + build
 npx oxlint           # lint (restam só avisos antigos de clientes/comum.tsx e qa/contraste.mjs)
-npm test             # vitest (72 arquivos, 382 testes)
+npm test             # vitest (83 arquivos, 453 testes)
 npm run test:visual  # Playwright, telas em 1440 e 390 px (22 testes)
 npm run desktop      # app de DESKTOP (Tauri) em modo dev — usa o dev server da porta 5173
 npm run desktop:build  # instaladores em src-tauri/target/release/bundle/{nsis,msi}/
@@ -335,6 +337,13 @@ Tudo vem do **backend por REST + SSE** (`src/api/eventos.ts`, `src/state/aplicar
 **Rotas:** `/` (Sora) · `/bots` · `/bots/novo` · `/bots/:agente` · `/bots/:id/editar` · `/grupos` · `/grupos/:grupoId` · `/clientes` · `/configuracoes` · `/celular` · `/lab/orb` · `/lab/ui` (dev). Redirecionam: `/plugins`, `/projetos`, `/projeto/:id`, `/revisao/:id`, `/chat/sora` e `/agentes/novo` para `/`; `/agentes` para `/bots`; `/canais/*` para `/grupos`.
 
 ### 7.3 Decisões de produto
+
+**2026-11-20 — Onda 1 (base de produção, `docs/referencias/openbot-comparativo.md`):**
+- **Senha nova:** "Esqueci minha senha" em Entrar manda um link de uso único (30 min, token no `#` do endereço) para `/redefinir-senha`; a resposta é a mesma exista a conta ou não, e quem envia o e-mail é o worker. Salvar a senha nova encerra todas as sessões. Sem `EMAIL_PROVEDOR`, a rota responde 503. Configurações → Conta → **Trocar senha** confere a atual e tira os outros aparelhos.
+- **Seus dados:** Configurações → Conta → **Baixar meus dados** (senha) gera um .zip com tudo o que é da conta (mesma regra de tabelas do apagar conta), sem senha, chaves, hashes nem vetores; 3 por hora.
+- **Relatar problema:** Ctrl+K ou Configurações → Conta. Texto + diagnóstico opcional (versão, tela, últimos 20 erros), que a pessoa vê antes de enviar; tudo mascarado no app e de novo no servidor; dá para retirar. O time lê com `python -m app.cli relatos listar`.
+- **Chaves extras e modelos reserva:** cada conexão aceita até 4 chaves extras; no limite da chave, o **mesmo modelo** segue com a próxima. Até 3 modelos reserva por conta, usados só quando o modelo fixo escolhido falha. Toda troca aparece na linha do tempo (nada silencioso). Reserva por bot fica para depois.
+- **Atualização do desktop:** procura versão nova ao abrir e a cada 6 h, instala só com assinatura válida. Desligada enquanto `plugins.updater.pubkey` estiver vazio (`app/docs/atualizacao-desktop.md`).
 
 **2026-11-16 — seletor de modelo e permissão:** escolhas persistentes por conversa/bot/grupo; modelo explícito sem troca silenciosa; modos Perguntar/Automático/Total conservam bloqueios. Provedor novo vem com todos os modelos ativos; migração 0016 ativa os existentes uma vez. Chat com destaques e adição por ID. Contrato: `docs/seletor-modelo-permissao.md`.
 
@@ -380,11 +389,13 @@ Todas leem `SORA_QA_BASE` (Vite, padrão `http://localhost:5173`) e, quando fala
 - `node qa/shoot.mjs [rotas]` → fotos rápidas em 1440 e 390 px.
 - `node qa/e2e-erro-provedor.mjs` → erro do provedor com servidor HTTP local que falha.
 - Modelo falso: `[pergunta]`, `[aprovacao]` e `[orcamento]` no pedido disparam cartões e orçamento (só com `SORA_MODELO_FALSO=1`).
-- Desktop: `cd src-tauri && cargo clippy -- -D warnings && cargo test` (22 testes); `npm run desktop:build`.
-- Backend: `cd backend && uv run ruff check && uv run pytest tests/unitarios` (1409 passam); integração com Docker (Postgres e Redis), arquivo por arquivo com `SORA_MODELO_FALSO=1` (28 de 28 verdes).
+- Desktop: `cd src-tauri && cargo clippy -- -D warnings && cargo test` (35 testes); `npm run desktop:build`.
+- Relatos do "Relatar problema": `cd backend && uv run python -m app.cli relatos listar --dias 7`.
+- Backend: `cd backend && uv run ruff check && uv run pytest tests/unitarios` (2176 passam); integração com Docker (Postgres e Redis), arquivo por arquivo com `SORA_MODELO_FALSO=1` (28 de 28 verdes).
 
 ### 7.5 Pendências / próximos passos
 
+- **Onda 1 (2026-11-20):** ligar o e-mail em produção (`EMAIL_PROVEDOR=smtp` ou `resend` e `EMAIL_REMETENTE`), aplicar as migrações 0018 e 0019, gerar as chaves do atualizador do desktop e decidir se o repositório fica público (o `latest.json` vem de `releases/latest`). Modelos reserva por bot e a Onda 2 do comparativo seguem abertos.
 - **Junção na `main`:** feita e enviada ao GitHub em 2026-11-15 (`e2f4371`).
 - **Teste real do Tauri:** feito em 2026-11-15 (login, Ilha, "(1) Sora", Bloco de Notas, Parar, senha e cmd recusados, tarja). Faltam a pausa pelo mouse físico (manual), o Gerenciador de Tarefas (UAC) e o clique no aviso do sistema (instalador).
 - **Slack e WhatsApp Business reais:** só testados com assinaturas simuladas.

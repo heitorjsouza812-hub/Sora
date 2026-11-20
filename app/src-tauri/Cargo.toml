@@ -21,6 +21,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-notification = "2.6"
+tauri-plugin-updater = "2"
 
 
 # Leitura do estado real das janelas (primeiro plano/minimizada) para a ilha só fora do app.

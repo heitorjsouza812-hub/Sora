@@ -5,7 +5,9 @@ corpo, porque o cookie `Lax` não acompanha pedidos de `http://tauri.localhost`.
 """
 
 import logging
+from collections.abc import Sequence
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, Header, Request, Response, status
 from redis.asyncio import Redis
@@ -15,7 +17,14 @@ from app.core import contas, seguranca
 from app.core.banco import obter_sessao
 from app.core.config import obter_configuracao
 from app.core.dependencias import obter_redis, obter_redis_opcional
-from app.modelos.esquemas import CadastroEntrada, LoginEntrada, RenovacaoEntrada, TokensSaida
+from app.modelos.esquemas import (
+    CadastroEntrada,
+    EsqueciSenhaEntrada,
+    LoginEntrada,
+    RedefinirSenhaEntrada,
+    RenovacaoEntrada,
+    TokensSaida,
+)
 
 roteador = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -90,6 +99,24 @@ async def renovar(
     return _responder_tokens(resposta, cliente, renovacao, acesso)
 
 
+async def soltar_pc_das_sessoes(
+    redis: Redis | None, usuario_id: UUID, sessoes: Sequence[UUID]
+) -> None:
+    """O controle do PC preso a um login (app de desktop) solta assim que o login acaba (Cerca B3).
+
+    Falha aqui não derruba a rota: o PC solta também quando a sessão dele vence."""
+    if redis is None or not sessoes:
+        return
+    from app.computador.pc_usuario_canal import CanalPc
+
+    canal = CanalPc(redis)
+    for sessao_id in sessoes:
+        try:
+            await canal.encerrar_da_sessao_de_login(usuario_id, sessao_id)
+        except Exception:
+            logging.getLogger(__name__).warning("não consegui soltar o PC do login", exc_info=True)
+
+
 @roteador.post("/sair", status_code=status.HTTP_204_NO_CONTENT)
 async def sair(
     resposta: Response,
@@ -102,11 +129,28 @@ async def sair(
     token = (dados.token_renovacao if dados else None) or cookie_renovacao
     encerrada = await contas.sair(sessao, token, redis)
     resposta.delete_cookie(COOKIE_RENOVACAO, path=CAMINHO_COOKIE)
-    if encerrada is not None and redis is not None:
-        # O controle do PC preso a este login (app de desktop) solta na hora (Cerca B3).
-        from app.computador.pc_usuario_canal import CanalPc
+    if encerrada is not None:
+        await soltar_pc_das_sessoes(redis, encerrada.usuario_id, [encerrada.id])
 
-        try:
-            await CanalPc(redis).encerrar_da_sessao_de_login(encerrada.usuario_id, encerrada.id)
-        except Exception:  # o PC solta também quando a sessão dele vence; sair não falha por isso
-            logging.getLogger(__name__).warning("não consegui soltar o PC ao sair", exc_info=True)
+
+@roteador.post("/esqueci-senha", status_code=status.HTTP_202_ACCEPTED)
+async def esqueci_senha(dados: EsqueciSenhaEntrada, requisicao: Request, redis: RedisDep) -> None:
+    """Pede o link de senha nova. Responde 202 sempre (exista a conta ou não); quem procura a
+    conta, cria o token e envia o e-mail é o worker, então nem o tempo de resposta revela nada."""
+    if not obter_configuracao().email_ligado:
+        raise contas.ErroEmailDesligado()
+    await contas.limitar_pedido_de_link(redis, dados.email, _ip(requisicao))
+    from workers.fila import enfileirar
+
+    await enfileirar("enviar_link_de_senha_nova", email=contas.normalizar_email(dados.email))
+
+
+@roteador.post("/redefinir-senha", status_code=status.HTTP_204_NO_CONTENT)
+async def redefinir_senha(
+    dados: RedefinirSenhaEntrada, requisicao: Request, sessao: Sessao, redis: RedisDep
+) -> None:
+    """Cria a senha nova pelo link do e-mail e encerra todas as sessões da conta."""
+    usuario_id, encerradas = await contas.redefinir_senha(
+        sessao, redis, dados.token, dados.senha_nova, _ip(requisicao)
+    )
+    await soltar_pc_das_sessoes(redis, usuario_id, encerradas)

@@ -19,6 +19,7 @@ from app.core.banco import fabrica_sessoes
 from app.core.config import obter_configuracao
 from app.core.observabilidade import configurar_log, iniciar_sentry
 from app.core.redis import criar_cliente_redis
+from app.emails import criar_enviador
 from app.llm.falso import verificar_modelo_falso_permitido
 from workers.ancora import compactar_historico
 from workers.aprovacoes import expirar_aprovacao
@@ -40,6 +41,7 @@ from workers.canais_empresa import (
 from workers.canal import responder_canal
 from workers.computador import desligar_computador, desligar_computadores_ociosos
 from workers.conversa import responder_direto, retomar_conversa
+from workers.emails import enviar_link_de_senha_nova
 from workers.equipe import (
     despachar_equipe,
     executar_item_fila,
@@ -73,6 +75,7 @@ async def ao_iniciar(ctx: dict[str, Any]) -> None:
     ctx["sessoes"] = fabrica_sessoes()
     ctx["redis_eventos"] = criar_cliente_redis(config.redis_url)
     ctx["checkpointer"] = await abrir_checkpointer(config.database_url)
+    ctx["email"] = criar_enviador(config)
     configurar_fila(ctx.get("redis"))
     await iniciar_navegador(ctx)
     await recuperar_equipe_apos_queda(ctx)
@@ -117,6 +120,7 @@ class WorkerSettings:
         desligar_computador,
         processar_canais_empresa,
         analisar_aprendizado_empresa,
+        enviar_link_de_senha_nova,
     ]
     cron_jobs: ClassVar[list[Any]] = [
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),

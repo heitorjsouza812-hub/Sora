@@ -40,6 +40,21 @@ class EventoTroca(BaseModel):
     de_modelo: str
     para_modelo: str | None
     motivo: MotivoTroca
+    outra_chave: bool = False
+    """O mesmo modelo continua com outra chave da mesma conexão (chaves extras, migração 0019)."""
+
+
+CHAVE_DA_CONEXAO = "sora_chave_da_conexao"
+"""Em ``chat.metadata``: 0 = chave principal da conexão; 1, 2… = chaves extras, na ordem."""
+
+
+def marcar_chave(chat: Any, indice: int) -> None:
+    """Diz ao aviso de troca qual chave da conexão este modelo usa (sem a chave, só a posição)."""
+    chat.metadata = {**(getattr(chat, "metadata", None) or {}), CHAVE_DA_CONEXAO: indice}
+
+
+def _chave_de(chat: Any) -> int:
+    return int((getattr(chat, "metadata", None) or {}).get(CHAVE_DA_CONEXAO, 0))
 
 
 class EstadoSaude(BaseModel):
@@ -105,6 +120,17 @@ def classificar_erro(erro: BaseException) -> MotivoTroca | None:
     return None
 
 
+def _limite_que_nao_cedeu(erro: BaseException) -> bool:
+    atual: BaseException | None = erro
+    for _ in range(_PROFUNDIDADE_MAXIMA_DA_CAUSA):
+        if atual is None:
+            return False
+        if isinstance(atual, ErroLimiteDoProvedor):
+            return True
+        atual = atual.__cause__ or atual.__context__
+    return False
+
+
 def deve_trocar(erro: BaseException) -> bool:
     """``classificar_erro(erro) is not None``. É o predicado que o middleware usa."""
     return classificar_erro(erro) is not None
@@ -156,18 +182,29 @@ def _criar_notificador(
                 raise
             except Exception as erro:
                 motivo = classificar_erro(erro)
+                posicao = next((i for i, m in enumerate(modelos) if m is request.model), None)
+                proximo = (
+                    modelos[posicao + 1]
+                    if posicao is not None and posicao + 1 < len(modelos)
+                    else None
+                )
+                if motivo is None and proximo is not None and _limite_que_nao_cedeu(erro):
+                    # O limite do plano não cedeu na espera: outra chave (ou a reserva) segue.
+                    motivo = MotivoTroca.LIMITE_DE_TAXA
                 if motivo is not None:
-                    posicao = next((i for i, m in enumerate(modelos) if m is request.model), None)
-                    proximo = (
-                        modelos[posicao + 1]
-                        if posicao is not None and posicao + 1 < len(modelos)
-                        else None
-                    )
+                    de, para = _nome_do_modelo(request.model), None
+                    if proximo is not None:
+                        para = _nome_do_modelo(proximo)
                     await ao_trocar(
                         EventoTroca(
-                            de_modelo=_nome_do_modelo(request.model),
-                            para_modelo=None if proximo is None else _nome_do_modelo(proximo),
+                            de_modelo=de,
+                            para_modelo=para,
                             motivo=motivo,
+                            outra_chave=(
+                                proximo is not None
+                                and para == de
+                                and _chave_de(proximo) != _chave_de(request.model)
+                            ),
                         )
                     )
                 raise

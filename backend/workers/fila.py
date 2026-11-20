@@ -38,6 +38,8 @@ NomeJob = Literal[
     # Ponte: canais da empresa (só leitura)
     "processar_canais_empresa",
     "analisar_aprendizado_empresa",
+    # conta (§8.2)
+    "enviar_link_de_senha_nova",
 ]
 
 _fila: ArqRedis | None = None

@@ -112,6 +112,23 @@ export async function cofreApagar(): Promise<void> {
   await invoke('cofre_apagar');
 }
 
+/** Resposta de src-tauri/src/atualizacao.rs. `desligada` = esta versão não tem chave pública. */
+export type VerificacaoAtualizacao =
+  | { estado: 'desligada' | 'em_dia'; versao_atual: string }
+  | { estado: 'disponivel'; versao_atual: string; versao_nova: string; notas: string | null };
+
+/** Procura versão nova do app de desktop. No navegador e na Ilha: `null`. */
+export async function verificarAtualizacao(): Promise<VerificacaoAtualizacao | null> {
+  if (!noDesktop || janelaAtual !== 'main') return null;
+  return invoke<VerificacaoAtualizacao>('atualizacao_verificar');
+}
+
+/** Baixa, confere a assinatura e instala; o app fecha (Windows) ou reinicia sozinho. */
+export async function instalarAtualizacao(): Promise<void> {
+  if (!noDesktop || janelaAtual !== 'main') return;
+  await invoke('atualizacao_instalar');
+}
+
 // WebView2 nem sempre propaga `storage` entre duas WebViews do mesmo app. Reemitimos cada
 // mutação via eventos Tauri; os stores continuam usando o evento web e não conhecem esta ponte.
 interface ArmazenamentoTauri { chave: string; origem: string }

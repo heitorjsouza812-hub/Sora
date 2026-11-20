@@ -307,6 +307,33 @@ class Provedor(Base):
     apagado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ChaveProvedor(Base):
+    """Chave extra de uma conexão (migração 0019): quando a principal bate no limite, o mesmo
+    modelo continua com a próxima chave. Cifrada como a principal (AAD com o id desta linha)."""
+
+    __tablename__ = "chaves_provedor"
+    __table_args__ = (Index("ix_chaves_provedor_provedor", "provedor_id"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    provedor_id: Mapped[UUID] = mapped_column(ForeignKey("provedores.id", ondelete="CASCADE"))
+    chave_cifrada: Mapped[bytes] = mapped_column(LargeBinary)
+    chave_final: Mapped[str | None] = mapped_column(Text)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ModeloReserva(Base):
+    """Modelos reserva da conta (migração 0019): só valem quando há um modelo fixo escolhido e
+    ele falha; a troca aparece na conversa."""
+
+    __tablename__ = "modelos_reserva"
+    __table_args__ = (UniqueConstraint("usuario_id", "provedor_id", "modelo"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    provedor_id: Mapped[UUID] = mapped_column(ForeignKey("provedores.id", ondelete="CASCADE"))
+    modelo: Mapped[str] = mapped_column(Text)
+    ordem: Mapped[int] = mapped_column(default=0, server_default="0")
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ModeloDisponivel(Base):
     __tablename__ = "modelos_disponiveis"
     __table_args__ = (UniqueConstraint("provedor_id", "modelo"),)
@@ -470,6 +497,18 @@ class TokenEmail(Base):
     token_hash: Mapped[str] = mapped_column(Text, unique=True)
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     usado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Relato(Base):
+    """ "Relatar problema" (migração 0018): texto do usuário e diagnóstico, já mascarados."""
+
+    __tablename__ = "relatos"
+    __table_args__ = (Index("ix_relatos_usuario_criado", "usuario_id", "criado_em"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    texto: Mapped[str] = mapped_column(Text)
+    diagnostico: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # ---------- 0004: peças adaptadas do Rakazo (docs/referencias/rakazo.md) ----------

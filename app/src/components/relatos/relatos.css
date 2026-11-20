@@ -1,0 +1,18 @@
+/* "Relatar problema" (Onda 1, 2026-11-20) */
+.relato { display: grid; gap: var(--sp-4); }
+.relato__opcao { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-3); align-items: start; color: var(--text-2); font-size: var(--fs-13); line-height: 1.45; cursor: pointer; }
+.relato__opcao input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--text); }
+.relato__opcao strong { display: block; color: var(--text); font-size: var(--fs-14); font-weight: 600; }
+.relato__opcao small { display: block; margin-top: 2px; color: var(--text-2); font-size: var(--fs-13); }
+.relato__detalhes summary { color: var(--text-2); font-size: var(--fs-13); cursor: pointer; }
+.relato__detalhes summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.relato__detalhes pre { max-height: 220px; overflow: auto; margin: var(--sp-2) 0 0; padding: var(--sp-3); color: var(--text-2); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.relato__erro { margin: 0; color: var(--danger); font-size: var(--fs-13); }
+
+.relatos-enviados { display: grid; gap: var(--sp-3); }
+.relatos-enviados__topo { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-7); }
+.relatos-enviados__lista { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
+.relatos-enviados__lista li { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line); font-size: var(--fs-13); }
+.relatos-enviados__lista li span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
+.relatos-enviados__lista time { margin-right: var(--sp-2); color: var(--text-3); }
+@media (max-width: 720px) { .relatos-enviados__topo { align-items: flex-start; flex-direction: column; gap: var(--sp-3); } }

@@ -18,6 +18,8 @@
     "allow-pc-estado",
     "allow-pc-executar",
     "allow-pc-parar",
-    "allow-pc-sair"
+    "allow-pc-sair",
+    "allow-atualizacao-verificar",
+    "allow-atualizacao-instalar"
   ]
 }

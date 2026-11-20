@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+
+// Versão do app: uma fonte só (a do instalador do desktop), usada no "Relatar problema".
+const versao = (JSON.parse(readFileSync(new URL('./src-tauri/tauri.conf.json', import.meta.url), 'utf-8')) as { version: string }).version
 
 // https://vite.dev/config/
 // /v1 → backend local. Mesma origem no navegador, então o cookie de renovação (httpOnly, path
@@ -10,6 +14,7 @@ const porta = Number(process.env.PORT ?? 5173)
 
 export default defineConfig({
   plugins: [react()],
+  define: { 'import.meta.env.VITE_SORA_VERSAO': JSON.stringify(versao) },
   server: {
     port: porta,
     proxy: {

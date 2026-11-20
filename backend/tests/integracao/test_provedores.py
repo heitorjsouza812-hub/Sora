@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 from alembic import command
@@ -595,3 +596,114 @@ async def test_guarda_so_os_primeiros_500_modelos_em_ordem_alfabetica(
             await sessao.scalars(select(ModeloDisponivel.modelo).order_by(ModeloDisponivel.modelo))
         )
     assert gravados == esperados
+
+
+# ---------- chaves extras e modelos reserva (migração 0019) ----------
+
+
+async def test_chaves_extras_e_reservas_entram_na_lista_do_worker(
+    api: AmbienteAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import obter_configuracao
+    from app.llm.troca import CHAVE_DA_CONEXAO
+    from app.modelos.tabelas import ChaveProvedor, ModeloReserva
+    from app.orquestrador.modelos import modelos_do_papel
+    from app.preferencias_conversa import EscolhaModelo
+
+    monkeypatch.setenv("SORA_MODELO_FALSO", "0")
+    obter_configuracao.cache_clear()
+    auth = await _cadastrar_e_entrar(api.cliente)
+    conexao = await api.cliente.post(
+        "/v1/provedores", json={"tipo": "openai", "chave": CHAVE_ORIGINAL}, headers=auth
+    )
+    provedor_id = conexao.json()["provedor"]["id"]
+    rota = f"/v1/provedores/{provedor_id}/chaves"
+
+    repetida = await api.cliente.post(rota, json={"chave": CHAVE_ORIGINAL}, headers=auth)
+    assert repetida.status_code == 409
+    invalida = await api.cliente.post(rota, json={"chave": CHAVE_INVALIDA}, headers=auth)
+    assert invalida.status_code == 422
+    criada = await api.cliente.post(rota, json={"chave": CHAVE_NOVA}, headers=auth)
+    assert criada.status_code == 201, criada.text
+    assert criada.json()["chave_final"] == "4321"
+    assert (await api.cliente.post(rota, json={"chave": CHAVE_NOVA}, headers=auth)).status_code == (
+        409
+    )
+    lista = (await api.cliente.get(rota, headers=auth)).json()
+    assert [c["chave_final"] for c in lista] == ["4321"]
+
+    usuario_id = await _usuario_id(api)
+    async with api.fabrica() as sessao:
+        linha = await sessao.get(ChaveProvedor, lista[0]["id"])
+        assert linha is not None
+        assert CHAVE_NOVA.encode() not in linha.chave_cifrada
+        assert (
+            decifrar_segredo(
+                linha.chave_cifrada,
+                usuario_id=usuario_id,
+                provedor=f"{provedor_id}:chave:{linha.id}",
+            )
+            == CHAVE_NOVA
+        )
+    # a cifra da chave extra é presa à linha dela: o AAD da conexão não abre
+    with pytest.raises(Exception):  # noqa: B017 - qualquer falha de decifrar serve
+        decifrar_segredo(linha.chave_cifrada, usuario_id=usuario_id, provedor=str(provedor_id))
+
+    # modelos reserva: validados, no máximo 3, só modelos de conversa ativos
+    reserva_ruim = await api.cliente.put(
+        "/v1/modelos-reserva",
+        json={"itens": [{"provedor_id": provedor_id, "modelo": "openai/nao-existe"}]},
+        headers=auth,
+    )
+    assert reserva_ruim.status_code == 422
+    demais = await api.cliente.put(
+        "/v1/modelos-reserva",
+        json={"itens": [{"provedor_id": provedor_id, "modelo": m} for m in MODELOS_INICIAIS * 2]},
+        headers=auth,
+    )
+    assert demais.status_code == 422
+    reserva = await api.cliente.put(
+        "/v1/modelos-reserva",
+        json={"itens": [{"provedor_id": provedor_id, "modelo": "openai/gpt-5.6-terra"}]},
+        headers=auth,
+    )
+    assert reserva.status_code == 200, reserva.text
+    assert (await api.cliente.get("/v1/modelos-reserva", headers=auth)).json() == [
+        {"provedor_id": provedor_id, "modelo": "openai/gpt-5.6-terra"}
+    ]
+
+    escolha = EscolhaModelo(provedor_id=UUID(provedor_id), modelo="openai/gpt-5.6-luna")
+    async with api.fabrica() as sessao:
+        chats = await modelos_do_papel(
+            sessao, usuario_id, "individual", escolha=escolha, precisa=()
+        )
+    nomes = [(c.model, (c.metadata or {}).get(CHAVE_DA_CONEXAO)) for c in chats]
+    assert nomes == [
+        ("openai/gpt-5.6-luna", 0),
+        ("openai/gpt-5.6-luna", 1),
+        ("openai/gpt-5.6-terra", 0),
+        ("openai/gpt-5.6-terra", 1),
+    ]
+
+    # remover a chave e apagar a conexão levam junto o que dependia dela
+    assert (await api.cliente.delete(f"{rota}/{lista[0]['id']}", headers=auth)).status_code == 204
+    assert (await api.cliente.get(rota, headers=auth)).json() == []
+    await api.cliente.post(rota, json={"chave": CHAVE_NOVA}, headers=auth)
+    assert (
+        await api.cliente.delete(f"/v1/provedores/{provedor_id}", headers=auth)
+    ).status_code == 204
+    async with api.fabrica() as sessao:
+        assert await sessao.scalar(select(func.count(ChaveProvedor.id))) == 0
+        assert await sessao.scalar(select(func.count(ModeloReserva.id))) == 0
+
+
+async def test_chaves_extras_de_outro_usuario_parecem_inexistentes(api: AmbienteAPI) -> None:
+    auth_ana = await _cadastrar_e_entrar(api.cliente)
+    auth_bia = await _cadastrar_e_entrar(api.cliente, email="bia@exemplo.com")
+    conexao = await api.cliente.post(
+        "/v1/provedores", json={"tipo": "openai", "chave": CHAVE_ORIGINAL}, headers=auth_ana
+    )
+    rota = f"/v1/provedores/{conexao.json()['provedor']['id']}/chaves"
+    assert (await api.cliente.get(rota, headers=auth_bia)).status_code == 404
+    alheia = await api.cliente.post(rota, json={"chave": CHAVE_NOVA}, headers=auth_bia)
+    assert alheia.status_code == 404

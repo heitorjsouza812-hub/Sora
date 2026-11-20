@@ -7,6 +7,9 @@ import './index.css';
 import './fontes.css';
 import App from './App';
 import { janelaAtual } from './desktop/ponte';
+import { iniciarDiagnostico } from './diagnostico';
+
+iniciarDiagnostico();
 
 // App de desktop (Tauri): a janela "ilha" mostra só a Ilha da Sora (sem telas, sem barra lateral).
 // Em desenvolvimento, /?janela=ilha no navegador abre a mesma vista para testar.
@@ -17,5 +20,6 @@ const raiz = createRoot(document.getElementById('root')!);
 if (ehIlha) {
   void import('./components/ilha/IlhaDesktop').then(({ IlhaDesktop }) => raiz.render(<StrictMode><IlhaDesktop /></StrictMode>));
 } else {
+  void import('./desktop/atualizacao').then(({ iniciarVerificacaoDeAtualizacao }) => iniciarVerificacaoDeAtualizacao());
   raiz.render(<StrictMode><App /></StrictMode>);
 }

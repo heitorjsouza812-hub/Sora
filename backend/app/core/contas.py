@@ -51,6 +51,7 @@ from app.modelos.tabelas import (
     Etapa,
     Provedor,
     Sessao,
+    TokenEmail,
     Usuario,
 )
 
@@ -83,6 +84,19 @@ LIMITE_LOGIN_EMAIL = (50, 60 * 60)
 LIMITE_CADASTRO_IP = (5, 60 * 60)
 # DELETE /v1/conta: senhas erradas por usuário (um token roubado não serve de oráculo de senha).
 LIMITE_APAGAR_CONTA = (5, 15 * 60)
+# Senha nova (§8.2): 3 pedidos de link por hora por e-mail (exista a conta ou não, então o limite
+# não revela nada) e um teto por IP contra quem varre e-mails. Trocar a senha logado conta só as
+# senhas atuais erradas, como apagar a conta.
+LIMITE_ESQUECI_EMAIL = (3, 60 * 60)
+LIMITE_ESQUECI_IP = (10, 60 * 60)
+LIMITE_REDEFINIR_IP = (10, 15 * 60)
+LIMITE_TROCAR_SENHA = (5, 15 * 60)
+
+TIPO_REDEFINIR_SENHA = "redefinir_senha"
+VALIDADE_REDEFINICAO = timedelta(minutes=30)
+"""Link de senha nova: uso único, 30 minutos (§8.2)."""
+RETENCAO_TOKENS_EMAIL = timedelta(days=30)
+"""Tokens de e-mail usados ou vencidos há mais que isto são apagados pela rotina do worker."""
 
 TABELAS_CHECKPOINT = ("checkpoint_writes", "checkpoint_blobs", "checkpoints")
 """Tabelas do ``AsyncPostgresSaver`` (criadas pelo ``setup()`` do worker), por ``thread_id``."""
@@ -136,8 +150,33 @@ class ErroEmailEmUso(ErroConta):
 class ErroSenhaIncorreta(ErroConta):
     status_code = 403
 
+    def __init__(self, detalhe: str = "Senha incorreta.") -> None:
+        super().__init__(detalhe)
+
+
+class ErroLinkSenha(ErroConta):
+    status_code = 400
+
     def __init__(self) -> None:
-        super().__init__("Senha incorreta.")
+        super().__init__(
+            'Este link de senha nova não vale mais. Peça outro em "Esqueci minha senha".'
+        )
+
+
+class ErroEmailDesligado(ErroConta):
+    status_code = 503
+
+    def __init__(self) -> None:
+        super().__init__(
+            "A recuperação de senha ainda não está ligada neste servidor. Fale com o suporte."
+        )
+
+
+class ErroSenhaRepetida(ErroConta):
+    status_code = 400
+
+    def __init__(self) -> None:
+        super().__init__("A senha nova precisa ser diferente da atual.")
 
 
 def normalizar_email(email: str) -> str:
@@ -444,6 +483,185 @@ async def sair(
     await sessao.flush()
     await revogar_acessos(redis, sessao_id=existente.id)
     return existente
+
+
+# ---------- senha nova (§8.2) ----------
+
+
+async def limitar_pedido_de_link(redis: Redis, email: str, ip: str | None) -> None:
+    """Limites do "Esqueci minha senha", contados antes de saber se a conta existe."""
+    await _limitar(redis, f"esqueci:ip:{ip or 'desconhecido'}", LIMITE_ESQUECI_IP)
+    await _limitar(redis, f"esqueci:email:{normalizar_email(email)}", LIMITE_ESQUECI_EMAIL)
+
+
+def link_de_senha_nova(app_url: str, token: str) -> str:
+    """O token vai no fragmento (``#``): o navegador não manda o fragmento ao servidor, então ele
+    não aparece no log do Caddy nem no ``Referer``."""
+    return f"{app_url.rstrip('/')}/redefinir-senha#token={token}"
+
+
+async def _invalidar_links_abertos(sessao: AsyncSession, usuario_id: UUID, agora: datetime) -> None:
+    await sessao.execute(
+        update(TokenEmail)
+        .where(
+            TokenEmail.usuario_id == usuario_id,
+            TokenEmail.tipo == TIPO_REDEFINIR_SENHA,
+            TokenEmail.usado_em.is_(None),
+        )
+        .values(usado_em=agora)
+    )
+
+
+async def criar_link_de_senha_nova(
+    sessao: AsyncSession, email: str, agora: datetime | None = None
+) -> tuple[Usuario, str] | None:
+    """Worker: cria o token de uso único (no banco só o hash) e invalida os links anteriores.
+
+    ``None`` quando não há conta com o e-mail: a rota já respondeu 202 do mesmo jeito, e é o
+    worker quem decide, então o tempo de resposta não revela quem tem conta. Sem commit."""
+    usuario = await sessao.scalar(
+        select(Usuario).where(func.lower(Usuario.email) == normalizar_email(email))
+    )
+    if usuario is None:
+        return None
+    agora = agora or datetime.now(UTC)
+    await _invalidar_links_abertos(sessao, usuario.id, agora)
+    token, token_hash = seguranca.gerar_token_renovacao()
+    sessao.add(
+        TokenEmail(
+            usuario_id=usuario.id,
+            tipo=TIPO_REDEFINIR_SENHA,
+            token_hash=token_hash,
+            expira_em=agora + VALIDADE_REDEFINICAO,
+        )
+    )
+    await sessao.flush()
+    return usuario, token
+
+
+async def _encerrar_sessoes(
+    sessao: AsyncSession, usuario_id: UUID, agora: datetime, *, menos: UUID | None = None
+) -> list[UUID]:
+    """Encerra as sessões abertas do usuário (menos a ``menos``) e devolve os ids encerrados."""
+    consulta = update(Sessao).where(Sessao.usuario_id == usuario_id, Sessao.encerrada_em.is_(None))
+    if menos is not None:
+        consulta = consulta.where(Sessao.id != menos)
+    resultado = await sessao.execute(
+        consulta.values(encerrada_em=agora, par_atual_cifrado=None).returning(Sessao.id)
+    )
+    return list(resultado.scalars().all())
+
+
+async def _revogar_sessoes(redis: Redis | None, sessoes: Sequence[UUID]) -> None:
+    """Derruba os tokens de acesso das sessões encerradas, uma a uma. Não usa a marca do usuário
+    inteiro: ela recusaria também o login novo (com a senha nova) pelos próximos 16 minutos."""
+    for sessao_id in sessoes:
+        await revogar_acessos(redis, sessao_id=sessao_id)
+
+
+async def redefinir_senha(
+    sessao: AsyncSession,
+    redis: Redis,
+    token: str,
+    senha_nova: str,
+    ip: str | None,
+) -> tuple[UUID, list[UUID]]:
+    """Troca a senha pelo link do e-mail (uso único) e encerra **todas** as sessões (§8.2).
+
+    Também marca o e-mail como verificado (quem abriu o link é dono da caixa) e solta o bloqueio
+    de login daquele e-mail. Faz o commit antes de mexer no Redis. Devolve o usuário e as
+    sessões encerradas (para a rota soltar o controle do PC)."""
+    await _limitar(redis, f"redefinir:ip:{ip or 'desconhecido'}", LIMITE_REDEFINIR_IP)
+    agora = datetime.now(UTC)
+    registro_token = await sessao.scalar(
+        select(TokenEmail)
+        .where(
+            TokenEmail.token_hash == seguranca.hash_token(token),
+            TokenEmail.tipo == TIPO_REDEFINIR_SENHA,
+        )
+        .with_for_update()
+    )
+    if (
+        registro_token is None
+        or registro_token.usado_em is not None
+        or registro_token.expira_em <= agora
+    ):
+        raise ErroLinkSenha()
+    usuario = await sessao.get(Usuario, registro_token.usuario_id)
+    if usuario is None:
+        raise ErroLinkSenha()
+    usuario.senha_hash = await seguranca.gerar_hash_senha_em_thread(senha_nova)
+    if usuario.email_verificado_em is None:
+        usuario.email_verificado_em = agora
+    await _invalidar_links_abertos(sessao, usuario.id, agora)
+    encerradas = await _encerrar_sessoes(sessao, usuario.id, agora)
+    await sessao.commit()
+    await _revogar_sessoes(redis, encerradas)
+    # Só os contadores DESTE e-mail: zerar o do IP inteiro daria a quem tem uma conta um jeito de
+    # ganhar mais tentativas contra as contas dos outros.
+    for chave in _chaves_de_login(normalizar_email(usuario.email), ip):
+        if ":email" in chave:
+            await limpar_limite(redis, chave)
+    return usuario.id, encerradas
+
+
+async def conferir_senha(
+    sessao: AsyncSession,
+    redis: Redis,
+    usuario_id: UUID,
+    senha: str,
+    chave_limite: str,
+    nome_campo: str = "A senha",
+) -> Usuario:
+    """Confere a senha de quem já está entrado antes de uma ação sensível. Só as senhas erradas
+    contam no limite (5 a cada 15 min): um token roubado não vira oráculo de senha."""
+    usuario = await sessao.get(Usuario, usuario_id)
+    if usuario is None:
+        raise ErroCredenciais("Conta não encontrada.")
+    espera, membro = await reservar_vaga(redis, chave_limite, *LIMITE_TROCAR_SENHA)
+    if espera:
+        raise ErroLimite(espera)
+    if not await seguranca.verificar_senha_em_thread(senha, usuario.senha_hash):
+        raise ErroSenhaIncorreta(f"{nome_campo} está incorreta.")
+    await devolver_vaga(redis, chave_limite, membro)
+    return usuario
+
+
+async def trocar_senha(
+    sessao: AsyncSession,
+    redis: Redis,
+    usuario_id: UUID,
+    sessao_atual: UUID | None,
+    senha_atual: str,
+    senha_nova: str,
+) -> list[UUID]:
+    """Configurações → Conta: troca a senha conferindo a atual e encerra as **outras** sessões
+    (este aparelho continua entrado). Links de senha nova ainda abertos deixam de valer."""
+    usuario = await conferir_senha(
+        sessao, redis, usuario_id, senha_atual, f"trocar_senha:{usuario_id}", "A senha atual"
+    )
+    if senha_nova == senha_atual:
+        raise ErroSenhaRepetida()
+    agora = datetime.now(UTC)
+    usuario.senha_hash = await seguranca.gerar_hash_senha_em_thread(senha_nova)
+    await _invalidar_links_abertos(sessao, usuario.id, agora)
+    encerradas = await _encerrar_sessoes(sessao, usuario.id, agora, menos=sessao_atual)
+    await sessao.commit()
+    await _revogar_sessoes(redis, encerradas)
+    return encerradas
+
+
+async def apagar_tokens_email_vencidos(sessao: AsyncSession, agora: datetime | None = None) -> int:
+    """Apaga tokens de e-mail usados ou vencidos há mais de ``RETENCAO_TOKENS_EMAIL``."""
+    limite = (agora or datetime.now(UTC)) - RETENCAO_TOKENS_EMAIL
+    resultado = await sessao.execute(
+        delete(TokenEmail).where(
+            (TokenEmail.expira_em < limite)
+            | (TokenEmail.usado_em.is_not(None) & (TokenEmail.usado_em < limite))
+        )
+    )
+    await sessao.commit()
+    return resultado.rowcount or 0
 
 
 async def apagar_sessoes_vencidas(sessao: AsyncSession, agora: datetime | None = None) -> int:

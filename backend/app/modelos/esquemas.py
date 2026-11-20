@@ -59,6 +59,25 @@ class TokensSaida(EsquemaBase):
     token_renovacao: str | None = None
 
 
+class EsqueciSenhaEntrada(EsquemaBase):
+    email: str = Field(max_length=EMAIL_MAX, pattern=_EMAIL)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _sem_espacos(cls, valor: object) -> object:
+        return valor.strip() if isinstance(valor, str) else valor
+
+
+class RedefinirSenhaEntrada(EsquemaBase):
+    token: str = Field(min_length=1, max_length=TOKEN_MAX)
+    senha_nova: str = Field(min_length=10, max_length=SENHA_MAX)
+
+
+class TrocarSenhaEntrada(EsquemaBase):
+    senha_atual: str = Field(max_length=SENHA_MAX)
+    senha_nova: str = Field(min_length=10, max_length=SENHA_MAX)
+
+
 class ContaSaida(EsquemaBase):
     nome: str
     email: str
@@ -194,6 +213,10 @@ class DecisaoAprovacaoEntrada(EsquemaBase):
 
 
 class ApagarContaEntrada(EsquemaBase):
+    senha: str = Field(max_length=SENHA_MAX)
+
+
+class ExportarDadosEntrada(EsquemaBase):
     senha: str = Field(max_length=SENHA_MAX)
 
 

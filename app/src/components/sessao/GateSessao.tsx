@@ -9,13 +9,18 @@ import { useOnboardingPulado } from './onboardingPulado';
 import { encerrarProjetos, iniciarProjetos } from '../../state/projetos';
 
 const Entrar = lazy(() => import('../../screens/Entrar'));
+const RedefinirSenha = lazy(() => import('../../screens/RedefinirSenha'));
 const Onboarding = lazy(() => import('./Onboarding').then(m => ({ default: m.Onboarding })));
+
+/** Link de senha nova do e-mail: abre com ou sem login. */
+export const ROTA_SENHA_NOVA = '/redefinir-senha';
 
 export function GateSessao({ children }: { children: ReactNode }) {
   const sessao = useSessao();
   const { pathname } = useLocation();
   const pulado = useOnboardingPulado();
-  const livre = import.meta.env.DEV && pathname.startsWith('/lab/');
+  const senhaNova = pathname === ROTA_SENHA_NOVA;
+  const livre = (import.meta.env.DEV && pathname.startsWith('/lab/')) || senhaNova;
 
   useEffect(() => { if (!livre) void iniciarSessao(); }, [livre]);
   useEffect(() => {
@@ -24,6 +29,7 @@ export function GateSessao({ children }: { children: ReactNode }) {
     return encerrarProjetos;
   }, [sessao.estado, livre]);
 
+  if (senhaNova) return <Suspense fallback={<TelaCarregando />}><RedefinirSenha /></Suspense>;
   if (livre) return <>{children}</>;
   if (sessao.estado === 'carregando') return <TelaCarregando />;
   if (sessao.estado === 'anonimo') return <Suspense fallback={<TelaCarregando />}><Entrar /></Suspense>;

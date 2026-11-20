@@ -14,6 +14,7 @@ use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 /// C3: controle do PC do usuário por um bot (ponte local; ver `pc/mod.rs`).
+mod atualizacao;
 mod pc;
 
 const ILHA_LARGURA: f64 = 800.0;
@@ -401,6 +402,8 @@ const COMANDOS_POR_JANELA: &[(&str, &str)] = &[
     ("pc_executar", "main"),
     ("pc_parar", "main"),
     ("pc_sair", "main"),
+    ("atualizacao_verificar", "main"),
+    ("atualizacao_instalar", "main"),
 ];
 
 fn janela_pode(comando: &str, label: &str) -> bool {
@@ -691,6 +694,7 @@ pub fn run() {
     let estado = IlhaEstado::novo(true);
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             mostrar_principal(app)
         }))
@@ -726,7 +730,9 @@ pub fn run() {
             pc::pc_estado,
             pc::pc_executar,
             pc::pc_parar,
-            pc::pc_sair
+            pc::pc_sair,
+            atualizacao::atualizacao_verificar,
+            atualizacao::atualizacao_instalar
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

@@ -170,9 +170,13 @@ def construir_dependencias(
     async def ao_trocar_modelo(troca: Any) -> None:
         """§6 "Falha de provedor": a troca aparece na linha do tempo (passo de pensamento)."""
         destino = troca.para_modelo or "nenhum modelo disponível"
+        texto = (
+            f"Continuei com outra chave da mesma conexão: {troca.de_modelo}"
+            if getattr(troca, "outra_chave", False)
+            else f"Troquei de modelo: {troca.de_modelo} → {destino}"
+        )
         await _passo_de_pensamento(
-            f"Troquei de modelo: {troca.de_modelo} → {destino}",
-            {"motivo": str(getattr(troca.motivo, "value", troca.motivo))},
+            texto, {"motivo": str(getattr(troca.motivo, "value", troca.motivo))}
         )
 
     async def ao_esperar_limite(segundos: int) -> None:

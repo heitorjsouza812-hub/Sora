@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
@@ -16,7 +17,7 @@ from app.core import contas, seguranca
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis
 from app.main import criar_aplicacao
-from app.modelos.tabelas import Agente, Sessao, Usuario
+from app.modelos.tabelas import Agente, Sessao, TokenEmail, Usuario
 
 pytestmark = pytest.mark.integracao
 
@@ -361,13 +362,9 @@ async def test_par_cifrado_some_quando_a_janela_fecha_e_historico_tem_teto(
     assert (await sessao_atual(atual)).par_atual_cifrado is None
 
 
-async def test_apagar_conta_com_dados_em_todas_as_tabelas(cliente: AsyncClient) -> None:
-    """Uma linha em CADA tabela do modelo, ligada ao usuário (inclusive as FKs que fecham ciclo,
-    como ``agentes.perfil_navegador_id``), e o DELETE /v1/conta apaga tudo.
-
-    Antes, ``apagar_conta`` listava ~21 tabelas à mão: com uma rotina, um grupo, a fila, o
-    navegador ou os canais da empresa, o ``DELETE FROM usuarios`` falhava por chave estrangeira
-    e a conta não era apagada (LGPD)."""
+async def _popular_todas_as_tabelas(cliente: AsyncClient) -> tuple[dict[str, str], Any]:
+    """Cadastra a Ana e põe uma linha em CADA tabela do modelo, ligada a ela (inclusive as FKs que
+    fecham ciclo). Devolve o cabeçalho de login e o id dela."""
     import enum
     import uuid
     from datetime import UTC, date, datetime
@@ -468,6 +465,20 @@ async def test_apagar_conta_com_dados_em_todas_as_tabelas(cliente: AsyncClient) 
                         .values({fk.parent.name: criados[fk.column.table.name][fk.column.name]})
                     )
         await s.commit()
+    return auth, usuario_id
+
+
+async def test_apagar_conta_com_dados_em_todas_as_tabelas(cliente: AsyncClient) -> None:
+    """Uma linha em CADA tabela do modelo, ligada ao usuário (inclusive as FKs que fecham ciclo,
+    como ``agentes.perfil_navegador_id``), e o DELETE /v1/conta apaga tudo.
+
+    Antes, ``apagar_conta`` listava ~21 tabelas à mão: com uma rotina, um grupo, a fila, o
+    navegador ou os canais da empresa, o ``DELETE FROM usuarios`` falhava por chave estrangeira
+    e a conta não era apagada (LGPD)."""
+    from app.core.contas import TABELAS_SEM_DONO, _tabelas_do_banco
+
+    auth, _ = await _popular_todas_as_tabelas(cliente)
+    fabrica = cliente.app_state.fabrica  # type: ignore[attr-defined]
 
     resposta = await cliente.request("DELETE", "/v1/conta", json={"senha": SENHA}, headers=auth)
     assert resposta.status_code == 204, resposta.text
@@ -479,3 +490,245 @@ async def test_apagar_conta_com_dados_em_todas_as_tabelas(cliente: AsyncClient) 
             and (n := await s.scalar(text(f"select count(*) from {t.name}")))
         }
     assert sobrou == {}
+
+
+# ---------- senha nova (§8.2) ----------
+
+SENHA_NOVA = "outra-senha-bem-longa"
+
+
+async def _entrar_desktop(c: AsyncClient, senha: str = SENHA):
+    return await c.post(
+        "/v1/auth/entrar",
+        json={"email": "ana@exemplo.com", "senha": senha},
+        headers={"X-Sora-Cliente": "desktop"},
+    )
+
+
+async def _link(c: AsyncClient, email: str = "ana@exemplo.com") -> str | None:
+    async with c.app_state.fabrica() as s:  # type: ignore[attr-defined]
+        criado = await contas.criar_link_de_senha_nova(s, email)
+        await s.commit()
+    return None if criado is None else criado[1]
+
+
+async def test_link_de_senha_nova_troca_a_senha_e_encerra_todas_as_sessoes(
+    cliente: AsyncClient,
+) -> None:
+    await _cadastrar(cliente)
+    renovacao = (await _entrar_desktop(cliente)).json()["token_renovacao"]
+    assert await _link(cliente, "ninguem@exemplo.com") is None  # sem conta: nada é criado
+    primeiro = await _link(cliente, "ANA@exemplo.com")
+    token = await _link(cliente)  # pedir de novo invalida o link anterior
+    assert primeiro and token and primeiro != token
+
+    anterior = await cliente.post(
+        "/v1/auth/redefinir-senha", json={"token": primeiro, "senha_nova": SENHA_NOVA}
+    )
+    assert anterior.status_code == 400
+    ok = await cliente.post(
+        "/v1/auth/redefinir-senha", json={"token": token, "senha_nova": SENHA_NOVA}
+    )
+    assert ok.status_code == 204
+    # uso único
+    repetido = await cliente.post(
+        "/v1/auth/redefinir-senha", json={"token": token, "senha_nova": SENHA_NOVA}
+    )
+    assert repetido.status_code == 400
+    # todas as sessões caíram; a senha velha não entra mais e a nova entra
+    assert (
+        await cliente.post("/v1/auth/renovar", json={"token_renovacao": renovacao})
+    ).status_code == 401
+    assert (await _entrar_desktop(cliente)).status_code == 401
+    assert (await _entrar_desktop(cliente, SENHA_NOVA)).status_code == 200
+    async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
+        usuario = await s.scalar(select(Usuario))
+        assert usuario is not None and usuario.email_verificado_em is not None
+        guardados = (await s.scalars(select(TokenEmail.token_hash))).all()
+    assert token not in guardados  # no banco só o hash
+    assert seguranca.hash_token(token) in guardados
+
+
+async def test_link_de_senha_nova_vence_em_30_minutos(cliente: AsyncClient) -> None:
+    await _cadastrar(cliente)
+    token = await _link(cliente)
+    assert token
+    async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
+        registro = await s.scalar(
+            select(TokenEmail).where(TokenEmail.token_hash == seguranca.hash_token(token))
+        )
+        assert registro is not None
+        registro.expira_em -= contas.VALIDADE_REDEFINICAO + timedelta(seconds=1)
+        await s.commit()
+    vencido = await cliente.post(
+        "/v1/auth/redefinir-senha", json={"token": token, "senha_nova": SENHA_NOVA}
+    )
+    assert vencido.status_code == 400
+    assert "Esqueci minha senha" in vencido.json()["detail"]
+    assert (await _entrar_desktop(cliente)).status_code == 200  # senha antiga continua
+
+
+async def test_trocar_senha_confere_a_atual_e_derruba_so_os_outros_aparelhos(
+    cliente: AsyncClient,
+) -> None:
+    await _cadastrar(cliente)
+    este = (await _entrar_desktop(cliente)).json()
+    outro = (await _entrar_desktop(cliente)).json()
+    auth = {"Authorization": f"Bearer {este['token_acesso']}"}
+
+    errada = await cliente.post(
+        "/v1/conta/senha",
+        json={"senha_atual": "senha-errada!", "senha_nova": SENHA_NOVA},
+        headers=auth,
+    )
+    assert errada.status_code == 403
+    igual = await cliente.post(
+        "/v1/conta/senha", json={"senha_atual": SENHA, "senha_nova": SENHA}, headers=auth
+    )
+    assert igual.status_code == 400
+    ok = await cliente.post(
+        "/v1/conta/senha", json={"senha_atual": SENHA, "senha_nova": SENHA_NOVA}, headers=auth
+    )
+    assert ok.status_code == 204
+
+    assert (
+        await cliente.post("/v1/auth/renovar", json={"token_renovacao": este["token_renovacao"]})
+    ).status_code == 200
+    assert (
+        await cliente.post("/v1/auth/renovar", json={"token_renovacao": outro["token_renovacao"]})
+    ).status_code == 401
+    assert (await _entrar_desktop(cliente, SENHA_NOVA)).status_code == 200
+
+
+# ---------- exportar meus dados (LGPD) ----------
+
+
+async def test_exportar_dados_traz_todas_as_tabelas_sem_segredos_nem_outra_conta(
+    cliente: AsyncClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import io
+    import json
+    import zipfile
+
+    from app.core.config import obter_configuracao
+    from app.core.contas import TABELAS_SEM_DONO, _tabelas_do_banco
+    from app.core.exportacao import TABELAS_FORA
+    from app.modelos.tabelas import Anexo
+
+    auth, usuario_id = await _popular_todas_as_tabelas(cliente)
+    fabrica = cliente.app_state.fabrica  # type: ignore[attr-defined]
+    # um anexo de verdade no volume (o da linha de teste aponta para um caminho que não existe)
+    monkeypatch.setattr(obter_configuracao(), "pasta_arquivos", tmp_path)
+    (tmp_path / str(usuario_id)).mkdir()
+    (tmp_path / str(usuario_id) / "nota.txt").write_text("conteúdo do anexo", encoding="utf-8")
+    async with fabrica() as s:
+        s.add(
+            Anexo(
+                usuario_id=usuario_id,
+                nome="../nota final.txt",
+                tipo="text/plain",
+                tamanho=17,
+                caminho=f"{usuario_id}/nota.txt",
+            )
+        )
+        await s.commit()
+    # outra conta com dados próprios: nada dela pode aparecer
+    await _cadastrar(cliente, email="bia@exemplo.com")
+
+    errada = await cliente.post("/v1/conta/exportar", json={"senha": "senha-errada!"}, headers=auth)
+    assert errada.status_code == 403
+    resposta = await cliente.post("/v1/conta/exportar", json={"senha": SENHA}, headers=auth)
+    assert resposta.status_code == 200, resposta.text
+    assert resposta.headers["content-type"] == "application/zip"
+    assert "sora-meus-dados-" in resposta.headers["content-disposition"]
+    assert resposta.headers["cache-control"] == "no-store"
+
+    with zipfile.ZipFile(io.BytesIO(resposta.content)) as zip_:
+        nomes = set(zip_.namelist())
+        conteudos = {n: zip_.read(n).decode("utf-8") for n in nomes if not n.startswith("arq")}
+        anexo = zip_.read(next(n for n in nomes if n.startswith("arquivos/")))
+    assert {"conta.json", "LEIA-ME.txt"} <= nomes
+    assert json.loads(conteudos["conta.json"])["email"] == "ana@exemplo.com"
+    esperadas = {
+        t.name for t in _tabelas_do_banco() if t.name not in TABELAS_SEM_DONO | TABELAS_FORA
+    }
+    exportadas = {n.removeprefix("dados/").removesuffix(".json") for n in nomes if "dados/" in n}
+    assert esperadas == exportadas
+    tudo = "\n".join(conteudos.values())
+    for proibido in ("senha_hash", "token_hash", "chave_cifrada", "par_atual_cifrado", "eA=="):
+        assert proibido not in tudo  # "eA==" é o b"x" das colunas cifradas, em base64
+    assert "bia@exemplo.com" not in tudo
+    assert anexo == "conteúdo do anexo".encode()
+    assert any(n.endswith("nota final.txt") and ".." not in n for n in nomes)
+    assert "1 arquivo(s) não estavam mais no servidor" in conteudos["LEIA-ME.txt"]
+
+
+async def test_exportar_dados_tem_limite_por_hora(cliente: AsyncClient) -> None:
+    await _cadastrar(cliente)
+    login = await cliente.post("/v1/auth/entrar", json={"email": "ana@exemplo.com", "senha": SENHA})
+    auth = {"Authorization": f"Bearer {login.json()['token_acesso']}"}
+    codigos = [
+        (await cliente.post("/v1/conta/exportar", json={"senha": SENHA}, headers=auth)).status_code
+        for _ in range(4)
+    ]
+    assert codigos == [200, 200, 200, 429]
+
+
+# ---------- relatar problema ----------
+
+
+async def test_relatos_mascarados_listados_e_retirados_so_pelo_dono(cliente: AsyncClient) -> None:
+    from app.modelos.tabelas import Relato
+
+    await _cadastrar(cliente)
+    await _cadastrar(cliente, email="bia@exemplo.com")
+    ana = await cliente.post("/v1/auth/entrar", json={"email": "ana@exemplo.com", "senha": SENHA})
+    bia = await cliente.post("/v1/auth/entrar", json={"email": "bia@exemplo.com", "senha": SENHA})
+    auth_ana = {"Authorization": f"Bearer {ana.json()['token_acesso']}"}
+    auth_bia = {"Authorization": f"Bearer {bia.json()['token_acesso']}"}
+
+    criado = await cliente.post(
+        "/v1/relatos",
+        json={
+            "texto": "O bot travou quando colei o cartão 4111 1111 1111 1111.",
+            "diagnostico": {
+                "versao_app": "0.1.0",
+                "plataforma": "web",
+                "rota": "/bots/1",
+                "navegador": "Mozilla/5.0",
+                "tela": "1440x900",
+                "idioma": "pt-BR",
+                "erros": [
+                    {
+                        "quando": "2026-11-20T10:00:00Z",
+                        "origem": "api",
+                        "mensagem": "POST /v1/x falhou para ana@exemplo.com",
+                    }
+                ],
+            },
+        },
+        headers=auth_ana,
+    )
+    assert criado.status_code == 201, criado.text
+    relato_id = criado.json()["id"]
+    assert criado.json()["com_diagnostico"] is True
+    async with cliente.app_state.fabrica() as s:  # type: ignore[attr-defined]
+        guardado = await s.get(Relato, uuid_de(relato_id))
+        assert guardado is not None
+        assert "4111 1111 1111 1111" not in guardado.texto
+        assert "ana@exemplo.com" not in str(guardado.diagnostico)
+
+    assert [r["id"] for r in (await cliente.get("/v1/relatos", headers=auth_ana)).json()] == [
+        relato_id
+    ]
+    assert (await cliente.get("/v1/relatos", headers=auth_bia)).json() == []
+    alheio = await cliente.delete(f"/v1/relatos/{relato_id}", headers=auth_bia)
+    assert alheio.status_code == 404
+    assert (await cliente.delete(f"/v1/relatos/{relato_id}", headers=auth_ana)).status_code == 204
+    assert (await cliente.get("/v1/relatos", headers=auth_ana)).json() == []
+
+
+def uuid_de(texto: str):
+    from uuid import UUID
+
+    return UUID(texto)

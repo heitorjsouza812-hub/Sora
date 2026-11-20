@@ -1,16 +1,17 @@
 """Rotas de APIs de modelos conectadas pelo usuário; especificação §§2 e 5."""
 
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import conexoes
+from app.core import conexoes, reservas
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
 from app.llm.catalogo_chat import modelos_principais
@@ -23,6 +24,7 @@ from app.modelos.esquemas import (
     ProvedorCriacao,
     ProvedorSaida,
 )
+from app.modelos.tabelas import ChaveProvedor
 from app.seletor.catalogo import obter_catalogo
 from app.seletor.repositorio import config_do_provedor
 
@@ -150,3 +152,51 @@ async def atualizar_provedor(
 async def apagar_provedor(provedor_id: UUID, usuario_id: Usuario, sessao: Sessao) -> None:
     """Remove logicamente um provedor e sua chave cifrada."""
     await conexoes.apagar(sessao, usuario_id, provedor_id)
+
+
+# ---------- chaves extras (migração 0019) ----------
+
+
+class ChaveExtraEntrada(BaseModel):
+    chave: SecretStr = Field(max_length=4_000)
+
+
+class ChaveExtraSaida(BaseModel):
+    id: UUID
+    chave_final: str | None
+    criado_em: datetime
+
+
+def _saida_chave(linha: ChaveProvedor) -> ChaveExtraSaida:
+    return ChaveExtraSaida(id=linha.id, chave_final=linha.chave_final, criado_em=linha.criado_em)
+
+
+@roteador.get("/{provedor_id}/chaves")
+async def listar_chaves_extras(
+    provedor_id: UUID, usuario_id: Usuario, sessao: Sessao
+) -> list[ChaveExtraSaida]:
+    """Chaves extras da conexão (só o final de cada uma)."""
+    return [_saida_chave(c) for c in await reservas.listar_chaves(sessao, usuario_id, provedor_id)]
+
+
+@roteador.post("/{provedor_id}/chaves", status_code=status.HTTP_201_CREATED)
+async def adicionar_chave_extra(
+    provedor_id: UUID,
+    dados: ChaveExtraEntrada,
+    usuario_id: Usuario,
+    sessao: Sessao,
+    redis: RedisDep,
+    listador: ListadorDep,
+) -> ChaveExtraSaida:
+    """Testa e guarda outra chave da mesma conexão; o mesmo modelo continua com ela no limite."""
+    linha = await reservas.adicionar_chave(
+        sessao, redis, usuario_id, provedor_id, dados.chave, listador
+    )
+    return _saida_chave(linha)
+
+
+@roteador.delete("/{provedor_id}/chaves/{chave_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remover_chave_extra(
+    provedor_id: UUID, chave_id: UUID, usuario_id: Usuario, sessao: Sessao
+) -> None:
+    await reservas.remover_chave(sessao, usuario_id, provedor_id, chave_id)

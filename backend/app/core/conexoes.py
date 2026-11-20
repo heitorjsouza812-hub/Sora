@@ -308,9 +308,12 @@ async def _modelos_do(sessao: AsyncSession, provedor_id: UUID) -> list[ModeloDis
 async def apagar(sessao: AsyncSession, usuario_id: UUID, provedor_id: UUID) -> None:
     """Apaga logicamente o provedor, elimina a chave e desativa seus modelos."""
     provedor = await _provedor_do_usuario(sessao, usuario_id, provedor_id)
+    from app.core.reservas import apagar_extras_e_reservas_do_provedor
+
     provedor.apagado_em = datetime.now(UTC)
     provedor.chave_cifrada = None
     provedor.chave_final = None
+    await apagar_extras_e_reservas_do_provedor(sessao, provedor.id)
     modelos = await sessao.scalars(
         select(ModeloDisponivel).where(ModeloDisponivel.provedor_id == provedor.id)
     )

@@ -1,6 +1,11 @@
 import { CanaisEmpresa } from '../components/settings/CanaisEmpresa';
 import { NotificacoesDesktop } from '../components/settings/NotificacoesDesktop';
 import { ComputadorPC } from '../components/settings/ComputadorPC';
+import { TrocarSenha } from '../components/settings/TrocarSenha';
+import { ModelosReserva } from '../components/settings/ModelosReserva';
+import { MeusDados } from '../components/settings/MeusDados';
+import { RelatosEnviados } from '../components/relatos/RelatosEnviados';
+import { VersaoApp } from '../components/settings/VersaoApp';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
@@ -113,10 +118,11 @@ export default function Configuracoes() {
           {estado.carregando && <div className="cfg-loading" role="status">Carregando provedores e modelos…</div>}
           {estado.erro && <div className="cfg-error" role="alert">{estado.erro}</div>}
           {conectados && <ModelDefaults estado={estado} />}
+          {conectados && <ModelosReserva estado={estado} />}
           <div className="cfg-provider-grid">{provedores.map(p => <ProviderCard key={p.id} provedor={p} />)}</div>
           {!conectados && <ModelDefaults estado={estado} />}
           <section className="cfg-security"><h3>Segurança das suas chaves</h3><p>As chaves são enviadas ao backend da Sora e guardadas cifradas. O navegador recebe apenas os últimos caracteres para identificação.</p><Button className="cfg-btn-perigo" onClick={() => setConfirmarChaves(true)}>Desconectar todas as APIs</Button></section>
-        </> : secao === 'canais-empresa' ? <CanaisEmpresa /> : secao === 'memoria' ? <SecaoMemoria /> : secao === 'rotinas' ? <SecaoRotinas /> : secao === 'habilidades' ? <SecaoHabilidades /> : secao === 'conectores' ? <SecaoConectores /> : secao === 'navegador' ? <SecaoNavegador /> : secao === 'telegram' ? <SecaoTelegram /> : secao === 'ilha' ? <ConfiguracaoIlha /> : secao === 'computador' ? <ComputadorPC /> : secao === 'conta' ? <><header className="cfg-heading"><h2>Conta</h2><p>Gerencie os dados da sua conta.</p></header><UsoDaConta /><h3 className="cfg-danger-title">Zona de perigo</h3><section className="cfg-account"><div><h3>Dados da Sora</h3><p>Apague grupos, conversas e bots. As conexões de modelos não serão alteradas.</p></div><Button className="cfg-btn-perigo" onClick={() => setConfirmarLimpeza(true)}>Apagar todos os dados</Button></section><section className="cfg-account"><div><h3>Apagar conta</h3><p>Remove permanentemente a conta, as chaves cifradas e os dados guardados no servidor.</p></div><Button variante="fantasma" className="cfg-btn-perigo" onClick={() => setConfirmarConta(true)}>Apagar conta</Button></section></> : null}
+        </> : secao === 'canais-empresa' ? <CanaisEmpresa /> : secao === 'memoria' ? <SecaoMemoria /> : secao === 'rotinas' ? <SecaoRotinas /> : secao === 'habilidades' ? <SecaoHabilidades /> : secao === 'conectores' ? <SecaoConectores /> : secao === 'navegador' ? <SecaoNavegador /> : secao === 'telegram' ? <SecaoTelegram /> : secao === 'ilha' ? <ConfiguracaoIlha /> : secao === 'computador' ? <ComputadorPC /> : secao === 'conta' ? <><header className="cfg-heading"><h2>Conta</h2><p>Gerencie os dados da sua conta.</p></header><UsoDaConta /><TrocarSenha /><MeusDados /><RelatosEnviados /><VersaoApp /><h3 className="cfg-danger-title">Zona de perigo</h3><section className="cfg-account"><div><h3>Dados da Sora</h3><p>Apague grupos, conversas e bots. As conexões de modelos não serão alteradas.</p></div><Button className="cfg-btn-perigo" onClick={() => setConfirmarLimpeza(true)}>Apagar todos os dados</Button></section><section className="cfg-account"><div><h3>Apagar conta</h3><p>Remove permanentemente a conta, as chaves cifradas e os dados guardados no servidor.</p></div><Button variante="fantasma" className="cfg-btn-perigo" onClick={() => setConfirmarConta(true)}>Apagar conta</Button></section></> : null}
       </section>
     </div>
     <Modal open={confirmarLimpeza} onClose={() => { if (!apagandoDados) setConfirmarLimpeza(false); }} title="Apagar todos os dados?" description="Esta ação não pode ser desfeita." size="sm" footer={<div className="cfg-modal-actions"><Button disabled={apagandoDados} onClick={() => setConfirmarLimpeza(false)}>Cancelar</Button><Button variante="perigo" carregando={apagandoDados} onClick={() => { setErroLimpeza(''); setApagandoDados(true); void limparTudo().then(() => { setConfirmarLimpeza(false); navigate('/'); }).catch(erro => setErroLimpeza(mensagemDeErro(erro))).finally(() => setApagandoDados(false)); }}>Apagar todos os dados</Button></div>}><p className="cfg-modal-copy">Todos os grupos, chats e bots serão removidos do servidor.</p>{erroLimpeza && <p role="alert">{erroLimpeza}</p>}</Modal>

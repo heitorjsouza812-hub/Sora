@@ -19,6 +19,8 @@ fn main() {
             "pc_executar",
             "pc_parar",
             "pc_sair",
+            "atualizacao_verificar",
+            "atualizacao_instalar",
         ]),
     ))
     .expect("falha ao gerar o manifesto do app Tauri");

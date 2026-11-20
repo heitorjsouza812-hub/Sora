@@ -30,9 +30,12 @@ async def apagar_sessoes_vencidas(ctx: dict[str, Any]) -> int:
     try:
         async with ctx["sessoes"]() as sessao:
             apagadas = await contas.apagar_sessoes_vencidas(sessao)
+            tokens = await contas.apagar_tokens_email_vencidos(sessao)
     except Exception:
         registro.warning("não consegui apagar as sessões vencidas", exc_info=True)
         return 0
     if apagadas:
         registro.info("%d sessão(ões) vencida(s) apagada(s)", apagadas)
+    if tokens:
+        registro.info("%d link(s) de e-mail vencido(s) apagado(s)", tokens)
     return apagadas

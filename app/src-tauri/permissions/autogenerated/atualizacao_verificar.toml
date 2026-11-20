@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-atualizacao-verificar"
+description = "Enables the atualizacao_verificar command without any pre-configured scope."
+commands.allow = ["atualizacao_verificar"]
+
+[[permission]]
+identifier = "deny-atualizacao-verificar"
+description = "Denies the atualizacao_verificar command without any pre-configured scope."
+commands.deny = ["atualizacao_verificar"]

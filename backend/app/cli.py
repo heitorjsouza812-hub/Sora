@@ -2,13 +2,17 @@
 
 import argparse
 import asyncio
+import json
 import secrets
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.banco import fabrica_sessoes
-from app.modelos.tabelas import Convite
+from app.modelos.tabelas import Convite, Relato, Usuario
 
 
 class ErroCli(Exception):
@@ -52,6 +56,47 @@ async def criar_convite(codigo: str | None, usos: int) -> str:
     return codigo_final
 
 
+async def listar_relatos(dias: int, limite: int) -> list[dict[str, Any]]:
+    """Relatos de problema dos últimos ``dias`` (o texto e o diagnóstico já vêm mascarados)."""
+    desde = datetime.now(UTC) - timedelta(days=dias)
+    fabrica = fabrica_sessoes()
+    async with fabrica() as sessao:
+        linhas = await sessao.execute(
+            select(Relato, Usuario.email)
+            .join(Usuario, Usuario.id == Relato.usuario_id)
+            .where(Relato.criado_em >= desde)
+            .order_by(Relato.criado_em.desc())
+            .limit(limite)
+        )
+        return [
+            {
+                "id": str(relato.id),
+                "criado_em": relato.criado_em.isoformat(),
+                "email": email,
+                "texto": relato.texto,
+                "diagnostico": relato.diagnostico,
+            }
+            for relato, email in linhas
+        ]
+
+
+def formatar_relatos(relatos: list[dict[str, Any]]) -> str:
+    if not relatos:
+        return "Nenhum relato no período."
+    blocos = []
+    for relato in relatos:
+        diagnostico = (
+            json.dumps(relato["diagnostico"], ensure_ascii=False, indent=2)
+            if relato["diagnostico"]
+            else "(sem diagnóstico)"
+        )
+        blocos.append(
+            f"── {relato['criado_em']} · {relato['email']} · {relato['id']}\n"
+            f"{relato['texto']}\n\nDiagnóstico:\n{diagnostico}"
+        )
+    return "\n\n".join(blocos)
+
+
 def construir_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description=__doc__)
     recursos = parser.add_subparsers(dest="recurso", required=True)
@@ -62,11 +107,23 @@ def construir_parser() -> argparse.ArgumentParser:
     criar.add_argument(
         "--usos", type=_usos_positivos, default=1, help="Número de usos (padrão: 1)."
     )
+    relatos = recursos.add_parser("relatos", help='Lê os "Relatar problema" dos usuários.')
+    acoes_relatos = relatos.add_subparsers(dest="acao", required=True)
+    listar = acoes_relatos.add_parser("listar", help="Lista os relatos mais recentes.")
+    listar.add_argument(
+        "--dias", type=_usos_positivos, default=7, help="Últimos N dias (padrão: 7)."
+    )
+    listar.add_argument(
+        "--limite", type=_usos_positivos, default=50, help="Máximo de relatos (padrão: 50)."
+    )
     return parser
 
 
 def executar(argv: Sequence[str] | None = None) -> int:
     argumentos = construir_parser().parse_args(argv)
+    if argumentos.recurso == "relatos":
+        print(formatar_relatos(asyncio.run(listar_relatos(argumentos.dias, argumentos.limite))))
+        return 0
     try:
         codigo = asyncio.run(criar_convite(argumentos.codigo, argumentos.usos))
     except ErroCli as erro:

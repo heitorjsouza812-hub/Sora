@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { alternarPaleta, digitando, fecharPaleta, focarCampoMensagem, usePaletaAberta } from './atalhos';
 import { CentralPrecisaDeVoce } from '../pendencias/CentralPrecisaDeVoce';
 import { PaletaComandos } from './PaletaComandos';
+import { RelatarProblema } from '../relatos/RelatarProblema';
 
 export function Comandos() {
   const aberta = usePaletaAberta();
@@ -31,5 +32,5 @@ export function Comandos() {
   // sair da rota fecha a paleta (ex.: voltar no navegador com ela aberta)
   useEffect(() => () => fecharPaleta(), []);
 
-  return <>{aberta && <PaletaComandos onAbrirCentral={() => { fecharPaleta(); setCentral(true); }} />}<CentralPrecisaDeVoce aberta={central} onFechar={() => setCentral(false)} /></>;
+  return <>{aberta && <PaletaComandos onAbrirCentral={() => { fecharPaleta(); setCentral(true); }} />}<CentralPrecisaDeVoce aberta={central} onFechar={() => setCentral(false)} /><RelatarProblema /></>;
 }
