@@ -37,7 +37,7 @@ import { usePrecisaDeVoce } from '../state/atencao';
 import { AvisosMemoria, PainelMemoria } from '../components/memoria';
 import { PainelRotinas } from '../components/rotinas/PainelRotinas';
 import {
-  anexarEnvio, enviarParaAgente, pendenciasDa, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, pararConversa, passosDoAgente, textoVisivel, useAgora, useProjetos,
+  anexarEnvio, enviarParaAgente, pendenciasDa, estadoAgente, execucoesDoAgente, gerandoNa, mensagensDa, mandarAgora, pararConversa, passosDoAgente, textoVisivel, useAgora, useProjetos,
   type AgenteSora, type EstadoProjetos,
 } from '../state/projetos';
 
@@ -205,7 +205,8 @@ export default function AgentChat() {
             <MessageComposer placeholder={`Mensagem para ${a.nome}…`} processing={st.status === 'trabalhando'} voz
               acoesDireita={<ConversaVoz key={a.id} agenteId={a.id} cor={a.cor} movimento={a.tipoMovimento} faixa={faixaVoz} />}
               onSend={(t, anexos) => { void anexarEnvio(anexos, enviados => enviarParaAgente(a.id, t, undefined, true, enviados)); seguirFim(); }}
-              gerando={gerando} onParar={() => { void pararConversa(a.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }} />
+              gerando={gerando} onParar={() => { void pararConversa(a.id).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); }}
+              onMandarAgora={t => { void mandarAgora(a.id, t).catch(erro => toast({ mensagem: mensagemDeErro(erro), tom: 'erro' })); seguirFim(); }} />
           </div>
           </ZonaSoltar>
         </main>

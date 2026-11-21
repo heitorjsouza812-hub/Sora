@@ -1,3 +1,14 @@
+## Onda 2 — `main` (2026-11-20, noite)
+
+Feita a Onda 2 do comparativo: rotina disparada por webhook (Standard Webhooks, dados cercados
+como externos), notificação no celular para "Precisa de você" (PWA + Web Push, Configurações →
+Notificações), senha digitada com segurança no navegador do bot (o modelo nunca vê), "Mandar
+agora" (mensagem entra na resposta em andamento), tela Arquivos (pastas, favoritos, Recentes) e
+agenda das rotinas com feed `.ics`. Migrações 0020 a 0023. Testes verdes no backend e no app;
+detalhes em `log/2026-11-20.md`. Enviada direto na `main`, sem PR. **Próximo:** no servidor,
+migrações 0017 a 0023, `API_URL` e chaves VAPID (`python -m app.cli push gerar-chaves`).
+
+
 ## Onda 1 — `main` (`d7dc113`) (2026-11-20, tarde)
 
 Feita a Onda 1 do comparativo, enviada direto na `main` sem PR: senha nova por link no e-mail e trocar senha, baixar

@@ -330,6 +330,15 @@ class ServicoArvore:
             self._por_aba[aba.id] = guardado
         return guardado[1]
 
+    async def navegador_da_aba(
+        self, contexto: ContextoFerramenta, aba_id: UUID | None
+    ) -> NavegadorArvore:
+        """O navegador por árvore de uma aba do agente, para quem age por dentro (senha segura)."""
+        try:
+            return await self._navegador(contexto, aba_id)
+        except ErroNavegador as erro:
+            raise ErroFerramenta(erro.args[0] if erro.args else "Aba não disponível.") from erro
+
     def esquecer_aba(self, aba_id: UUID) -> None:
         self._por_aba.pop(aba_id, None)
 

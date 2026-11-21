@@ -12,6 +12,7 @@ import { abrirPaleta, MOD } from '../comandos';
 import { AgentsIcon, GearIcon, PlusIcon, TeamIcon } from '../ui/Icons';
 import { estadoDaMarca, statusDaSora } from './useSoraStatus';
 
+const ArquivosIcone = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5a2 2 0 0 1 2-2h3.6l2 2H18a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" /></svg>;
 const ClientesIcone = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5" /><path d="M5 19.5c.8-3.4 3.5-5 7-5s6.2 1.6 7 5" /></svg>;
 const BuscaIcone = () => <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" /><path d="m16 16 4 4" /></svg>;
 
@@ -71,6 +72,7 @@ export function Navegacao({ onNavegar }: { onNavegar?: () => void }) {
     </Popover>
     <button type="button" className="shell-item shell-buscar" onClick={() => abrirPaleta()}><BuscaIcone /><span>Buscar</span><kbd>{MOD} K</kbd></button>
     <NavLink to="/clientes" onClick={onNavegar} className="shell-item shell-clientes"><ClientesIcone /><span>Clientes</span></NavLink>
+    <NavLink to="/arquivos" onClick={onNavegar} className="shell-item shell-arquivos"><ArquivosIcone /><span>Arquivos</span></NavLink>
     <section className="shell-section" aria-labelledby="nav-bots">
       <header><NavLink id="nav-bots" to="/bots" onClick={onNavegar}>Bots</NavLink><small>{bots.length}</small></header>
       <div className="shell-list">

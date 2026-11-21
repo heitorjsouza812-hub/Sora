@@ -31,8 +31,8 @@ export interface Rotina {
   id: string; agente_id: string | null; conversa_id: string | null; titulo: string; pedido: string; tipo: 'unico' | 'cron' | 'intervalo'; expressao: string | null; fuso: string | null;
   proxima_execucao: string | null; ultima_execucao: string | null; silencioso: boolean; ativa: boolean; ultimo_status: string | null; criada_em: string;
 }
-export interface ExecucaoRotina { id: string; rotina_id: string; iniciada_em: string; concluida_em: string | null; status: 'executando' | 'enviada' | 'silenciosa' | 'falhou'; resumo: string | null; erro: string | null; mensagem_id: string | null }
-export interface NovaRotina { agente_id?: string; titulo: string; pedido: string; silencioso?: boolean; fuso?: string; cron?: string; a_cada?: number; unidade?: 'minutos' | 'horas' | 'dias'; daqui_minutos?: number }
+export interface ExecucaoRotina { id: string; rotina_id: string; iniciada_em: string; concluida_em: string | null; status: 'executando' | 'enviada' | 'silenciosa' | 'falhou'; resumo: string | null; erro: string | null; mensagem_id: string | null; origem?: 'agenda' | 'manual' | 'webhook' }
+export interface NovaRotina { agente_id?: string; titulo: string; pedido: string; silencioso?: boolean; fuso?: string; cron?: string; a_cada?: number; unidade?: 'minutos' | 'horas' | 'dias'; daqui_minutos?: number; /** data e hora de uma execução única (ISO) */ em?: string }
 export const listarRotinas = () => api.get<Rotina[]>('/v1/rotinas');
 export const listarRotinasDoAgente = (agenteId: string) => api.get<Rotina[]>(`/v1/rotinas?agente_id=${encodeURIComponent(agenteId)}`);
 export const ultimasExecucoes = (id: string) => api.get<ExecucaoRotina[]>(`/v1/rotinas/${id}/execucoes?limite=5`);

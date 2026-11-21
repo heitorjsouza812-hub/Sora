@@ -51,7 +51,8 @@ from workers.equipe import (
 )
 from workers.fila import configurar_fila
 from workers.navegador import abrir_aba_de_perfil, fechar_navegador, iniciar_navegador
-from workers.rotinas import disparar_rotinas, executar_rotina
+from workers.push import enviar_push_do_pedido
+from workers.rotinas import disparar_rotinas, executar_rotina, limpar_entregas_de_webhook
 from workers.sessoes import apagar_sessoes_vencidas, limpar_pares_de_renovacao
 from workers.travados import reconciliar_travados
 
@@ -121,6 +122,7 @@ class WorkerSettings:
         processar_canais_empresa,
         analisar_aprendizado_empresa,
         enviar_link_de_senha_nova,
+        enviar_push_do_pedido,
     ]
     cron_jobs: ClassVar[list[Any]] = [
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),
@@ -128,6 +130,7 @@ class WorkerSettings:
         cron(desligar_computadores_ociosos, second={5}, run_at_startup=False),
         cron(limpar_pares_de_renovacao, second={45}, run_at_startup=False),
         cron(apagar_sessoes_vencidas, hour={4}, minute={23}, second={0}),
+        cron(limpar_entregas_de_webhook, hour={4}, minute={37}, second={0}),
         cron(processar_pendentes_canais_empresa, minute=set(range(0, 60, 5)), second={20}),
         cron(apagar_mensagens_vencidas, minute={17}, second={0}),
         cron(analisar_aprendizado_periodico, minute={42}, second={0}),

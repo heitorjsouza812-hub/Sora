@@ -475,6 +475,34 @@ export function gerandoNa(e: EstadoProjetos, conversaOuAgenteId: string, agora: 
 function rodandoFerramenta(e: EstadoProjetos, agenteId: string, conversaId: string) {
   return e.execucoes.some(x => (x.agenteId === agenteId || x.projetoId === conversaId) && (x.status === 'executando' || (x.status === 'pendente' && x.roteiro.some(passo => passo.status === 'executando'))));
 }
+/** "Mandar agora" (Onda 2): a mensagem entra na resposta que está rodando, antes da próxima chamada
+ *  ao modelo (POST …/mensagens/agora). Sem resposta rodando, o servidor segue pelo caminho normal.
+ *  Devolve se entrou no turno. Falha: tira a bolha e lança o erro (a tela avisa). */
+export async function mandarAgora(conversaOuAgenteId: string, texto: string): Promise<boolean> {
+  const sessao = geracaoSessao;
+  const agenteId = estado.agentes[conversaOuAgenteId] ? conversaOuAgenteId : undefined;
+  await enviosAgenteEmVoo.get(conversaOuAgenteId);
+  const conversaId = estado.agentes[conversaOuAgenteId]?.conversaId ?? conversasCriadas.get(conversaOuAgenteId) ?? conversaOuAgenteId;
+  if (conversaId.startsWith('local-')) {
+    // a conversa ainda está nascendo: não há turno para entrar, vai pelo envio normal
+    await (agenteId ? enviarParaAgente(agenteId, texto) : enviarOtimista(conversaId, texto, []));
+    return false;
+  }
+  const localId = 'local-' + crypto.randomUUID(), enviadoEm = Date.now();
+  alterar(e => ({ ...e, mensagens: [...e.mensagens, { id: localId, conversaId, agenteId, autor: 'usuario', texto, criadoEm: enviadoEm, anexos: [], envio: 'enviando' }] }));
+  try {
+    const aceita = await api.post<{ mensagem_id: string; no_turno: boolean }>(`/v1/conversas/${conversaId}/mensagens/agora`, { texto });
+    if (sessao === geracaoSessao) {
+      alterar(e => registrarEnvioDoUsuario(e, { id: aceita.mensagem_id, localId, conversaId, agenteId, texto, enviadoEm, anexos: [] }));
+      acompanharConversa(conversaId);
+    }
+    return aceita.no_turno;
+  } catch (erro) {
+    alterar(e => ({ ...e, mensagens: e.mensagens.filter(m => m.id !== localId) }));
+    throw erro;
+  }
+}
+
 export async function pararConversa(conversaOuAgenteId: string) {
   const sessao = geracaoSessao;
   // Primeiro envio pode ainda estar criando a conversa. Espere sua confirmação antes de parar.

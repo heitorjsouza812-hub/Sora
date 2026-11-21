@@ -192,6 +192,19 @@ def montar_middleware(
         itens.append(
             MiddlewareMensagensPendentes(contexto.etapa_id, ler=deps.ler_mensagens_pendentes)
         )
+    if (
+        contexto.etapa_id is None
+        and contexto.canal_id is None
+        and not contexto.sem_supervisao
+        and contexto.papel in {"sora", "individual"}
+        and deps.ler_mensagens_do_turno is not None
+    ):
+        # "Mandar agora": o que o usuário escreveu durante a resposta entra no turno.
+        from app.agentes.middleware.mensagens import MiddlewareMensagemNoTurno
+
+        itens.append(
+            MiddlewareMensagemNoTurno(contexto.conversa_id, ler=deps.ler_mensagens_do_turno)
+        )
     if deps.salvar_saida is not None:
         itens.append(MiddlewareSaidaGrande(contexto.cadeia_id, salvar=deps.salvar_saida))
     if contexto.modelo_enxerga is not None:

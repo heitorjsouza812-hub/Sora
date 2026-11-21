@@ -220,6 +220,143 @@ class AmbienteNavegador:
             return f"Erro: o pedido de acesso a {revisao.dominio} expirou sem resposta."
         return "Domínio aprovado. Repita a navegação."
 
+    async def _pedir_senha(self, aba: Aba, args: Any, contexto: ContextoFerramenta) -> Any:
+        """Senha segura (Onda 2): cartão no app, o usuário digita lá, a senha vai cifrada para o
+        Redis por poucos minutos (``app/api/navegador_senha.py``) e é preenchida aqui, direto
+        no campo. Nunca volta para o modelo nem entra no histórico do turno: o valor de retomada
+        do turno é só a decisão (``permitir``/``negar``).
+
+        Ao retomar, a ferramenta roda de novo do começo: o cartão é achado pelo mesmo id e o
+        ``interrupt`` devolve a decisão."""
+        from langgraph.types import interrupt
+
+        from app.navegador.senha_segura import (
+            MAX_CARTOES,
+            VALIDADE_CARTAO,
+            dominio_de,
+            ler_e_apagar,
+        )
+
+        if contexto.sem_supervisao:
+            raise ErroFerramenta(
+                "Rotina roda sem ninguém olhando: não dá para pedir senha. Diga ao usuário que o "
+                "site pede login e siga sem entrar."
+            )
+        navegador = await self.arvore.navegador_da_aba(contexto, aba.id)
+        leitura = await navegador.elemento(args.ref, "valor")
+        if not leitura.ok or not leitura.dados.get("senha"):
+            raise ErroFerramenta(
+                "Esse campo não é de senha. Use navegador_observar e passe a ref do campo de senha."
+            )
+        dominio = dominio_de(aba.url)
+        escopo = contexto.etapa_id or contexto.conversa_id
+        base = f"sora:senha:{escopo}:{aba.id}:{args.ref}"
+        criada = False
+        async with self.sessoes() as sessao:
+            for tentativa in range(MAX_CARTOES):
+                aprovacao_id = uuid5(
+                    NAMESPACE_URL, base if tentativa == 0 else f"{base}:{tentativa}"
+                )
+                aprovacao = await sessao.get(Aprovacao, aprovacao_id, with_for_update=True)
+                if aprovacao is None:
+                    aprovacao = Aprovacao(
+                        id=aprovacao_id,
+                        usuario_id=contexto.usuario_id,
+                        etapa_id=contexto.etapa_id,
+                        agente_id=contexto.agente_id,
+                        grupo_id=contexto.canal_id,
+                        acao={
+                            "tipo": "preencher_senha",
+                            "ferramenta": "navegador_pedir_senha",
+                            "aba_id": str(aba.id),
+                            "ref": args.ref,
+                            "dominio": dominio,
+                            "motivo": args.motivo,
+                            "conversa_id": str(contexto.conversa_id),
+                        },
+                        avaliacao={"resumo": f"Senha de {dominio}", "dano": "Login no site."},
+                        expira_em=datetime.now(UTC) + VALIDADE_CARTAO,
+                    )
+                    sessao.add(aprovacao)
+                    criada = True
+                    await sessao.commit()
+                    break
+                consumida = bool((aprovacao.acao or {}).get("consumida"))
+                if aprovacao.status == StatusAprovacao.PENDENTE:
+                    if aprovacao.expira_em > datetime.now(UTC):
+                        break  # esperando o usuário
+                elif aprovacao.status != StatusAprovacao.EXPIRADA and not consumida:
+                    break  # a ferramenta rodou de novo depois da decisão: o interrupt devolve
+                # cartão já usado (senha errada, login de novo) ou vencido: tenta o próximo
+            else:
+                return (
+                    "Erro: pedidos de senha demais para este campo. Peça ao usuário para "
+                    "assumir a aba."
+                )
+        if criada:
+            await publicar_evento(
+                self.redis,
+                AprovacaoPedida(
+                    aprovacao_id=aprovacao_id,
+                    resumo=f"Senha de {dominio}",
+                    dano="O bot não vê a senha: ela vai direto para o campo da página.",
+                    quem_recebe=dominio,
+                    expira_em=aprovacao.expira_em,
+                    tipo="preencher_senha",
+                    dominio=dominio,
+                    url=aba.url,
+                    agente_id=contexto.agente_id,
+                    conversa_id=contexto.conversa_id,
+                    bot_id=contexto.agente_id,
+                    grupo_id=contexto.canal_id,
+                    opcoes=[
+                        {"rotulo": "Preencher", "valor": "preencher_senha"},
+                        {"rotulo": "Eu mesmo faço", "valor": "negar"},
+                    ],
+                ),
+                contexto.conversa_id,
+                contexto.usuario_id,
+            )
+            from app.atencao import publicar_estado_atencao_persistido
+
+            await publicar_estado_atencao_persistido(
+                contexto.usuario_id, agente_id=contexto.agente_id, grupo_id=contexto.canal_id
+            )
+        decisao = str(interrupt({"tipo": "aprovacao", "aprovacao_id": str(aprovacao_id)}))
+        senha = await ler_e_apagar(self.redis, contexto.usuario_id, aprovacao_id)
+        async with self.sessoes() as sessao:
+            linha = await sessao.get(Aprovacao, aprovacao_id, with_for_update=True)
+            if linha is not None:
+                linha.acao = {**linha.acao, "consumida": True}
+                await sessao.commit()
+        if decisao in ("negar", "negada"):
+            return (
+                "O usuário preferiu não digitar a senha aqui. Peça para ele assumir a aba "
+                "(navegador_pedir_ajuda) ou siga sem entrar."
+            )
+        if decisao == "expirada" or senha is None:
+            return "Erro: a senha não chegou a tempo. Peça de novo se ainda precisar entrar."
+        aba_agora = self._aba(contexto, aba.id)
+        if dominio_de(aba_agora.url) != dominio:
+            del senha
+            return (
+                "Erro: a página mudou de site antes de preencher. Nada foi preenchido; abra de "
+                "novo a página de login e peça a senha outra vez."
+            )
+        try:
+            resposta = await navegador.agir(args.ref, "definir_valor", texto=senha)
+        finally:
+            del senha
+        if not resposta.ok:
+            return f"Erro: não consegui preencher o campo de senha. {para_modelo(resposta)}"
+        return {
+            "resumo": (
+                "O usuário digitou a senha e ela foi preenchida no campo (você não vê o valor). "
+                "Agora clique no botão de entrar."
+            ),
+            "aba_id": str(aba.id),
+        }
+
     async def _perfil_do_cartao(self, nome_particao: str | None) -> dict[str, Any]:
         """``{tipo, perfil_id?, nome?}`` para o cartão; a partição (interna) nunca vai ao app."""
         lida = ler_particao(nome_particao or "")
@@ -324,6 +461,8 @@ class AmbienteNavegador:
             if nome == "navegador_pedir_ajuda":
                 await self.publicar_aba(aba, contexto, ajuda=args.motivo)
                 return {"resumo": "Pedi ao usuário para assumir a aba.", "aba_id": str(aba.id)}
+            if nome == "navegador_pedir_senha":
+                return await self._pedir_senha(aba, args, contexto)
 
             resposta = await self.arvore.executar(nome, args, contexto)
             if revisao := self.motor.consumir_revisao(aba):
@@ -424,6 +563,7 @@ for _nome in (
     "navegador_capturar",
     "navegador_console",
     "navegador_pedir_ajuda",
+    "navegador_pedir_senha",
     "navegador_observar",
     "navegador_procurar",
     "navegador_elemento",

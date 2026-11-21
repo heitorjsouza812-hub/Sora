@@ -226,6 +226,7 @@ def construir_dependencias(
         anunciar_prompt=None if com_cadeia or com_passo else anunciar_prompt,
         salvar_saida=salvar_saida,
         ler_mensagens_pendentes=ambiente.ler_mensagens_pendentes,
+        ler_mensagens_do_turno=None if com_cadeia or com_passo else ambiente.ler_mensagens_do_turno,
         ao_trocar_modelo=ao_trocar_modelo if com_passo else None,
         ao_esperar_limite=ao_esperar_limite if com_passo else None,
     )

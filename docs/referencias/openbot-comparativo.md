@@ -44,6 +44,12 @@ compromissos.
 
 ### Onda 2: valor rápido para o usuário
 
+> **Feita em 2026-11-20** (na `main`; `log/2026-11-20.md`). Diferenças do que está abaixo:
+> senha segura **sem cofre** (a senha não é guardada; o login fica nos cookies do perfil do bot);
+> biblioteca sem o bot organizar as pastas e sem visualizador além da prévia; agenda só com o mês
+> (sem semana e sem criar rotina clicando num dia).
+
+
 | # | O quê | Por quê | Esforço |
 |---|---|---|---|
 | 6 | **Rotina disparada por webhook** | Outro serviço (formulário, loja, pagamento) chama uma URL assinada e a rotina roda com os dados recebidos. Como a Sora já é um servidor na nuvem, isso é mais natural para nós do que para eles (eles precisam do computador ligado). Assinatura no padrão Standard Webhooks, filtro por tipo de evento, deduplicação e histórico. | M |

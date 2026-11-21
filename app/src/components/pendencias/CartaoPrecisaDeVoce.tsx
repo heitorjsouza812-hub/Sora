@@ -20,6 +20,35 @@ interface Props {
   atalho?: ReactNode;
 }
 
+/** Senha segura (Onda 2): a senha vai direto para o campo da página do bot; o bot não a vê. O campo
+ *  some depois do envio (o texto não fica no estado do app depois que o pedido sai da lista). */
+function CampoSenhaSegura({ pedido }: { pedido: PedidoAtencao }) {
+  const [senha, setSenha] = useState('');
+  const [ver, setVer] = useState(false);
+  const enviar = (evento: FormEvent) => {
+    evento.preventDefault();
+    if (!senha || pedido.enviando) return;
+    const valor = senha;
+    setSenha('');
+    registrarDecisao(pedido.id, 'preencher_senha');
+    void decidirPedidoAtencao(pedido.id, 'preencher_senha', valor).catch(() => undefined);
+  };
+  const recusar = () => { registrarDecisao(pedido.id, 'recusar'); void decidirPedidoAtencao(pedido.id, 'recusar').catch(() => undefined); };
+  return <form className="pend-senha" onSubmit={enviar} autoComplete="off">
+    <label className="pend-senha__campo"><span>Senha</span>
+      <span className="pend-senha__linha">
+        <input type={ver ? 'text' : 'password'} value={senha} onChange={e => setSenha(e.target.value)} autoComplete="current-password" disabled={pedido.enviando} aria-describedby={`senha-ajuda-${pedido.id}`} />
+        <button type="button" className="pend-senha__ver" aria-pressed={ver} onClick={() => setVer(v => !v)}>{ver ? 'Ocultar' : 'Mostrar'}</button>
+      </span>
+      <small id={`senha-ajuda-${pedido.id}`}>A senha não é guardada e o bot não a vê: ela vai direto para o campo da página.</small>
+    </label>
+    <div className="pend-acoes" role="group" aria-label="Decisão">
+      <Button type="submit" tamanho="M" variante="primario" disabled={!senha || pedido.enviando}>Preencher</Button>
+      <Button type="button" tamanho="M" variante="secundario" disabled={pedido.enviando} onClick={recusar}>Eu mesmo faço</Button>
+    </div>
+  </form>;
+}
+
 export function CartaoPrecisaDeVoce({ pedido, compacto = false, semGrupo = false, faixa = false, atalho }: Props) {
   const [resposta, setResposta] = useState('');
   const origem = useOrigemDoPedido(pedido);
@@ -57,7 +86,8 @@ export function CartaoPrecisaDeVoce({ pedido, compacto = false, semGrupo = false
           <Input rotulo="Sua resposta" rotuloOculto value={resposta} onChange={evento => setResposta(evento.target.value)} placeholder="Escreva sua resposta…" disabled={pedido.enviando} />
           <Button type="submit" tamanho="M" variante="primario" disabled={!resposta.trim() || pedido.enviando}>Enviar</Button>
         </form>}
-      </> : pedido.tipo === 'envio' ? <div className="pend-acoes" role="group" aria-label="Decisão">
+      </> : pedido.acao === 'preencher_senha' ? <CampoSenhaSegura pedido={pedido} />
+      : pedido.tipo === 'envio' ? <div className="pend-acoes" role="group" aria-label="Decisão">
         <Button tamanho="M" variante="primario" disabled={pedido.enviando} onClick={() => agir('enviar')}>{ROTULOS_DECISAO.enviar}</Button>
         <Button tamanho="M" variante="perigo" disabled={pedido.enviando} onClick={() => agir('descartar')}>{ROTULOS_DECISAO.descartar}</Button>
       </div> : <BotoesAprovacao desabilitado={pedido.enviando} onPermitir={() => agir('aprovar')} onSempre={pedido.opcoes?.some(o => o.valor === 'sempre_permitir') ? () => agir('sempre_permitir') : undefined} onRecusar={() => agir('recusar')} />}

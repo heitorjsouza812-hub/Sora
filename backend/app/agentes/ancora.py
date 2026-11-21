@@ -157,6 +157,7 @@ SINONIMOS_DO_NAVEGADOR = {
     "navegador_capturar": "capturar, captura de tela, screenshot, imagem da página, foto, print",
     "navegador_console": "console, erros do console, logs da página, javascript",
     "navegador_pedir_ajuda": "pedir ajuda, login, captcha, assumir a aba, usuário entrar",
+    "navegador_pedir_senha": "senha, login, entrar, campo de senha, pedir senha, autenticar",
     "navegador_elemento": "elemento, detalhes de um elemento, conferir ref, estado do elemento",
     "navegador_esperar": "esperar, aguardar, carregar, tempo, até aparecer, wait",
     "navegador_tecla": "tecla, teclado, enter, tab, esc, atalho, pressionar",

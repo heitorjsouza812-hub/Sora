@@ -44,7 +44,7 @@ function JanelaRelato() {
   return <Modal open onClose={fechar} title="Relatar problema" description="Conte o que aconteceu. O time da Sora lê cada relato." size="md"
     footer={<div className="cfg-modal-actions"><Button disabled={enviando} onClick={fechar}>Cancelar</Button><Button variante="primario" carregando={enviando} disabled={!texto.trim()} onClick={() => { void enviar(); }}>Enviar relato</Button></div>}>
     <div className="relato">
-      <Textarea rotulo="O que aconteceu?" rows={5} maxLength={MAX_TEXTO} value={texto} onChange={e => setTexto(e.target.value)}
+      <Textarea data-autofocus rotulo="O que aconteceu?" rows={5} maxLength={MAX_TEXTO} value={texto} onChange={e => setTexto(e.target.value)}
         placeholder="Ex.: cliquei em Permitir e o bot parou de responder."
         ajuda="Não escreva senhas nem dados de cartão. Se escrever, eles são escondidos antes de guardar." />
       <label className="relato__opcao">

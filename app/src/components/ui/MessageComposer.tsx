@@ -52,6 +52,9 @@ interface Props {
   voz?: boolean;
   /** muda de valor → o foco vai para o campo (com o cursor no fim) */
   focoSinal?: number;
+  /** "Mandar agora": com a resposta rodando e texto no campo, aparece ao lado de Parar e Enter
+   *  manda o texto para dentro da resposta em andamento (só texto, sem anexo) */
+  onMandarAgora?: (text: string) => void;
 }
 
 // O BorderBeam e o VoiceBeam têm um efeito que depende de `children` e grava um objeto novo a cada execução: com `children`
@@ -89,7 +92,7 @@ const avisoMic: Record<string, string> = {
 export function MessageComposer({
   placeholder, placeholderCurto, onSend, initialValue = '', value: controlado, onValueChange, processing = false,
   grande = false, tools = false, onActivity, onMicChange, anexar = true, gerando = false, onParar, enviarMesmoGerando = false, extras, acoesDireita, voz = false, focoSinal,
-  preferencias,
+  preferencias, onMandarAgora,
 }: Props) {
   const campoRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -131,6 +134,7 @@ export function MessageComposer({
   const temConteudo = value.trim().length > 0 || anexos.length > 0;
   const travado = gerando && !(enviarMesmoGerando && temConteudo);
   const podeParar = travado && Boolean(onParar);
+  const podeMandarAgora = travado && Boolean(onMandarAgora) && !bloqueado && value.trim().length > 0 && anexos.length === 0;
 
   // arquivos soltos na área do chat (<ZonaSoltar>) chegam por evento
   useEffect(() => {
@@ -189,6 +193,13 @@ export function MessageComposer({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (podeMandarAgora) {
+      onMandarAgora?.(value.trim());
+      setValue('');
+      cb.current.typing = false;
+      if (live) { descartarGravacao(); mic.stop(); }
+      return;
+    }
     if (travado) { onParar?.(); return; }
     const text = value.trim();
     if (!onSend || bloqueado || (!text && !anexos.length)) return;
@@ -220,7 +231,7 @@ export function MessageComposer({
               }
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                if (!travado) event.currentTarget.form?.requestSubmit();
+                if (!travado || podeMandarAgora) event.currentTarget.form?.requestSubmit();
               }
             }}
           />
@@ -248,6 +259,7 @@ export function MessageComposer({
               disabled={mic.state === 'unsupported'}
               onClick={() => live ? mic.stop() : void mic.start()}
             ><MicIcon /></button>}
+            {podeMandarAgora && <button type="submit" className="send-button is-agora" aria-label="Mandar agora: entra na resposta em andamento" title="Mandar agora (Enter): entra na resposta em andamento"><SendIcon /></button>}
             {podeParar
               ? <button type="button" className="send-button is-parar" aria-label="Parar resposta" title="Parar (Esc)" onClick={() => onParar?.()}>
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" /></svg>

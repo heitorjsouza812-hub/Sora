@@ -159,3 +159,4 @@
 .cfg-chaves-extras li { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line); color: var(--text-1); font-size: var(--fs-14); }
 .cfg-reservas { margin-top: var(--sp-4); }
 .cfg-reservas__acoes { display: flex; justify-content: flex-end; }
+.cfg-notif-acoes { display: flex; gap: var(--sp-2); }

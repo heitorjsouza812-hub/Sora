@@ -89,3 +89,10 @@
 .pend-proposta-texto { margin: 0; max-height: 240px; overflow: auto; padding: var(--sp-3); white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 var(--font-ui, inherit); color: var(--text-1); background: var(--surface-1); border: 1px solid var(--line); border-radius: var(--r-10); box-sizing: border-box; }
 .pend-proposta-dif summary { cursor: pointer; color: var(--text-2); font-size: 13px; padding: var(--sp-1) 0; }
 .pend-proposta-dif .pend-proposta-texto { margin-top: var(--sp-2); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+/* Senha segura no navegador do bot (Onda 2) */
+.pend-senha { display: grid; gap: var(--sp-3); }
+.pend-senha__campo { display: grid; gap: 6px; color: var(--text-2); font-size: var(--fs-13); }
+.pend-senha__linha { display: flex; gap: 6px; }
+.pend-senha__linha input { flex: 1; min-width: 0; height: 40px; padding: 0 var(--sp-3); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; }
+.pend-senha__ver { padding: 0 var(--sp-3); color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; font-size: var(--fs-13); cursor: pointer; }
+.pend-senha small { color: var(--text-3); font-size: var(--fs-12); line-height: 1.4; }

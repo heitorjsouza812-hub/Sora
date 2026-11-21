@@ -68,4 +68,30 @@ describe('cartões Precisa de você', () => {
     expect(await screen.findByText(/Nenhum bot foi criado/)).toBeTruthy();
     expect(ajustar).not.toHaveBeenCalled(); expect(aceitar).not.toHaveBeenCalled();
   });
+
+  it('senha segura: campo de senha, Preencher manda o valor e limpa o campo', async () => {
+    const pedido: PedidoAtencao = { id: 'p7', tipo: 'aprovacao', titulo: 'Senha de exemplo.com', resumo: 'Entrar no painel', acao: 'preencher_senha' };
+    receberPedidoAtencao(pedido); resolver.mockResolvedValue(undefined);
+    render(<CartaoPrecisaDeVoce pedido={pedido} />);
+    const campo = screen.getByLabelText(/Senha/, { selector: 'input' }) as HTMLInputElement;
+    expect(campo.type).toBe('password');
+    expect(screen.queryByRole('button', { name: 'Permitir uma vez' })).toBeNull();
+    const preencher = screen.getByRole('button', { name: 'Preencher' }) as HTMLButtonElement;
+    expect(preencher.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar' }));
+    expect(campo.type).toBe('text');
+    fireEvent.change(campo, { target: { value: 'segredo-123' } });
+    fireEvent.click(preencher);
+    expect(resolver).toHaveBeenCalledWith(pedido, 'preencher_senha', 'segredo-123');
+    expect(campo.value).toBe('');
+    await waitFor(() => expect(lerPrecisaDeVoce().lista).toEqual([]));
+  });
+
+  it('senha segura: Eu mesmo faço recusa sem mandar senha', () => {
+    const pedido: PedidoAtencao = { id: 'p8', tipo: 'aprovacao', titulo: 'Senha de exemplo.com', resumo: 'Entrar', acao: 'preencher_senha' };
+    receberPedidoAtencao(pedido); resolver.mockResolvedValue(undefined);
+    render(<CartaoPrecisaDeVoce pedido={pedido} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Eu mesmo faço' }));
+    expect(resolver).toHaveBeenCalledWith(pedido, 'recusar', undefined);
+  });
 });

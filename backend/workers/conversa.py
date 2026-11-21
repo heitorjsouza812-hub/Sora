@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from sqlalchemy import func, select
@@ -196,9 +196,7 @@ async def _responder_direto_sem_fila(
             indisponivel = str(erro)
         else:
             indisponivel = None
-        antes = await sessao.scalar(
-            select(func.count()).select_from(Mensagem).where(Mensagem.conversa_id == conversa_id)
-        )
+        antes = await _falas_do_bot(sessao, conversa_id)
         historico = list(
             (
                 await sessao.scalars(
@@ -285,14 +283,61 @@ MENSAGEM_FALHA = (
 )
 
 
+async def _abrir_turno_vivo(conversa_id: Any) -> str | None:
+    """Marca a conversa como "respondendo agora": a API passa a aceitar "Mandar agora".
+    Falha no Redis não impede o turno (a mensagem do usuário só cai na fila normal)."""
+    from app.ferramentas import ambiente
+
+    marca = uuid4().hex
+    try:
+        await ambiente.marcar_turno_vivo(conversa_id, marca)
+    except Exception:
+        registro.warning("não consegui marcar o turno vivo da conversa", exc_info=True)
+        return None
+    return marca
+
+
+async def _fechar_turno_vivo(conversa_id: Any, marca: str | None) -> None:
+    """Tira a marca e manda pela fila normal o que chegou depois da última chamada ao modelo
+    (senão essas mensagens ficariam sem resposta)."""
+    if marca is None:
+        return
+    from app.ferramentas import ambiente
+    from workers.fila import enfileirar
+
+    try:
+        await ambiente.desmarcar_turno_vivo(conversa_id, marca)
+        sobras = await ambiente.esvaziar_correio_do_turno(conversa_id)
+    except Exception:
+        registro.warning("não consegui fechar o turno vivo da conversa", exc_info=True)
+        return
+    for item in sobras:
+        if item["mensagem_id"]:
+            await enfileirar(
+                "responder_direto",
+                id_job=f"responder:{item['mensagem_id']}",
+                mensagem_id=item["mensagem_id"],
+            )
+
+
+async def _falas_do_bot(sessao: Any, conversa_id: Any) -> int:
+    """Quantas mensagens da conversa NÃO são do usuário. É assim que o worker sabe se o bot já
+    falou no turno; contar as do usuário enganaria a conta quando ele manda algo com "Mandar
+    agora" no meio da resposta."""
+    total = await sessao.scalar(
+        select(func.count())
+        .select_from(Mensagem)
+        .where(Mensagem.conversa_id == conversa_id, Mensagem.autor != AutorMensagem.USUARIO)
+    )
+    return int(total or 0)
+
+
 async def _ja_falou_neste_turno(ctx: dict[str, Any], conversa_id: Any, antes: int | None) -> bool:
     if antes is None:
         return False
     async with ctx["sessoes"]() as sessao:
-        depois = await sessao.scalar(
-            select(func.count()).select_from(Mensagem).where(Mensagem.conversa_id == conversa_id)
-        )
-    return (depois or 0) > antes
+        depois = await _falas_do_bot(sessao, conversa_id)
+    return depois > antes
 
 
 async def _pedido_de_equipe(contexto: Any, entrada: dict[str, Any] | None) -> tuple[str, int]:
@@ -346,11 +391,8 @@ async def _rodar_e_falar(
         # Retomada (cartão ou pergunta): conta agora, para o texto puro do fim só ser falado se o
         # turno retomado não falou nada (antes ele era falado sempre, repetindo o que já saiu).
         async with ctx["sessoes"]() as sessao:
-            antes = await sessao.scalar(
-                select(func.count())
-                .select_from(Mensagem)
-                .where(Mensagem.conversa_id == contexto.conversa_id)
-            )
+            antes = await _falas_do_bot(sessao, contexto.conversa_id)
+    marca = await _abrir_turno_vivo(contexto.conversa_id)
     try:
         resultado = await montar_e_rodar_agente(
             contexto=contexto,
@@ -360,6 +402,7 @@ async def _rodar_e_falar(
             resposta=resposta,
         )
     except Exception as erro:
+        await _fechar_turno_vivo(contexto.conversa_id, marca)
         from app.agentes.middleware.cancelamento import CadeiaCancelada
 
         if isinstance(erro, CadeiaCancelada):
@@ -393,13 +436,10 @@ async def _rodar_e_falar(
         )
         return
 
+    await _fechar_turno_vivo(contexto.conversa_id, marca)
     if not resultado.get("__interrupt__"):
         async with ctx["sessoes"]() as sessao:
-            depois = await sessao.scalar(
-                select(func.count())
-                .select_from(Mensagem)
-                .where(Mensagem.conversa_id == contexto.conversa_id)
-            )
+            depois = await _falas_do_bot(sessao, contexto.conversa_id)
         texto = _texto_da_resposta(resultado)
         if texto and (
             antes is None or depois == antes or _texto_final_depois_de_trabalho(resultado, texto)

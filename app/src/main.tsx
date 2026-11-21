@@ -21,5 +21,7 @@ if (ehIlha) {
   void import('./components/ilha/IlhaDesktop').then(({ IlhaDesktop }) => raiz.render(<StrictMode><IlhaDesktop /></StrictMode>));
 } else {
   void import('./desktop/atualizacao').then(({ iniciarVerificacaoDeAtualizacao }) => iniciarVerificacaoDeAtualizacao());
+  // Navegador e celular (PWA): service worker só da notificação do Precisa de você (sem cache).
+  if (!import.meta.env.DEV) void import('./push').then(({ registrarServiceWorker }) => registrarServiceWorker());
   raiz.render(<StrictMode><App /></StrictMode>);
 }

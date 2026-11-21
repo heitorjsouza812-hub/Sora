@@ -40,6 +40,8 @@
 .send-button:active:not(:disabled) { transform: scale(.94); }
 .send-button:disabled { color: var(--off-fg); background: var(--off-bg); cursor: default; }
 .send-button.is-parar svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+/* "Mandar agora" ao lado de Parar: mesma cara do Enviar (Onda 2) */
+.send-button.is-agora { margin-right: 2px; }
 .tool-button { display: inline-flex; align-items: center; gap: var(--sp-2); height: 36px; padding: 0 var(--sp-3); color: var(--text-2); background: transparent; border: 1px solid var(--line-strong); border-radius: var(--r-pill); font-size: var(--fs-13); font-weight: 500; }
 .tool-button:hover { color: var(--text-1); background: var(--hover); }
 

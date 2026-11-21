@@ -69,10 +69,11 @@ Modelo de entrada:
 ### 👤 Heitor
 
 - **Papel:** _(preencher — ex.: produto / design / front-end)_
-- **Onde parou (2026-11-20):** Onda 1 do comparativo com o OpenBot na `main` (`d7dc113`, enviada direto em 2026-11-20, sem PR e sem esperar o CI, a pedido do Heitor): senha nova por link no e-mail e trocar senha, exportar meus dados, relatar problema, chaves extras por conexão e modelos reserva, atualização automática do desktop (desligada até haver chave de assinatura). Migrações 0018 e 0019. Detalhes em `log/2026-11-20.md`.
-- **Próximo passo:** no servidor: `alembic upgrade head` (0017 a 0019), `REDIS_SENHA` e `EMAIL_PROVEDOR`/`EMAIL_REMETENTE` no `.env`. Para ligar a atualização do desktop: gerar as chaves (`app/docs/atualizacao-desktop.md`). Depois, Onda 2 (`docs/referencias/openbot-comparativo.md`).
+- **Onde parou (2026-11-20, noite):** Onda 2 do comparativo com o OpenBot na `main` (enviada direto em 2026-11-20, sem PR e sem CI, a pedido do Heitor): rotina disparada por webhook (Standard Webhooks), notificação no celular para "Precisa de você" (PWA + Web Push), senha digitada com segurança no navegador do bot, "Mandar agora" (mensagem entra na resposta em andamento), tela Arquivos (biblioteca com pastas e favoritos) e agenda das rotinas com feed `.ics`. Migrações 0020 a 0023. A Onda 1 já está na `main` (`d7dc113`). Detalhes em `log/2026-11-20.md`.
+- **Próximo passo:** no servidor: `alembic upgrade head` (0017 a 0023), `REDIS_SENHA`, `EMAIL_PROVEDOR`/`EMAIL_REMETENTE`, `API_URL` e as chaves VAPID (`uv run python -m app.cli push gerar-chaves`) no `.env`. Para ligar a atualização do desktop: gerar as chaves (`app/docs/atualizacao-desktop.md`). Ver ao vivo, com backend, as telas novas. Depois, Onda 3 (decisão do grupo).
 
 **Histórico**
+- **2026-11-20 (noite)** — Onda 2 do comparativo, na `main` (enviada direto, sem PR): webhook nas rotinas (`/v1/ganchos/{rota}`, assinatura Standard Webhooks, dados cercados como externos), Web Push para "Precisa de você" (`sw.js`, VAPID, Configurações → Notificações), `navegador_pedir_senha` (senha cifrada no Redis 5 min, `GETDEL`, o modelo nunca vê), "Mandar agora" (`/mensagens/agora`, turno vivo no Redis com Lua), tela `/arquivos` (pastas, favoritos, Recentes) e agenda das rotinas (`/v1/agenda`, feed `.ics`). Migrações 0020 a 0023. Arquivos: `backend/app/{rotinas/{ganchos,calendario},push,navegador/senha_segura,api/{ganchos,agenda,biblioteca,push,navegador_senha}}.py`, `backend/workers/{push,rotinas,conversa}.py`, `backend/app/agentes/middleware/mensagens.py`, `app/src/{screens/Arquivos,push,components/{rotinas,biblioteca,settings/NotificacoesCelular,pendencias}}`, `app/public/sw.js`, `log/2026-11-20.md`. Pendente: o bot organizar as pastas, visão de semana e criar rotina pelo calendário, ver ao vivo com backend.
 - **2026-11-20 (noite)** — CI só manual (Actions → CI → Run workflow) e `main` sem checagens obrigatórias, a pedido do Heitor: envio direto na `main` não espera mais nada (continua proibido apagar a `main` ou reescrever o histórico dela à força). Arquivos: `.github/workflows/ci.yml`, `log/2026-11-20.md`.
 - **2026-11-20 (tarde)** — Onda 1 do comparativo, na `main` (`d7dc113`, enviada direto, sem PR): "Esqueci minha senha" com link de uso único (30 min, `app/emails` com SMTP/Resend/console, job `enviar_link_de_senha_nova`), trocar senha em Configurações → Conta (os outros aparelhos saem), "Baixar meus dados" (.zip com tudo, sem segredos), "Relatar problema" (diagnóstico mascarado, Retirar, `python -m app.cli relatos listar`), chaves extras por conexão e modelos reserva da conta (avisados na linha do tempo), atualização do desktop (`src-tauri/src/atualizacao.rs`, fluxo `desktop-versao.yml`). Migrações 0018 (`relatos`) e 0019 (`chaves_provedor`, `modelos_reserva`). Arquivos: `backend/app/{emails,core/{contas,exportacao,reservas},api/{auth,conta,relatos,reservas,provedores}}`, `backend/app/orquestrador/modelos.py`, `backend/app/llm/troca.py`, `app/src/{screens/{Entrar,RedefinirSenha},components/{settings,relatos},diagnostico,desktop/atualizacao.ts}`, `app/src-tauri/**`, `log/2026-11-20.md`. Pendente: e-mail real em produção, chaves do atualizador, reservas por bot.
 - **2026-11-20** — Comparativo OpenBot 0.75.0 × Sora: lista por área do que eles têm e a Sora não, o que não trazer e três ondas de prioridade. Achados de base: sem recuperação de senha nem e-mail, sem exportar dados (LGPD), desktop sem atualização automática. Arquivos: `docs/referencias/openbot-comparativo.md`, `docs/referencias/openbot.md`, `log/2026-11-20.md`. Nenhum código alterado.
@@ -302,7 +303,7 @@ npm install
 npm run dev          # http://localhost:5173 (outra porta: PORT=5174 npm run dev)
 npm run build        # checagem de tipos + build
 npx oxlint           # lint (restam só avisos antigos de clientes/comum.tsx e qa/contraste.mjs)
-npm test             # vitest (83 arquivos, 453 testes)
+npm test             # vitest (87 arquivos, 468 testes)
 npm run test:visual  # Playwright, telas em 1440 e 390 px (22 testes)
 npm run desktop      # app de DESKTOP (Tauri) em modo dev — usa o dev server da porta 5173
 npm run desktop:build  # instaladores em src-tauri/target/release/bundle/{nsis,msi}/
@@ -320,24 +321,32 @@ Tudo vem do **backend por REST + SSE** (`src/api/eventos.ts`, `src/state/aplicar
 |---|---|
 | `components/mascot/` | **Mascote**: `SoraOrb`, `SoraThinking`, `orbEngine.ts`. Estados: `arriving · idle · listening · thinking · coordinating · working · done`. Não mudar. |
 | `components/layout/` | `AppShell`, `Sidebar` (260 px), painel lateral e barra superior de 52 px. |
-| `screens/` | `SoraChat` (início e conversa com a Sora), `AgentChat` (bot 1:1), `Agentes` (galeria de bots), `NovoBot` (criação direta por descrição), `CriarAgente` (editar bot), `Grupos`, `Clientes`, `Configuracoes`, `Entrar`, `Mobile` (/celular), `OrbLab`, `Catalogo` (/lab/ui, só em dev). `Plugins.tsx` fica no código, mas a rota redireciona para `/`. |
+| `screens/` | `SoraChat` (início e conversa com a Sora), `AgentChat` (bot 1:1), `Agentes` (galeria de bots), `NovoBot` (criação direta por descrição), `CriarAgente` (editar bot), `Grupos`, `Clientes`, `Arquivos` (biblioteca), `Configuracoes`, `Entrar`, `Mobile` (/celular), `OrbLab`, `Catalogo` (/lab/ui, só em dev). `Plugins.tsx` fica no código, mas a rota redireciona para `/`. |
 | `components/ui/` | Compositor único (BorderBeam, voz dentro do campo), mensagens, fontes em chips, código e tabela sob demanda, "Ir para o fim", "Pensando" com orb. |
 | `components/builder/` | Cartão de rascunho de bot (seções em linhas) e formulário do bot. |
 | `components/grupos/` | Novo grupo (2 a 5 bots), chat do grupo, membros com estado e Parar, gerir grupo, menções com teclado, tarefas. |
 | `components/pendencias/` | Cartão e central **Precisa de você** (Permitir uma vez · Sempre permitir · Recusar), proposta de grupo, instruções propostas, cartão de domínio do navegador. |
 | `components/work/` | Painel **Trabalho**: "Você pediu", chamadas de ferramenta, rastro, abas **Navegador** e **Computador** com tela ao vivo, Assumir/Devolver. |
-| `components/clientes/`, `settings/` | Tela Clientes (fichas, conhecimento da empresa, sugestões); Configurações (Conta, Modelos de IA, Memória, Rotinas, Habilidades, Conectores, Telegram, Navegador, Canais da empresa, Ilha). |
+| `components/clientes/`, `settings/` | Tela Clientes (fichas, conhecimento da empresa, sugestões); Configurações (Conta, Modelos de IA, Memória, Rotinas com webhook e agenda, Habilidades, Conectores, Telegram, Navegador, Canais da empresa, Notificações, Ilha). |
 | `components/ilha/` | **Ilha da Sora**: pílula com a Sora e os bots trabalhando, aprovação, filtro. `IlhaDesktop.tsx` é a janela. |
 | `components/comandos/` | Paleta **Ctrl/⌘+K** (comandos e busca nas mensagens) e atalhos. |
-| `components/{equipe,memoria,rotinas,anexos,uso,erros,sessao,overlay,gestao}/` | Fila, contexto, memória, rotinas, anexos, "Uso do mês", erros, login, diálogos e menus. |
+| `components/{equipe,memoria,rotinas,anexos,biblioteca,uso,erros,sessao,overlay,gestao}/` | Fila, contexto, memória, rotinas (webhook, agenda, feed), anexos, biblioteca, "Uso do mês", erros, login, diálogos e menus. |
 | `state/` | `aplicarEvento.ts` (redutor idempotente dos eventos SSE), `projetos.ts` (conversas), `sora.ts`, `bots.ts`, `grupos.ts`, `atencao.ts` ("Precisa de você"), `equipe.ts`, `telas.ts`, `clientes.ts`, `pecas.ts`, `modelos.ts`, `sessao.ts`, `uso.ts`. |
 | `api/` | Cliente HTTP (`cliente.ts`, token só em memória), `eventos.ts` (SSE com `Last-Event-ID`), `bots.ts`, `grupos.ts`, `telas.ts`, `canaisEmpresa.ts`, `anexos.ts`, `voz.ts`. |
 | `desktop/` | Ponte Tauri, aviso do sistema e "(N) Sora" no título fora de foco, controle do PC. |
 | `../src-tauri/` | Casca Tauri v2: janelas, bandeja, atalho, ponte do PC (Rust). |
 
-**Rotas:** `/` (Sora) · `/bots` · `/bots/novo` · `/bots/:agente` · `/bots/:id/editar` · `/grupos` · `/grupos/:grupoId` · `/clientes` · `/configuracoes` · `/celular` · `/lab/orb` · `/lab/ui` (dev). Redirecionam: `/plugins`, `/projetos`, `/projeto/:id`, `/revisao/:id`, `/chat/sora` e `/agentes/novo` para `/`; `/agentes` para `/bots`; `/canais/*` para `/grupos`.
+**Rotas:** `/` (Sora) · `/bots` · `/bots/novo` · `/bots/:agente` · `/bots/:id/editar` · `/grupos` · `/grupos/:grupoId` · `/clientes` · `/arquivos` · `/configuracoes` · `/celular` · `/lab/orb` · `/lab/ui` (dev). Redirecionam: `/plugins`, `/projetos`, `/projeto/:id`, `/revisao/:id`, `/chat/sora` e `/agentes/novo` para `/`; `/agentes` para `/bots`; `/canais/*` para `/grupos`.
 
 ### 7.3 Decisões de produto
+
+**2026-11-20 — Onda 2 (valor rápido, `docs/referencias/openbot-comparativo.md`; na `main`):**
+- **Rotina por webhook:** cada rotina pode ter um endereço `/v1/ganchos/{rota}` (padrão Standard Webhooks: assinatura, 5 min de tolerância, mesmo id não roda duas vezes, filtro por tipo de evento). Os dados chegam ao bot como dado externo, nunca como instrução; o corpo não é gravado. O segredo aparece uma vez só.
+- **Notificação no celular:** Configurações → **Notificações** liga o Web Push neste aparelho. A notificação diz só quem precisa de você; o clique abre o cartão. Desligada sem as chaves VAPID.
+- **Senha segura:** o bot aponta o campo de senha e pede; o cartão "Senha de <site>" tem campo de senha, **Preencher** e **Eu mesmo faço**. A senha vai direto para o campo da página e o bot nunca a vê; nada é guardado (sem cofre). Só o bot com quem o usuário conversa pede senha; rotina não pede.
+- **Mandar agora:** com o bot respondendo e texto no campo, Enter (ou o botão ao lado de Parar) põe a mensagem dentro da resposta em andamento. Sem resposta rodando, vira mensagem normal.
+- **Arquivos:** item na barra lateral (abaixo de Clientes) e no Ctrl+K. Tudo o que o usuário enviou ou os bots criaram, com pastas, favoritos, Recentes (7 dias), Sem pasta, busca e baixar. Apagar pasta não apaga arquivos.
+- **Agenda das rotinas:** em Configurações → Rotinas, calendário do mês com o que rodou e o que vai rodar, e "Assinar no calendário" (feed `.ics` secreto, só título e bot).
 
 **2026-11-20 — Onda 1 (base de produção, `docs/referencias/openbot-comparativo.md`):**
 - **Senha nova:** "Esqueci minha senha" em Entrar manda um link de uso único (30 min, token no `#` do endereço) para `/redefinir-senha`; a resposta é a mesma exista a conta ou não, e quem envia o e-mail é o worker. Salvar a senha nova encerra todas as sessões. Sem `EMAIL_PROVEDOR`, a rota responde 503. Configurações → Conta → **Trocar senha** confere a atual e tira os outros aparelhos.
@@ -392,11 +401,12 @@ Todas leem `SORA_QA_BASE` (Vite, padrão `http://localhost:5173`) e, quando fala
 - Modelo falso: `[pergunta]`, `[aprovacao]` e `[orcamento]` no pedido disparam cartões e orçamento (só com `SORA_MODELO_FALSO=1`).
 - Desktop: `cd src-tauri && cargo clippy -- -D warnings && cargo test` (35 testes); `npm run desktop:build`.
 - Relatos do "Relatar problema": `cd backend && uv run python -m app.cli relatos listar --dias 7`.
-- Backend: `cd backend && uv run ruff check && uv run pytest tests/unitarios` (2176 passam); integração com Docker (Postgres e Redis), arquivo por arquivo com `SORA_MODELO_FALSO=1` (28 de 28 verdes).
+- Backend: `cd backend && uv run ruff check && uv run pytest tests/unitarios` (2208 passam); integração com Docker (Postgres e Redis), arquivo por arquivo com `SORA_MODELO_FALSO=1` (28 de 28 verdes).
 
 ### 7.5 Pendências / próximos passos
 
-- **Onda 1 (2026-11-20):** ligar o e-mail em produção (`EMAIL_PROVEDOR=smtp` ou `resend` e `EMAIL_REMETENTE`), aplicar as migrações 0018 e 0019, gerar as chaves do atualizador do desktop e decidir se o repositório fica público (o `latest.json` vem de `releases/latest`). Modelos reserva por bot e a Onda 2 do comparativo seguem abertos.
+- **Onda 1 (2026-11-20):** ligar o e-mail em produção (`EMAIL_PROVEDOR=smtp` ou `resend` e `EMAIL_REMETENTE`), aplicar as migrações 0018 e 0019, gerar as chaves do atualizador do desktop e decidir se o repositório fica público (o `latest.json` vem de `releases/latest`). Modelos reserva por bot seguem abertos.
+- **Onda 2 (2026-11-20, na `main`):** migrações 0020 a 0023; `API_URL` e chaves VAPID no `.env` do servidor. Faltam: o bot organizar as pastas da biblioteca (ferramenta) e um visualizador de arquivo; visão de semana e criar rotina clicando num dia; ver ao vivo as telas novas com backend; baselines do `test:visual` podem mudar com o item Arquivos na barra lateral. A Onda 3 precisa de decisão do grupo.
 - **Junção na `main`:** feita e enviada ao GitHub em 2026-11-15 (`e2f4371`).
 - **Teste real do Tauri:** feito em 2026-11-15 (login, Ilha, "(1) Sora", Bloco de Notas, Parar, senha e cmd recusados, tarja). Faltam a pausa pelo mouse físico (manual), o Gerenciador de Tarefas (UAC) e o clique no aviso do sistema (instalador).
 - **Slack e WhatsApp Business reais:** só testados com assinaturas simuladas.

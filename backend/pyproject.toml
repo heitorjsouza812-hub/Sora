@@ -32,6 +32,7 @@ dependencies = [
     "pypdf>=6,<7",
     "python-docx>=1.2,<2",
     "python-multipart>=0.0.20,<1",
+    "pywebpush>=2",
     "pyyaml>=6,<7",
     "redis[hiredis]>=5,<6",
     "sentry-sdk[fastapi]>=2.39,<3",

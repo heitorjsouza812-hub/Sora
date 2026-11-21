@@ -1,0 +1,43 @@
+/* Webhook da rotina (Onda 2, 2026-11-20) */
+.gancho { display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.gancho-titulo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; font-size: var(--fs-13); }
+.gancho small, .gancho-carregando { color: var(--text-2); font-size: var(--fs-12); line-height: 1.45; }
+.gancho-campo { display: grid; gap: 4px; color: var(--text-2); font-size: var(--fs-12); }
+.gancho-campo input { height: 32px; padding: 0 8px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; font-size: var(--fs-13); }
+.gancho-linha { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.gancho-linha code { flex: 1; min-width: 0; overflow: hidden; padding: 4px 6px; color: var(--text); background: var(--panel-2); border-radius: 6px; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.gancho-segredo { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.gancho-entregas { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; color: var(--text-2); font-size: var(--fs-12); }
+.gancho-entregas li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; }
+
+/* Agenda das rotinas e feed .ics (Onda 2) */
+.agenda { display: grid; gap: var(--sp-2); margin: var(--sp-4) 0; }
+.agenda-topo { display: flex; align-items: center; gap: var(--sp-2); }
+.agenda-topo strong { min-width: 160px; text-align: center; text-transform: capitalize; }
+.agenda-grade { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.agenda-semana { padding: 4px; color: var(--text-3); font-size: var(--fs-12); text-align: center; }
+.agenda-dia { position: relative; display: grid; align-content: start; gap: 2px; min-height: 78px; padding: 4px; overflow: hidden; color: var(--text); text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font: inherit; cursor: pointer; }
+.agenda-dia[data-fora] { opacity: .45; }
+.agenda-dia[data-hoje] .agenda-numero { color: var(--bg); background: var(--text); }
+.agenda-dia[aria-pressed="true"] { border-color: var(--focus); }
+.agenda-dia:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.agenda-numero { justify-self: start; min-width: 20px; padding: 0 4px; border-radius: 999px; font-size: var(--fs-12); text-align: center; }
+.agenda-item { overflow: hidden; color: var(--text-2); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-item[data-feita="falhou"] { color: var(--danger); }
+.agenda-mais { color: var(--text-3); font-size: 11px; }
+.agenda-ponto { display: none; }
+.agenda-detalhe { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); }
+.agenda-detalhe strong { text-transform: capitalize; }
+.agenda-detalhe ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: var(--fs-13); }
+.agenda-detalhe li { display: grid; grid-template-columns: 48px 1fr auto; gap: 8px; color: var(--text-2); }
+.agenda-nova { display: grid; gap: 6px; }
+.agenda-nova input, .agenda-nova textarea, .agenda-nova select { padding: 6px 8px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; font-size: var(--fs-13); }
+.agenda-nova__linha { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.feed-agenda { display: grid; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.feed-agenda > div:first-child { display: grid; gap: 2px; }
+.feed-agenda small { color: var(--text-2); font-size: var(--fs-12); line-height: 1.45; }
+@media (max-width: 640px) {
+  .agenda-dia { min-height: 44px; }
+  .agenda-item, .agenda-mais { display: none; }
+  .agenda-ponto { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--text-2); }
+}

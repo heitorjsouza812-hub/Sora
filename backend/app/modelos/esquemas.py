@@ -168,6 +168,19 @@ class MensagemAceita(EsquemaBase):
     mensagem_id: UUID
 
 
+class MensagemAgoraCriacao(EsquemaBase):
+    """ "Mandar agora": entra no turno que está rodando (só texto)."""
+
+    texto: str = Field(min_length=1, max_length=TEXTO_MAX)
+
+
+class MensagemAgoraAceita(EsquemaBase):
+    mensagem_id: UUID
+    no_turno: bool
+    """``True``: entrou na resposta em andamento. ``False``: não havia resposta rodando e a
+    mensagem seguiu pelo caminho normal."""
+
+
 class AvaliacaoEntrada(EsquemaBase):
     valor: Literal[1, -1] | None
 

@@ -109,6 +109,7 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
         NavegadorConsole,
         NavegadorFecharAba,
         NavegadorPedirAjuda,
+        NavegadorPedirSenha,
     )
     from app.navegador.arvore.ferramentas import ESQUEMAS as FERRAMENTAS_DA_ARVORE
     from app.pendencias import (
@@ -152,6 +153,7 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
         "navegador_capturar": NavegadorCapturar,
         "navegador_console": NavegadorConsole,
         "navegador_pedir_ajuda": NavegadorPedirAjuda,
+        "navegador_pedir_senha": NavegadorPedirSenha,
         # navegador por árvore, adaptado do agent-desktop (docs/referencias/agent-desktop.md)
         **FERRAMENTAS_DA_ARVORE,
     }

@@ -40,6 +40,7 @@ NomeJob = Literal[
     "analisar_aprendizado_empresa",
     # conta (§8.2)
     "enviar_link_de_senha_nova",
+    "enviar_push_do_pedido",
 ]
 
 _fila: ArqRedis | None = None

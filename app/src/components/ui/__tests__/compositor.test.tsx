@@ -64,4 +64,29 @@ describe('compositor único (etapa 6)', () => {
     fireEvent.focus(screen.getByLabelText('Mensagem'));
     expect(ctl.beam.at(-1)?.active).toBe(false);
   });
+
+  it('Mandar agora: com resposta rodando e texto no campo, Enter entra na resposta em vez de parar', () => {
+    const mandar = vi.fn(); const parar = vi.fn();
+    render(<MessageComposer placeholder="Mensagem" onSend={() => {}} gerando onParar={parar} onMandarAgora={mandar} />);
+    expect(screen.queryByRole('button', { name: /Mandar agora/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Parar resposta' })).toBeInTheDocument();
+    const campo = screen.getByLabelText('Mensagem');
+    fireEvent.change(campo, { target: { value: '  use azul  ' } });
+    expect(screen.getByRole('button', { name: /Mandar agora/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Parar resposta' })).toBeInTheDocument();
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    expect(mandar).toHaveBeenCalledWith('use azul');
+    expect(parar).not.toHaveBeenCalled();
+    expect((campo as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('sem Mandar agora, Enter com resposta rodando não envia nem para', () => {
+    const enviar = vi.fn(); const parar = vi.fn();
+    render(<MessageComposer placeholder="Mensagem" onSend={enviar} gerando onParar={parar} />);
+    const campo = screen.getByLabelText('Mensagem');
+    fireEvent.change(campo, { target: { value: 'oi' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    expect(enviar).not.toHaveBeenCalled();
+    expect(parar).not.toHaveBeenCalled();
+  });
 });

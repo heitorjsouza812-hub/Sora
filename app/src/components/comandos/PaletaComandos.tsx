@@ -82,6 +82,7 @@ export function PaletaComandos({ onAbrirCentral }: { onAbrirCentral: () => void 
       { id: 'sora', grupo: 'Ações', rotulo: 'Conversar com a Sora', icone: <Icone d={IC.mais} />, teclas: [MOD, 'Shift', 'O'], busca: 'sora conversa', executar: ir('/') },
       { id: 'bots', grupo: 'Ações', rotulo: 'Ver bots', icone: <Icone d={IC.agente} />, busca: 'bots agentes', executar: ir('/bots') },
       { id: 'grupos', grupo: 'Ações', rotulo: 'Ver grupos', icone: <Icone d={IC.grupo} />, busca: 'grupos equipe', executar: ir('/grupos') },
+      { id: 'arquivos', grupo: 'Ações', rotulo: 'Ver arquivos', icone: <Icone d={IC.mais} />, busca: 'arquivos biblioteca pastas downloads imagens documentos', executar: ir('/arquivos') },
       { id: 'configuracoes', grupo: 'Ações', rotulo: 'Configurações', icone: <Icone d={IC.engrenagem} />, busca: 'configuracoes ajustes conta modelos api', executar: ir('/configuracoes') },
     ];
     const itensBots = bots.map<Item>((bot) => ({

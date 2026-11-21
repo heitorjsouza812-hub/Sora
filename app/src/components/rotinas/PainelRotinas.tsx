@@ -5,8 +5,10 @@ import { mensagemDeErro } from '../../api/cliente';
 import { DIAS_DA_SEMANA, FREQUENCIAS, lerAgendamento, montarAgendamento, type Frequencia } from '../builder/rotinaAmigavel';
 import { alterarRotina, apagarRotina, criarRotina, executarRotina, listarRotinasDoAgente, ultimasExecucoes, type ExecucaoRotina, type Rotina } from '../../state/pecas';
 import '../memoria/memoria.css';
+import { GanchoRotina } from './GanchoRotina';
 
 const ROTULO_STATUS: Record<ExecucaoRotina['status'], string> = { executando: 'Rodando', enviada: 'Enviada', silenciosa: 'Silenciosa', falhou: 'Falhou' };
+const ROTULO_ORIGEM: Record<string, string> = { webhook: ' · webhook', manual: ' · à mão' };
 const quando = (iso: string | null) => iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
 function descreverRotina(r: Rotina): string {
@@ -40,7 +42,8 @@ function Linha({ r, aoMudar, aoErro }: { r: Rotina; aoMudar: (r: Rotina | null) 
     {aberta && <div className="rot-execs">
       <p className="rot-pedido">{r.pedido}</p>
       {exec === null ? <small>Carregando…</small> : exec.length === 0 ? <small>Ainda não rodou.</small> :
-        <ul>{exec.map(x => <li key={x.id}><span>{quando(x.iniciada_em)}</span><span className={x.status === 'falhou' ? 'rot-falhou' : ''}>{ROTULO_STATUS[x.status]}</span></li>)}</ul>}
+        <ul>{exec.map(x => <li key={x.id}><span>{quando(x.iniciada_em)}{ROTULO_ORIGEM[x.origem ?? ''] ?? ''}</span><span className={x.status === 'falhou' ? 'rot-falhou' : ''}>{ROTULO_STATUS[x.status]}</span></li>)}</ul>}
+      <GanchoRotina rotinaId={r.id} />
     </div>}
   </li>;
 }

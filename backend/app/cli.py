@@ -107,6 +107,9 @@ def construir_parser() -> argparse.ArgumentParser:
     criar.add_argument(
         "--usos", type=_usos_positivos, default=1, help="Número de usos (padrão: 1)."
     )
+    push = recursos.add_parser("push", help="Notificação no celular (Web Push).")
+    acoes_push = push.add_subparsers(dest="acao", required=True)
+    acoes_push.add_parser("gerar-chaves", help="Gera o par de chaves VAPID para o .env.")
     relatos = recursos.add_parser("relatos", help='Lê os "Relatar problema" dos usuários.')
     acoes_relatos = relatos.add_subparsers(dest="acao", required=True)
     listar = acoes_relatos.add_parser("listar", help="Lista os relatos mais recentes.")
@@ -121,6 +124,15 @@ def construir_parser() -> argparse.ArgumentParser:
 
 def executar(argv: Sequence[str] | None = None) -> int:
     argumentos = construir_parser().parse_args(argv)
+    if argumentos.recurso == "push":
+        from app.push import gerar_chaves
+
+        publica, privada = gerar_chaves()
+        print("# Web Push: cole no .env do servidor (a privada é segredo)")
+        print(f"VAPID_CHAVE_PUBLICA={publica}")
+        print(f"VAPID_CHAVE_PRIVADA={privada}")
+        print("VAPID_CONTATO=mailto:suporte@seu-dominio.com.br")
+        return 0
     if argumentos.recurso == "relatos":
         print(formatar_relatos(asyncio.run(listar_relatos(argumentos.dias, argumentos.limite))))
         return 0

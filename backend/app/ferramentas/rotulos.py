@@ -155,6 +155,7 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "navegador_capturar": lambda _: "Capturando a tela da página",
     "navegador_console": lambda _: "Lendo o console da página",
     "navegador_pedir_ajuda": lambda a: f"Pedindo sua ajuda: {_detalhe(a.get('motivo'))}",
+    "navegador_pedir_senha": lambda a: f"Pedindo a senha: {_detalhe(a.get('motivo'))}",
     # navegador por árvore (docs/referencias/agent-desktop.md); o texto digitado nunca aparece
     "navegador_observar": lambda a: (
         "Lendo uma parte da página" if a.get("raiz") else "Lendo a página"

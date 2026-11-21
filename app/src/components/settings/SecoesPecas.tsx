@@ -7,6 +7,9 @@ import { Button, Input, Textarea } from '../base';
 import { Modal } from '../overlay';
 import { devolverAba, fecharAba, receberEventoEquipe, useEquipe } from '../../state/equipe';
 import './pecas.css';
+import { AgendaRotinas } from '../rotinas/AgendaRotinas';
+import { FeedAgenda } from '../rotinas/FeedAgenda';
+import { GanchoRotina } from '../rotinas/GanchoRotina';
 
 /** Lista carregada de uma rota, com recarregar e erro. */
 function useLista<T>(carregar: () => Promise<T[]>, atualizarACada = 0) {
@@ -88,6 +91,8 @@ export function SecaoRotinas() {
     if (ok) { setTitulo(''); setPedido(''); }
   };
   return <Secao titulo="Rotinas" texto="Pedidos que a Sora faz sozinha, no horário que você marcar. Rotinas rodam sem você olhando: só usam ferramentas seguras e o navegador sem logins salvos.">
+    <AgendaRotinas aoCriar={recarregar} />
+    <FeedAgenda />
     <form className="pc-form pc-form-coluna" onSubmit={ev => void criar(ev)}>
       <Input rotulo="Título" value={titulo} onChange={e => setTitulo(e.target.value)} maxLength={80} />
       <Textarea rotulo="O que fazer" value={pedido} onChange={e => setPedido(e.target.value)} rows={3} />
@@ -103,7 +108,7 @@ export function SecaoRotinas() {
     {itens === null ? <p role="status">Carregando rotinas…</p> : !itens.length ? <p className="pc-vazio">Nenhuma rotina ainda.</p> :
       <ul className="pc-lista">{itens.map(r => <li key={r.id} data-ativa={r.ativa}>
         <span><strong>{r.titulo}</strong><p>{r.pedido}</p><small>{r.tipo === 'cron' ? `cron ${r.expressao}` : r.tipo === 'intervalo' ? `a cada ${intervaloLegivel(r.expressao)}` : 'uma vez'} · próxima: {quando(r.proxima_execucao)} · última: {quando(r.ultima_execucao)}{r.ultimo_status ? ` (${ROTULO_EXEC[r.ultimo_status] ?? r.ultimo_status})` : ''}{!r.ativa ? ' · pausada' : ''}</small>
-          {aberta === r.id && <Execucoes rotinaId={r.id} />}</span>
+          {aberta === r.id && <><Execucoes rotinaId={r.id} /><GanchoRotina rotinaId={r.id} /></>}</span>
         <span className="pc-acoes">
           <Button tamanho="M" variante="secundario" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.alterarRotina(r.id, { ativa: !r.ativa }))}>{r.ativa ? 'Pausar' : 'Retomar'}</Button>
           <Button tamanho="M" variante="secundario" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.executarRotina(r.id))}>Rodar agora</Button>

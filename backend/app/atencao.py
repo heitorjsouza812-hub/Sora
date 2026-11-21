@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -114,6 +115,13 @@ def _texto_acao(aprovacao: Aprovacao, nome: str = "O bot") -> tuple[str, str, st
     if acao.get("tipo") == "aprovar_dominio":
         titulo = "Revisar acesso a domínio"
         resumo = f"Permitir acesso a {acao.get('dominio', 'um novo domínio')}?"
+    elif acao.get("tipo") == "preencher_senha":  # Onda 2: senha segura no navegador do bot
+        titulo = f"Senha de {acao.get('dominio') or 'um site'}"[:120]
+        resumo = (
+            f"{nome} precisa entrar em {acao.get('dominio') or 'um site'}: "
+            f"{str(acao.get('motivo') or 'login')[:200]}. Digite a senha aqui: ela vai direto "
+            "para o campo da página e o bot não a vê."
+        )
     elif acao.get("tipo") in {"pc_programa", "pc_retomar"}:  # Vela-3 (C3): texto já pronto
         titulo = str(acao.get("titulo") or "Usar o seu computador")[:120]
         resumo = str(acao.get("resumo") or f"{nome} quer usar o seu computador.")[:400]
@@ -166,8 +174,16 @@ async def listar_atencao(sessao: AsyncSession, usuario_id: UUID) -> list[PedidoA
         sugestao = (
             isinstance(aprovacao.acao, dict) and aprovacao.acao.get("tipo") == "sugestao_melhoria"
         )
+        senha = isinstance(aprovacao.acao, dict) and aprovacao.acao.get("tipo") == "preencher_senha"
         opcoes = (
             [
+                # "Preencher" vai por POST /v1/navegador/senhas/{id}, com a senha; nunca por
+                # /v1/aprovacoes/{id}/decidir (o app desenha o campo de senha neste cartão).
+                OpcaoAtencao(rotulo="Preencher", valor="preencher_senha"),
+                OpcaoAtencao(rotulo="Eu mesmo faço", valor="negar"),
+            ]
+            if senha
+            else [
                 OpcaoAtencao(rotulo="Aplicar", valor="permitir"),
                 OpcaoAtencao(rotulo="Descartar", valor="negar"),
             ]
@@ -197,7 +213,11 @@ async def listar_atencao(sessao: AsyncSession, usuario_id: UUID) -> list[PedidoA
                 grupo_id=aprovacao.grupo_id,
                 titulo=titulo,
                 resumo=resumo,
-                acao=str((aprovacao.acao or {}).get("ferramenta") or tipo),
+                acao=(
+                    "preencher_senha"
+                    if senha
+                    else str((aprovacao.acao or {}).get("ferramenta") or tipo)
+                ),
                 proposta=proposta_do_cartao(aprovacao.acao),
                 opcoes=opcoes,
                 criado_em=aprovacao.criado_em,
@@ -259,6 +279,12 @@ async def publicar_estado_atencao(
         ),
         usuario_id,
     )
+    try:  # notificação no celular para os pedidos novos (Web Push): extra, nunca atrapalha
+        from app.push import avisar_pedidos_novos
+
+        await avisar_pedidos_novos(redis, usuario_id, pedidos)
+    except Exception:
+        logging.getLogger(__name__).warning("não consegui avisar o celular", exc_info=True)
 
 
 async def publicar_estado_atencao_persistido(

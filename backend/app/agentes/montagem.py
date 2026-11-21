@@ -75,6 +75,9 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         "ler_pagina",
         "escrever_arquivo",
         *FERRAMENTAS_NAVEGADOR,
+        # Senha segura só no bot com quem o usuário conversa; as etapas de pesquisa e verificação
+        # leem páginas públicas e não pedem a senha de ninguém.
+        "navegador_pedir_senha",
     ),
     "canal": ("canal_historico", "canal_delegar", "canal_transferir", "canal_resultado"),
 }
@@ -98,6 +101,8 @@ class DependenciasAgente:
     """Conversa direta: publica o passo ``prompt`` (o pedido recebido) no painel Trabalho."""
     salvar_saida: Callable[[UUID | None, str], Awaitable[str]] | None = None
     ler_mensagens_pendentes: Callable[[UUID], Awaitable[list[str]]] | None = None
+    ler_mensagens_do_turno: Callable[[UUID], Awaitable[list[str]]] | None = None
+    """Conversa direta: o que o usuário mandou com "Mandar agora" durante o turno."""
 
 
 @dataclass(slots=True)

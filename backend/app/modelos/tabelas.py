@@ -289,6 +289,32 @@ class Anexo(Base):
     caminho: Mapped[str] = mapped_column(Text)
     origem: Mapped[str] = mapped_column(Text, default="usuario", server_default="usuario")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # 0022: Biblioteca de arquivos
+    pasta_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("pastas_biblioteca.id", ondelete="SET NULL")
+    )
+    favorito: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
+Index("ix_anexos_usuario_criado", Anexo.usuario_id, Anexo.criado_em)
+
+
+class PastaBiblioteca(Base):
+    """Pasta da Biblioteca de arquivos (migração 0022). Apagar a pasta não apaga os arquivos."""
+
+    __tablename__ = "pastas_biblioteca"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    nome: Mapped[str] = mapped_column(Text)
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+Index(
+    "ux_pastas_biblioteca_nome",
+    PastaBiblioteca.usuario_id,
+    func.lower(PastaBiblioteca.nome),
+    unique=True,
+)
 
 
 class Provedor(Base):
@@ -833,10 +859,78 @@ class RotinaExecucao(Base):
     )
     concluida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(Text, default="executando", server_default="executando")
+    origem: Mapped[str] = mapped_column(Text, default="agenda", server_default="agenda")
+    """``agenda``, ``manual`` (Rodar agora) ou ``webhook`` (migração 0020)."""
     resumo: Mapped[str | None] = mapped_column(Text)
     erro: Mapped[str | None] = mapped_column(Text)
     mensagem_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("mensagens.id", ondelete="SET NULL")
+    )
+
+
+class GanchoRotina(Base):
+    """Webhook de uma rotina (migração 0020): outro serviço chama ``/v1/ganchos/{rota}`` com a
+    assinatura do segredo e a rotina roda com os dados recebidos (``app/rotinas/ganchos.py``)."""
+
+    __tablename__ = "ganchos_rotina"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    rotina_id: Mapped[UUID] = mapped_column(
+        ForeignKey("rotinas.id", ondelete="CASCADE"), unique=True
+    )
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    rota: Mapped[str] = mapped_column(Text, unique=True)
+    segredo_cifrado: Mapped[bytes] = mapped_column(LargeBinary)
+    tipos_evento: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default=text("'{}'")
+    )
+    ativo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ultimo_recebido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class InscricaoPush(Base):
+    """Aparelho que recebe notificação do "Precisa de você" (Web Push, migração 0023)."""
+
+    __tablename__ = "inscricoes_push"
+    __table_args__ = (Index("ix_inscricoes_push_usuario", "usuario_id"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    endpoint: Mapped[str] = mapped_column(Text, unique=True)
+    p256dh: Mapped[str] = mapped_column(Text)
+    auth: Mapped[str] = mapped_column(Text)
+    aparelho: Mapped[str | None] = mapped_column(Text)
+    criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ultimo_envio_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FeedAgenda(Base):
+    """Endereço secreto do feed ``.ics`` das rotinas (migração 0021). Só o hash fica aqui."""
+
+    __tablename__ = "feeds_agenda"
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EntregaGancho(Base):
+    """Cada chamada recebida (sem o corpo): serve para recusar repetidas e para o histórico."""
+
+    __tablename__ = "entregas_gancho"
+    __table_args__ = (
+        UniqueConstraint("gancho_id", "mensagem_id"),
+        Index("ix_entregas_gancho_recebida", "gancho_id", "recebida_em"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    gancho_id: Mapped[UUID] = mapped_column(ForeignKey("ganchos_rotina.id", ondelete="CASCADE"))
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    mensagem_id: Mapped[str] = mapped_column(Text)
+    tipo_evento: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+    """``aceita`` (a rotina rodou) ou ``ignorada`` (tipo de evento fora do filtro)."""
+    tamanho: Mapped[int] = mapped_column(default=0, server_default="0")
+    execucao_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True))
+    recebida_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 

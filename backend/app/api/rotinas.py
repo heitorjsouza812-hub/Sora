@@ -66,6 +66,7 @@ class ExecucaoSaida(BaseModel):
     iniciada_em: datetime
     concluida_em: datetime | None
     status: Literal["executando", "enviada", "silenciosa", "falhou"]
+    origem: str = "agenda"
     resumo: str | None
     erro: str | None
     mensagem_id: UUID | None
@@ -191,7 +192,9 @@ async def executar_agora(
     rotina_id: UUID, usuario_id: UsuarioId, sessao: Sessao, redis: RedisDep
 ) -> ExecucaoAceita:
     rotina = await _obter(sessao, usuario_id, rotina_id)
-    execucao = RotinaExecucao(id=uuid4(), rotina_id=rotina.id, usuario_id=usuario_id)
+    execucao = RotinaExecucao(
+        id=uuid4(), rotina_id=rotina.id, usuario_id=usuario_id, origem="manual"
+    )
     sessao.add(execucao)
     await sessao.commit()
     fila = ArqRedis(redis.connection_pool)

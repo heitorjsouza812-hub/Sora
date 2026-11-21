@@ -414,3 +414,20 @@ class NavegadorPedirAjuda(BaseModel):
 
     aba_id: UUID
     motivo: str = Field(min_length=3, max_length=300)
+
+
+class NavegadorPedirSenha(BaseModel):
+    """Pede ao usuário a senha de um campo de senha da aba, num cartão seguro do app. O usuário
+    digita lá e a Sora preenche o campo direto na página: você nunca vê a senha. Use quando a
+    página pedir senha para entrar (preencha antes o usuário/e-mail, se souber). Depois que a
+    senha for preenchida, clique no botão de entrar. Não funciona em rotina (ninguém olhando)."""
+
+    ref: str = Field(
+        min_length=2, max_length=64, description="Ref do campo de senha (de navegador_observar)."
+    )
+    motivo: str = Field(
+        min_length=3,
+        max_length=200,
+        description="Para que é o login, em poucas palavras (aparece no cartão).",
+    )
+    aba_id: UUID | None = Field(default=None, description="Aba; vazio = a última usada.")

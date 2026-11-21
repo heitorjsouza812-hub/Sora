@@ -42,6 +42,8 @@ from app.modelos.esquemas import (
     ConversaCriacao,
     ConversaSaida,
     MensagemAceita,
+    MensagemAgoraAceita,
+    MensagemAgoraCriacao,
     MensagemCriacao,
     MensagemEdicao,
     MensagemSaida,
@@ -605,6 +607,46 @@ async def enviar_mensagem(
         agente=agente,
     )
     return MensagemAceita(mensagem_id=mensagem.id)
+
+
+@roteador.post("/{conversa_id}/mensagens/agora", status_code=status.HTTP_202_ACCEPTED)
+async def mandar_agora(
+    conversa_id: UUID,
+    dados: MensagemAgoraCriacao,
+    usuario_id: UsuarioComProvedor,
+    sessao: Sessao,
+    redis: RedisDep,
+    fila: Fila,
+) -> MensagemAgoraAceita:
+    """ "Mandar agora": a mensagem entra na resposta que está rodando (antes da próxima chamada ao
+    modelo). Sem resposta rodando, segue pelo caminho normal: nada se perde."""
+    from app.ferramentas.ambiente import entregar_no_turno
+
+    await _conferir_entrada(sessao, usuario_id, dados.texto, [])
+    conversa = await repositorio.obter(sessao, usuario_id, conversa_id)
+    if conversa is None:
+        raise _nao_encontrada()
+    agente = await repositorio.obter_agente(sessao, usuario_id, conversa.agente_id)
+    if agente is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "O agente desta conversa não está disponível."
+        )
+    mensagem = await repositorio.criar_mensagem(
+        sessao, conversa=conversa, texto=dados.texto, anexos=[], agente_id=None
+    )
+    await sessao.commit()
+    if await entregar_no_turno(conversa.id, mensagem.id, dados.texto, redis=redis):
+        return MensagemAgoraAceita(mensagem_id=mensagem.id, no_turno=True)
+    await _encaminhar(
+        sessao,
+        redis,
+        fila,
+        usuario_id=usuario_id,
+        conversa=conversa,
+        mensagem=mensagem,
+        agente=agente,
+    )
+    return MensagemAgoraAceita(mensagem_id=mensagem.id, no_turno=False)
 
 
 async def aprovar_versao(

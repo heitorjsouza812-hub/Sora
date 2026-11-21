@@ -48,6 +48,7 @@ FERRAMENTAS_CONHECIDAS = frozenset(n for lista in FERRAMENTAS_POR_PAPEL.values()
     "navegador_capturar",
     "navegador_console",
     "navegador_pedir_ajuda",
+    "navegador_pedir_senha",
     "navegador_observar",
     "navegador_acao",
     "navegador_procurar",

@@ -118,6 +118,9 @@ class Configuracao(BaseSettings):
     busca_provedor: NomeProvedor = "tavily"
     busca_chave: SecretStr | None = None
     app_url: str = "http://localhost:5173"
+    api_url: str | None = None
+    """Endereço público da API (ex.: ``https://api.seu-dominio.com.br``), usado na URL dos
+    webhooks das rotinas. Vazio: o endereço pelo qual a requisição chegou."""
     cors_origens: str | None = None
     """Lista separada por vírgula. Vazio: Vite + Tauri fora de produção; em produção,
     ``APP_URL`` (se não for local) + Tauri."""
@@ -166,6 +169,12 @@ class Configuracao(BaseSettings):
     smtp_seguranca: SegurancaSmtp = "starttls"
     """``starttls`` (587), ``ssl`` (465) ou ``nenhuma`` (só desenvolvimento)."""
     resend_chave: SecretStr | None = None
+    vapid_chave_publica: str | None = None
+    """Web Push (``app/push.py``): par de chaves do servidor. Gere com
+    ``uv run python -m app.cli push gerar-chaves``. Vazio: notificação no celular desligada."""
+    vapid_chave_privada: SecretStr | None = None
+    vapid_contato: str | None = None
+    """``mailto:`` ou ``https:`` do responsável, exigido pelos serviços de push."""
 
     @field_validator("sora_modelo_falso", mode="before")
     @classmethod
@@ -183,6 +192,7 @@ class Configuracao(BaseSettings):
     def _seguranca(self) -> Self:
         self.chaveiro()
         self._validar_email()
+        self._validar_push()
         if ambiente_local(self.ambiente):
             return self
         segredo = self.jwt_segredo.get_secret_value()
@@ -220,6 +230,17 @@ class Configuracao(BaseSettings):
     @property
     def email_ligado(self) -> bool:
         return self.email_provedor != "nenhum"
+
+    def _validar_push(self) -> None:
+        publica = (self.vapid_chave_publica or "").strip()
+        if bool(publica) != bool(self.vapid_chave_privada):
+            raise ValueError("Informe as duas chaves do Web Push (VAPID_CHAVE_PUBLICA e _PRIVADA).")
+        if publica and not (self.vapid_contato or "").startswith(("mailto:", "https://")):
+            raise ValueError("VAPID_CONTATO precisa ser mailto:… ou https://… (pedido do padrão).")
+
+    @property
+    def push_ligado(self) -> bool:
+        return bool((self.vapid_chave_publica or "").strip() and self.vapid_chave_privada)
 
     def chaveiro(self) -> dict[int, bytes]:
         """Versão → chave mestra (a atual + as antigas), validado no boot."""

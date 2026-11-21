@@ -1,0 +1,41 @@
+/* Arquivos (Biblioteca, Onda 2) */
+.bib { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--sp-6); max-width: 1200px; margin: 0 auto; padding: var(--sp-6) var(--sp-4) var(--sp-12); }
+.bib-lugares { position: sticky; top: var(--sp-4); align-self: start; display: grid; gap: 2px; }
+.bib-lugares button { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; padding: 0 var(--sp-3); color: var(--text-2); background: transparent; border: 0; border-radius: var(--r-md); font: inherit; font-size: var(--fs-14); text-align: left; cursor: pointer; }
+.bib-lugares button:hover { color: var(--text); background: var(--hover, var(--white-a10)); }
+.bib-lugares button[aria-current="page"] { color: var(--text); background: var(--white-a10); }
+.bib-lugares button small { color: var(--text-3); font-size: var(--fs-12); }
+.bib-separador { margin: var(--sp-3) 0 var(--sp-1); padding: 0 var(--sp-3); color: var(--text-3); font-size: var(--fs-12); letter-spacing: .08em; text-transform: uppercase; }
+.bib-nova-pasta input { width: 100%; height: 36px; padding: 0 var(--sp-3); color: var(--text); background: transparent; border: 1px dashed var(--line); border-radius: var(--r-md); font: inherit; font-size: var(--fs-14); box-sizing: border-box; }
+.bib-topo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.bib-topo h1 { margin: 0; font-size: var(--fs-24); font-weight: 500; }
+.bib-acoes-pasta { display: flex; gap: 4px; }
+.bib-filtros { display: flex; gap: var(--sp-2); margin-left: auto; }
+.bib-filtros input, .bib-filtros select, .bib-acoes select { height: 34px; padding: 0 var(--sp-2); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; font-size: var(--fs-13); }
+.bib-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.bib-arquivo { display: grid; grid-template-rows: auto auto auto; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-16); }
+.bib-previa { display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; background: var(--panel-2); }
+.bib-previa img { width: 100%; height: 100%; object-fit: cover; }
+.bib-previa span { color: var(--text-3); font-size: var(--fs-14); font-weight: 600; letter-spacing: .06em; }
+.bib-info { display: grid; gap: 2px; padding: var(--sp-2) var(--sp-3) 0; min-width: 0; }
+.bib-info strong { overflow: hidden; font-size: var(--fs-14); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.bib-info small { color: var(--text-2); font-size: var(--fs-12); }
+.bib-acoes { display: flex; align-items: center; gap: 6px; padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+.bib-acoes select { flex: 1; min-width: 0; }
+.bib-acoes button { height: 34px; padding: 0 var(--sp-2); color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; font-size: var(--fs-13); cursor: pointer; }
+.bib-acoes button:hover { color: var(--text); }
+.bib-estrela[aria-pressed="true"] { color: var(--text); }
+.bib-vazio, .bib-erro { color: var(--text-2); font-size: var(--fs-14); }
+.bib-erro { color: var(--danger); }
+.bib-mais { display: flex; justify-content: center; margin-top: var(--sp-4); }
+@media (max-width: 760px) {
+  .bib { grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); padding-top: var(--sp-3); }
+  .bib-lugares { position: static; display: flex; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  .bib-lugares button { flex: none; white-space: nowrap; }
+  .bib-separador { display: none; }
+  .bib-nova-pasta { flex: none; width: 140px; }
+  .bib-filtros { width: 100%; margin-left: 0; }
+  .bib-filtros input { flex: 1; min-width: 0; }
+  .bib-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.bib-campo-modal { width: 100%; height: 40px; padding: 0 var(--sp-3); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; box-sizing: border-box; }

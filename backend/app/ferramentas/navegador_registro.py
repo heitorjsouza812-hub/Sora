@@ -11,6 +11,7 @@ from app.navegador.abas import (
     NavegadorConsole,
     NavegadorFecharAba,
     NavegadorPedirAjuda,
+    NavegadorPedirSenha,
 )
 from app.navegador.arvore import ESQUEMAS as ESQUEMAS_ARVORE
 
@@ -25,6 +26,7 @@ def registrar(esquemas: dict[str, Any], modulos: dict[str, str]) -> None:
         "navegador_capturar": NavegadorCapturar,
         "navegador_console": NavegadorConsole,
         "navegador_pedir_ajuda": NavegadorPedirAjuda,
+        "navegador_pedir_senha": NavegadorPedirSenha,
         **ESQUEMAS_ARVORE,
     }
     esquemas.update(ativos)

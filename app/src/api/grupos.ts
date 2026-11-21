@@ -194,6 +194,12 @@ export function propostaDaApi(d: Dados): PropostaGrupo {
 
 export function resolverPedidoAtencao(pedido: PedidoAtencao, acao: string, resposta?: string): Promise<void> {
   if (pedido.tipo === 'pergunta') return api.post<void>(`/v1/perguntas/${pedido.id}/responder`, { valor: resposta ?? acao });
+  // Senha segura no navegador do bot: a senha vai só por esta rota (cifrada no servidor por 5 min)
+  // e nunca pela decisão comum. Sem senha, nada é enviado.
+  if (acao === 'preencher_senha') {
+    if (!resposta) return Promise.reject(new Error('Digite a senha.'));
+    return api.post<void>(`/v1/navegador/senhas/${encodeURIComponent(pedido.id)}`, { senha: resposta });
+  }
   const decisao = acao === 'sempre_permitir' ? 'sempre_permitir' : acao === 'enviar' || acao === 'aprovar' ? 'permitir' : 'negar';
   return api.post<void>(`/v1/aprovacoes/${pedido.id}/decidir`, { decisao });
 }
