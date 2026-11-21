@@ -78,6 +78,8 @@ class Usuario(Base):
         server_default="custo",
     )
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # 0025 (Onda 3): relê a conversa a cada N mensagens do usuário (0 = desligado).
+    aprender_a_cada: Mapped[int] = mapped_column(Integer, default=20, server_default="20")
 
 
 # Login e cadastro procuram por lower(email): sem este índice a consulta varre a tabela.
@@ -150,6 +152,8 @@ class Conversa(Base):
     # 0004: compactação do histórico (app/memoria/compactacao.py)
     resumo_compactado: Mapped[str | None] = mapped_column(Text)
     compactado_ate: Mapped[int | None]
+    # 0025: até onde "aprender com correções" já releu (``app/memoria/aprendizado.py``)
+    aprendizado_ate: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Mensagem(Base):
@@ -561,6 +565,14 @@ class Rotina(Base):
     silencioso: Mapped[bool] = mapped_column(default=False, server_default="false")
     ativa: Mapped[bool] = mapped_column(default=True, server_default="true")
     criada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # 0024 (Onda 3): o resultado segue para outro bot (``workers/rotinas.py``, repasse).
+    seguinte_agente_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("agentes.id", ondelete="SET NULL")
+    )
+    seguinte_pedido: Mapped[str | None] = mapped_column(Text)
+    seguinte_conversa_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("conversas.id", ondelete="SET NULL")
+    )
 
 
 class Pendencia(Base):
@@ -609,6 +621,24 @@ class Conector(Base):
     cabecalhos_cifrados: Mapped[bytes | None] = mapped_column(LargeBinary)
     ativo: Mapped[bool] = mapped_column(default=True, server_default="true")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConectorOAuth(Base):
+    """Login OAuth de um conector do catálogo de apps (Onda 3, migração 0027;
+    ``app/conectores/oauth.py``). Tudo cifrado; apagar o conector apaga o login."""
+
+    __tablename__ = "conectores_oauth"
+    conector_id: Mapped[UUID] = mapped_column(
+        ForeignKey("conectores.id", ondelete="CASCADE"), primary_key=True
+    )
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    app: Mapped[str] = mapped_column(Text)
+    dados_cifrados: Mapped[bytes] = mapped_column(LargeBinary)
+    expira_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class CanalVinculado(Base):
@@ -866,6 +896,13 @@ class RotinaExecucao(Base):
     mensagem_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("mensagens.id", ondelete="SET NULL")
     )
+    # 0024: repasse do resultado para o bot seguinte (``aguardando``, ``enviada``, ``silenciosa``
+    # ou ``falhou``; vazio = a rotina não repassa ou não houve resultado).
+    repasse_status: Mapped[str | None] = mapped_column(Text)
+    repasse_erro: Mapped[str | None] = mapped_column(Text)
+    repasse_mensagem_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("mensagens.id", ondelete="SET NULL")
+    )
 
 
 class GanchoRotina(Base):
@@ -955,6 +992,32 @@ class PreferenciaConversa(Base):
     atualizada_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class BotCompartilhado(Base):
+    """Link público de um bot (Onda 3, migração 0026; ``app/api/compartilhar.py``).
+
+    ``retrato`` é o que foi compartilhado no momento do link (nunca arquivos, memória, conversas
+    nem chaves). Um link ativo por bot (índice parcial em ``revogado_em IS NULL``)."""
+
+    __tablename__ = "bots_compartilhados"
+    __table_args__ = (
+        Index(
+            "ix_bots_compartilhados_agente_ativo",
+            "agente_id",
+            unique=True,
+            postgresql_where=text("revogado_em IS NULL"),
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    usuario_id: Mapped[UUID] = mapped_column(ForeignKey("usuarios.id"))
+    agente_id: Mapped[UUID] = mapped_column(ForeignKey("agentes.id", ondelete="CASCADE"))
+    codigo: Mapped[str] = mapped_column(Text, unique=True)
+    retrato: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    imagem: Mapped[bytes | None] = mapped_column(LargeBinary)
+    usos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revogado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 # Canais da empresa (Ponte, migração 0012): só registra as tabelas no mesmo metadata.

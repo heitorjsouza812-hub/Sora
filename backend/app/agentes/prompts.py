@@ -34,6 +34,7 @@ VERSOES: dict[str, int] = {
     "revisor_acoes": 1,
     "memoria_sintese": 1,
     "memoria_verificacao": 1,
+    "aprender_correcoes": 1,  # Onda 3: aprender com correções (app/memoria/aprendizado.py)
     "lembrete_inicio_turno": 1,
     "lembrete_silencio": 1,
     "lembrete_entrega": 1,

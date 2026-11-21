@@ -69,13 +69,23 @@ async def criar_conector(
 
 
 async def servidores_do_usuario(sessao: AsyncSession, usuario_id: UUID) -> list[ServidorMCP]:
-    """Conectores ativos, com cabeçalhos decifrados (só dentro do worker)."""
+    """Conectores ativos, com cabeçalhos decifrados (só dentro do worker). Os do catálogo de apps
+    ganham o ``Authorization`` do login OAuth, renovado se estiver perto de vencer."""
     linhas = (
         await sessao.scalars(
             select(Conector).where(Conector.usuario_id == usuario_id, Conector.ativo.is_(True))
         )
     ).all()
-    return [ServidorMCP(nome=c.nome, url=c.url, cabecalhos=decifrar_cabecalhos(c)) for c in linhas]
+    from app.conectores.oauth import cabecalhos_do_conector
+
+    servidores: list[ServidorMCP] = []
+    for conector in linhas:
+        try:
+            cabecalhos = await cabecalhos_do_conector(sessao, conector)
+        except ErroFerramenta:
+            continue  # login vencido sem renovação: o app pede para conectar de novo
+        servidores.append(ServidorMCP(nome=conector.nome, url=conector.url, cabecalhos=cabecalhos))
+    return servidores
 
 
 async def adicionar_servidor_mcp(args: AdicionarServidorMCP, contexto: ContextoFerramenta) -> str:

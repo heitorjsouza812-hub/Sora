@@ -8,6 +8,7 @@ import { useTelas } from '../../state/telas';
 import { Button } from '../base';
 import { Modal } from '../overlay';
 import './telas.css';
+import { EnsinarTarefa } from './EnsinarTarefa';
 
 const OCIOSO_MS = 90_000;
 
@@ -158,6 +159,7 @@ function TelaNavegador({ agenteId, cor }: { agenteId: string; cor?: string }) {
         <Button tamanho="M" variante={assumida ? 'primario' : 'secundario'} disabled={ocupado} onClick={() => void agir()}>{assumida ? 'Devolver ao bot' : 'Assumir a aba'}</Button>
         <Button tamanho="M" variante="fantasma" disabled={!imagem} onClick={() => setAmpliada(true)}>Ampliar</Button>
       </div>
+      <EnsinarTarefa abaId={abaId} assumida={assumida} />
       {devolvida && !assumida && <small className="wk-tela-nota" role="status">Devolvido. O bot retoma na próxima ação dele.</small>}
       {erro && <small className="wk-nav-erro" role="alert">{erro}</small>}
       <Modal open={ampliada} onClose={() => setAmpliada(false)} title="Navegador do bot" size="lg" className="wk-tela-modal">

@@ -29,6 +29,7 @@ NOME_EXIBIDO: dict[str, str] = {
     "ler_anexo": "Ler anexo",
     "escrever_arquivo": "Escrever arquivo",
     "gerar_imagem": "Gerar imagem",
+    "gerar_video": "Gerar vídeo",
     "entregar": "Entrega",
     "veredito": "Verificação",
     "buscar_memoria": "Memória",
@@ -92,6 +93,9 @@ _ROTULOS: dict[str, Callable[[dict[str, Any]], str]] = {
     "ler_anexo": lambda _: "Lendo o anexo",
     "escrever_arquivo": lambda a: f"Escrevendo {_detalhe(a.get('nome'))}",
     "gerar_imagem": lambda a: f"Gerando {_plural(a.get('quantidade', 1), 'imagem', 'imagens')}",
+    "gerar_video": lambda a: (
+        f"Gerar um vídeo de {a.get('duracao', 8)} s: {_detalhe(a.get('descricao'))}"
+    ),
     "entregar": lambda a: f"Entregando: {_detalhe(a.get('titulo'))}",
     "veredito": lambda _: "Conferindo os requisitos",
     "falar": lambda _: "Respondendo",

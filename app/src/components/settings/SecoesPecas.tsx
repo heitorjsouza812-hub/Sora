@@ -10,6 +10,9 @@ import './pecas.css';
 import { AgendaRotinas } from '../rotinas/AgendaRotinas';
 import { FeedAgenda } from '../rotinas/FeedAgenda';
 import { GanchoRotina } from '../rotinas/GanchoRotina';
+import { RepasseRotina } from '../rotinas/RepasseRotina';
+import { AprenderCorrecoes } from '../memoria/AprenderCorrecoes';
+import { AppsConectaveis } from './AppsConectaveis';
 
 /** Lista carregada de uma rota, com recarregar e erro. */
 function useLista<T>(carregar: () => Promise<T[]>, atualizarACada = 0) {
@@ -48,13 +51,14 @@ export function SecaoMemoria() {
   const [texto, setTexto] = useState('');
   const salvar = async (ev: FormEvent) => { ev.preventDefault(); if (texto.trim() && await acao.rodar(() => pecas.criarMemoria(texto.trim()))) setTexto(''); };
   return <Secao titulo="Memória" texto="O que a Sora e os bots lembram sobre você entre conversas. Você pode acrescentar ou apagar qualquer item; senhas e chaves não são aceitas.">
+    <AprenderCorrecoes />
     <form className="pc-form" onSubmit={ev => void salvar(ev)}>
       <Input rotulo="Nova lembrança" value={texto} onChange={e => setTexto(e.target.value)} maxLength={500} placeholder="Ex.: Prefiro respostas curtas e em tópicos." />
       <Button type="submit" variante="primario" tamanho="M" disabled={!texto.trim() || acao.ocupado}>Guardar</Button>{(!texto.trim()) && <p className="pc-form-hint">Escreva uma lembrança para guardar.</p>}
     </form>
     <Erro texto={acao.erro || erro} />
     {itens === null ? <p role="status">Carregando memórias…</p> : !itens.length ? <p className="pc-vazio">Nada guardado ainda.</p> :
-      <ul className="pc-lista">{itens.map(m => <li key={m.id}><span><p>{m.conteudo}</p><small>{m.origem === 'agente' ? 'Guardada por um bot' : 'Você'} · {quando(m.criada_em)}</small></span>
+      <ul className="pc-lista">{itens.map(m => <li key={m.id}><span><p>{m.conteudo}</p><small>{m.origem === 'sintese' ? 'Aprendida da conversa' : m.origem === 'agente' ? 'Guardada por um bot' : 'Você'} · {quando(m.criada_em)}</small></span>
         <Button tamanho="M" variante="perigo" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.apagarMemoria(m.id))}>Esquecer</Button></li>)}</ul>}
   </Secao>;
 }
@@ -75,7 +79,7 @@ function Execucoes({ rotinaId }: { rotinaId: string }) {
   if (erro) return <Erro texto={erro} />;
   if (itens === null) return <p role="status">Carregando…</p>;
   if (!itens.length) return <p className="pc-vazio">Ainda não rodou.</p>;
-  return <ul className="pc-execs">{itens.map(x => <li key={x.id}>{quando(x.iniciada_em)} · <b>{ROTULO_EXEC[x.status] ?? x.status}</b>{x.resumo ? ` — ${x.resumo}` : ''}{x.erro ? ` (${x.erro})` : ''}</li>)}</ul>;
+  return <ul className="pc-execs">{itens.map(x => <li key={x.id}>{quando(x.iniciada_em)} · <b>{ROTULO_EXEC[x.status] ?? x.status}</b>{x.resumo ? ` — ${x.resumo}` : ''}{x.erro ? ` (${x.erro})` : ''}{x.repasse_status ? ` · passar adiante: ${ROTULO_EXEC[x.repasse_status] ?? (x.repasse_status === 'aguardando' ? 'na fila' : x.repasse_status)}` : ''}{x.repasse_erro ? ` (${x.repasse_erro})` : ''}</li>)}</ul>;
 }
 
 export function SecaoRotinas() {
@@ -108,7 +112,7 @@ export function SecaoRotinas() {
     {itens === null ? <p role="status">Carregando rotinas…</p> : !itens.length ? <p className="pc-vazio">Nenhuma rotina ainda.</p> :
       <ul className="pc-lista">{itens.map(r => <li key={r.id} data-ativa={r.ativa}>
         <span><strong>{r.titulo}</strong><p>{r.pedido}</p><small>{r.tipo === 'cron' ? `cron ${r.expressao}` : r.tipo === 'intervalo' ? `a cada ${intervaloLegivel(r.expressao)}` : 'uma vez'} · próxima: {quando(r.proxima_execucao)} · última: {quando(r.ultima_execucao)}{r.ultimo_status ? ` (${ROTULO_EXEC[r.ultimo_status] ?? r.ultimo_status})` : ''}{!r.ativa ? ' · pausada' : ''}</small>
-          {aberta === r.id && <><Execucoes rotinaId={r.id} /><GanchoRotina rotinaId={r.id} /></>}</span>
+          {aberta === r.id && <><Execucoes rotinaId={r.id} /><RepasseRotina rotina={r} aoMudar={() => void recarregar()} /><GanchoRotina rotinaId={r.id} /></>}</span>
         <span className="pc-acoes">
           <Button tamanho="M" variante="secundario" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.alterarRotina(r.id, { ativa: !r.ativa }))}>{r.ativa ? 'Pausar' : 'Retomar'}</Button>
           <Button tamanho="M" variante="secundario" disabled={acao.ocupado} onClick={() => void acao.rodar(() => pecas.executarRotina(r.id))}>Rodar agora</Button>
@@ -132,7 +136,9 @@ export function SecaoConectores() {
     const r = await pecas.testarConector(id);
     setTeste(t => ({ ...t, [id]: r.ok ? `Funcionou: ${r.ferramentas.length} ferramenta(s).` : `Falhou: ${r.erro ?? 'sem detalhe'}` }));
   });
-  return <Secao titulo="Conectores" texto="Servidores MCP externos que dão mais ferramentas aos bots. Só endereços https públicos; os cabeçalhos (chaves de acesso) ficam guardados no servidor e nunca voltam para esta tela.">
+  return <Secao titulo="Conectores" texto="Apps e servidores MCP que dão mais ferramentas aos bots. No servidor próprio, só endereços https públicos; os cabeçalhos (chaves de acesso) ficam guardados no servidor e nunca voltam para esta tela.">
+    <AppsConectaveis aoConectar={() => void recarregar()} />
+    <h3 className="pc-subtitulo">Outro servidor MCP</h3>
     <form className="pc-form pc-form-coluna" onSubmit={ev => void criar(ev)}>
       <Input rotulo="Nome" value={nome} onChange={e => setNome(e.target.value)} maxLength={60} />
       <Input rotulo="Endereço (https)" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://servidor.exemplo.com/mcp" />

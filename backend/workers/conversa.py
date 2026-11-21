@@ -249,6 +249,7 @@ async def _responder_direto_sem_fila(
         await publicar_evento(
             ctx["redis_eventos"], SugestoesEvento(itens=[]), conversa_id, usuario_id
         )
+        await _talvez_aprender(ctx, contexto)
         return
     texto_final = await aplicar_habilidade_forcada(usuario_id, texto)
     if texto_final != texto:
@@ -472,9 +473,31 @@ async def _rodar_e_falar(
             await falar(Falar(texto=MENSAGEM_FALHA), ferramenta)
     if not resultado.get("__interrupt__"):
         await _cartao_de_seguranca(ferramenta, pedido_de_equipe, cartoes_antes)
+        await _talvez_aprender(ctx, contexto)
     await publicar_evento(
         ctx["redis_eventos"], SugestoesEvento(itens=[]), contexto.conversa_id, contexto.usuario_id
     )
+
+
+async def _talvez_aprender(ctx: dict[str, Any], contexto: Any) -> None:
+    """Onda 3: a cada N mensagens do usuário, o job ``aprender_com_correcoes`` relê a conversa.
+    Só conta e enfileira aqui; falha não afeta a resposta que o usuário já recebeu."""
+    from app.memoria.aprendizado import precisa_reler
+    from workers.fila import enfileirar
+
+    try:
+        async with ctx["sessoes"]() as sessao:
+            ultima = await precisa_reler(sessao, contexto.usuario_id, contexto.conversa_id)
+        if ultima is not None:
+            await enfileirar(
+                "aprender_com_correcoes",
+                id_job=f"aprender:{contexto.conversa_id}:{ultima}",
+                conversa_id=str(contexto.conversa_id),
+            )
+    except Exception:
+        registro.warning(
+            "não consegui agendar o aprendizado da conversa %s", contexto.conversa_id, exc_info=True
+        )
 
 
 async def retomar_conversa(ctx: dict[str, Any], conversa_id: str, resposta: Any) -> None:

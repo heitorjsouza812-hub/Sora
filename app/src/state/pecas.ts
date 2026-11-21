@@ -30,14 +30,17 @@ export function useAvisosMemoria(agenteId?: string): AvisoMemoria[] {
 export interface Rotina {
   id: string; agente_id: string | null; conversa_id: string | null; titulo: string; pedido: string; tipo: 'unico' | 'cron' | 'intervalo'; expressao: string | null; fuso: string | null;
   proxima_execucao: string | null; ultima_execucao: string | null; silencioso: boolean; ativa: boolean; ultimo_status: string | null; criada_em: string;
+  /** Onda 3: o resultado segue para este bot, com este pedido. */
+  seguinte_agente_id?: string | null; seguinte_pedido?: string | null;
 }
-export interface ExecucaoRotina { id: string; rotina_id: string; iniciada_em: string; concluida_em: string | null; status: 'executando' | 'enviada' | 'silenciosa' | 'falhou'; resumo: string | null; erro: string | null; mensagem_id: string | null; origem?: 'agenda' | 'manual' | 'webhook' }
+export interface ExecucaoRotina { id: string; rotina_id: string; iniciada_em: string; concluida_em: string | null; status: 'executando' | 'enviada' | 'silenciosa' | 'falhou'; resumo: string | null; erro: string | null; mensagem_id: string | null; origem?: 'agenda' | 'manual' | 'webhook';
+  repasse_status?: 'aguardando' | 'executando' | 'enviada' | 'silenciosa' | 'falhou' | null; repasse_erro?: string | null; repasse_mensagem_id?: string | null }
 export interface NovaRotina { agente_id?: string; titulo: string; pedido: string; silencioso?: boolean; fuso?: string; cron?: string; a_cada?: number; unidade?: 'minutos' | 'horas' | 'dias'; daqui_minutos?: number; /** data e hora de uma execução única (ISO) */ em?: string }
 export const listarRotinas = () => api.get<Rotina[]>('/v1/rotinas');
 export const listarRotinasDoAgente = (agenteId: string) => api.get<Rotina[]>(`/v1/rotinas?agente_id=${encodeURIComponent(agenteId)}`);
 export const ultimasExecucoes = (id: string) => api.get<ExecucaoRotina[]>(`/v1/rotinas/${id}/execucoes?limite=5`);
 export const criarRotina = (r: NovaRotina) => api.post<Rotina>('/v1/rotinas', r);
-export const alterarRotina = (id: string, patch: Partial<Pick<Rotina, 'titulo' | 'pedido' | 'silencioso' | 'ativa'>>) => api.patch<Rotina>(`/v1/rotinas/${id}`, patch);
+export const alterarRotina = (id: string, patch: Partial<Pick<Rotina, 'titulo' | 'pedido' | 'silencioso' | 'ativa' | 'seguinte_agente_id' | 'seguinte_pedido'>>) => api.patch<Rotina>(`/v1/rotinas/${id}`, patch);
 export const apagarRotina = (id: string) => api.delete<void>(`/v1/rotinas/${id}`);
 export const executarRotina = (id: string) => api.post<{ execucao_id: string }>(`/v1/rotinas/${id}/executar`);
 export const execucoesDaRotina = (id: string) => api.get<ExecucaoRotina[]>(`/v1/rotinas/${id}/execucoes?limite=20`);

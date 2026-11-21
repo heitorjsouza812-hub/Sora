@@ -357,3 +357,53 @@ async def test_aba_fechada_nao_deixa_nada_guardado_na_memoria(kit: _Kit) -> None
     await kit.gerente.fechar(aba.id, kit.agente)
     kit.vivo._esquecer_fechadas()
     assert aba.id not in kit.vivo._ids and aba.id not in kit.vivo._ultimo_quadro
+
+
+# ---------- Ensinar (Onda 3, item 14) ----------
+
+
+async def test_ensinar_grava_os_passos_sem_a_senha_e_vira_rascunho(kit: _Kit) -> None:
+    from app.navegador import ensinar
+
+    aba = await kit.abrir()
+    await kit.redis.set(CHAVE_ASSUMIDA.format(aba_id=aba.id), "1")
+    # sem a gravação ligada, nada é anotado
+    await kit.pedir(aba, tipo="clicar", x=100, y=65, largura=640, altura=360)
+    assert await ensinar.ler(kit.redis, aba.id) == []
+
+    await ensinar.iniciar(kit.redis, aba.id, kit.usuario, kit.agente, aba.url)
+    await kit.pedir(aba, tipo="clicar", x=100, y=65, largura=640, altura=360)  # o botão
+    await kit.pedir(aba, tipo="clicar", x=100, y=107, largura=640, altura=360)  # campo de texto
+    await kit.pedir(aba, tipo="digitar", texto="note")
+    await kit.pedir(aba, tipo="digitar", texto="book")
+    await kit.pedir(aba, tipo="clicar", x=100, y=137, largura=640, altura=360)  # campo de senha
+    await kit.pedir(aba, tipo="digitar", texto=SEGREDO)
+    await kit.pedir(aba, tipo="tecla", tecla="Enter")
+    assert await kit.valor(aba, "#s") == SEGREDO  # a senha foi digitada na página, de verdade
+
+    passos = await ensinar.ler(kit.redis, aba.id)
+    tipos = [p.tipo for p in passos]
+    assert tipos[0] == "abrir" and tipos.count("clicar") == 3 and "tecla" in tipos
+    assert passos[1].alvo == "botão “Clique”"
+    digitados = [p.texto for p in passos if p.tipo == "digitar"]
+    assert digitados == ["note", "book", "[senha]"]
+    # a senha não ficou em chave nenhuma do Redis
+    for chave in await kit.redis.keys("*"):
+        tipo = await kit.redis.type(chave)
+        valores = (
+            await kit.redis.lrange(chave, 0, -1)
+            if tipo == "list"
+            else [await kit.redis.get(chave)]
+            if tipo == "string" and not chave.startswith("navegador:captura:")
+            else []
+        )
+        assert all(SEGREDO not in (v or "") for v in valores), chave
+
+    rascunho = ensinar.rascunho(passos, "Entrar no painel e buscar notebook", "alpha.test")
+    assert "Clique em botão “Clique”" in rascunho.corpo
+    assert "digite “notebook”" in rascunho.corpo  # as digitações seguidas viram uma
+    assert "navegador_pedir_senha" in rascunho.corpo and SEGREDO not in rascunho.corpo
+    assert rascunho.nome == "Entrar no painel e buscar notebook"
+    await ensinar.encerrar(kit.redis, aba.id)
+    assert await ensinar.ensinando(kit.redis, aba.id) is None
+    assert await ensinar.ler(kit.redis, aba.id) == []

@@ -1,3 +1,14 @@
+## Onda 3 — `main` (2026-11-20, noite)
+
+Feita a Onda 3 do comparativo, menos a equipe (item 18, para uma etapa própria): rotina que passa
+o resultado para outro bot, aprender com correções, compartilhar bot por link e exportar/importar
+`.zip`, geração de vídeo pelo Gemini Omni Flash (a API de vídeo da OpenAI e o Veo foram
+desligados), "Ensinar uma tarefa" no navegador do bot e 15 apps com login OAuth em Conectores.
+Migrações 0024 a 0027. Testes verdes no backend e no app; detalhes em `log/2026-11-20.md`.
+Enviada direto na `main`, sem PR. **Próximo:** no servidor, migrações 0017 a 0027 e o Caddy
+novo; ver ao vivo o login dos apps e o vídeo com chave paga.
+
+
 ## Onda 2 — `main` (2026-11-20, noite)
 
 Feita a Onda 2 do comparativo: rotina disparada por webhook (Standard Webhooks, dados cercados

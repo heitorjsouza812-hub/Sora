@@ -120,6 +120,8 @@ CARTAO_FIXO: frozenset[str] = frozenset(
         "atualizar_habilidade",
         "apagar_habilidade",
         "adicionar_servidor_mcp",
+        # Onda 3: vídeo custa dinheiro na conta do Google do usuário; o cartão mostra o custo.
+        "gerar_video",
     }
 )
 

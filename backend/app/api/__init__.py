@@ -15,9 +15,11 @@ from app.api import (
     cadeias,
     canais,
     canais_empresa,
+    compartilhar,
     computador,
     computador_pc,
     conectores,
+    conectores_apps,
     conta,
     conversas,
     entregas,
@@ -55,6 +57,8 @@ for roteador in (
     agenda.roteador,  # agenda das rotinas e feed .ics (o feed é sem login: segredo no endereço)
     agentes.roteador,
     bots.roteador,
+    compartilhar.roteador,  # Onda 3: compartilhar, exportar e importar bot
+    compartilhar.roteador_publico,  # sem login: o código do link é o segredo
     atencao.roteador,
     conversas.roteador,
     eventos.roteador,
@@ -79,6 +83,8 @@ for roteador in (
     grupos.roteador,
     rotinas.roteador,
     busca.roteador,
+    conectores_apps.roteador,  # Onda 3: catálogo de apps com login (antes de /{id})
+    conectores_apps.roteador_publico,  # retorno do login OAuth: sem login, vale o state
     conectores.roteador,
     habilidades.roteador,
     voz.roteador,

@@ -63,6 +63,10 @@ def criar_aplicacao() -> FastAPI:
     # Por último = mais por fora: o corpo grande é recusado antes de qualquer rota ler o multipart.
     aplicacao.add_middleware(LimiteDeCorpo)
     aplicacao.include_router(roteador_v1, prefix="/v1")
+    # /b/<código>: prévia do bot compartilhado para redes sociais (o Caddy manda /b/* para a API)
+    from app.api.compartilhar import roteador_pagina
+
+    aplicacao.include_router(roteador_pagina)
 
     @aplicacao.get("/health", tags=["saude"])
     async def health() -> dict[str, str]:

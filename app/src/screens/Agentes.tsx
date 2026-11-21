@@ -8,6 +8,8 @@ import { pedirApagar, pedirRenomear } from '../components/gestao';
 import { MenuAgente } from '../components/builder';
 import { deixarPedidoInicial } from '../components/inicio';
 import { estadoAgente, todosAgentes, useAgora, useProjetos } from '../state/projetos';
+import { CompartilharBot } from '../components/compartilhar/CompartilharBot';
+import { ImportarBot } from '../components/compartilhar/ImportarBot';
 import './agentes.css';
 
 const Mais = () => <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>;
@@ -15,6 +17,7 @@ const Mais = () => <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>;
 export default function Agentes() {
   const e = useProjetos();
   const [sobre, setSobre] = useState<string | null>(null);
+  const [compartilhando, setCompartilhando] = useState<{ id: string; nome: string } | null>(null);
   const agora = useAgora();
   const navigate = useNavigate();
   // Só bots persistentes (tipo individual); especialistas internos das conversas ficam fora.
@@ -24,7 +27,7 @@ export default function Agentes() {
   );
   const primeiroBot = () => { deixarPedidoInicial('Quero um bot que '); navigate('/'); };
   return (
-    <AppShell titulo="Bots" acoes={ags.length ? criar('P') : <span />}>
+    <AppShell titulo="Bots" acoes={<div className="gallery-acoes"><ImportarBot />{ags.length ? criar('P') : null}</div>}>
       <main className="gallery-screen">
         <header className="gallery-head">
           <div><p>Bots persistentes criados em conversa com a {e.sora.nome}.</p></div>
@@ -44,6 +47,7 @@ export default function Agentes() {
               <article key={a.id} className="gallery-card" onMouseEnter={() => setSobre(a.id)} onMouseLeave={() => setSobre(null)} style={{ '--agent': a.cor } as CSSProperties}>
                 <MenuAgente agenteId={a.id} nome={a.nome} className="gallery-menu" semEditar itens={[
                   { rotulo: 'Editar bot', onClick: () => navigate(`/bots/${a.id}/editar`) },
+                  { rotulo: 'Compartilhar', onClick: () => setCompartilhando({ id: a.id, nome: a.nome }) },
                   { rotulo: 'Renomear', onClick: () => pedirRenomear({ tipo: 'agente', id: a.id }) },
                   { rotulo: 'Apagar', perigo: true, onClick: () => pedirApagar({ tipo: 'agente', id: a.id }) },
                 ]} />
@@ -58,6 +62,7 @@ export default function Agentes() {
             );
           })}
         </div>
+        {compartilhando && <CompartilharBot botId={compartilhando.id} nome={compartilhando.nome} aberto aoFechar={() => setCompartilhando(null)} />}
       </main>
     </AppShell>
   );

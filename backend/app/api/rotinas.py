@@ -29,11 +29,17 @@ UsuarioId = Annotated[UUID, Depends(usuario_atual)]
 RedisDep = Annotated[Redis, Depends(obter_redis)]
 
 
+MAX_PEDIDO_SEGUINTE = 2000
+
+
 class RotinaCriacao(Agendar):
-    """Mesmos campos de ``agendar`` + o agente dono (padrão: a Sora) e o fuso."""
+    """Mesmos campos de ``agendar`` + o agente dono (padrão: a Sora) e o fuso. Com
+    ``seguinte_agente_id``, o resultado de cada execução segue para esse bot (Onda 3)."""
 
     agente_id: UUID | None = None
     fuso: str | None = None
+    seguinte_agente_id: UUID | None = None
+    seguinte_pedido: str | None = Field(default=None, max_length=MAX_PEDIDO_SEGUINTE)
 
 
 class RotinaAtualizacao(BaseModel):
@@ -41,6 +47,9 @@ class RotinaAtualizacao(BaseModel):
     pedido: str | None = Field(default=None, min_length=1, max_length=MAX_PEDIDO)
     silencioso: bool | None = None
     ativa: bool | None = None
+    seguinte_agente_id: UUID | None = None
+    """``null`` enviado de propósito tira o repasse; campo ausente não mexe."""
+    seguinte_pedido: str | None = Field(default=None, max_length=MAX_PEDIDO_SEGUINTE)
 
 
 class RotinaSaida(BaseModel):
@@ -58,6 +67,8 @@ class RotinaSaida(BaseModel):
     ativa: bool
     ultimo_status: str | None
     criada_em: datetime
+    seguinte_agente_id: UUID | None = None
+    seguinte_pedido: str | None = None
 
 
 class ExecucaoSaida(BaseModel):
@@ -70,6 +81,9 @@ class ExecucaoSaida(BaseModel):
     resumo: str | None
     erro: str | None
     mensagem_id: UUID | None
+    repasse_status: str | None = None
+    repasse_erro: str | None = None
+    repasse_mensagem_id: UUID | None = None
 
 
 class ExecucaoAceita(BaseModel):
@@ -92,7 +106,46 @@ def _saida(rotina: Rotina, ultimo_status: str | None) -> RotinaSaida:
         ativa=rotina.ativa,
         ultimo_status=ultimo_status,
         criada_em=rotina.criada_em,
+        seguinte_agente_id=rotina.seguinte_agente_id,
+        seguinte_pedido=rotina.seguinte_pedido,
     )
+
+
+async def _definir_seguinte(
+    sessao: AsyncSession,
+    usuario_id: UUID,
+    rotina: Rotina,
+    agente_id: UUID | None,
+    pedido: str | None,
+) -> None:
+    """Liga ou tira o repasse. O bot que recebe é do mesmo usuário, existe e não é o dono."""
+    if agente_id is None:
+        rotina.seguinte_agente_id = None
+        rotina.seguinte_pedido = None
+        return
+    if agente_id == rotina.agente_id:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Escolha outro bot: o resultado não volta para quem fez a rotina.",
+        )
+    existe = await sessao.scalar(
+        select(Agente.id).where(
+            Agente.id == agente_id,
+            Agente.usuario_id == usuario_id,
+            Agente.apagado_em.is_(None),
+        )
+    )
+    if existe is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
+    texto = (pedido or "").strip()
+    if not texto:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Diga o que o bot faz com o resultado."
+        )
+    if rotina.seguinte_agente_id != agente_id:
+        rotina.seguinte_conversa_id = None  # outro bot: outra conversa
+    rotina.seguinte_agente_id = agente_id
+    rotina.seguinte_pedido = texto
 
 
 async def _ultimos_status(sessao: AsyncSession, ids: list[UUID]) -> dict[UUID, str]:
@@ -149,12 +202,21 @@ async def criar_rotina(dados: RotinaCriacao, usuario_id: UsuarioId, sessao: Sess
             usuario_id=usuario_id,
             agente_id=agente_id,
             conversa_id=None,
-            args=Agendar.model_validate(dados.model_dump(exclude={"agente_id", "fuso"})),
+            args=Agendar.model_validate(
+                dados.model_dump(
+                    exclude={"agente_id", "fuso", "seguinte_agente_id", "seguinte_pedido"}
+                )
+            ),
             fuso=dados.fuso,
         )
     except ErroFerramenta as erro:
         codigo = 404 if "não encontrado" in str(erro) else 422
         raise HTTPException(codigo, str(erro)) from erro
+    if dados.seguinte_agente_id is not None:
+        await _definir_seguinte(
+            sessao, usuario_id, rotina, dados.seguinte_agente_id, dados.seguinte_pedido
+        )
+        await sessao.flush()
     return _saida(rotina, None)
 
 
@@ -169,6 +231,14 @@ async def atualizar_rotina(
         rotina.pedido = dados.pedido.strip()
     if dados.silencioso is not None:
         rotina.silencioso = dados.silencioso
+    if "seguinte_agente_id" in dados.model_fields_set:
+        await _definir_seguinte(
+            sessao, usuario_id, rotina, dados.seguinte_agente_id, dados.seguinte_pedido
+        )
+    elif dados.seguinte_pedido is not None and rotina.seguinte_agente_id is not None:
+        await _definir_seguinte(
+            sessao, usuario_id, rotina, rotina.seguinte_agente_id, dados.seguinte_pedido
+        )
     if dados.ativa is True and not rotina.ativa:
         await servico.retomar(rotina)
         if not rotina.ativa:

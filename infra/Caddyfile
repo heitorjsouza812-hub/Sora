@@ -47,6 +47,12 @@
         reverse_proxy api:8000
     }
 
+    # Bot compartilhado (Onda 3): a API devolve a página com a prévia para redes sociais e
+    # manda o navegador para /compartilhado/<código>, que é do app.
+    handle /b/* {
+        reverse_proxy api:8000
+    }
+
     handle {
         encode zstd gzip
         root * /srv/app

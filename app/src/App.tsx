@@ -5,6 +5,7 @@ const SoraChat = lazy(() => import('./screens/SoraChat'));
 const NovoBot = lazy(() => import('./screens/NovoBot'));
 const AgentChat = lazy(() => import('./screens/AgentChat'));
 const Agentes = lazy(() => import('./screens/Agentes'));
+const Compartilhado = lazy(() => import('./screens/Compartilhado'));
 const Grupos = lazy(() => import('./screens/Grupos'));
 const Clientes = lazy(() => import('./screens/Clientes'));
 const Arquivos = lazy(() => import('./screens/Arquivos'));
@@ -37,6 +38,7 @@ function AppRoutes() {
     <Route path="/grupos" element={<Grupos />} />
     <Route path="/clientes" element={<Clientes />} />
     <Route path="/arquivos" element={<Arquivos />} />
+    <Route path="/compartilhado/:codigo" element={<Compartilhado />} />
     <Route path="/grupos/:grupoId" element={<Grupos />} />
     <Route path="/configuracoes" element={<Configuracoes />} />
     <Route path="/plugins" element={<Navigate to="/" replace />} />

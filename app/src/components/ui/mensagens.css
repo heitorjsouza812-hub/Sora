@@ -145,3 +145,6 @@
 .chat-msg.msg-destaque, .grp-msg.msg-destaque { border-radius: 12px; animation: msg-destaque 2.4s ease-out; }
 @keyframes msg-destaque { 0%, 60% { background: rgba(226, 236, 255, .10); box-shadow: 0 0 0 1px rgba(226, 236, 255, .28); } 100% { background: transparent; box-shadow: 0 0 0 1px transparent; } }
 @media (prefers-reduced-motion: reduce) { .chat-msg.msg-destaque, .grp-msg.msg-destaque { animation: none; background: rgba(226, 236, 255, .10); } }
+
+/* Vídeo gerado pelo bot (Onda 3) */
+.msg-video { display: block; width: 100%; max-width: 480px; max-height: 420px; border-radius: 12px; background: #000; }

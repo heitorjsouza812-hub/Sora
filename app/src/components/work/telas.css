@@ -39,3 +39,15 @@
 .wk-tela-img { max-height: 240px; object-fit: contain; }
 .wk-tela-acoes > * { min-height: 32px; }
 @media (max-width: 767px) { .wk-telas-abas button, .wk-tela-acoes > * { min-height: 44px; } }
+
+/* Ensinar uma tarefa (Onda 3) */
+.wk-ensinar { display: grid; gap: 6px; margin-top: 8px; }
+.wk-ensinar > small { color: var(--text-2); font-size: 12px; line-height: 1.45; }
+.wk-ensinar-gravando { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.wk-ensinar-gravando > p { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; font-weight: 600; }
+.wk-ensinar-ponto { width: 8px; height: 8px; border-radius: 50%; background: #ff6b6b; animation: wk-ensinar-pulso 1.2s ease-in-out infinite; }
+@keyframes wk-ensinar-pulso { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .wk-ensinar-ponto { animation: none; } }
+.wk-ensinar-gravando ol { margin: 0; padding-left: 18px; display: grid; gap: 2px; color: var(--text-2); font-size: 12px; }
+.wk-ensinar-rascunho { display: grid; gap: 10px; }
+.wk-ensinar-rascunho textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }

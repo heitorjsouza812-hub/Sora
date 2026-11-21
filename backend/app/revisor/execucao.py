@@ -370,6 +370,10 @@ async def conferir_acao(
         if politica is Politica.CARTAO_FIXO
         else "Tem efeito fora da Sora."
     )
+    if nome == "gerar_video":
+        from app.ferramentas.gerar_video import texto_do_custo
+
+        dano = texto_do_custo(argumentos)
     quem_recebe: str | None = None
 
     if existente is None:

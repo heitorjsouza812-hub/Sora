@@ -1,0 +1,28 @@
+/* Compartilhar bot e página do bot compartilhado (Onda 3) */
+.compartilhar { display: grid; gap: 14px; }
+.compartilhar-link { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.compartilhar-linha { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.compartilhar-linha code { flex: 1; min-width: 0; overflow: hidden; padding: 6px 8px; color: var(--text); background: var(--panel-2); border-radius: 6px; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.compartilhar small, .compartilhar-vazio { color: var(--text-2); font-size: 13px; line-height: 1.45; margin: 0; }
+.compartilhar-link > button { justify-self: start; }
+.compartilhar-opcoes { display: grid; gap: 6px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.compartilhar-opcoes legend { padding: 0 4px; color: var(--text); font-size: 13px; font-weight: 600; }
+.compartilhar-opcoes label { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+.compartilhar-opcoes p { margin: 4px 0 0; color: var(--text-2); font-size: 13px; }
+.compartilhar-opcoes ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.compartilhar-erro { margin: 0; color: #ff9b9b; font-size: 13px; }
+
+.bot-publico { min-height: 100dvh; display: grid; place-items: start center; padding: 48px 16px; background: var(--bg, #050608); color: var(--text); }
+.bot-publico-cartao { width: min(640px, 100%); display: grid; gap: 18px; }
+.bot-publico-topo { display: flex; align-items: center; gap: 16px; }
+.bot-publico-topo h1 { margin: 0; font-size: 28px; line-height: 1.2; }
+.bot-publico-topo p { margin: 4px 0 0; color: var(--text-2); }
+.bot-publico section { display: grid; gap: 6px; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg, 14px); }
+.bot-publico h2 { margin: 0; color: var(--text-2); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.bot-publico pre { margin: 0; white-space: pre-wrap; font: inherit; font-size: 14px; line-height: 1.5; }
+.bot-publico ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
+.bot-publico-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bot-publico-chips span { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--text-2); }
+.bot-publico-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.bot-publico-acoes small { color: var(--text-2); }
+.bot-publico-erro { color: #ff9b9b; }

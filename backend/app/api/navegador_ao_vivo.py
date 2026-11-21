@@ -180,3 +180,92 @@ async def rolar(
 ) -> Enviado:
     comando = Comando(tipo="rolar", usuario_id=usuario_id, dy=dados.dy)
     return await _enviar(aba_id, comando, sessao, redis, usuario_id)
+
+
+# ---------------------------------------------------------------- Ensinar (Onda 3, item 14)
+
+
+class GravacaoSaida(BaseModel):
+    gravando: bool
+    passos: list[str]
+    """Cada passo já em frase ("Clique em botão “Entrar”"), na ordem."""
+
+
+class ConcluirEntrada(BaseModel):
+    objetivo: str = Field(min_length=1, max_length=300, description="O que a tarefa faz.")
+
+
+async def _aba_do_usuario(sessao: AsyncSession, usuario_id: UUID, aba_id: UUID) -> AbaNavegador:
+    aba = await sessao.scalar(
+        select(AbaNavegador).where(AbaNavegador.id == aba_id, AbaNavegador.usuario_id == usuario_id)
+    )
+    if aba is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Aba não encontrada.")
+    return aba
+
+
+async def _gravacao(redis: Redis, aba_id: UUID) -> GravacaoSaida:
+    from app.navegador import ensinar
+
+    gravando = await ensinar.ensinando(redis, aba_id) is not None
+    passos = ensinar.juntar_passos(await ensinar.ler(redis, aba_id)) if gravando else []
+    return GravacaoSaida(gravando=gravando, passos=[ensinar.frase_do_passo(p) for p in passos])
+
+
+@roteador.post("/navegador/abas/{aba_id}/ensinar")
+async def comecar_a_ensinar(
+    aba_id: UUID, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
+) -> GravacaoSaida:
+    """Liga a gravação: o que o usuário fizer na aba assumida vira passos de uma habilidade."""
+    from app.navegador import ensinar
+
+    aba = await _aba_do_usuario(sessao, usuario_id, aba_id)
+    if not await redis.exists(CHAVE_ASSUMIDA.format(aba_id=aba_id)):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Assuma a aba antes de ensinar: a tarefa é feita por você."
+        )
+    url = aba.url if aba.url and not aba.url.startswith("about:") else None
+    await ensinar.iniciar(redis, aba_id, usuario_id, aba.agente_id, url)
+    return await _gravacao(redis, aba_id)
+
+
+@roteador.get("/navegador/abas/{aba_id}/ensinar")
+async def ver_gravacao(
+    aba_id: UUID, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
+) -> GravacaoSaida:
+    await _aba_do_usuario(sessao, usuario_id, aba_id)
+    return await _gravacao(redis, aba_id)
+
+
+@roteador.post("/navegador/abas/{aba_id}/ensinar/concluir")
+async def concluir_ensino(
+    aba_id: UUID, dados: ConcluirEntrada, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
+) -> dict[str, object]:
+    """Para a gravação e devolve o **rascunho** da habilidade. Nada é salvo aqui: o app mostra
+    o rascunho e o usuário salva (``POST /v1/habilidades``) depois de ler e ajustar."""
+    from urllib.parse import urlsplit
+
+    from app.navegador import ensinar
+
+    aba = await _aba_do_usuario(sessao, usuario_id, aba_id)
+    if await ensinar.ensinando(redis, aba_id) is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A gravação não está ligada nesta aba.")
+    passos = await ensinar.ler(redis, aba_id)
+    inicio = next((p.url for p in passos if p.url), None) or aba.url
+    dominio = (urlsplit(inicio).hostname or None) if inicio else None
+    try:
+        rascunho = ensinar.rascunho(passos, dados.objetivo, dominio)
+    except ValueError as erro:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(erro)) from erro
+    await ensinar.encerrar(redis, aba_id)
+    return rascunho.model_dump()
+
+
+@roteador.delete("/navegador/abas/{aba_id}/ensinar", status_code=status.HTTP_204_NO_CONTENT)
+async def cancelar_ensino(
+    aba_id: UUID, usuario_id: Usuario, sessao: Sessao, redis: RedisDep
+) -> None:
+    from app.navegador import ensinar
+
+    await _aba_do_usuario(sessao, usuario_id, aba_id)
+    await ensinar.encerrar(redis, aba_id)

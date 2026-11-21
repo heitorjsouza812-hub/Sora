@@ -16,7 +16,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.conectores.ferramenta import ambiente_local, criar_conector, decifrar_cabecalhos
+from app.conectores.ferramenta import ambiente_local, criar_conector
 from app.conectores.servidores import AdicionarServidorMCP, ServidorMCP, carregar_ferramentas
 from app.core.banco import obter_sessao
 from app.core.dependencias import obter_redis, usuario_atual
@@ -155,12 +155,15 @@ async def remover_conector(
 async def testar_conector(
     conector_id: UUID, usuario_id: UsuarioId, sessao: Sessao, redis: RedisDep
 ) -> ResultadoTeste:
+    from app.conectores.oauth import cabecalhos_do_conector
+
     conector = await _obter(sessao, usuario_id, conector_id)
-    cabecalhos = decifrar_cabecalhos(conector)
-    servidor = ServidorMCP(nome=conector.nome, url=conector.url, cabecalhos=cabecalhos)
     nomes: list[str] = []
     erro: str | None = None
+    cabecalhos: dict[str, str] = {}
     try:
+        cabecalhos = await cabecalhos_do_conector(sessao, conector)
+        servidor = ServidorMCP(nome=conector.nome, url=conector.url, cabecalhos=cabecalhos)
         ferramentas = await asyncio.wait_for(
             carregar_ferramentas([servidor], ambiente_local=ambiente_local()), PRAZO_TESTE_S
         )

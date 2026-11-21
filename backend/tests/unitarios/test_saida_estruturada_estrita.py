@@ -23,9 +23,13 @@ from app.llm.estruturada import (
     instrucoes_json,
     violacoes_modo_estrito,
 )
+from app.memoria.aprendizado import PropostasMemoria
 
 # todo esquema usado com saída estruturada (response_format) entra aqui
-ESQUEMAS_ESTRUTURADOS: dict[str, type[BaseModel]] = {"DecisaoLider": DecisaoLider}
+ESQUEMAS_ESTRUTURADOS: dict[str, type[BaseModel]] = {
+    "DecisaoLider": DecisaoLider,
+    "PropostasMemoria": PropostasMemoria,  # Onda 3: aprender com correções
+}
 
 RAIZ = Path(__file__).resolve().parents[2]
 

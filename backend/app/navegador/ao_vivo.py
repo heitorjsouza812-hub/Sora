@@ -16,6 +16,9 @@ O que o usuário vê e faz na aba que o bot usa, sem sair do app:
   expira) e é digitado na página: **nunca** vai para o rastro, para os eventos, para o log nem
   para o estado. O quadro seguinte mostra a página como o navegador a desenha (campo de senha
   aparece com pontos). Só se registra o tamanho do que foi digitado, e nem isso sai do worker.
+  Exceção: com "Ensinar" ligado pelo próprio usuário (``app/navegador/ensinar.py``), o passo
+  é anotado no Redis por até 30 min, com o texto mascarado (campo de senha vira ``[senha]``,
+  dado pessoal vira ``[dado pessoal]``), para virar o rascunho de uma habilidade.
 - **Devolver.** ``POST …/devolver`` solta a marca; a aba volta a ser do bot na próxima
   ferramenta (``AmbienteNavegador._sincronizar_assuncao``).
 
@@ -46,6 +49,7 @@ from pydantic import BaseModel, Field
 from app.core.redacao import limpar_texto_sensivel, url_sem_segredos
 from app.eventos.tipos import EventoBase
 from app.ferramentas.base import ErroFerramenta
+from app.navegador import ensinar
 from app.navegador.abas import Aba, GerenteAbas
 
 registro = logging.getLogger(__name__)
@@ -354,6 +358,10 @@ class NavegadorAoVivo:
         if not self._carregada(aba):
             return False
         pagina = self._motor.pagina(aba)
+        # "Ensinar" (Onda 3, ``app/navegador/ensinar.py``): com a gravação ligada, anota o passo.
+        gravando = await ensinar.ensinando(self._redis, aba_id) is not None
+        alvo: dict[str, Any] | None = None
+        url_antes = aba.url
         if comando.tipo == "clicar":
             tamanho = pagina.viewport_size or {"width": 1280, "height": 720}
             x, y = converter_ponto(
@@ -363,8 +371,12 @@ class NavegadorAoVivo:
                 comando.altura or 1,
                 (int(tamanho["width"]), int(tamanho["height"])),
             )
+            if gravando:
+                alvo = await _descrever(pagina, ensinar.DESCREVER_PONTO_JS, [x, y])
             await pagina.mouse.click(x, y)
         elif comando.tipo == "digitar":
+            if gravando:
+                alvo = await _descrever(pagina, ensinar.DESCREVER_FOCO_JS)
             await pagina.keyboard.type(comando.texto or "")
         elif comando.tipo == "tecla":
             await pagina.keyboard.press(comando.tecla or "")
@@ -372,8 +384,38 @@ class NavegadorAoVivo:
             await pagina.mouse.wheel(0, comando.dy or 0)
         await asyncio.sleep(0.2)  # o clique pode abrir outra página
         aviso = await self._depois_de_agir(aba)
+        if gravando:
+            await self._anotar(aba_id, comando, alvo, url_antes)
         await self.quadro(self._gerente.obter(aba_id) or aba, aviso=aviso)
         return True
+
+    async def _anotar(
+        self, aba_id: UUID, comando: Comando, alvo: dict[str, Any] | None, url_antes: str
+    ) -> None:
+        """Um passo da gravação de "Ensinar". O texto digitado só entra mascarado (nunca senha)."""
+        try:
+            if comando.tipo == "clicar":
+                passo = ensinar.Passo(tipo="clicar", alvo=ensinar.descrever_alvo(alvo))
+            elif comando.tipo == "digitar":
+                passo = ensinar.Passo(
+                    tipo="digitar",
+                    alvo=ensinar.descrever_alvo(alvo) if alvo else None,
+                    texto=ensinar.texto_seguro(
+                        comando.texto or "", senha=bool(alvo and alvo.get("senha"))
+                    ),
+                )
+            elif comando.tipo == "tecla":
+                passo = ensinar.Passo(tipo="tecla", texto=comando.tecla)
+            else:
+                passo = None
+            if passo is not None:
+                await ensinar.gravar(self._redis, aba_id, passo)
+            atual = self._gerente.obter(aba_id)
+            if atual is not None and atual.url and atual.url != url_antes:
+                url = url_sem_segredos(atual.url)[:500]
+                await ensinar.gravar(self._redis, aba_id, ensinar.Passo(tipo="pagina", url=url))
+        except Exception as erro:  # nunca o conteúdo: pode ter texto digitado
+            registro.debug("não anotei o passo de Ensinar (%s)", type(erro).__name__)
 
     async def _depois_de_agir(self, aba: Aba) -> str | None:
         """Atualiza o registro da aba; navegação barrada pela revisão de domínio vira aviso."""
@@ -396,6 +438,15 @@ class NavegadorAoVivo:
         except Exception as erro:
             registro.debug("não atualizei a aba %s (%s)", aba.id, type(erro).__name__)
         return aviso
+
+
+async def _descrever(pagina: Any, script: str, argumento: Any = None) -> dict[str, Any] | None:
+    """Papel e nome do elemento (para "Ensinar"); ``None`` se a página não responder logo."""
+    try:
+        resultado = await asyncio.wait_for(pagina.evaluate(script, argumento), 1.5)
+    except Exception:
+        return None
+    return resultado if isinstance(resultado, dict) else None
 
 
 # ---------- do lado da API ----------

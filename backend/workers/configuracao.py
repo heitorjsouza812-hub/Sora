@@ -22,6 +22,7 @@ from app.core.redis import criar_cliente_redis
 from app.emails import criar_enviador
 from app.llm.falso import verificar_modelo_falso_permitido
 from workers.ancora import compactar_historico
+from workers.aprendizado import aprender_com_correcoes
 from workers.aprovacoes import expirar_aprovacao
 from workers.cadeia import (
     ajustar,
@@ -52,7 +53,12 @@ from workers.equipe import (
 from workers.fila import configurar_fila
 from workers.navegador import abrir_aba_de_perfil, fechar_navegador, iniciar_navegador
 from workers.push import enviar_push_do_pedido
-from workers.rotinas import disparar_rotinas, executar_rotina, limpar_entregas_de_webhook
+from workers.rotinas import (
+    disparar_rotinas,
+    executar_rotina,
+    limpar_entregas_de_webhook,
+    repassar_resultado_da_rotina,
+)
 from workers.sessoes import apagar_sessoes_vencidas, limpar_pares_de_renovacao
 from workers.travados import reconciliar_travados
 
@@ -123,6 +129,8 @@ class WorkerSettings:
         analisar_aprendizado_empresa,
         enviar_link_de_senha_nova,
         enviar_push_do_pedido,
+        repassar_resultado_da_rotina,
+        aprender_com_correcoes,
     ]
     cron_jobs: ClassVar[list[Any]] = [
         cron(reconciliar_travados, second={0, 15, 30, 45}, run_at_startup=False),

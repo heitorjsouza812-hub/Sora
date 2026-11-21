@@ -18,6 +18,7 @@ from app.ferramentas.entregar import Entregar
 from app.ferramentas.escrever_arquivo import EscreverArquivo
 from app.ferramentas.falar import Falar
 from app.ferramentas.gerar_imagem import GerarImagem
+from app.ferramentas.gerar_video import GerarVideo
 from app.ferramentas.ler_anexo import LerAnexo
 from app.ferramentas.ler_pagina import LerPagina
 from app.ferramentas.mensagem_especialista import MensagemEspecialista
@@ -42,6 +43,7 @@ ESQUEMAS: dict[str, type[BaseModel]] = {
     "ler_anexo": LerAnexo,
     "escrever_arquivo": EscreverArquivo,
     "gerar_imagem": GerarImagem,
+    "gerar_video": GerarVideo,  # Onda 3: sempre com cartão (custa dinheiro)
     "entregar": Entregar,
     "veredito": Veredito,
     "criar_agente": CriarAgente,

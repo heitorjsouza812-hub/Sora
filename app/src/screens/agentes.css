@@ -27,3 +27,6 @@
   .gallery-screen .gallery-info:has(.gallery-status) small { -webkit-line-clamp: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .gallery-screen .gallery-card { transition: none; } }
+
+/* Onda 3: Importar bot ao lado de "Criar com a Sora" */
+.gallery-acoes { display: flex; align-items: center; gap: 8px; }

@@ -41,3 +41,10 @@
   .agenda-item, .agenda-mais { display: none; }
   .agenda-ponto { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--text-2); }
 }
+
+/* Repasse do resultado para outro bot (Onda 3) */
+.repasse-form { display: grid; gap: 6px; }
+.gancho-campo select, .gancho-campo textarea { padding: 6px 8px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; font-size: var(--fs-13); }
+.gancho-campo select { height: 32px; padding-block: 0; }
+.gancho-campo textarea { resize: vertical; }
+.repasse small b { color: var(--text); font-weight: 600; }

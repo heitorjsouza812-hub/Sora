@@ -38,3 +38,22 @@
 .pc-form-hint { margin: 0; }
 .pc-form .b-btn:disabled { opacity: 1; background: rgba(255,255,255,.14); color: #B6BDCB; }
 @media (max-width: 720px) { .pc-form { flex-wrap: wrap; } .pc-form > :first-child { min-width: 0; } .pc-form :is(input,select) { height: 44px; } .pc-linha > label { flex: 1; min-width: 120px; } .pc-form-coluna > .b-btn { justify-self: end; } }
+
+/* Aprender com correções (Onda 3) */
+.pc-campo-select { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--text); }
+.pc-campo-select select { height: 34px; padding: 0 10px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); font: inherit; font-size: 13px; }
+.aprender { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+
+/* Catálogo de apps com login (Onda 3) */
+.apps-catalogo { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.apps-catalogo header h3 { margin: 0; font-size: 15px; }
+.apps-catalogo header p { margin: 4px 0 0; color: var(--text-2); font-size: 13px; line-height: 1.45; }
+.apps-aviso { margin: 0; color: #7EF2C4; font-size: 13px; }
+.apps-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.apps-grade li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-md); }
+.apps-inicial { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--panel); color: var(--text); font-weight: 700; }
+.apps-texto { display: grid; min-width: 0; }
+.apps-texto strong { font-size: 14px; }
+.apps-texto small { overflow: hidden; color: var(--text-2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.apps-conectado { color: #7EF2C4; font-size: 12px; white-space: nowrap; }
+.pc-subtitulo { margin: 4px 0 0; font-size: 14px; color: var(--text); }

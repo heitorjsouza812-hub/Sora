@@ -8,6 +8,7 @@ import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { SoraOrb, SoraThinking } from '../components/mascot';
 import { abrirEditorAgente } from '../components/builder';
+import { CompartilharBot } from '../components/compartilhar/CompartilharBot';
 import { EntregaCard } from '../components/ui/EntregaCard';
 import { MedidorContexto } from '../components/equipe/MedidorContexto';
 import { FilaDoAgente } from '../components/equipe/FilaDoAgente';
@@ -46,6 +47,7 @@ type Item = { t: number; key: string; node: ReactNode };
 
 function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: number }) {
   const [novaPendencia, setNovaPendencia] = useState(false);
+  const [compartilhando, setCompartilhando] = useState(false);
   const st = estadoAgente(e, a.id, agora);
   const passos = passosDoAgente(e, a.id, agora).filter(p => p.tipo === 'ferramenta');
   const estadoFerramenta = (nome: string) => {
@@ -59,7 +61,9 @@ function Perfil({ e, a, agora }: { e: EstadoProjetos; a: AgenteSora; agora: numb
   return (
     <div className="agent-profile">
       <p className="eyebrow tools-label">Função</p><p>{a.funcao}</p>
-      <Button variante="fantasma" tamanho="P" onClick={() => abrirEditorAgente(a.id)}>Editar bot</Button>
+      <div className="agent-profile-acoes"><Button variante="fantasma" tamanho="P" onClick={() => abrirEditorAgente(a.id)}>Editar bot</Button>
+        {a.avulso && <Button variante="fantasma" tamanho="P" onClick={() => setCompartilhando(true)}>Compartilhar</Button>}</div>
+      {compartilhando && <CompartilharBot botId={a.id} nome={a.nome} aberto aoFechar={() => setCompartilhando(false)} />}
       {st.status === 'trabalhando' && <><div className="progress-title"><span>Progresso</span><b>{st.progresso}%</b></div>
       <ProgressBar value={st.progresso} color={a.cor} label={a.nome} status={st.rotulo} /></>}
       <p className="eyebrow tools-label">Ferramentas</p>

@@ -61,6 +61,14 @@ compromissos.
 
 ### Onda 3: diferencial (precisa de decisão do grupo)
 
+> **Feita em 2026-11-20, menos o item 18** (na `main`; `log/2026-11-20.md`). Diferenças:
+> catálogo com 15 apps de MCP oficial com login OAuth e cadastro automático, dentro de Conectores
+> (Plugins segue escondido); só o repasse de resultado entre bots, sem o editor visual; vídeo só
+> pelo Gemini Omni Flash do Google (a OpenAI desligou a API de vídeo em 2026-09-24 e o Google
+> desligou o Veo na Gemini API); "Ensinar" sem "aprender com a minha navegação"; importar só
+> bots da própria Sora; equipe com membros e papéis fica para uma etapa própria.
+
+
 | # | O quê | Por quê | Esforço |
 |---|---|---|---|
 | 12 | **Catálogo de apps com login pelo navegador** | O OpenBot tem um Marketplace com 254 apps (conectores MCP com OAuth, por exemplo HubSpot, Canva, Notion, Stripe), 40 habilidades prontas e agentes prontos; também instala habilidade a partir de um link do GitHub. A Sora promete "mais de 1.000 plugins", mas hoje só aceita servidor MCP por URL + cabeçalho, e os Plugins estão escondidos (decisão 3). Sugestão: começar com 10 a 15 apps que o público brasileiro usa, escolhidos pelo grupo, com login OAuth. | G |

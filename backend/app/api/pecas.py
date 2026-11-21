@@ -78,6 +78,48 @@ async def _exigir_agente(sessao: AsyncSession, usuario_id: UUID, agente_id: UUID
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bot não encontrado.")
 
 
+class AprendizadoSaida(BaseModel):
+    a_cada: int
+    """De quantas em quantas mensagens suas a Sora relê a conversa (0 = desligado)."""
+    opcoes: list[int]
+
+
+class AprendizadoEntrada(BaseModel):
+    a_cada: int
+
+
+@roteador.get("/memorias/aprendizado")
+async def ler_aprendizado(usuario_id: Usuario, sessao: Sessao) -> AprendizadoSaida:
+    """Aprender com correções (Onda 3): ``app/memoria/aprendizado.py``."""
+    from app.memoria.aprendizado import OPCOES, PADRAO
+    from app.modelos.tabelas import Usuario as UsuarioTabela
+
+    a_cada = await sessao.scalar(
+        select(UsuarioTabela.aprender_a_cada).where(UsuarioTabela.id == usuario_id)
+    )
+    return AprendizadoSaida(a_cada=PADRAO if a_cada is None else a_cada, opcoes=list(OPCOES))
+
+
+@roteador.put("/memorias/aprendizado")
+async def mudar_aprendizado(
+    dados: AprendizadoEntrada, usuario_id: Usuario, sessao: Sessao
+) -> AprendizadoSaida:
+    from app.memoria.aprendizado import OPCOES
+    from app.modelos.tabelas import Usuario as UsuarioTabela
+
+    if dados.a_cada not in OPCOES:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Escolha " + ", ".join(str(o) for o in OPCOES if o) + " mensagens, ou desligado.",
+        )
+    usuario = await sessao.get(UsuarioTabela, usuario_id)
+    if usuario is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta não encontrada.")
+    usuario.aprender_a_cada = dados.a_cada
+    await sessao.commit()
+    return AprendizadoSaida(a_cada=dados.a_cada, opcoes=list(OPCOES))
+
+
 @roteador.get("/memorias")
 async def listar_memorias(
     usuario_id: Usuario, sessao: Sessao, agente_id: UUID | None = None

@@ -3,7 +3,7 @@ import { buscarAutenticado } from '../../api/cliente';
 import './mensagens.css';
 
 export function AnexoResposta({ anexo }: { anexo: { id: string; nome: string } }) {
-  const [arquivo, setArquivo] = useState<{ url: string; nome: string; imagem: boolean; tamanho: number }>();
+  const [arquivo, setArquivo] = useState<{ url: string; nome: string; imagem: boolean; video: boolean; tamanho: number }>();
   const [erro, setErro] = useState(false);
   const [tentativa, setTentativa] = useState(0);
   const dialogo = useRef<HTMLDialogElement>(null);
@@ -16,7 +16,7 @@ export function AnexoResposta({ anexo }: { anexo: { id: string; nome: string } }
       let nome = bruto ?? anexo.nome;
       try { nome = decodeURIComponent(nome); } catch { /* nome literal */ }
       url = URL.createObjectURL(blob);
-      setArquivo({ url, nome, imagem: blob.type.startsWith('image/'), tamanho: blob.size });
+      setArquivo({ url, nome, imagem: blob.type.startsWith('image/'), video: blob.type.startsWith('video/'), tamanho: blob.size });
     }).catch(() => { if (!ac.signal.aborted) setErro(true); });
     return () => { ac.abort(); if (url) URL.revokeObjectURL(url); };
   }, [anexo.id, anexo.nome, tentativa]);
@@ -36,6 +36,14 @@ export function AnexoResposta({ anexo }: { anexo: { id: string; nome: string } }
     <dialog ref={dialogo} className="msg-imagem-ampliada" aria-label={arquivo.nome}>
       <button type="button" onClick={() => dialogo.current?.close()}>Fechar imagem</button><img src={arquivo.url} alt={arquivo.nome} />
     </dialog>
+  </figure>;
+  // Vídeo (Onda 3, gerar_video): player com controles, sem tocar sozinho, e o mesmo "Baixar".
+  if (arquivo.video) return <figure className="msg-imagem-fig msg-video-fig">
+    <div className="msg-imagem-caixa">
+      <video className="msg-video" src={arquivo.url} controls preload="metadata" playsInline aria-label={arquivo.nome} />
+      {baixar('msg-baixar')}
+    </div>
+    <figcaption>{arquivo.nome} · {kb}</figcaption>
   </figure>;
   return <figure className="msg-arquivo">
     <figcaption>{baixar('msg-arquivo-baixar', arquivo.nome)}<small>{kb}</small></figcaption>

@@ -11,6 +11,7 @@ export const FERRAMENTAS_AGENTE: { id: string; rotulo: string }[] = [
   { id: 'ler_anexo', rotulo: 'Ler anexos' },
   { id: 'escrever_arquivo', rotulo: 'Escrever arquivos' },
   { id: 'gerar_imagem', rotulo: 'Gerar imagens' },
+  { id: 'gerar_video', rotulo: 'Gerar vídeos' },
 ];
 
 /** Computador próprio do bot: vêm desligadas e o formulário liga todas juntas, num só interruptor (não entram na grade acima). */

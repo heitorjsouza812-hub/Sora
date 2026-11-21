@@ -57,6 +57,7 @@ FERRAMENTAS_CONHECIDAS = frozenset(n for lista in FERRAMENTAS_POR_PAPEL.values()
     "navegador_elemento",
     "navegador_lote",
     *FERRAMENTAS_DO_COMPUTADOR,  # Farol (C2): o bot liga o computador virtual por ferramenta extra
+    "gerar_video",  # Onda 3: o usuário liga por bot; cada vídeo pede aprovação com o custo
     "consultar_cliente",  # Ponte: entram no bot quando o usuário o autoriza
     "consultar_conhecimento",
     # Memória, pendências, agenda…: o bot já recebe sozinho; aceitar o nome evita 422 no PATCH.

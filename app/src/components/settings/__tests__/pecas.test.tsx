@@ -54,7 +54,8 @@ describe('seções de Configurações da etapa 4', () => {
   });
 
   it('Conectores testa e mostra o resultado, sem expor cabeçalhos', async () => {
-    api.get.mockResolvedValue([{ id: 'c1', nome: 'Docs', url: 'https://x.com/mcp', ativo: true, tem_cabecalhos: true, estado: 'desconhecido', n_ferramentas: 0, ultimo_erro: null, criado_em: '2026-11-02T10:00:00Z' }]);
+    const conectores = [{ id: 'c1', nome: 'Docs', url: 'https://x.com/mcp', ativo: true, tem_cabecalhos: true, estado: 'desconhecido', n_ferramentas: 0, ultimo_erro: null, criado_em: '2026-11-02T10:00:00Z' }];
+    api.get.mockImplementation(async (caminho: string) => caminho === '/v1/conectores/apps' ? [] : conectores);
     api.post.mockResolvedValue({ ok: true, ferramentas: ['a', 'b'], erro: null });
     render(<SecaoConectores />);
     await screen.findByText('Docs');
