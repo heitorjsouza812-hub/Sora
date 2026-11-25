@@ -393,6 +393,23 @@ class ServicoComputador:
                 else "Conferência: a tela NÃO mudou. A ação pode não ter tido efeito; confira "
                 "antes de repetir."
             )
+            if alvo is Alvo.PC_USUARIO and feitas and resolvidas[feitas - 1].acao.tipo == "digitar":
+                ativa = next((j for j in antes.janelas if j.ativa), None)
+                if ativa and (ativa.programa or "").lower() == "notepad.exe":
+                    from app.computador.conferencia import TEXTO_CONFIRMADO, TEXTO_PENDENTE
+
+                    esperado = resolvidas[feitas - 1].acao.texto or ""
+                    mesma = any(j.ativa and j.id_nativo == ativa.id_nativo for j in depois.janelas)
+                    presente = (
+                        mesma
+                        and esperado
+                        and any(
+                            esperado in (e.get("valor") or "")
+                            for e in depois.arvore or []
+                            if e.get("papel") == "documento"
+                        )
+                    )
+                    conferencia = TEXTO_CONFIRMADO if presente else TEXTO_PENDENTE
             texto = f"{feitas} de {len(resolvidas)} ação(ões) feita(s). {conferencia}\n\n"
             texto += self.descrever(nova, alvo, leitura if alvo is Alvo.PC_USUARIO else None)
             if falha:

@@ -200,6 +200,14 @@ async def test_sem_app_conectado_recusa(redis, cartoes) -> None:
         await provedor.obter(uuid4(), uuid4())
 
 
+async def test_ponte_desconectada_orienta_abrir_desktop_sem_trocar_de_alvo(redis, cartoes) -> None:
+    provedor = ProvedorPcUsuario(redis=redis, cartoes=cartoes)
+    with pytest.raises(ErroFerramenta) as falha:
+        await provedor.obter(uuid4(), uuid4())
+    assert "Windows" in str(falha.value) and "Configurações → Computador" in str(falha.value)
+    assert "virtual" not in str(falha.value)
+
+
 async def test_redis_fora_do_ar_vira_recusa(cartoes) -> None:
     class RedisQuebrado:
         async def get(self, *_: object) -> None:

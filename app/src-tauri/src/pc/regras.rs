@@ -130,11 +130,11 @@ pub fn programa_bloqueado(programa: &str) -> bool {
 /// Títulos exatos de janelas que executam comandos (a caixa Executar do Windows).
 const TITULOS_EXATOS_BLOQUEADOS: &[&str] = &["executar", "run", "macro", "macros"];
 
-pub fn titulo_bloqueado(titulo: &str) -> bool {
+pub fn titulo_bloqueado(titulo: &str, bloco_de_notas_oficial: bool) -> bool {
     let titulo = titulo.trim().to_lowercase();
     TITULOS_BLOQUEADOS.iter().any(|t| titulo.contains(t))
         || TITULOS_EXATOS_BLOQUEADOS.contains(&titulo.as_str())
-        || mostra_a_sora(&titulo)
+        || (!bloco_de_notas_oficial && mostra_a_sora(&titulo))
 }
 
 /// Janela que mostra a Sora (Cerca A2): a Sora web num navegador liberado tem "Sora" no título da
@@ -147,6 +147,7 @@ pub fn mostra_a_sora(titulo: &str) -> bool {
 /// Uma janela de topo que vai receber a ação.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AlvoJanela {
+    pub bloco_de_notas_oficial: bool,
     pub hwnd: isize,
     pub pid: u32,
     pub programa: String,
@@ -183,7 +184,7 @@ pub fn conferir_alvo(alvo: &AlvoJanela, permitidos: &[String], pid_proprio: u32)
     if alvo.pid == pid_proprio {
         return Err(ErroPc { programa: Some("sora.exe".into()), ..ErroPc::novo("programa_bloqueado") });
     }
-    if programa_bloqueado(&alvo.programa) || titulo_bloqueado(&alvo.titulo) {
+    if programa_bloqueado(&alvo.programa) || titulo_bloqueado(&alvo.titulo, alvo.bloco_de_notas_oficial) {
         return Err(ErroPc {
             programa: Some(alvo.programa.clone()),
             ..ErroPc::novo("programa_bloqueado")
@@ -863,11 +864,11 @@ mod testes {
     #[test]
     fn sora_no_titulo_e_caixa_executar_sao_bloqueadas() {
         for titulo in ["Sora - Google Chrome", "Sora — agentes de IA - Microsoft Edge", "Precisa de você · SORA", "Executar", "Run"] {
-            assert!(titulo_bloqueado(titulo), "{titulo}");
+            assert!(titulo_bloqueado(titulo, false), "{titulo}");
             assert!(conferir_alvo(&alvo("chrome.exe", titulo, 10), &["chrome.exe".into()], 99).is_err());
         }
         for titulo in ["Professora Ana - Gmail", "Assessoria - Word", "Executar testes.txt - Bloco de Notas"] {
-            assert!(!titulo_bloqueado(titulo), "{titulo}");
+            assert!(!titulo_bloqueado(titulo, false), "{titulo}");
         }
     }
 
@@ -987,7 +988,7 @@ mod testes {
     }
 
     fn alvo(programa: &str, titulo: &str, pid: u32) -> AlvoJanela {
-        AlvoJanela { hwnd: 1, pid, programa: programa.into(), titulo: titulo.into() }
+        AlvoJanela { bloco_de_notas_oficial: false, hwnd: 1, pid, programa: programa.into(), titulo: titulo.into() }
     }
 
     #[test]
@@ -997,8 +998,11 @@ mod testes {
         assert!(programa_bloqueado("keepassxc.exe"));
         assert!(programa_bloqueado("powershell.exe"));
         assert!(!programa_bloqueado("notepad.exe"));
-        assert!(titulo_bloqueado("Gerenciador de senhas - Google Chrome"));
-        assert!(!titulo_bloqueado("Sem título - Bloco de Notas"));
+        assert!(titulo_bloqueado("Gerenciador de senhas - Google Chrome", false));
+        assert!(!titulo_bloqueado("Sem título - Bloco de Notas", false));
+        assert!(!titulo_bloqueado("Teste da Sora - Bloco de Notas", true));
+        assert!(titulo_bloqueado("Teste da Sora - Bloco de Notas", false));
+        assert!(titulo_bloqueado("Gerenciador de senhas - Bloco de Notas", true));
     }
 
     #[test]
@@ -1029,12 +1033,12 @@ mod testes {
 
     #[test]
     fn editor_de_macros_interpretadores_e_devtools_sao_bloqueados() {
-        assert!(titulo_bloqueado("Microsoft Visual Basic for Applications - Pasta1.xlsx"));
-        assert!(titulo_bloqueado("Macro"));
-        assert!(titulo_bloqueado("Macros do LibreOffice Basic"));
-        assert!(titulo_bloqueado("DevTools - exemplo.com.br"));
-        assert!(!titulo_bloqueado("Pasta1.xlsx - Excel"));
-        assert!(!titulo_bloqueado("Relatório de macroeconomia"));
+        assert!(titulo_bloqueado("Microsoft Visual Basic for Applications - Pasta1.xlsx", false));
+        assert!(titulo_bloqueado("Macro", false));
+        assert!(titulo_bloqueado("Macros do LibreOffice Basic", false));
+        assert!(titulo_bloqueado("DevTools - exemplo.com.br", false));
+        assert!(!titulo_bloqueado("Pasta1.xlsx - Excel", false));
+        assert!(!titulo_bloqueado("Relatório de macroeconomia", false));
         for programa in ["python.exe", "node.exe", "wmic.exe", "winget.exe", "reg.exe"] {
             assert!(programa_bloqueado(programa), "{programa}");
         }

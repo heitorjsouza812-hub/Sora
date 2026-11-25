@@ -34,10 +34,10 @@ use windows::{
         },
         UI::{
             Accessibility::{
-                CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationElement, TreeScope_Descendants,
+                CUIAutomation, IUIAutomation, IUIAutomation2, IUIAutomationElement, IUIAutomationTextPattern, TreeScope_Descendants,
                 UIA_BoundingRectanglePropertyId, UIA_CONTROLTYPE_ID, UIA_ControlTypePropertyId,
                 UIA_HasKeyboardFocusPropertyId, UIA_IsEnabledPropertyId, UIA_IsOffscreenPropertyId,
-                UIA_IsPasswordPropertyId, UIA_NamePropertyId, UIA_ValueValuePropertyId,
+                UIA_IsPasswordPropertyId, UIA_NamePropertyId, UIA_TextPatternId, UIA_ValueValuePropertyId,
             },
             Input::KeyboardAndMouse::{
                 GetKeyState, GetKeyboardLayout, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS,
@@ -258,7 +258,7 @@ fn janela_bloqueada(alvo: &AlvoJanela) -> bool {
     alvo.pid == std::process::id()
         || alvo.programa.is_empty()
         || programa_bloqueado(&alvo.programa)
-        || titulo_bloqueado(&alvo.titulo)
+        || titulo_bloqueado(&alvo.titulo, alvo.bloco_de_notas_oficial)
 }
 
 /// Raio dos cantos arredondados do Windows 11 a 100 % (8 px, com folga; cresce com o DPI): os cantos de uma
@@ -513,7 +513,25 @@ fn alvo_da_janela(raiz: HWND) -> AlvoJanela {
             programa = programa_do_pid(pid);
         }
     }
-    AlvoJanela { hwnd: raiz.0 as isize, pid, programa, titulo: titulo(raiz) }
+    let bloco_de_notas_oficial = programa == "notepad.exe" && pacote_do_bloco_de_notas(pid);
+    AlvoJanela { hwnd: raiz.0 as isize, pid, programa, titulo: titulo(raiz), bloco_de_notas_oficial }
+}
+
+/// O Windows verifica a identidade do pacote. Um executável com o mesmo nome continua bloqueado.
+fn pacote_do_bloco_de_notas(pid: u32) -> bool {
+    use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
+    // SAFETY: consulta de um processo, buffer UTF-16 limitado e handle fechado após a consulta.
+    unsafe {
+        let Ok(processo) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+            return false;
+        };
+        let mut buffer = [0u16; 128];
+        let mut tamanho = buffer.len() as u32;
+        let status = GetPackageFamilyName(processo, &mut tamanho, Some(PWSTR(buffer.as_mut_ptr())));
+        let _ = CloseHandle(processo);
+        status.is_ok() && String::from_utf16_lossy(&buffer).trim_end_matches('\0')
+            .eq_ignore_ascii_case("Microsoft.WindowsNotepad_8wekyb3d8bbwe")
+    }
 }
 
 /// Janela de topo sob um ponto físico.
@@ -707,7 +725,7 @@ pub fn janelas(t: &Tela, pid_proprio: u32) -> Vec<Value> {
         let alvo = alvo_da_janela(hwnd);
         let propria = alvo.pid == pid_proprio;
         let programa = if propria { "sora.exe".to_string() } else { alvo.programa.clone() };
-        let bloqueada = propria || programa_bloqueado(&programa) || titulo_bloqueado(&texto);
+        let bloqueada = propria || programa_bloqueado(&programa) || titulo_bloqueado(&texto, alvo.bloco_de_notas_oficial);
         let (x, y) = (r.left.max(0), r.top.max(0));
         saida.push(json!({
             "id": (hwnd.0 as isize).to_string(),
@@ -735,7 +753,7 @@ pub fn janelas(t: &Tela, pid_proprio: u32) -> Vec<Value> {
         let alvo = alvo_da_janela(hwnd);
         let propria = alvo.pid == pid_proprio;
         let programa = if propria { "sora.exe".to_string() } else { alvo.programa.clone() };
-        let bloqueada = propria || programa_bloqueado(&programa) || titulo_bloqueado(&texto);
+        let bloqueada = propria || programa_bloqueado(&programa) || titulo_bloqueado(&texto, alvo.bloco_de_notas_oficial);
         saida.push(json!({
             "id": (hwnd.0 as isize).to_string(),
             "titulo": if bloqueada { String::new() } else { texto.chars().take(200).collect() },
@@ -819,7 +837,7 @@ pub fn arvore(t: &Tela, pid_proprio: u32) -> Vec<Value> {
     let Some(frente) = alvo_em_foco() else {
         return Vec::new();
     };
-    if frente.pid == pid_proprio || programa_bloqueado(&frente.programa) || titulo_bloqueado(&frente.titulo) {
+    if frente.pid == pid_proprio || programa_bloqueado(&frente.programa) || titulo_bloqueado(&frente.titulo, frente.bloco_de_notas_oficial) {
         return Vec::new();
     }
     let Some(uia) = automacao() else {
@@ -899,6 +917,17 @@ pub fn arvore(t: &Tela, pid_proprio: u32) -> Vec<Value> {
             {
                 tem_valor = true;
                 item["valor"] = Value::String(texto.to_string().chars().take(200).collect());
+            }
+            // O editor do Bloco de Notas moderno expõe o documento via TextPattern.
+            if !senha && !tem_valor && nome_papel == "documento"
+                && frente.programa.eq_ignore_ascii_case("notepad.exe")
+                && let Ok(padrao) = el.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+                && let Ok(intervalo) = padrao.DocumentRange()
+                && let Ok(texto) = intervalo.GetText(200)
+                && !texto.is_empty()
+            {
+                item["valor"] = Value::String(texto.to_string());
+                tem_valor = true;
             }
             let foco = estados.contains(&"foco");
             if !estados.is_empty() {

@@ -20,7 +20,9 @@ from dataclasses import dataclass
 from typing import Any
 
 FERRAMENTAS_DE_ACAO = frozenset({"computador_agir", "computador_abrir_programa"})
-MARCAS_DE_CONFERIDO = ("Conferência: a tela mudou", "Programa aberto e na frente")
+TEXTO_CONFIRMADO = "Conferência: texto localizado no documento."
+TEXTO_PENDENTE = "Conferência: não consegui localizar o texto no documento."
+MARCAS_DE_CONFERIDO = ("Conferência: a tela mudou", "Programa aberto e na frente", TEXTO_CONFIRMADO)
 
 AVISO = (
     "Não consegui confirmar que fiz isso no seu computador: nenhuma ação minha teve o resultado "
@@ -56,6 +58,7 @@ class AcoesDoTurno:
     tentativas: int = 0
     conferidas: int = 0
     ultimo_erro: str | None = None
+    digitacao_pendente: bool = False
 
 
 def acoes_do_turno(mensagens: list[Any]) -> AcoesDoTurno:
@@ -77,6 +80,7 @@ def acoes_do_turno(mensagens: list[Any]) -> AcoesDoTurno:
                 chamadas[str(chamada.get("id"))] = nome
     tentativas = conferidas = 0
     ultimo_erro: str | None = None
+    digitacao_pendente = False
     for mensagem in mensagens[inicio:]:
         if _tipo(mensagem) != "tool" or str(getattr(mensagem, "tool_call_id", "")) not in chamadas:
             continue
@@ -85,9 +89,15 @@ def acoes_do_turno(mensagens: list[Any]) -> AcoesDoTurno:
         if conteudo.startswith("Erro") or getattr(mensagem, "status", None) == "error":
             ultimo_erro = conteudo.removeprefix("Erro:").strip()
             continue
-        if any(marca in conteudo for marca in MARCAS_DE_CONFERIDO):
+        # Somente o cabeçalho do executor é evidência. O documento contém dados externos.
+        cabecalho = conteudo.partition("\n\n")[0]
+        if TEXTO_PENDENTE in cabecalho:
+            digitacao_pendente = True
+        if TEXTO_CONFIRMADO in cabecalho:
+            digitacao_pendente = False
+        if any(marca in cabecalho for marca in MARCAS_DE_CONFERIDO):
             conferidas += 1
-    return AcoesDoTurno(tentativas, conferidas, ultimo_erro)
+    return AcoesDoTurno(tentativas, conferidas, ultimo_erro, digitacao_pendente)
 
 
 def afirma_que_fez(texto: str) -> bool:
@@ -97,6 +107,8 @@ def afirma_que_fez(texto: str) -> bool:
 
 
 def precisa_de_aviso(texto: str, acoes: AcoesDoTurno) -> bool:
+    if acoes.digitacao_pendente:
+        return afirma_que_fez(texto)
     if acoes.conferidas or not afirma_que_fez(texto):
         return False
     if acoes.tentativas:
@@ -107,6 +119,8 @@ def precisa_de_aviso(texto: str, acoes: AcoesDoTurno) -> bool:
 
 def texto_com_aviso(texto: str, acoes: AcoesDoTurno) -> str:
     """Troca a afirmação pelo aviso, com o último erro (curto) quando houver."""
+    if acoes.digitacao_pendente:
+        return "Tentei escrever no Bloco de Notas, mas não confirmei o texto pedido no documento."
     partes = [AVISO]
     if acoes.ultimo_erro:
         primeira = re.split(r"(?<=[.!?])\s", acoes.ultimo_erro.strip(), maxsplit=1)[0]

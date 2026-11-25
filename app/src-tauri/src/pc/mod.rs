@@ -466,7 +466,7 @@ fn restaurar_janela(_janela: Option<isize>) -> bool {
 fn restaurar_janela(janela: Option<isize>) -> bool {
     let Some(hwnd) = janela else { return false };
     let Some(alvo) = sistema::alvo_da_ref(hwnd) else { return false };
-    if alvo.pid == std::process::id() || regras::programa_bloqueado(&alvo.programa) || regras::titulo_bloqueado(&alvo.titulo) {
+    if alvo.pid == std::process::id() || regras::programa_bloqueado(&alvo.programa) || regras::titulo_bloqueado(&alvo.titulo, alvo.bloco_de_notas_oficial) {
         return false;
     }
     let ok = sistema::trazer_para_frente(hwnd);
@@ -633,6 +633,8 @@ fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
     let bloqueados_antes = sistema::alvos_bloqueados()?;
     let processos_antes = sistema::processos();
     let digitando = plano.conferencias == [Conferencia::Foco];
+    let bloco_de_notas = digitando && sistema::alvo_em_foco()
+        .is_some_and(|alvo| alvo.programa.eq_ignore_ascii_case("notepad.exe"));
     // Vela-12: a janela da frente é conferida a cada passo (barato); campo de senha e programa,
     // depois de tecla que muda o foco, a cada `CONFERIR_A_CADA` passos e quando a janela muda.
     let mut janela_da_frente = sistema::janela_da_frente();
@@ -681,6 +683,8 @@ fn agir(c: &ControlePc, dados: &Value, prazo: u64) -> Result<Value, ErroPc> {
             return Err(ErroPc::com_mensagem("falha", m));
         }
         thread::sleep(Duration::from_millis(match passo {
+            // A 4 ms o editor WinUI perdeu letras mesmo com SendInput aceitando todos os eventos.
+            Passo::Caractere(_) if bloco_de_notas => 28,
             Passo::Caractere(_) => 4,
             Passo::Mover(..) => 12,
             Passo::Botao(..) => 35,

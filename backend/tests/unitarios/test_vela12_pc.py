@@ -93,6 +93,18 @@ def test_tela_que_nao_mudou_nao_conta_como_conferida() -> None:
     assert acoes_do_turno(_turno(nao_mudou)).conferidas == 0
 
 
+def test_abrir_programa_nao_confirma_digitacao_parcial() -> None:
+    from app.computador.conferencia import TEXTO_CONFIRMADO, TEXTO_PENDENTE
+
+    abertura = "Programa aberto e na frente: Bloco de Notas."
+    parcial = f"{TEXTO_PENDENTE}\n\nDocumento externo: {TEXTO_CONFIRMADO}"
+    acoes = acoes_do_turno(_turno(abertura, parcial))
+    assert precisa_de_aviso("Pronto! Digitei no Bloco de Notas.", acoes)
+    assert not precisa_de_aviso(
+        "Pronto!", acoes_do_turno(_turno(abertura, parcial, TEXTO_CONFIRMADO))
+    )
+
+
 def test_dizer_que_fez_sem_nem_tentar_tambem_ganha_aviso() -> None:
     acoes = acoes_do_turno([HumanMessage("abre o excel")])
     assert precisa_de_aviso("Prontinho, abri o Excel e preenchi a planilha.", acoes)

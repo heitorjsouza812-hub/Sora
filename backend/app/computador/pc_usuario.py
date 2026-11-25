@@ -53,11 +53,12 @@ from app.ferramentas.base import ErroFerramenta
 
 RECUSA = (
     "O controle do seu computador precisa do app de desktop da Sora aberto e logado nesta conta. "
-    "Peça ao usuário para abrir o app de desktop, ou use o computador virtual (alvo virtual)."
+    "Peça ao usuário para abrir o app de desktop da Sora no Windows e ligar o bot em "
+    "Configurações → Computador. Informe que a ação no PC ficou pendente."
 )
 DESLIGADO_PARA_O_BOT = (
     "O usuário não ligou o controle do computador para este bot. Ele liga em Configurações → "
-    "Computador, no app de desktop. Até lá, use o computador virtual (alvo virtual)."
+    "Computador, no app de desktop. Informe que a ação no PC ficou pendente."
 )
 PARADO = (
     "O usuário clicou em Parar: não use o computador dele de novo nesta tarefa. Diga o que "
