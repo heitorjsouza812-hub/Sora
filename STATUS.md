@@ -18,16 +18,23 @@
 |---|---|---|---|---|---|---|---|
 | 0.1 Commitar trabalho de 21–22/11 | Tech Lead | `onda3` | `75434fd`, `081bdfd`, `2f7042f` + commit de docs | ruff check/format + `uv run pytest tests/unitarios -q` por commit (worktree `C:/dev/sora-tl-verifica`); `cargo clippy -D warnings` + `cargo test` | 2242 → 2244 → 2246 passam, 0 falham, 5 pulados; Rust 35 passam, 1 ignorado | Docker Desktop desligado (integração não rodada localmente) | push de `onda3` |
 | 0.2 Religar o CI | Tech Lead | `onda3` | _este commit_ | PR de teste contra `onda3` dispara os 4 jobs | local: YAML válido; `pytest --count=20` em `test_modelo_travado.py` = 120 passam; CI: _aguardando_ | proteção da `main`/`onda3` é com o Heitor (GitHub → Settings → Branches) | PR de teste |
-| 0.3 Bypass de aprovação do MCP | Codex | `fix/mcp-aprovacao` (`../sora-codex`) | — | caso de 25 ferramentas falha antes / passa depois | — | depende da 0.2 | — |
-| 0.4 Testes de ponta a ponta | Codex | `feat/ponta-a-ponta` | — | 13 cenários 20/20, 0 skipped | — | depende da 0.2 | — |
-| 0.5 Baseline | Claude + Heitor | `feat/baseline` (`../sora-claude`) | — | 30 tela + 30 longas com classe de falha | — | SHA final da 0.1; antes de merge da 0.3 | — |
+| 0.3 Bypass de aprovação do MCP | Codex (`gpt-6.2-sol`, medium) | `fix/mcp-aprovacao` (`C:/dev/sora-codex`) | — | caso de 25 ferramentas falha antes / passa depois | — | — | em andamento (2026-11-25) |
+| 0.4 Testes de ponta a ponta | Codex | `feat/ponta-a-ponta` (mesmo worktree, depois da 0.3) | — | 13 cenários 20/20, 0 skipped | — | Docker Desktop desligado nesta máquina | depois da 0.3 |
+| 0.5 Baseline | Claude (Opus 5.5) + Heitor | `feat/baseline` (`C:/dev/sora-claude`) | — | 30 tela + 30 longas com classe de falha | — | Docker; sessão do Heitor no Windows para G01–G10 | em andamento (2026-11-25): fixtures e L01–L10 |
+
+Código medido pela 0.5: `a30c98f`. O `onda3` em `f2fb882` só muda `.github/workflows/ci.yml`, `STATUS.md` e o grupo dev (`pytest-repeat`); o código que roda é o mesmo.
+
+PR de teste da 0.2: [#3](https://github.com/heitorjsouza812-hub/Sora/pull/3) (`ci/teste-pr-onda3`, commit vazio, rascunho, não mesclar).
 
 ## Locks de arquivo
 
 | Arquivo / pasta | Dono | Desde | Motivo |
 |---|---|---|---|
 | `STATUS.md`, `.github/**`, `CLAUDE.md`, `AGENTS.md`, `log/**`, `docs/benchmarks/**` | Tech Lead | 2026-11-25 | §9 |
-| `backend/pyproject.toml`, `backend/uv.lock` | Tech Lead | 2026-11-25 | 0.2 (`pytest-repeat`) |
+| `backend/pyproject.toml`, `backend/uv.lock` | Tech Lead | 2026-11-25 | 0.2 (`pytest-repeat`); liberado depois do `f2fb882` (pedir lock antes de mudar) |
+| `backend/app/conectores/**`, `backend/app/ferramentas/catalogo_preguicoso.py`, `backend/tests/unitarios/{test_rakazo_fase1,test_rakazo_fase3,test_engrenagem_pedido}.py`, `backend/tests/integracao/test_mcp_aprovacao.py` (novo), `backend/app/agentes/ancora.py` (só se preciso) | Codex | 2026-11-25 | 0.3 |
+| `backend/app/llm/falso.py`, `backend/workers/{conversa,configuracao}.py` (só leitura dos prazos por variável), `backend/tests/ponta_a_ponta/**`, `backend/tests/conftest.py`, `backend/tests/integracao/{conftest,relogio_base}.py`, ferramenta de teste nova (só com `SORA_MODELO_FALSO=1`) | Codex | 2026-11-25 | 0.4 (começa depois do PR da 0.3) |
+| `docs/benchmarks/**` | Claude | 2026-11-25 | 0.5 (cedido pelo Tech Lead) |
 
 ## 0.1 — inventário do trabalho local (2026-11-25, `onda3` sobre `f92a420`)
 
