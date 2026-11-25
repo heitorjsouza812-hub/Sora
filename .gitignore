@@ -20,3 +20,4 @@ backend/arquivos*/
 
 # Configurações locais do Claude Code (permissões e URLs da máquina de cada um).
 .claude/settings.local.json
+.claude/launch.json

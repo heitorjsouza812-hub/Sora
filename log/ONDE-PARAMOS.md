@@ -1,3 +1,23 @@
+## Plano de correções antes do DSH (2026-11-25)
+
+O plano V2 (DSH + Hatchet + Cua, entrega única) fica suspenso até o Gate de decisão de 2026-12-30.
+O plano vigente para o T3 Code é `docs/SORA_PLANO_CORRECOES_NO_LUGAR.md`. Achado urgente: bypass de
+aprovação do MCP com mais de 20 ferramentas (tarefa 0.3). Detalhes em [log de 25 de novembro](2026-11-25.md).
+**Próximo:** o Tech Lead começa pela tarefa 0.1 (commitar o trabalho de 21–22/11).
+
+## Execução dos bots pelo chat no Windows (2026-11-22)
+
+Diagnóstico, correções locais, resultados com Groq e roteiro de reprodução em [log de 22 de novembro](2026-11-22.md). A versão do desktop precisa ser recompilada para a correção do Bloco de Notas.
+
+## Bot travado ao usar o PC — corrigido, sem commit (2026-11-21)
+
+O bot do Excel ficava "pensando": o Gemini estava sobrecarregado e a chamada não tinha prazo.
+Agora: prazo de 45 s por chamada, prazo vai direto para a reserva, bot do computador com reserva
+de outro provedor, Gemini 3 com temperatura 1.0 e pausa de provedor ligada (3 falhas, 5 min).
+Detalhes em `log/2026-11-21.md`. **Próximo:** o Heitor testar o Excel no app de desktop; commit
+quando ele pedir.
+
+
 ## Onda 3 — `main` (2026-11-20, noite)
 
 Feita a Onda 3 do comparativo, menos a equipe (item 18, para uma etapa própria): rotina que passa
