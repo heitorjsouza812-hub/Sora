@@ -8,12 +8,15 @@ como resultado e segue; a interrupção do cartão passa direto para o LangGraph
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, ToolCallRequest
 from langchain_core.messages import ToolMessage
 
 from app.ferramentas.base import ContextoFerramenta
+
+chamada_do_catalogo: ContextVar[str] = ContextVar("chamada_do_catalogo", default="")
 
 
 class MiddlewareRevisor(AgentMiddleware):
@@ -28,6 +31,21 @@ class MiddlewareRevisor(AgentMiddleware):
         chamada = request.tool_call
         nome = str(chamada.get("name", ""))
         argumentos = chamada.get("args") if isinstance(chamada.get("args"), dict) else {}
+        if nome == "computador_agir":
+            from pydantic import ValidationError
+
+            from app.computador.ferramentas import ComputadorAgir
+
+            try:
+                ComputadorAgir.model_validate(argumentos)
+            except ValidationError:
+                return ToolMessage(
+                    content="Argumentos inválidos. Confira o esquema de cada ação: "
+                    "tecla exige o campo tecla, digitar exige texto e clicar exige ref ou x/y.",
+                    tool_call_id=str(chamada.get("id", "")),
+                    name=nome,
+                    status="error",
+                )
         metadados = getattr(request.tool, "metadata", None) or {}
         resultado = await conferir_acao(
             nome,
@@ -40,4 +58,8 @@ class MiddlewareRevisor(AgentMiddleware):
             return ToolMessage(
                 content=resultado, tool_call_id=str(chamada.get("id", "")), name=nome
             )
-        return await handler(request)
+        token = chamada_do_catalogo.set(str(chamada.get("id") or ""))
+        try:
+            return await handler(request)
+        finally:
+            chamada_do_catalogo.reset(token)

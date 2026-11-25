@@ -182,6 +182,59 @@ def _chamada(nome: str, **argumentos):
     )
 
 
+async def test_envio_simulado_espera_cartao_e_nao_repete(ambiente_fase_b, monkeypatch):
+    from langchain.agents import create_agent
+    from langchain_core.messages import AIMessage
+    from langchain_core.tools import tool
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.types import Command
+
+    from app.agentes.middleware.revisor import MiddlewareRevisor
+    from app.ferramentas.base import ContextoFerramenta
+    from app.revisor import execucao
+
+    cliente, fabrica, _ = ambiente_fase_b
+    email = "envio-simulado@exemplo.com"
+    auth = await entrar(cliente, fabrica, email)
+    uid, aid, cid = await _agente_e_conversa(fabrica, email)
+    contexto = ContextoFerramenta(
+        usuario_id=uid, agente_id=aid, conversa_id=cid, permissao="perguntar"
+    )
+    caixa = []
+
+    @tool
+    async def enviar_email(texto: str) -> str:
+        """Entrega uma mensagem em uma caixa local do teste."""
+        caixa.append(texto)
+        return "Recebido."
+
+    async def revisor(*_):
+        return "{}"  # avaliação inconclusiva exige decisão humana
+
+    monkeypatch.setattr(execucao, "chamar_modelo_revisor", revisor)
+    chamada = _chamada("enviar_email", texto="Inventário")
+    agente = create_agent(
+        _modelo_roteirizado(chamada, AIMessage("Entregue.")),
+        tools=[enviar_email],
+        middleware=[MiddlewareRevisor(contexto)],
+        checkpointer=InMemorySaver(),
+    )
+    config = {"configurable": {"thread_id": str(cid)}}
+    pausa = await agente.ainvoke({"messages": [("user", "Envie o inventário")]}, config)
+    cartao = pausa["__interrupt__"][0].value["aprovacao_id"]
+    assert caixa == []
+    rota = f"/v1/aprovacoes/{cartao}/decidir"
+    r = await cliente.post(rota, headers=auth, json={"decisao": "permitir_uma_vez"})
+    r.raise_for_status()
+    await agente.ainvoke(Command(resume="permitir_uma_vez"), config)
+    assert caixa == ["Inventário"]
+    args = chamada.tool_calls[0]
+    repetida = await execucao.conferir_acao(
+        "enviar_email", args["args"], contexto, chamada_id=args["id"]
+    )
+    assert repetida and "já foi usada" in repetida
+
+
 async def test_instrucoes_pedem_cartao_e_so_gravam_depois_de_aprovar(
     ambiente_fase_b: tuple[httpx.AsyncClient, async_sessionmaker, object],
 ) -> None:

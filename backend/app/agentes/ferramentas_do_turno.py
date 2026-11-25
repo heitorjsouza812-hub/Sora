@@ -15,6 +15,7 @@ Os outros papéis (especialistas da cadeia, bot de grupo) já têm conjuntos peq
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -40,6 +41,15 @@ ESSENCIAIS = frozenset(
 """Pequenas, de uso comum e com efeito na tela (chip "Guardei isto", cartão de instruções)."""
 
 GRUPO_DO_NAVEGADOR = "navegador"
+
+
+def superficie_do_pedido(texto: str) -> str | None:
+    if re.search(r"\b(?:meu|meu próprio) (?:pc|computador)\b", texto, re.I):
+        return "computador"
+    if re.search(r"\b(?:navegador|campo de (?:busca|pesquisa)|barra de pesquisa)\b", texto, re.I):
+        return "navegador"
+    return None
+
 
 GRUPOS_ESCONDIDOS: dict[str, str] = {
     "buscar_historico": "historico",
@@ -88,6 +98,15 @@ def nomes_diretos(nomes: list[str], contexto: ContextoAgente) -> list[str]:
     habilitadas.update(contexto.ferramentas_extras)
     from app.agentes.ancora import NAVEGADOR_DIRETO
 
+    superficie = contexto.superficie
+    if superficie and any(n.startswith(superficie + "_") for n in habilitadas):
+        # O catálogo recebe somente ferramentas já permitidas para este papel/bot.
+        # Isso deixa espaço para a árvore da página no pedido e mantém as demais acessíveis.
+        habilitadas = {
+            n
+            for n in habilitadas
+            if n.startswith(("navegador_", "computador_")) or n in {"falar", "perguntar"}
+        }
     # Do navegador só as quatro de sempre vão direto (é o que o prompt do navegador ensina); as
     # outras nove ficam no catálogo. Antes, com o navegador ligado, as 13 iam direto e o prompt
     # mandava usar um ``navegador_executar_ferramenta`` que este bot não tem.
@@ -103,7 +122,7 @@ def nomes_escondidos(nomes: list[str], contexto: ContextoAgente) -> list[str]:
     return [n for n in nomes if n not in diretos]
 
 
-def prompt_do_navegador(papel: str) -> str:
+def prompt_do_navegador(papel: str, *, catalogo_confirmado: bool = True) -> str:
     """Prompt do navegador com os nomes do catálogo que este papel tem de verdade.
 
     A Sora e o bot 1:1 têm um catálogo só (``conectores_*``); os outros papéis têm o catálogo
@@ -114,6 +133,14 @@ def prompt_do_navegador(papel: str) -> str:
     texto = carregar_prompt("navegador_arvore")
     if papel not in PAPEIS_ENXUTOS:
         return texto
-    for acao in ("buscar_ferramentas", "carregar_ferramenta", "executar_ferramenta"):
-        texto = texto.replace(f"navegador_{acao}", f"conectores_{acao}")
-    return texto.replace("catálogo do navegador", "catálogo `conectores` (grupo navegador)")
+    if catalogo_confirmado:
+        for acao in ("buscar_ferramentas", "carregar_ferramenta", "executar_ferramenta"):
+            texto = texto.replace(f"navegador_{acao}", f"conectores_{acao}")
+        return texto
+    # Os nomes do catálogo entram após montar as ferramentas reais do turno.
+    return "\n".join(
+        linha
+        if "navegador_buscar_ferramentas" not in linha
+        else "- Para as ações extras, use o catálogo disponível neste turno, no grupo navegador."
+        for linha in texto.splitlines()
+    )

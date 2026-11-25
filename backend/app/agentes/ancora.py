@@ -280,16 +280,29 @@ def _catalogo_revisado(
     )
 
     async def antes(ferramenta, argumentos) -> None:
-        # Sem id de chamada aqui: o hash dos argumentos faz a retomada achar o mesmo cartão.
+        from app.agentes.middleware.revisor import chamada_do_catalogo
+
+        # Mesmo conteúdo em duas chamadas distintas precisa de duas decisões.
         chamada = hashlib.sha1(
-            json.dumps([ferramenta.name, argumentos], sort_keys=True, default=str).encode()
+            json.dumps(
+                [contexto.thread_proprio, chamada_do_catalogo.get(), ferramenta.name, argumentos],
+                sort_keys=True,
+                default=str,
+            ).encode()
         ).hexdigest()
         metadados = getattr(ferramenta, "metadata", None) or {}
+        legado = None
+        if contexto.cartoes_retomados:
+            legado = hashlib.sha1(
+                json.dumps([ferramenta.name, argumentos], sort_keys=True, default=str).encode()
+            ).hexdigest()
         retorno = await conferir_acao(
             ferramenta.name,
             dict(argumentos),
             ferramenta_ctx,
             chamada_id=chamada,
+            chamada_legada=legado,
+            cartoes_retomados=contexto.cartoes_retomados,
             somente_leitura=metadados.get("somente_leitura"),
         )
         if retorno is not None:

@@ -40,9 +40,10 @@ def _ai(*chamadas: tuple[str, dict[str, Any], str], texto: str = "") -> AIMessag
 def _agente(roteiro: list[AIMessage], falados: list[str]):  # type: ignore[no-untyped-def]
     class Args(BaseModel):
         texto: str = Field(min_length=1)
+        final: bool = False
 
     @tool(args_schema=Args)
-    async def falar(texto: str) -> str:
+    async def falar(texto: str, final: bool = False) -> str:
         """Fala com o usuário."""
         falados.append(texto)
         return "Mensagem enviada ao usuário."
@@ -98,7 +99,7 @@ async def test_falas_diferentes_e_mesma_fala_em_outro_turno_continuam_saindo() -
         [
             _ai(("falar", {"texto": "Vou guardar."}, "c1")),
             _ai(("lembrar", {"fato": "x"}, "c2")),
-            _ai(("falar", {"texto": "Guardei."}, "c3")),
+            _ai(("falar", {"texto": "Guardei.", "final": True}, "c3")),
         ],
         falados,
     )

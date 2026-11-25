@@ -4,6 +4,22 @@ O backend só entrega a um agente as ferramentas listadas aqui para o papel
 dele ou em ``agentes.ferramentas`` (agente individual).
 """
 
+FERRAMENTAS_NAVEGADOR = (
+    "navegador_abrir",
+    "navegador_abas",
+    "navegador_fechar_aba",
+    "navegador_capturar",
+    "navegador_console",
+    "navegador_pedir_ajuda",
+    "navegador_observar",
+    "navegador_procurar",
+    "navegador_elemento",
+    "navegador_esperar",
+    "navegador_acao",
+    "navegador_tecla",
+    "navegador_lote",
+)
+
 FERRAMENTAS_POR_PAPEL: dict[str, list[str]] = {
     "sora": [
         "falar",
@@ -19,6 +35,7 @@ FERRAMENTAS_POR_PAPEL: dict[str, list[str]] = {
         # uma recusa (Faro-3, 2026-11-18).
         "buscar_web",
         "ler_pagina",
+        *FERRAMENTAS_NAVEGADOR,
     ],
     "pesquisador": ["buscar_web", "ler_pagina", "ler_anexo", "entregar"],
     "redator": ["ler_anexo", "escrever_arquivo", "entregar"],

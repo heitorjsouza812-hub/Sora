@@ -357,6 +357,22 @@ async def test_observar_le_papeis_nomes_estados_e_esconde_senha(pagina: Any) -> 
     assert 'texto: "A"' in completo or "texto:" in completo
 
 
+async def test_busca_devolve_ref_da_sugestao_que_chega_depois(pagina: Any) -> None:
+    await pagina.set_content("""
+        <input aria-label="Pesquisar" oninput="setTimeout(() => lista.hidden = false, 150)">
+        <div role="listbox" id="lista" hidden>
+          <button role="option" onclick="this.textContent='Artigo aberto'">Inventora</button>
+        </div>
+    """)
+    nav = NavegadorArvore(pagina)
+    refs = await _observar(nav)
+    r = await nav.agir(refs[("textbox", "Pesquisar")][0], "definir_valor", texto="Inven")
+    opcao = r.dados["sugestoes_visiveis"][0]
+    assert opcao["nome"] == "Inventora"
+    assert (await nav.agir(opcao["ref"], "clicar")).ok
+    assert await pagina.get_by_role("option").inner_text() == "Artigo aberto"
+
+
 async def test_formulario_de_ponta_a_ponta(pagina: Any) -> None:
     nav = NavegadorArvore(pagina, cursor=CursorAgente("#46E8A8", "Nina"))
     refs = await _observar(nav)

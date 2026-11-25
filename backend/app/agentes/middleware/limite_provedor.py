@@ -74,10 +74,23 @@ class MiddlewareLimiteDoProvedor(AgentMiddleware):
         pedido = request.override(messages=enxugar(list(request.messages), 1))
         espera_feita = 0
         malformadas = 0
+        repetiu_vazia = False
         nivel = 1
         while True:
             try:
                 resposta = await handler(pedido)
+                mensagens = getattr(resposta, "result", None) or [resposta]
+                ultima = mensagens[-1]
+                if (
+                    not repetiu_vazia
+                    and getattr(ultima, "type", None) == "ai"
+                    and not ultima.content
+                    and not ultima.tool_calls
+                    and not ultima.invalid_tool_calls
+                ):
+                    repetiu_vazia = True
+                    registro.warning("resposta do modelo sem texto nem ação; repetindo uma vez")
+                    continue
                 if _so_chamadas_invalidas(resposta) and malformadas < TENTATIVAS_CHAMADA_MALFORMADA:
                     # JSON quebrado nos argumentos: o LangChain põe a chamada em
                     # ``invalid_tool_calls`` e o turno acabava mudo (sem ferramenta e sem texto).

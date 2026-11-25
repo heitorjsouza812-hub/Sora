@@ -320,7 +320,6 @@ async def _turno_real(
         tarefa_canal_id=tarefa.id,
         revisao_canal=revisao,
         ferramentas_extras=extras,
-        valores_do_prompt={"perfil_do_agente": pacote},
         thread_proprio=thread,
     )
 

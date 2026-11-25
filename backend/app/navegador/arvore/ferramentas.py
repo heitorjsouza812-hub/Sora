@@ -225,8 +225,15 @@ def _cortar(texto: str, limite: int) -> str:
     return texto[:limite] + "\n… (resposta cortada; use esqueleto, raiz ou navegador_procurar)"
 
 
-def para_modelo(resposta: Resposta, limite: int = LIMITE_RESULTADO_CARACTERES) -> str:
+def para_modelo(
+    resposta: Resposta,
+    limite: int = LIMITE_RESULTADO_CARACTERES,
+    *,
+    pedido: BaseModel | None = None,
+) -> str:
     """Texto compacto (vai dentro da cerca ``<dado_externo>``): árvore em linhas, o resto JSON."""
+    if isinstance(pedido, NavegadorObservar) and pedido.compacto and not pedido.raiz:
+        limite = min(limite, 3_000)
     if not resposta.ok:
         assert resposta.erro is not None
         erro = resposta.erro.para_json()
@@ -361,4 +368,5 @@ class ServicoArvore:
     async def executar_para_modelo(
         self, nome: str, args: BaseModel, contexto: ContextoFerramenta
     ) -> str:
-        return para_modelo(await self.executar(nome, args, contexto))
+        resposta = await self.executar(nome, args, contexto)
+        return para_modelo(resposta, pedido=args)

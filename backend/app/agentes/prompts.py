@@ -21,7 +21,8 @@ _CHAVE = re.compile(r"\{([a-z_][a-z0-9_]*)\}")
 _TAG_DA_CERCA = re.compile(r"<(/?)(dado_externo)", re.IGNORECASE)
 
 VERSOES: dict[str, int] = {
-    "sora_base": 1,
+    "sora_base": 2,
+    "bot_de_grupo": 1,
     "rotina_sem_supervisao": 1,
     "sistema1": 1,
     "planejador": 1,
@@ -35,18 +36,18 @@ VERSOES: dict[str, int] = {
     "memoria_sintese": 1,
     "memoria_verificacao": 1,
     "aprender_correcoes": 1,  # Onda 3: aprender com correções (app/memoria/aprendizado.py)
-    "lembrete_inicio_turno": 1,
+    "lembrete_inicio_turno": 2,
     "lembrete_silencio": 1,
-    "lembrete_entrega": 1,
+    "lembrete_entrega": 2,
     "cerca_dado_externo": 1,
     "aviso_dado_externo": 1,
     # Adaptados do Rakazo (docs/referencias/rakazo.md):
     "compactacao_historico": 1,
     "juiz_rapido": 1,
     # Navegador por árvore, adaptado do agent-desktop (docs/referencias/agent-desktop.md):
-    "navegador_arvore": 1,
+    "navegador_arvore": 2,
     # Computador do usuário (C3, Vela-12): o caminho rápido e conferir antes de dizer que fez.
-    "computador_pc": 1,
+    "computador_pc": 2,
 }
 """Versão em uso de cada prompt; o arquivo é ``{nome}.v{versao}.md``."""
 

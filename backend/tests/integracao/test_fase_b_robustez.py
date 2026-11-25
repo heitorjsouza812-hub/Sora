@@ -215,9 +215,19 @@ async def _fluxo_sse(completacao: dict[str, Any]) -> AsyncIterator[str]:
     if mensagem.get("content"):
         delta["content"] = mensagem["content"]
     if mensagem.get("tool_calls"):
-        delta["tool_calls"] = [{"index": i, **c} for i, c in enumerate(mensagem["tool_calls"])]
+        delta["tool_calls"] = [
+            {**c, "index": i, "function": {**c["function"], "arguments": ""}}
+            for i, c in enumerate(mensagem["tool_calls"])
+        ]
     primeiro = {**base, "choices": [{"index": 0, "delta": delta, "finish_reason": None}]}
     yield "data: " + json.dumps(primeiro) + "\n\n"
+    for i, chamada in enumerate(mensagem.get("tool_calls", [])):
+        argumentos = chamada["function"]["arguments"]
+        meio = len(argumentos) // 2
+        for parte in (argumentos[:meio], argumentos[meio:]):
+            fragmento = {"index": i, "function": {"arguments": parte}}
+            escolha_parcial = {"index": 0, "delta": {"tool_calls": [fragmento]}}
+            yield "data: " + json.dumps({**base, "choices": [escolha_parcial]}) + "\n\n"
     ultimo = {
         **base,
         "choices": [{"index": 0, "delta": {}, "finish_reason": escolha["finish_reason"]}],
@@ -753,6 +763,17 @@ async def test_aprovacao_fora_de_cadeia_retoma_a_conversa(ambiente_http: Ambient
     async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
         auth, usuario_id = await usuario_com_modelo_http(amb, cliente, "aprova-sora@exemplo.com")
         cartao = await _aprovacao_da_sora(amb, usuario_id)
+        # Enquanto decide, o usuário já escreveu outra mensagem. O cartão ainda pertence
+        # ao primeiro pedido. A mensagem seguinte não tem checkpoint nem deve ser executada.
+        async with amb.fabrica() as sessao:
+            sessao.add(
+                Mensagem(
+                    conversa_id=UUID(cartao.acao["conversa_id"]),
+                    autor=AutorMensagem.USUARIO,
+                    conteudo="Um segundo pedido independente.",
+                )
+            )
+            await sessao.commit()
         resposta = await cliente.post(
             f"/v1/aprovacoes/{cartao.id}/decidir",
             headers=auth,
@@ -771,6 +792,45 @@ async def test_aprovacao_fora_de_cadeia_retoma_a_conversa(ambiente_http: Ambient
                 ) == "Responder em tom formal."
 
         await esperar(mudou, "a conversa não retomou e não aplicou as instruções")
+
+
+async def test_ferramentas_dependentes_com_aviso_no_meio(ambiente_http: AmbienteHttp) -> None:
+    import re
+
+    amb = ambiente_http
+    usadas = []
+
+    def roteiro(corpo, n):
+        resultados = {
+            m["tool_call_id"]: m["content"] for m in corpo["messages"] if m["role"] == "tool"
+        }
+        if "call-adicionar_pendencia" not in resultados:
+            return completar_ferramenta("adicionar_pendencia", {"titulo": "Conferir estoque"})
+        if "call-falar" not in resultados:
+            return completar_ferramenta("falar", {"texto": "Anotei a pendência. Vou concluí-la."})
+        if "call-concluir_pendencia" not in resultados:
+            identificador = re.search(r"[0-9a-f-]{36}", resultados["call-adicionar_pendencia"])
+            assert identificador
+            usadas.append(identificador[0])
+            return completar_ferramenta("concluir_pendencia", {"pendencia_id": identificador[0]})
+        return completar_texto("Estoque conferido.")
+
+    amb.provedor.responder = roteiro
+    async with httpx.AsyncClient(base_url=amb.url_api, timeout=60) as cliente:
+        _, uid = await usuario_com_modelo_http(amb, cliente, "duas-ferramentas@exemplo.com")
+        cid, mid = await _conversa_com_pedido(amb, uid, "Anote e conclua a pendência.")
+        await _enfileirar(amb.url_redis, "responder_direto", str(mid))
+
+        async def terminou():
+            async with amb.fabrica() as sessao:
+                return await sessao.scalar(
+                    select(Mensagem.id).where(
+                        Mensagem.conversa_id == cid, Mensagem.conteudo == "Estoque conferido."
+                    )
+                )
+
+        await esperar(terminou, "faltou a entrega depois da segunda ferramenta")
+        assert len(usadas) == 1
 
 
 async def test_aprovacao_expirada_nega_e_retoma(ambiente_http: AmbienteHttp) -> None:

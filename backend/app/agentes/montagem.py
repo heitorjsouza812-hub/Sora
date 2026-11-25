@@ -18,6 +18,8 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
+from app.ferramentas.permissoes import FERRAMENTAS_NAVEGADOR
+
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
     from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -30,22 +32,6 @@ registro = logging.getLogger(__name__)
 PapelAgente = Literal[
     "sora", "pesquisador", "redator", "designer", "verificador", "individual", "canal"
 ]
-
-FERRAMENTAS_NAVEGADOR = (
-    "navegador_abrir",
-    "navegador_abas",
-    "navegador_fechar_aba",
-    "navegador_capturar",
-    "navegador_console",
-    "navegador_pedir_ajuda",
-    "navegador_observar",
-    "navegador_procurar",
-    "navegador_elemento",
-    "navegador_esperar",
-    "navegador_acao",
-    "navegador_tecla",
-    "navegador_lote",
-)
 
 FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
     "sora": (
@@ -62,6 +48,7 @@ FERRAMENTAS_POR_PAPEL: dict[PapelAgente, tuple[str, ...]] = {
         # (Faro-3, 2026-11-18). Mesma lista de ``app/ferramentas/permissoes.py``.
         "buscar_web",
         "ler_pagina",
+        *FERRAMENTAS_NAVEGADOR,
     ),
     "pesquisador": ("buscar_web", "ler_pagina", "ler_anexo", *FERRAMENTAS_NAVEGADOR, "entregar"),
     "redator": ("ler_anexo", "escrever_arquivo", "entregar"),
@@ -128,6 +115,9 @@ class ContextoAgente:
     ferramentas_do_bot: list[str] | None = None
     """``agentes.ferramentas`` do bot de conversa 1:1: só elas (e o essencial) vão direto no
     pedido ao modelo; o resto fica no catálogo (``ferramentas_do_turno.py``)."""
+    superficie: str | None = None
+    """Interface que o usuário pediu para operar. As outras ferramentas ficam no catálogo."""
+    cartoes_retomados: set[str] = field(default_factory=set)
     modelo_enxerga: Callable[[Any], bool] | None = None
     """Só para bots com ``computador_*`` (``app/computador/visao.py``): diz se o modelo de uma
     chamada tem visão. Com ele o middleware anexa a última captura da tela à chamada."""
@@ -164,16 +154,12 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
         # Rotina: não há ``falar`` (nem ninguém para ouvir). O prompt da Sora manda "sempre falar"
         # e o agente ficava chamando uma ferramenta que não existe até estourar o limite.
         prompt = carregar_prompt("rotina_sem_supervisao")
-    elif contexto.papel in {"sora", "individual", "canal"}:
+    elif contexto.papel == "canal":
+        prompt = carregar_prompt("bot_de_grupo")
+    elif contexto.papel in {"sora", "individual"}:
         padroes = {
             "idioma": "pt-BR",
-            "perfil_do_agente": (
-                "Sora"
-                if contexto.papel == "sora"
-                else "Agente trabalhando em um canal de equipe"
-                if contexto.papel == "canal"
-                else "Agente individual"
-            ),
+            "perfil_do_agente": ("Sora" if contexto.papel == "sora" else "Agente individual"),
             "data_hora": "não informada",
             "fuso": "America/Sao_Paulo",
             "memorias_relevantes": "nenhuma",
@@ -193,7 +179,7 @@ def montar_prompt_de_sistema(contexto: ContextoAgente) -> str:
     if any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes):
         from app.agentes.ferramentas_do_turno import prompt_do_navegador
 
-        instrucoes += "\n\n" + prompt_do_navegador(contexto.papel)
+        instrucoes += "\n\n" + prompt_do_navegador(contexto.papel, catalogo_confirmado=False)
     elif any(nome in FERRAMENTAS_NAVEGADOR for nome in nomes_escondidos(todos, contexto)):
         instrucoes += "\n\nNavegador no catalogo conectores: carregue o esquema antes de usar."
     if "computador_agir" in nomes:
@@ -377,6 +363,15 @@ async def rodar_etapa(
     )
     configuracao = {"configurable": {"thread_id": thread_id}}
     chamada = Command(resume=resposta) if resposta is not None else entrada
+    if resposta is not None:
+        estado = await agente.aget_state(configuracao)
+        contexto.cartoes_retomados = {
+            str(p.value["aprovacao_id"])
+            for p in estado.interrupts
+            if isinstance(p.value, dict)
+            and p.value.get("aprovacao_id")
+            and (not isinstance(resposta, dict) or p.id in resposta)
+        }
     if continuar_se_parou:
         estado = await agente.aget_state(configuracao)
         if estado.next and not getattr(estado, "interrupts", ()):

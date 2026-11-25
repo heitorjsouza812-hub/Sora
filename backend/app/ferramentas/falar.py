@@ -26,9 +26,10 @@ MAX_ANEXOS = 10
 
 
 class Falar(BaseModel):
-    """Manda uma mensagem ao usuário. Só o que passa por aqui chega a ele."""
+    """Manda uma mensagem ao usuário. Um aviso intermediário permite continuar a tarefa."""
 
     texto: str = Field(min_length=1)
+    final: bool = Field(default=False, description="Encerra o turno com o resultado ou bloqueio.")
     anexos: list[UUID] | None = None
     responde_a: UUID | None = None
 

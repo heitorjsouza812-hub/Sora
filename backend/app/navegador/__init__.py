@@ -186,7 +186,7 @@ def conferir_ref(ref: str, geracao_atual: int) -> None:
 
 
 class NavegadorAbrir(BaseModel):
-    """Abre um endereço e devolve o texto e os elementos da página."""
+    """Abre a URL em uma aba. Observe a aba para obter as refs."""
 
     url: str = Field(min_length=8, max_length=2_000)
 

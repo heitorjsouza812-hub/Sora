@@ -662,10 +662,16 @@ class NavegadorArvore:
                     return no_iframe
             if not dados["total"]:
                 dados["url"] = bruto.get("url") or self._pagina.url
+                superficies = await self._superficies()
                 dados["dica"] = (
                     "Nada com isso nesta página. A busca já ignora maiúsculas e acentos e aceita "
                     "trecho: confira se está na página certa (url) ou leia com navegador_observar."
                 )
+                if any(s.get("papel") == "listbox" for s in superficies or []):
+                    dados["dica"] = (
+                        "A lista de sugestões está aberta. Procure papel=option com o nome "
+                        "do resultado desejado e clique na ref encontrada."
+                    )
             return dados
 
         return await self._executar("procurar", args, corpo)
@@ -767,6 +773,25 @@ class NavegadorArvore:
                     quantidade=quantidade, destino=destino, prazo_ms=prazo_ms,
                 )  # fmt: skip
             await self._esperar_depois(dados, esperar_por, esperar_sumir, prazo_espera_ms)
+            if acao in {"definir_valor", "digitar"} and not dados.get("_senha"):
+                estado = dados.get("estado_depois") or {}
+                busca = estado.get("papel") in {"searchbox", "combobox"} or any(
+                    p in str(estado.get("nome") or "").casefold()
+                    for p in ("pesquis", "busca", "search")
+                )
+                if busca:
+                    # A lista pode chegar pela rede depois da confirmação do valor no campo.
+                    with contextlib.suppress(Exception):
+                        destino_da_busca = self._quadro or self._pagina
+                        await destino_da_busca.get_by_role("option").first.wait_for(
+                            state="visible", timeout=1200
+                        )
+                        opcoes = await self.procurar(papel="option", limite=6)
+                        if opcoes.ok and opcoes.dados.get("total"):
+                            dados = {
+                                "sugestoes_visiveis": opcoes.dados["correspondencias"],
+                                **dados,
+                            }
             return dados
 
         return await self._executar("agir", args, corpo)

@@ -9,13 +9,15 @@ worker fala por ele. Termina com ``sugestoes``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 from uuid import UUID, uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
+from app.agentes.ferramentas_do_turno import superficie_do_pedido
 from app.eventos.streams import publicar_evento
 from app.eventos.tipos import SugestoesEvento
 from app.filas import FilaAgente, OrigemItem
@@ -23,6 +25,7 @@ from app.filas.sql import ArmazemFilaSQL
 from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
 from app.modelos.enumeracoes import AutorMensagem, TipoAgente
 from app.modelos.tabelas import Agente, Conversa, Mensagem
+from app.orquestrador.modelos import SemModeloDisponivel
 from app.preferencias_conversa import (
     ModeloEscolhidoIndisponivel,
     escolha_efetiva,
@@ -194,6 +197,8 @@ async def _responder_direto_sem_fila(
             )
         except ModeloEscolhidoIndisponivel as erro:
             indisponivel = str(erro)
+        except SemModeloDisponivel:
+            indisponivel = "Conecte um modelo com ferramentas em Configurações → Modelos de IA."
         else:
             indisponivel = None
         antes = await _falas_do_bot(sessao, conversa_id)
@@ -225,6 +230,8 @@ async def _responder_direto_sem_fila(
         agente_id=agente_id,
         conversa_id=conversa_id,
         papel=papel,
+        superficie=superficie_do_pedido(texto),
+        valores_do_prompt={"perfil_do_agente": agente.papel} if papel == "individual" else {},
         ferramentas_do_bot=list(agente.ferramentas or []),
         ferramentas_extras=list(agente.ferramentas or []),
         # Item sem mensagem (Repetir): thread só dele. Na thread da conversa cada execução
@@ -333,12 +340,32 @@ async def _falas_do_bot(sessao: Any, conversa_id: Any) -> int:
     return int(total or 0)
 
 
-async def _ja_falou_neste_turno(ctx: dict[str, Any], conversa_id: Any, antes: int | None) -> bool:
-    if antes is None:
-        return False
-    async with ctx["sessoes"]() as sessao:
-        depois = await _falas_do_bot(sessao, conversa_id)
-    return depois > antes
+async def _ultima_etapa(ctx: dict[str, Any], contexto: Any) -> str:
+    from app.ferramentas.rotulos import NOME_EXIBIDO
+
+    thread = getattr(contexto, "thread_proprio", None)
+    if thread and ctx.get("checkpointer"):
+        try:
+            estado = await ctx["checkpointer"].aget({"configurable": {"thread_id": thread}})
+        except Exception:
+            registro.warning("Última etapa indisponível ao relatar uma falha do turno")
+            return ""
+        mensagens = (estado or {}).get("channel_values", {}).get("messages", ())
+        for m in reversed(mensagens):
+            if isinstance(m, HumanMessage):
+                break
+            if isinstance(m, ToolMessage) and m.name and m.name != "falar":
+                etapa = {
+                    "navegador_abrir": "abrir a página",
+                    "navegador_observar": "ler os elementos da página",
+                    "navegador_procurar": "localizar um elemento na página",
+                    "navegador_acao": "agir no elemento da página",
+                    "computador_abrir_programa": "abrir o programa",
+                    "computador_agir": "executar a ação no computador",
+                }.get(m.name, NOME_EXIBIDO.get(m.name))
+                if etapa:
+                    return f"Última etapa com retorno: {etapa}. "
+    return ""
 
 
 async def _pedido_de_equipe(contexto: Any, entrada: dict[str, Any] | None) -> tuple[str, int]:
@@ -395,13 +422,15 @@ async def _rodar_e_falar(
             antes = await _falas_do_bot(sessao, contexto.conversa_id)
     marca = await _abrir_turno_vivo(contexto.conversa_id)
     try:
-        resultado = await montar_e_rodar_agente(
-            contexto=contexto,
-            modelos=modelos,
-            checkpointer=ctx["checkpointer"],
-            entrada=entrada,
-            resposta=resposta,
-        )
+        # O ARQ cancela o job aos 360 s. Reserve tempo para fechar o turno e avisar pelo SSE.
+        async with asyncio.timeout(285):
+            resultado = await montar_e_rodar_agente(
+                contexto=contexto,
+                modelos=modelos,
+                checkpointer=ctx["checkpointer"],
+                entrada=entrada,
+                resposta=resposta,
+            )
     except Exception as erro:
         await _fechar_turno_vivo(contexto.conversa_id, marca)
         from app.agentes.middleware.cancelamento import CadeiaCancelada
@@ -410,24 +439,20 @@ async def _rodar_e_falar(
             return
         from app.llm.limite import mensagem_de_limite
 
-        registro.exception("o agente da conversa %s falhou", contexto.conversa_id)
-        if await _ja_falou_neste_turno(ctx, contexto.conversa_id, antes):
-            # O usuário já tem a resposta: um aviso de falha agora a contradiria. Fica no log.
-            registro.warning(
-                "falha depois da resposta; sem aviso ao usuário (%s)", type(erro).__name__
-            )
-        else:
-            from app.agentes.middleware.limites import (
-                MENSAGEM_LIMITE_DE_PASSOS,
-                estourou_limite_de_passos,
-            )
+        registro.warning("Conversa %s: %s", contexto.conversa_id, type(erro).__name__)
+        from app.agentes.middleware.limites import (
+            MENSAGEM_LIMITE_DE_PASSOS,
+            estourou_limite_de_passos,
+        )
 
-            texto = (
-                MENSAGEM_LIMITE_DE_PASSOS
-                if estourou_limite_de_passos(erro)
-                else texto_da_falha(modelos, erro) or mensagem_de_limite(erro) or MENSAGEM_FALHA
-            )
-            await falar(Falar(texto=texto), ferramenta)
+        texto = (
+            MENSAGEM_LIMITE_DE_PASSOS
+            if estourou_limite_de_passos(erro)
+            else texto_da_falha(modelos, erro) or mensagem_de_limite(erro) or MENSAGEM_FALHA
+        )
+        if isinstance(erro, TimeoutError):
+            texto = "O tempo deste turno acabou antes de eu conseguir concluir o pedido."
+        await falar(Falar(texto=await _ultima_etapa(ctx, contexto) + texto), ferramenta)
         await _cartao_de_seguranca(ferramenta, pedido_de_equipe, cartoes_antes)
         await publicar_evento(
             ctx["redis_eventos"],
@@ -460,11 +485,7 @@ async def _rodar_e_falar(
                 await falar(Falar(texto=texto), ferramenta)
             finally:
                 fontes_do_turno.reset(token)
-        elif (
-            antes is not None
-            and depois == antes
-            and not any(isinstance(m, ToolMessage) for m in resultado.get("messages", []))
-        ):
+        elif depois == antes and not texto:
             # Nem texto nem ferramenta: um provedor que ignora ``stream`` ou devolve vazio deixaria
             # a conversa muda. O usuário recebe o aviso e pode tentar de novo.
             registro.warning(
@@ -503,6 +524,42 @@ async def _talvez_aprender(ctx: dict[str, Any], contexto: Any) -> None:
 async def retomar_conversa(ctx: dict[str, Any], conversa_id: str, resposta: Any) -> None:
     """Retoma o agente de uma conversa fora de cadeia (Sora ou agente individual) depois que o
     usuário respondeu uma pergunta ou decidiu uma aprovação. Quem põe na fila: a API."""
+    from app.agentes.checkpointer import pausa_da_conversa
+
+    if not isinstance(resposta, dict):
+        return
+    cartao = resposta.get("aprovacao_id") or resposta.get("pergunta_id")
+    if not cartao:
+        return
+    async with ctx["sessoes"]() as trava:
+        # Serializa decisões de cartões paralelos da mesma conversa, inclusive jobs repetidos.
+        await trava.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:chave, 0))"),
+            {"chave": f"retomar:{conversa_id}"},
+        )
+        for tentativa in range(12):
+            pausa = await pausa_da_conversa(
+                trava, ctx["checkpointer"], UUID(conversa_id), str(cartao)
+            )
+            if pausa:
+                thread, interrupcao = pausa
+                await _retomar_pedido(ctx, conversa_id, resposta, thread, interrupcao)
+                return
+            # O usuário pode decidir no intervalo entre a emissão do cartão e o checkpoint.
+            if tentativa < 11:
+                await asyncio.sleep(0.25)
+        registro.info("Cartão sem interrupção pendente na conversa %s", conversa_id)
+    if 0 < ctx.get("job_try", 0) < 3:
+        # O cartão pode ter sido decidido enquanto o worker ainda gravava o checkpoint.
+        # Um job duplicado só consulta o estado e termina sem executar o efeito.
+        from arq import Retry
+
+        raise Retry(defer=3)
+
+
+async def _retomar_pedido(
+    ctx: dict[str, Any], conversa_id: str, resposta: Any, thread: str, interrupcao: str
+) -> None:
     from app.agentes import ContextoAgente
     from app.orquestrador.modelos import modelos_do_papel
     from workers.cadeia import dependencias_da_etapa, valor_da_retomada
@@ -528,40 +585,45 @@ async def retomar_conversa(ctx: dict[str, Any], conversa_id: str, resposta: Any)
                 conversa_privada=conversa.privada,
                 escolha=escolha,
             )
-        except ModeloEscolhidoIndisponivel as erro:
+        except (ModeloEscolhidoIndisponivel, SemModeloDisponivel) as erro:
             from app.ferramentas.base import ContextoFerramenta
             from app.ferramentas.falar import Falar, falar
 
             usuario_id, agente_id = conversa.usuario_id, agente.id
             await sessao.commit()
             await falar(
-                Falar(texto=str(erro)),
+                Falar(
+                    texto=(
+                        "Conecte um modelo com ferramentas em Configurações → Modelos de IA."
+                        if isinstance(erro, SemModeloDisponivel)
+                        else str(erro)
+                    )
+                ),
                 ContextoFerramenta(
                     usuario_id=usuario_id, agente_id=agente_id, conversa_id=UUID(conversa_id)
                 ),
             )
             return
         usuario_id, agente_id = conversa.usuario_id, agente.id
-        pedido_id = await sessao.scalar(
-            select(Mensagem.id)
-            .where(
-                Mensagem.conversa_id == conversa.id,
-                Mensagem.autor == AutorMensagem.USUARIO,
-                Mensagem.visivel.is_(True),
-            )
-            .order_by(Mensagem.criada_em.desc(), Mensagem.id.desc())
-            .limit(1)
+        pedido = (
+            await sessao.get(Mensagem, UUID(thread.rsplit(":", 1)[-1]))
+            if ":pedido:" in thread
+            else None
         )
+        if pedido is not None and (not pedido.visivel or pedido.estado == "interrompida"):
+            return
     contexto = ContextoAgente(
         usuario_id=usuario_id,
         agente_id=agente_id,
         conversa_id=UUID(conversa_id),
         papel=papel,
+        superficie=superficie_do_pedido(pedido.conteudo) if pedido else None,
+        valores_do_prompt={"perfil_do_agente": agente.papel} if papel == "individual" else {},
         ferramentas_do_bot=list(agente.ferramentas or []),
         ferramentas_extras=list(agente.ferramentas or []),
-        thread_proprio=f"conversa:{conversa_id}:pedido:{pedido_id}",
+        thread_proprio=thread,
         dependencias=dependencias_da_etapa(
             ctx, usuario_id=usuario_id, conversa_id=UUID(conversa_id)
         ),
     )
-    await _rodar_e_falar(ctx, contexto, modelos, antes=None, resposta=valor)
+    await _rodar_e_falar(ctx, contexto, modelos, antes=None, resposta={interrupcao: valor})

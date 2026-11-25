@@ -341,6 +341,8 @@ async def conferir_acao(
     contexto: ContextoFerramenta,
     *,
     chamada_id: str,
+    chamada_legada: str | None = None,
+    cartoes_retomados: set[str] | None = None,
     somente_leitura: bool | None = None,
 ) -> str | None:
     """``None`` = pode rodar. Texto = resultado que volta ao modelo no lugar da ferramenta."""
@@ -364,6 +366,10 @@ async def conferir_acao(
     acao = acao_do_cartao(nome, proposta, contexto, chamada_id)
     resumo = rotulo_do_passo(nome, argumentos)
     existente = await _cartao_existente(contexto, acao)
+    if existente is None and chamada_legada and cartoes_retomados:
+        anterior = await _cartao_existente(contexto, {**acao, "chamada_id": chamada_legada})
+        if anterior and str(anterior[0]) in cartoes_retomados:
+            existente = anterior
     avaliacao: dict[str, Any] = {"modelo_revisor": False, "dano": "baixo"}
     dano = (
         "Muda algo na sua conta."
@@ -437,5 +443,34 @@ async def conferir_acao(
         decisao = DecisaoAprovacao.NEGAR
     if str(decisao) in (DecisaoAprovacao.NEGAR.value, StatusAprovacao.NEGADA.value, "expirada"):
         return NEGADO
-    await _registrar(contexto, proposta, resumo, aprovacao_id)
+    from app.revisor.decisoes import e_envio
+
+    if e_envio(acao):
+        from app.modelos.tabelas import RegistroAcao
+        from app.revisor.acoes import registrar_acao
+
+        # A reserva é confirmada antes da chamada externa. Se o destino recebeu o envio e
+        # a resposta se perdeu, uma repetição deste job não envia de novo.
+        async with abrir_sessao() as sessao:
+            decisao_gravada = await sessao.scalar(
+                select(Aprovacao.status).where(Aprovacao.id == aprovacao_id).with_for_update()
+            )
+            if decisao_gravada != StatusAprovacao.PERMITIDA:
+                return NEGADO
+            usado = await sessao.scalar(
+                select(RegistroAcao.id).where(RegistroAcao.aprovacao_id == aprovacao_id).limit(1)
+            )
+            if usado:
+                return "Esta aprovação de envio já foi usada. Confira o destino antes de continuar."
+            await registrar_acao(
+                sessao,
+                contexto.usuario_id,
+                contexto.agente_id,
+                contexto.etapa_id,
+                proposta,
+                resumo,
+                aprovacao_id,
+            )
+    else:
+        await _registrar(contexto, proposta, resumo, aprovacao_id)
     return None

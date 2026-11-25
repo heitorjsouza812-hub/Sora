@@ -47,6 +47,37 @@ def thread_da_conversa(conversa_id: UUID) -> str:
     return f"conversa:{conversa_id}"
 
 
+async def pausa_da_conversa(
+    sessao, saver, conversa_id: UUID, cartao: str
+) -> tuple[str, str] | None:
+    """Localiza o interrupt do cartão no checkpoint atual, inclusive de turnos anteriores."""
+    from sqlalchemy import text
+
+    base = thread_da_conversa(conversa_id)
+    threads = await sessao.scalars(
+        text(
+            "SELECT DISTINCT w.thread_id FROM checkpoint_writes w "
+            "WHERE (w.thread_id = :base OR w.thread_id LIKE :pedidos) "
+            "AND w.checkpoint_ns = '' AND w.channel = '__interrupt__' "
+            "AND w.checkpoint_id = (SELECT max(c.checkpoint_id) FROM checkpoints c "
+            "WHERE c.thread_id = w.thread_id AND c.checkpoint_ns = '')"
+        ),
+        {"base": base, "pedidos": f"{base}:pedido:%"},
+    )
+    for thread in threads:
+        checkpoint = await saver.aget_tuple({"configurable": {"thread_id": thread}})
+        for _, canal, pausas in checkpoint.pending_writes if checkpoint else ():
+            if canal == "__interrupt__":
+                for pausa in pausas:
+                    valor = pausa.value
+                    if isinstance(valor, dict) and cartao in (
+                        valor.get("aprovacao_id"),
+                        valor.get("pergunta_id"),
+                    ):
+                        return thread, pausa.id
+    return None
+
+
 async def abrir_checkpointer(
     database_url: str, *, tamanho_do_pool: int = TAMANHO_DO_POOL
 ) -> AsyncPostgresSaver:

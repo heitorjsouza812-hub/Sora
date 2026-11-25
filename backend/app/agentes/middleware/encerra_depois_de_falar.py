@@ -3,9 +3,7 @@
 Sem isto, depois de cada ``falar`` o modelo é chamado de novo só para dizer "pronto": num
 plano com limite de tokens por minuto isso custa chamadas à toa (7 para guardar uma memória).
 
-Regra: o turno termina depois de um ``falar`` que veio **sozinho** na chamada do modelo e que
-**não é o primeiro passo do turno** (já houve outra ferramenta ou outro ``falar`` antes). O
-primeiro ``falar`` sozinho é aviso ("vou guardar...") e o agente segue para a ferramenta.
+O modelo indica a entrega com falar(final=True). Um aviso entre duas ações permite continuar.
 """
 
 from __future__ import annotations
@@ -13,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware, hook_config
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 
 def deve_encerrar(mensagens: list[Any]) -> bool:
@@ -35,14 +33,11 @@ def deve_encerrar(mensagens: list[Any]) -> bool:
     if any(m.content == JA_ENVIADA for m in mensagens[inicio:]):
         # O modelo repetiu uma fala já enviada (``fala_unica.py``): não há mais o que dizer.
         return True
-    # Há algo de ferramenta antes dela neste turno (desde a última mensagem do usuário)?
-    anteriores = mensagens[: inicio - 1]
-    for mensagem in reversed(anteriores):
-        if isinstance(mensagem, HumanMessage):
-            return False
-        if isinstance(mensagem, ToolMessage):
-            return True
-    return False
+    return (
+        len(chamada.tool_calls) == 1
+        and chamada.tool_calls[0]["args"].get("final") is True
+        and all(m.status == "success" for m in mensagens[inicio:])
+    )
 
 
 class MiddlewareEncerraDepoisDeFalar(AgentMiddleware):

@@ -477,7 +477,7 @@ class AmbienteNavegador:
             await self.repositorio.salvar_aba(aba)
             await self.publicar_aba(aba, contexto)
             saida: dict[str, Any] = {
-                "resumo": para_modelo(resposta),
+                "resumo": para_modelo(resposta, pedido=args),
                 "url": aba.url,
                 "titulo": aba.titulo,
             }

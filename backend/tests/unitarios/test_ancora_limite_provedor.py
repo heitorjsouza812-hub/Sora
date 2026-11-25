@@ -138,6 +138,13 @@ async def _rodar(modelos, middleware, ferramentas=()):
     return await agente.ainvoke({"messages": [HumanMessage("oi")]})
 
 
+async def test_resposta_vazia_repete_uma_vez(groq) -> None:
+    principal = groq([_resposta(""), _resposta("12")])
+    resultado = await _rodar([_modelo(principal.url)], [MiddlewareLimiteDoProvedor()])
+    assert resultado["messages"][-1].content == "12"
+    assert len(principal.corpos) == 2
+
+
 async def test_429_com_retry_after_espera_e_repete_o_mesmo_modelo(groq) -> None:
     principal = groq(
         [
@@ -357,6 +364,8 @@ def test_falar_sozinho_depois_de_ferramenta_encerra_o_turno() -> None:
         chamada("falar", "3"),
         ToolMessage("ok", name="falar", tool_call_id="3"),
     ]
+    assert deve_encerrar(relato) is False  # aviso entre duas ações
+    relato[-2].tool_calls[0]["args"]["final"] = True
     assert deve_encerrar(relato) is True
     assert deve_encerrar(relato[:-2]) is False  # acabou de voltar a ferramenta: fala ainda
 
