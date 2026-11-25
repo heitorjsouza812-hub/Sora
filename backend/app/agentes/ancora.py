@@ -209,13 +209,17 @@ def catalogo_dos_conectores(conectores: list, contexto: ContextoAgente) -> list:
 
 def catalogo_enxuto(escondidas: list, conectores: list, contexto: ContextoAgente) -> list:
     """Um só catálogo (``conectores_*``) para o que o turno não manda direto ao modelo: navegador,
-    histórico, pendências, habilidades, colegas… e os conectores MCP. Cada ferramenta ganha o
-    grupo pelo nome; a cláusula de uso dela vai junto do esquema, na primeira carga."""
+    histórico, pendências, habilidades, colegas… e os conectores MCP acima do limite direto.
+    Cada ferramenta ganha o grupo pelo nome; a cláusula de uso dela vai junto do esquema."""
     from app.agentes.ferramentas_do_turno import grupo_da_escondida, prompt_do_navegador
     from app.agentes.instrucoes import POR_FERRAMENTA
+    from app.ferramentas.catalogo_preguicoso import LIMITE_DIRETO
 
     if not escondidas:
         return catalogo_dos_conectores(conectores, contexto)
+    conectores_diretos = []
+    if len(conectores) <= LIMITE_DIRETO:
+        conectores_diretos, conectores = conectores, []
     for ferramenta in escondidas:
         metadados = dict(getattr(ferramenta, "metadata", None) or {})
         metadados["grupo"] = grupo_da_escondida(ferramenta.name)
@@ -229,7 +233,7 @@ def catalogo_enxuto(escondidas: list, conectores: list, contexto: ContextoAgente
     }
     if any(f.name.startswith("navegador_") for f in escondidas):
         guias["navegador"] = prompt_do_navegador(contexto.papel)
-    return _catalogo_revisado(
+    return conectores_diretos + _catalogo_revisado(
         [*escondidas, *conectores],
         contexto,
         "conectores",
