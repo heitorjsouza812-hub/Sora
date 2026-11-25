@@ -95,12 +95,23 @@ async def modelos_do_papel(
     from app.seletor.repositorio import config_do_provedor, contexto_do_usuario
     from app.seletor.seletor import escolher_modelos
 
+    precisa = frozenset(precisa)
     nome = _PAPEL_DO_SELETOR.get(papel, papel)
     contexto = await contexto_do_usuario(sessao, usuario_id, conversa_privada=conversa_privada)
     fixo = escolha is not None and escolha.modelo_fixo
     if fixo:
         assert escolha is not None
         escolhido = _candidato_escolhido(contexto, escolha, conversa_privada)
+        if (
+            Capacidade.FERRAMENTAS in precisa
+            and Capacidade.FERRAMENTAS not in escolhido.capacidades
+        ):
+            from app.preferencias_conversa import SUGESTAO_DE_TROCA, ModeloEscolhidoIndisponivel
+
+            raise ModeloEscolhidoIndisponivel(
+                f"O modelo {escolhido.modelo} está sem a capacidade de chamar ferramentas "
+                f"confirmada. {SUGESTAO_DE_TROCA}"
+            )
         selecionados = [
             escolhido,
             *await _reservas_validas(

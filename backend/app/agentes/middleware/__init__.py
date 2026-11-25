@@ -33,9 +33,15 @@ def montar_middleware(
     from app.agentes.middleware.prazo_ferramenta import MiddlewarePrazoFerramenta
     from app.agentes.middleware.saida_grande import MiddlewareSaidaGrande
     from app.agentes.middleware.troca_provedor import montar_middleware_de_troca
+    from app.llm.saude import provedor_falhou, provedor_respondeu
 
     itens: list[AgentMiddleware] = list(
-        montar_middleware_de_troca(modelos, ao_trocar=contexto.dependencias.ao_trocar_modelo)
+        montar_middleware_de_troca(
+            modelos,
+            ao_trocar=contexto.dependencias.ao_trocar_modelo,
+            ao_falhar=provedor_falhou,
+            ao_responder=provedor_respondeu,
+        )
     )
     from app.agentes.middleware.limite_provedor import MiddlewareLimiteDoProvedor
 
@@ -225,4 +231,23 @@ def montar_middleware(
         itens.insert(0, MiddlewareStreamingCanal(contexto))
     elif contexto.dependencias.iniciar_passo is not None:
         itens.insert(0, MiddlewareConversa(contexto))
+    from app.agentes.middleware.rastro import rastro_ligado
+
+    if rastro_ligado():
+        # SORA_RASTRO=1: um identificador por execução e o caminho do pedido no log (sem segredos).
+        from app.agentes.middleware.rastro import (
+            MiddlewareRastroFerramentas,
+            MiddlewareRastroModelo,
+            Rastro,
+            nome_do_modelo,
+        )
+
+        rastro = Rastro(contexto)
+        rastro.registrar(
+            "execucao.inicio",
+            modelos=[nome_do_modelo(m) for m in modelos],
+            sem_supervisao=contexto.sem_supervisao,
+        )
+        itens.insert(0, MiddlewareRastroFerramentas(rastro))
+        itens.append(MiddlewareRastroModelo(rastro))
     return itens

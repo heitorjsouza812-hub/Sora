@@ -197,6 +197,31 @@ async def ler_do_disco(anexo: AnexoDaEntrada) -> bytes:
     return await asyncio.to_thread(caminho.read_bytes)
 
 
+def _nome(modelo: Any) -> str:
+    return str(getattr(modelo, "model", None) or getattr(modelo, "model_name", None) or id(modelo))
+
+
+def _provedor(modelo: Any) -> str:
+    return _nome(modelo).split("/", 1)[0]
+
+
+def ordenar_com_reservas(com_visao: list[Any], reservas: list[Any]) -> list[Any]:
+    """O melhor que enxerga primeiro; logo depois, as reservas de **outro** provedor; por fim, o
+    resto (sem repetir). Um provedor sobrecarregado costuma derrubar todos os modelos dele de uma
+    vez: assim a troca chega a outro provedor no primeiro erro, e não depois de vários prazos."""
+    if not com_visao:
+        return list(reservas)
+    primeiro = com_visao[0]
+    lista = [primeiro]
+    vistos = {_nome(primeiro)}
+    outros = [m for m in reservas if _provedor(m) != _provedor(primeiro)]
+    for modelo in [*outros, *com_visao[1:], *reservas]:
+        if _nome(modelo) not in vistos:
+            vistos.add(_nome(modelo))
+            lista.append(modelo)
+    return lista
+
+
 async def modelos_com_visao(
     sessao: AsyncSession,
     usuario_id: UUID,
@@ -205,8 +230,15 @@ async def modelos_com_visao(
     dificuldade: int = 1,
     conversa_privada: bool = False,
     escolha: EscolhaModelo | None = None,
+    completar_sem_visao: bool = False,
 ) -> tuple[list[BaseChatModel], bool]:
     """Modelos do papel que enxergam, ou, se o usuário não tem nenhum, os de sempre e ``False``.
+
+    ``completar_sem_visao`` (bots com ``computador_*``): depois dos que enxergam, entram os de
+    sempre como reserva. Antes a lista era só de modelos com visão, quase sempre de um provedor só:
+    com ele sobrecarregado o bot ficava sem saída, embora pudesse seguir pela árvore de
+    acessibilidade e pelo texto da conferência (``app/computador/visao.py`` avisa o bot, chamada a
+    chamada, quando o modelo da vez não enxerga).
 
     O seletor já filtra pela capacidade ``visao``, então todo o fallback também enxerga. Com modelo
     fixo no seletor do campo de mensagem, vale ele (enxerga se o catálogo diz que tem visão)."""
@@ -235,6 +267,21 @@ async def modelos_com_visao(
             conversa_privada=conversa_privada,
             escolha=escolha,
         )
+        if completar_sem_visao:
+            from app.orquestrador.modelos import MAX_MODELOS_NA_LISTA
+
+            try:
+                reservas = await modelos_do_papel(
+                    sessao,
+                    usuario_id,
+                    papel,
+                    dificuldade=dificuldade,
+                    conversa_privada=conversa_privada,
+                    escolha=escolha,
+                )
+            except SemModeloDisponivel:
+                reservas = []
+            modelos = ordenar_com_reservas(modelos, reservas)[:MAX_MODELOS_NA_LISTA]
         return modelos, True
     except SemModeloDisponivel:
         modelos = await modelos_do_papel(
@@ -277,6 +324,7 @@ async def preparar_entrada(
             dificuldade=dificuldade,
             conversa_privada=conversa_privada,
             escolha=escolha,
+            completar_sem_visao=True,
         )
         entrada = await montar_entrada(
             texto, anexos, tem_visao=True, ler=ler_do_disco, usuario_avisado=usuario_avisado

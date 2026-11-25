@@ -136,6 +136,13 @@ def deve_trocar(erro: BaseException) -> bool:
     return classificar_erro(erro) is not None
 
 
+def deve_repetir_no_mesmo(erro: BaseException) -> bool:
+    """Repete no mesmo modelo só o que costuma passar logo (429, 5xx). Prazo estourado vai direto
+    para o próximo da lista: repetir um modelo pendurado dobrava a espera do usuário."""
+    motivo = classificar_erro(erro)
+    return motivo is not None and motivo is not MotivoTroca.PRAZO
+
+
 async def registrar_falha(
     armazem: ArmazemSaude,
     provedor_id: UUID,
@@ -218,6 +225,8 @@ def montar_middleware_de_troca(
     ao_trocar: Callable[[EventoTroca], Awaitable[None]] | None = None,
     tentativas_no_mesmo_modelo: int = 1,
     espera_inicial_s: float = 0.5,
+    ao_falhar: Callable[[Any, BaseException], Awaitable[None]] | None = None,
+    ao_responder: Callable[[Any], Awaitable[None]] | None = None,
 ) -> list[Any]:
     """Fábrica ÚNICA do middleware de troca de provedor: ``ModelRetryMiddleware`` +
     ``ModelFallbackMiddleware`` com os modelos na ordem do seletor (o primeiro é o principal).
@@ -243,9 +252,37 @@ def montar_middleware_de_troca(
     middleware.append(
         ModelRetryMiddleware(
             max_retries=tentativas_no_mesmo_modelo,
-            retry_on=deve_trocar,
+            retry_on=deve_repetir_no_mesmo,
             on_failure="error",
             initial_delay=espera_inicial_s,
         )
     )
+    if ao_falhar is not None or ao_responder is not None:
+        # Por dentro da nova tentativa: cada chamada de verdade conta na saúde do provedor dela.
+        middleware.append(_criar_monitor_de_saude(ao_falhar, ao_responder))
     return middleware
+
+
+def _criar_monitor_de_saude(
+    ao_falhar: Callable[[Any, BaseException], Awaitable[None]] | None,
+    ao_responder: Callable[[Any], Awaitable[None]] | None,
+) -> Any:
+    """Middleware que conta, por modelo chamado, as falhas e as respostas (``app/llm/saude.py``)."""
+    from langchain.agents.middleware import AgentMiddleware
+    from langgraph.errors import GraphBubbleUp
+
+    class MonitorDeSaude(AgentMiddleware):  # type: ignore[type-arg]
+        async def awrap_model_call(self, request: Any, handler: Any) -> Any:
+            try:
+                resposta = await handler(request)
+            except GraphBubbleUp:
+                raise
+            except Exception as erro:
+                if ao_falhar is not None:
+                    await ao_falhar(request.model, erro)
+                raise
+            if ao_responder is not None:
+                await ao_responder(request.model)
+            return resposta
+
+    return MonitorDeSaude()

@@ -11,6 +11,7 @@ middleware de ``troca.py``, para a troca aparecer na linha do tempo.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
@@ -51,6 +52,20 @@ def _classe_do_chat() -> type:
     return ChatLiteLLMSora
 
 
+PRAZO_CHAMADA_S = 45.0
+"""Prazo de cada chamada de um bot ao modelo (sem resposta nem pedaço novo nesse tempo, a chamada
+cai). Sem prazo, um provedor sobrecarregado deixava o bot "pensando" para sempre; com ele, o
+erro de prazo faz a troca para o próximo modelo da lista (``app/llm/troca.py``)."""
+
+_GEMINI_3_EM_DIANTE = re.compile(r"gemini-([3-9]|\d{2,})(\.|-|$)", re.IGNORECASE)
+
+
+def exige_temperatura_padrao(modelo: str) -> bool:
+    """Gemini 3 em diante (e os ``antigravity`` do Google, da mesma família)."""
+    nome = modelo.rsplit("/", 1)[-1]
+    return bool(_GEMINI_3_EM_DIANTE.search(nome)) or nome.startswith("antigravity")
+
+
 def criar_chat_model(
     modelo: str,
     provedor: ConfigProvedor,
@@ -86,6 +101,10 @@ def criar_chat_model(
             temperatura = ajuste.temperatura
         if ajuste.max_tokens_minimo is not None:
             max_tokens = max(max_tokens or 0, ajuste.max_tokens_minimo)
+    if exige_temperatura_padrao(modelo):
+        # Gemini 3 em diante: temperatura abaixo de 1 deixa o modelo em laço e falhando em tarefa
+        # longa (aviso do próprio provedor). Vai a padrão dele (1.0).
+        temperatura = 1.0
     chat = _classe_do_chat()(
         enviar_raciocinio=aceita_raciocinio_no_historico(provedor.tipo),
         model=modelo,
@@ -110,6 +129,7 @@ def criar_modelos_na_ordem(
     temperatura: float = 0.0,
     streaming: bool = False,
     raciocinios: Sequence[str | None] | None = None,
+    timeout_s: float | None = PRAZO_CHAMADA_S,
 ) -> list[BaseChatModel]:
     """Cria um ``ChatLiteLLM`` por candidato, mantendo a ordem do seletor (o 1º é o principal).
     ``raciocinios`` traz o nível de cada candidato (mesma ordem); ``None`` = sem ajuste."""
@@ -122,6 +142,7 @@ def criar_modelos_na_ordem(
             temperatura=temperatura,
             streaming=streaming,
             raciocinio=nivel,
+            timeout_s=timeout_s,
         )
         for (modelo, provedor), nivel in zip(candidatos, niveis, strict=True)
     ]
