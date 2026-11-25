@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 import re
 from typing import Any
@@ -23,6 +24,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field
 
 from app.agentes.middleware.pedido_valido import MiddlewarePedidoValido
+from app.agentes.montagem import ContextoAgente, montar_agente
 from app.ferramentas.base import ContextoFerramenta
 from app.ferramentas.catalogo_preguicoso import montar_catalogo
 from app.ferramentas.registro import ESQUEMAS, criar_ferramentas
@@ -33,6 +35,11 @@ from app.llm.esquemas import (
     historico_valido,
     modelo_gemini,
 )
+from app.llm.falso import criar_modelo_falso
+
+
+async def _permitir(ferramenta: BaseTool, argumentos: dict[str, Any]) -> None:
+    pass
 
 
 def _todas_as_ferramentas() -> list[BaseTool]:
@@ -40,8 +47,12 @@ def _todas_as_ferramentas() -> list[BaseTool]:
     ferramentas = criar_ferramentas(list(ESQUEMAS), contexto)
     return [
         *ferramentas,
-        *montar_catalogo(ferramentas, prefixo="conectores", limite_direto=0),
-        *montar_catalogo(ferramentas[:3], prefixo="navegador", limite_direto=0),
+        *montar_catalogo(
+            ferramentas, prefixo="conectores", limite_direto=0, antes_de_executar=_permitir
+        ),
+        *montar_catalogo(
+            ferramentas[:3], prefixo="navegador", limite_direto=0, antes_de_executar=_permitir
+        ),
     ]
 
 
@@ -214,7 +225,7 @@ def _executar_ferramenta() -> tuple[StructuredTool, list[Any]]:
         StructuredTool.from_function(coroutine=acao, name=f"mcp__s__a{i}", description="x")
         for i in range(2)
     ]
-    executar = montar_catalogo(conectores, limite_direto=0)[2]
+    executar = montar_catalogo(conectores, limite_direto=0, antes_de_executar=_permitir)[2]
     return executar, recebidos
 
 
@@ -273,3 +284,46 @@ def test_argumentos_em_texto_dentro_de_lista_de_objetos() -> None:
     passos = [{"ferramenta": "navegador_acao", "args": '{"ref": "@s1:e2"}'}]
     lidos = argumentos_lidos(esquema, {"passos": passos})
     assert lidos["passos"][0]["args"] == {"ref": "@s1:e2"}
+
+
+@pytest.mark.parametrize("papel", ["pesquisador", "individual"])
+async def test_montagem_do_agente_entrega_apenas_executores_com_revisao(
+    monkeypatch: pytest.MonkeyPatch, papel
+) -> None:
+    async def conectores_do_usuario(*args, **kwargs) -> list[StructuredTool]:
+        async def consultar() -> str:
+            pytest.fail("A montagem do agente nunca executa ferramentas")
+
+        return [
+            StructuredTool.from_function(
+                coroutine=consultar,
+                name=f"mcp__inventario__get_item_{i}",
+                description="Consulta um item",
+            )
+            for i in range(25)
+        ]
+
+    async def prompt_de_teste(contexto: ContextoAgente) -> str:
+        return "Conversa de teste"
+
+    entregues: list[BaseTool] = []
+
+    def capturar_ferramentas(*, tools, **kwargs) -> None:
+        entregues.extend(tools)
+
+    monkeypatch.setenv("SORA_MODELO_FALSO", "1")
+    monkeypatch.setattr("app.agentes.montagem._prompt_do_turno", prompt_de_teste)
+    monkeypatch.setattr("app.conectores.carregar.ferramentas_dos_conectores", conectores_do_usuario)
+    monkeypatch.setattr("langchain.agents.create_agent", capturar_ferramentas)
+
+    contexto = ContextoAgente(
+        usuario_id=uuid4(), agente_id=uuid4(), conversa_id=uuid4(), papel=papel
+    )
+    await montar_agente(contexto, [criar_modelo_falso(papel)], checkpointer=None)
+
+    executores = [f for f in entregues if f.name.endswith("_executar_ferramenta")]
+    assert "conectores_executar_ferramenta" in {f.name for f in executores}
+    for executor in executores:
+        assert isinstance(executor, StructuredTool) and executor.coroutine is not None
+        gancho = inspect.getclosurevars(executor.coroutine).nonlocals.get("antes_de_executar")
+        assert callable(gancho), executor.name
