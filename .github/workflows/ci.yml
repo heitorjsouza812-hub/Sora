@@ -1,14 +1,27 @@
 # Testes do backend, do app e da ponte do desktop.
-# Desde 2026-11-20 rodam só à mão (Actions → CI → Run workflow), a pedido do Heitor: envio na
-# main e PR não esperam mais o CI. Para voltar a rodar sozinho, devolver os gatilhos push e
-# pull_request abaixo.
+# 2026-11-25 (plano de correções, tarefa 0.2, docs/SORA_PLANO_CORRECOES_NO_LUGAR.md §3.2): o CI
+# volta a rodar sozinho em push na main e no onda3 e em todo PR. Os 4 jobs (backend,
+# backend-integracao, app, desktop) são os obrigatórios da proteção da main e do onda3.
+# O job ponta-a-ponta-repetido roda os testes de backend/tests/ponta_a_ponta 20 vezes (o 20/20 dos
+# gates), uma vez por dia e à mão (Run workflow → "Rodar ponta a ponta 20 vezes"); fica fora do
+# caminho de cada PR. O GitHub só dispara o schedule pelo ci.yml que está na main.
 name: CI
 
 on:
+  push:
+    branches: [main, onda3]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * *" # 03:00 em Brasília
   workflow_dispatch:
+    inputs:
+      ponta_a_ponta_20x:
+        description: Rodar ponta a ponta 20 vezes
+        type: boolean
+        default: false
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -17,6 +30,7 @@ permissions:
 jobs:
   backend:
     name: Backend (ruff + unitários)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,6 +49,7 @@ jobs:
 
   backend-integracao:
     name: Backend (integração com Postgres e Redis)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     needs: backend
     defaults:
@@ -51,19 +66,69 @@ jobs:
       - run: uv sync --frozen --python 3.12 --group navegador
       - run: uv run playwright install --with-deps chromium
       # Os testes sobem os próprios contêineres (Docker do runner). Arquivo por arquivo, como no
-      # CLAUDE.md §7.4: cada arquivo tem o seu banco limpo.
-      - name: Integração
+      # CLAUDE.md §7.4: cada arquivo tem o seu banco limpo. Os de ponta a ponta (tarefa 0.4) rodam
+      # aqui 1 vez por PR; o 20/20 fica no job ponta-a-ponta-repetido. -rs mostra cada pulado.
+      - name: Integração e ponta a ponta
+        env:
+          SORA_EXIGIR_DOCKER: "1"
         run: |
+          shopt -s nullglob
           falhou=0
-          for arquivo in tests/integracao/test_*.py; do
+          for arquivo in tests/integracao/test_*.py tests/ponta_a_ponta/test_*.py; do
             echo "::group::$arquivo"
-            uv run pytest "$arquivo" -q || falhou=1
+            uv run pytest "$arquivo" -q -rs || falhou=1
+            echo "::endgroup::"
+          done
+          exit $falhou
+
+  ponta-a-ponta-repetido:
+    name: Ponta a ponta 20 vezes (diário)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.ponta_a_ponta_20x)
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      SORA_MODELO_FALSO: "1"
+      SORA_EXIGIR_DOCKER: "1"
+    steps:
+      # No agendamento o GitHub usa a main; enquanto o plano de correções corre, o alvo é o onda3.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'onda3' || github.ref }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --python 3.12 --group navegador
+      - run: uv run playwright install --with-deps chromium
+      # 20/20 e 0 pulados: teste pulado não conta como passou (plano §2.9).
+      - name: Ponta a ponta 20 vezes
+        run: |
+          shopt -s nullglob
+          arquivos=(tests/ponta_a_ponta/test_*.py)
+          if [ ${#arquivos[@]} -eq 0 ]; then
+            echo "::warning::Nenhum teste em tests/ponta_a_ponta ainda (tarefa 0.4)."
+            exit 0
+          fi
+          falhou=0
+          for arquivo in "${arquivos[@]}"; do
+            echo "::group::$arquivo"
+            # Shell do GitHub: bash -eo pipefail; o if segura a falha e segue para o próximo arquivo.
+            if ! uv run pytest "$arquivo" -q -rs --count=20 -p no:cacheprovider | tee saida.txt; then
+              falhou=1
+            fi
+            if grep -qE "[0-9]+ skipped" saida.txt; then
+              echo "::error file=backend/$arquivo::teste pulado no 20/20"
+              falhou=1
+            fi
             echo "::endgroup::"
           done
           exit $falhou
 
   app:
     name: App (build, lint e testes)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -82,6 +147,7 @@ jobs:
 
   desktop:
     name: Desktop (clippy e testes da ponte do PC)
+    if: github.event_name != 'schedule'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

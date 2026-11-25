@@ -17,7 +17,7 @@
 | Tarefa | Dono | Ramo | Commit | Verificação | Resultado real | Bloqueio | Próximo passo |
 |---|---|---|---|---|---|---|---|
 | 0.1 Commitar trabalho de 21–22/11 | Tech Lead | `onda3` | `75434fd`, `081bdfd`, `2f7042f` + commit de docs | ruff check/format + `uv run pytest tests/unitarios -q` por commit (worktree `C:/dev/sora-tl-verifica`); `cargo clippy -D warnings` + `cargo test` | 2242 → 2244 → 2246 passam, 0 falham, 5 pulados; Rust 35 passam, 1 ignorado | Docker Desktop desligado (integração não rodada localmente) | push de `onda3` |
-| 0.2 Religar o CI | Tech Lead | `onda3` | — | PR de teste contra `onda3` dispara os 4 jobs | — | depende da 0.1 | — |
+| 0.2 Religar o CI | Tech Lead | `onda3` | _este commit_ | PR de teste contra `onda3` dispara os 4 jobs | local: YAML válido; `pytest --count=20` em `test_modelo_travado.py` = 120 passam; CI: _aguardando_ | proteção da `main`/`onda3` é com o Heitor (GitHub → Settings → Branches) | PR de teste |
 | 0.3 Bypass de aprovação do MCP | Codex | `fix/mcp-aprovacao` (`../sora-codex`) | — | caso de 25 ferramentas falha antes / passa depois | — | depende da 0.2 | — |
 | 0.4 Testes de ponta a ponta | Codex | `feat/ponta-a-ponta` | — | 13 cenários 20/20, 0 skipped | — | depende da 0.2 | — |
 | 0.5 Baseline | Claude + Heitor | `feat/baseline` (`../sora-claude`) | — | 30 tela + 30 longas com classe de falha | — | SHA final da 0.1; antes de merge da 0.3 | — |
