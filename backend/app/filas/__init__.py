@@ -282,6 +282,15 @@ class FilaAgente:
             item, status=StatusItem.FALHOU, motivo=motivo[:500], terminado_em=_agora()
         )
 
+    async def interromper_item(self, item_id: UUID, agente_id: UUID, motivo: str) -> ItemFila:
+        """Cancela somente o item ativo que o worker estava executando."""
+        item = await self._buscar(item_id, agente_id)
+        if item.status not in ATIVOS:
+            return item
+        return await self._mudar(
+            item, status=StatusItem.CANCELADO, motivo=motivo, terminado_em=_agora()
+        )
+
     # ---------- controles do usuário ----------
 
     async def pausar(self, agente_id: UUID) -> EstadoFila:

@@ -590,7 +590,7 @@ async def retomar_tarefa_canal(
 
 async def _encerrar_item_fila(fila: FilaAgente, item: ItemFila, estado: StatusItem | None) -> None:
     if estado is StatusItem.CANCELADO:
-        await fila.interromper(item.agente_id, item.pista, "cancelado_pelo_usuario")
+        await fila.interromper_item(item.id, item.agente_id, "cancelado_pelo_usuario")
     elif estado is StatusItem.FALHOU:
         await fila.falhar(item.id, item.agente_id, "prazo_do_turno")
     else:

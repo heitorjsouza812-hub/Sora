@@ -30,3 +30,28 @@ async def test_fila_grava_o_estado_real_do_turno(estado_turno, estado_final, mot
     assert encerrado.status is estado_final
     assert encerrado.motivo == motivo
     assert encerrado.terminado_em is not None
+
+
+async def test_cancelamento_tardio_preserva_o_proximo_item_na_mesma_pista():
+    armazem = ArmazemFilaEmMemoria()
+    fila = FilaAgente(armazem)
+    usuario, agente = uuid4(), uuid4()
+    antigo = await fila.enfileirar(
+        usuario_id=usuario, agente_id=agente, texto="Pedido antigo", origem=OrigemItem.USUARIO
+    )
+    novo = await fila.enfileirar(
+        usuario_id=usuario, agente_id=agente, texto="Pedido novo", origem=OrigemItem.USUARIO
+    )
+    assert antigo.pista == novo.pista
+    await fila.iniciar(antigo.id, agente)
+    await fila.rodando(antigo.id, agente)
+    assert [item.id for item in await fila.recuperar_apos_queda()] == [antigo.id]
+    await fila.iniciar(novo.id, agente)
+    await fila.rodando(novo.id, agente)
+
+    await _encerrar_item_fila(fila, antigo, StatusItem.CANCELADO)
+
+    itens = {item.id: item for item in await armazem.itens(agente)}
+    assert itens[antigo.id].status is StatusItem.INTERROMPIDO
+    assert itens[novo.id].status is StatusItem.RODANDO
+    assert itens[novo.id].terminado_em is None
