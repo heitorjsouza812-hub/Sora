@@ -5,10 +5,11 @@ Decidido pelo produto, não pelo plano grátis da Groq, que só existe nos teste
 
 - **vão direto**: as que o bot tem habilitadas (o que o app mostra no perfil dele), as de
   conversa do papel (memória, agenda, pendências, histórico, habilidades, colegas, clientes) e o
-  essencial (falar, perguntar, propor instruções);
+  essencial (falar, perguntar, propor instruções), além de até 20 ferramentas MCP permitidas;
 - **ficam no catálogo** (três meta-ferramentas, ``conectores_*``): conectores MCP (podem ser
-  centenas) e as ferramentas extras do navegador. O modelo vê os nomes por grupo, carrega o
-  esquema de uma e a executa pelo id. A política e o revisor decidem pelo nome de verdade.
+  centenas) quando passam desse limite e as ferramentas extras do navegador. O modelo vê os nomes
+  por grupo, carrega o esquema de uma e a executa pelo id. A política e o revisor decidem pelo nome
+  de verdade.
 
 Os outros papéis (especialistas da cadeia, bot de grupo) já têm conjuntos pequenos e não mudam.
 """

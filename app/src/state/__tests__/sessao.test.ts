@@ -157,7 +157,9 @@ describe('sessão', () => {
     rotas['POST /v1/auth/entrar'] = () => json(200, { token_acesso: 'tok' });
     rotas['GET /v1/eu'] = () => json(200, ANA);
     await entrar('ana@exemplo.com', 'x');
-    rotas['POST /v1/conta/exportar'] = () => new Response(new Blob(['zip']), {
+    // Corpo em texto: no Node 20 (CI) o Response nativo não aceita o Blob do jsdom e o fetch falso
+    // lançava, o que o cliente traduz como "Sem conexão".
+    rotas['POST /v1/conta/exportar'] = () => new Response('zip', {
       status: 200, headers: { 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="sora-meus-dados-2026-11-20.zip"' },
     });
     const criar = vi.fn(() => 'blob:x');

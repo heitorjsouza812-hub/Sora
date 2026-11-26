@@ -10,8 +10,7 @@ Regras:
 - os cabeçalhos (tokens) ficam cifrados em ``conectores.cabecalhos_cifrados`` e só são
   decifrados pelo worker na hora de conectar;
 - toda ferramenta embrulhada: prazo de 2 minutos, erro sem segredo, resultado dentro da cerca
-  ``<dado_externo>`` e nome ``mcp__<servidor>__<ferramenta>``;
-- mais de 20 ferramentas vão pelo catálogo preguiçoso.
+  ``<dado_externo>`` e nome ``mcp__<servidor>__<ferramenta>``.
 """
 
 from __future__ import annotations
@@ -39,7 +38,6 @@ from app.ferramentas.base import (
     PRAZO_FERRAMENTA_SEGUNDOS,
     ErroFerramenta,
 )
-from app.ferramentas.catalogo_preguicoso import AntesDeExecutar, montar_catalogo
 
 if TYPE_CHECKING:
     from langchain_core.tools import BaseTool
@@ -199,10 +197,9 @@ async def carregar_ferramentas(
     servidores: Sequence[ServidorMCP],
     *,
     ambiente_local: bool = False,
-    antes_de_executar: AntesDeExecutar | None = None,
     cliente: Any = None,
 ) -> list[BaseTool]:
-    """Liga nos servidores, embrulha as ferramentas e aplica o catálogo preguiçoso.
+    """Liga nos servidores e devolve as ferramentas embrulhadas em uma lista plana.
 
     Servidor que falha não derruba os outros: as ferramentas dele só não aparecem.
     ``cliente`` permite injetar um ``MultiServerMCPClient`` falso nos testes.
@@ -226,4 +223,4 @@ async def carregar_ferramentas(
     embrulhadas = [
         embrulhar(f, slug, nome, segredos) for (slug, f), nome in zip(brutas, visiveis, strict=True)
     ]
-    return montar_catalogo(embrulhadas, antes_de_executar=antes_de_executar)
+    return embrulhadas
