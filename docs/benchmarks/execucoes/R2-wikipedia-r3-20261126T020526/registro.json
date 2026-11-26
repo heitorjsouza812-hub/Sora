@@ -1,0 +1,75 @@
+{
+ "tarefa": "R2-wikipedia",
+ "rodada": 3,
+ "inicio": "2026-11-26T02:05:26.891969+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 245.5
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "conversa_id": "cb0256b0-b8c0-4cbf-b498-4e4ce7fd2276",
+ "agente_id": "24f62963-2f81-406c-955a-cc921b12deda",
+ "fim": "2026-11-26T02:09:36.250771+00:00",
+ "duracao_s": 249.3,
+ "resultado": "nao_executado",
+ "classe_sugerida": "modelo",
+ "classe": "ambiente_bancada",
+ "prova": "✔ usou o navegador interativo (não só busca); ✘ aba final no artigo Santos_Dumont (banco); ✘ título da aba contém Santos Dumont (banco); ✘ resposta cita o título Santos Dumont",
+ "ferramentas_usadas": [
+  "navegador_abrir",
+  "conectores_buscar_ferramentas",
+  "conectores_carregar_ferramenta",
+  "conectores_buscar_ferramentas",
+  "conectores_buscar_ferramentas",
+  "conectores_buscar_ferramentas",
+  "conectores_buscar_ferramentas",
+  "conectores_buscar_ferramentas",
+  "conectores_buscar_ferramentas"
+ ],
+ "abas": [],
+ "chamadas_modelo": 10,
+ "modelos_usados": [
+  "groq/qwen/qwen3.8-27b"
+ ],
+ "tokens_entrada": 55455,
+ "tokens_saida": 465,
+ "chamadas_ferramenta": 9,
+ "rastro": {
+  "modelo.pedido": 22,
+  "ferramenta.inicio": 9,
+  "modelo.erro": 13,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 13,
+  "ferramentas": [
+   "navegador_abrir",
+   "conectores_buscar_ferramentas",
+   "conectores_carregar_ferramenta",
+   "conectores_buscar_ferramentas",
+   "conectores_buscar_ferramentas",
+   "conectores_buscar_ferramentas",
+   "conectores_buscar_ferramentas",
+   "conectores_buscar_ferramentas",
+   "conectores_buscar_ferramentas"
+  ]
+ },
+ "resposta_final": "Última etapa com retorno: abrir a página. O pedido excede o limite deste modelo. Compacte a conversa ou escolha outro modelo.",
+ "revisao": [
+  {
+   "em": "2026-11-26T02:10:59.464427+00:00",
+   "de": [
+    "parcial",
+    "modelo"
+   ],
+   "para": [
+    "nao_executado",
+    "ambiente_bancada"
+   ],
+   "nota": "navegador_abrir devolveu 'O navegador não está instalado neste servidor (uv sync --group navegador)': faltava o grupo navegador no venv do worktree. Não conta. Depois disso a Sora chamou conectores_buscar_ferramentas 7x e terminou por 413/ITPM"
+  }
+ ]
+}

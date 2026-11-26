@@ -1,0 +1,73 @@
+{
+ "tarefa": "L09",
+ "rodada": 1,
+ "inicio": "2026-11-26T02:28:38.668219+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 12.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "d0e4ba14-aef4-4236-93b9-d33786d6b9dd",
+ "conversa_id": "d1a2216b-ef8d-4aa9-8a95-f8997e5c2cef",
+ "fim": "2026-11-26T02:28:54.133404+00:00",
+ "duracao_s": 15.4,
+ "resultado": "nao_executado",
+ "classe_sugerida": "cota_provedor",
+ "classe": "cota_provedor",
+ "prova": "✘ 4 agendamentos ativos com os títulos certos; ✘ módulo 2 remarcado para 01/03/2027; ✘ módulo 2 antigo cancelado; ✘ Revisão geral recorrente 29/02 08:30; ✘ memória do fim do treinamento; ✘ arquivo agenda_L09.md; ✘ resposta: 4",
+ "criterios": [
+  {
+   "criterio": "4 agendamentos ativos com os títulos certos",
+   "ok": false
+  },
+  {
+   "criterio": "módulo 2 remarcado para 01/03/2027",
+   "ok": false
+  },
+  {
+   "criterio": "módulo 2 antigo cancelado",
+   "ok": false
+  },
+  {
+   "criterio": "Revisão geral recorrente 29/02 08:30",
+   "ok": false
+  },
+  {
+   "criterio": "memória do fim do treinamento",
+   "ok": false
+  },
+  {
+   "criterio": "arquivo agenda_L09.md",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: 4",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 0,
+ "chamadas_por_papel": {},
+ "modelos_usados": [],
+ "tokens_entrada": 0,
+ "tokens_saida": 0,
+ "custo_usd": 0.0,
+ "chamadas_ferramenta": 0,
+ "pedidos_ao_modelo_rastro": 2,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 2,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 2,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 2,
+  "ferramentas": []
+ },
+ "bateu_limite_429": true,
+ "esperas_429_s": 0,
+ "erros_sse": []
+}

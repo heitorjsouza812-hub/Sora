@@ -1,0 +1,78 @@
+{
+ "tarefa": "L01",
+ "rodada": 0,
+ "inicio": "2026-11-25T20:45:10.230140+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 34.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "48136ffa-e778-4c1f-ad8f-4009460c22ce",
+ "conversa_id": "b60d5d07-7d9c-4577-8b2b-be2c4980341e",
+ "fim": "2026-11-25T20:45:48.223846+00:00",
+ "duracao_s": 37.5,
+ "resultado": "nao_executado",
+ "classe_sugerida": "cota_provedor",
+ "classe": "cota_provedor",
+ "prova": "✘ arquivo resumo_L01.json é JSON; ✘ memória com a campeã; ✘ resposta com campeã e total",
+ "criterios": [
+  {
+   "criterio": "arquivo resumo_L01.json é JSON",
+   "ok": false
+  },
+  {
+   "criterio": "memória com a campeã",
+   "ok": false
+  },
+  {
+   "criterio": "resposta com campeã e total",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 1,
+ "chamadas_por_papel": {
+  "agente_individual": 1
+ },
+ "modelos_usados": [
+  "groq/qwen/qwen3.8-27b"
+ ],
+ "tokens_entrada": 6733,
+ "tokens_saida": 63,
+ "custo_usd": 0.005638,
+ "chamadas_ferramenta": 1,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 4,
+  "ferramenta.inicio": 1,
+  "modelo.erro": 3,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 3,
+  "ferramentas": [
+   "ler_anexo"
+  ]
+ },
+ "bateu_limite_429": true,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "pedidos_ao_modelo_rastro": 4,
+ "piloto": true,
+ "revisao": [
+  {
+   "em": "2026-11-26T02:11:01.407664+00:00",
+   "de": [
+    "nao_executado",
+    "cota_provedor"
+   ],
+   "para": [
+    "nao_executado",
+    "cota_provedor"
+   ],
+   "nota": "piloto do executor (rodada 0, não conta nas 30): 413/ITPM no 2º pedido"
+  }
+ ]
+}

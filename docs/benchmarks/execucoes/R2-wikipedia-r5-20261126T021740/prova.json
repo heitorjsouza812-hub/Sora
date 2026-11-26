@@ -1,0 +1,162 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Abra a página inicial da Wikipédia em português, use o campo de busca para procurar Santos Dumont, abra o artigo e me diga o título que apareceu na página.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "sora",
+   "conteudo": "Última etapa com retorno: agir no elemento da página. O pedido excede o limite deste modelo. Compacte a conversa ou escolha outro modelo.",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {},
+ "chamadas_modelo": [
+  {
+   "papel": "sistema1",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 1199,
+   "tokens_saida": 134,
+   "custo_usd": "0.001495",
+   "latencia_ms": 705
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5270,
+   "tokens_saida": 33,
+   "custo_usd": "0.004348",
+   "latencia_ms": 551
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5371,
+   "tokens_saida": 33,
+   "custo_usd": "0.004429",
+   "latencia_ms": 429
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5630,
+   "tokens_saida": 33,
+   "custo_usd": "0.004636",
+   "latencia_ms": 757
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5903,
+   "tokens_saida": 66,
+   "custo_usd": "0.004986",
+   "latencia_ms": 1270
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6553,
+   "tokens_saida": 44,
+   "custo_usd": "0.005418",
+   "latencia_ms": 592
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6370,
+   "tokens_saida": 43,
+   "custo_usd": "0.005268",
+   "latencia_ms": 621
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6613,
+   "tokens_saida": 43,
+   "custo_usd": "0.005462",
+   "latencia_ms": 622
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6790,
+   "tokens_saida": 43,
+   "custo_usd": "0.005604",
+   "latencia_ms": 721
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6967,
+   "tokens_saida": 43,
+   "custo_usd": "0.005746",
+   "latencia_ms": 748
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6724,
+   "tokens_saida": 43,
+   "custo_usd": "0.005551",
+   "latencia_ms": 897
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6853,
+   "tokens_saida": 43,
+   "custo_usd": "0.005654",
+   "latencia_ms": 935
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6982,
+   "tokens_saida": 43,
+   "custo_usd": "0.005758",
+   "latencia_ms": 870
+  }
+ ],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 26,
+  "ferramenta.inicio": 13,
+  "modelo.erro": 14,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 1,
+  "erros_de_limite": 14,
+  "ferramentas": [
+   "navegador_abrir",
+   "navegador_abrir",
+   "navegador_abrir",
+   "navegador_procurar",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao"
+  ]
+ },
+ "memorias": [],
+ "pendencias": [],
+ "rotinas": [],
+ "habilidades": [],
+ "aprovacoes": [
+  {
+   "acao": "{\"url\": \"https://pt.wikipedia.org\", \"tipo\": \"aprovar_dominio\", \"aba_id\": \"58758578-18f6-4187-81df-c0b15a83054b\", \"dominio\": \"wikipedia.org\", \"particao\": \"ua2bf12c119a045eba6a945dcfeffdd06-compartilhado\", \"ferramenta\": \"navegador_abrir\", \"conversa_id\": \"6662704d-1a8b-45f0-aaae-ffbcaa42d539\"}",
+   "status": "permitida"
+  }
+ ],
+ "abas": [
+  {
+   "url": "https://pt.wikipedia.org/wiki/Wikip%C3%A9dia:P%C3%A1gina_principal",
+   "titulo": "Wikipédia, a enciclopédia livre",
+   "usada_em": "2026-11-26 02:22:28.079921+00"
+  }
+ ]
+}

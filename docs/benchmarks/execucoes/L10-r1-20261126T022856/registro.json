@@ -1,0 +1,73 @@
+{
+ "tarefa": "L10",
+ "rodada": 1,
+ "inicio": "2026-11-26T02:29:00.685952+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 12.3
+  },
+  {
+   "terminou": true,
+   "segundos": 12.3
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "76de8e30-52be-44ff-bfea-ee2371900e03",
+ "conversa_id": "a8a5afef-82d5-40d0-aada-93246e3682a0",
+ "fim": "2026-11-26T02:29:28.674409+00:00",
+ "duracao_s": 27.8,
+ "resultado": "nao_executado",
+ "classe_sugerida": "cota_provedor",
+ "classe": "cota_provedor",
+ "prova": "✘ arquivo saldo_L10.csv confere; ✘ arquivo saldo_L10_v2.csv confere; ✘ memória do pior mês = março (antiga apagada); ✘ cartões de esquecer_memoria e criar_habilidade; ✘ habilidade saldo-mensal criada; ✘ resposta: 3.900 e março",
+ "criterios": [
+  {
+   "criterio": "arquivo saldo_L10.csv confere",
+   "ok": false
+  },
+  {
+   "criterio": "arquivo saldo_L10_v2.csv confere",
+   "ok": false
+  },
+  {
+   "criterio": "memória do pior mês = março (antiga apagada)",
+   "ok": false
+  },
+  {
+   "criterio": "cartões de esquecer_memoria e criar_habilidade",
+   "ok": false
+  },
+  {
+   "criterio": "habilidade saldo-mensal criada",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: 3.900 e março",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 0,
+ "chamadas_por_papel": {},
+ "modelos_usados": [],
+ "tokens_entrada": 0,
+ "tokens_saida": 0,
+ "custo_usd": 0.0,
+ "chamadas_ferramenta": 0,
+ "pedidos_ao_modelo_rastro": 4,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 4,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 4,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 4,
+  "ferramentas": []
+ },
+ "bateu_limite_429": true,
+ "esperas_429_s": 0,
+ "erros_sse": []
+}

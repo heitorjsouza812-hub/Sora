@@ -611,7 +611,7 @@ def conferir(fid: str, prova: dict, mcp: dict) -> tuple[list[tuple[str, bool]], 
     return ck, texto
 
 
-COTA = ("limite de uso do provedor", "tempo deste turno acabou", "limite do provedor")
+COTA = ("limite de uso do provedor", "tempo deste turno acabou", "limite do provedor", "excede o limite deste modelo")
 
 
 def por_cota(prova: dict) -> bool:
@@ -841,6 +841,7 @@ async def reproduzir_wikipedia(rodada: int, log_worker: Path | None) -> dict:
                     "tokens_entrada": sum(c["tokens_entrada"] for c in prova["chamadas_modelo"]),
                     "tokens_saida": sum(c["tokens_saida"] for c in prova["chamadas_modelo"]),
                     "chamadas_ferramenta": len(ferramentas), "rastro": prova["rastro"],
+                    "bateu_limite_429": prova["rastro"]["erros_de_limite"] > 0,
                     "resposta_final": _resposta(prova)[:600]})
         (pasta / "prova.json").write_text(json.dumps({**prova, "abas": abas}, ensure_ascii=False, indent=1, default=str), "utf-8")
         (pasta / "eventos.json").write_text(json.dumps(ouv.eventos, ensure_ascii=False, indent=1, default=str), "utf-8")
@@ -852,6 +853,17 @@ async def reproduzir_wikipedia(rodada: int, log_worker: Path | None) -> dict:
     print(f"R2 wikipedia r{rodada}: {reg.get('resultado')} classe={reg.get('classe') or '-'} {reg.get('duracao_s', '?')} s | "
           f"{reg.get('prova', reg.get('erro_executor', ''))}")
     return reg
+
+
+def anotar(pasta: str, resultado: str, classe: str, nota: str) -> None:
+    """Revisão humana de uma execução já gravada: guarda o que o executor sugeriu e o motivo da troca."""
+    arq = EXECUCOES / pasta / "registro.json"
+    reg = json.loads(arq.read_text("utf-8"))
+    reg.setdefault("revisao", []).append({"em": agora().isoformat(), "de": [reg.get("resultado"), reg.get("classe")],
+                                          "para": [resultado, classe], "nota": nota})
+    reg["resultado"], reg["classe"] = resultado, classe
+    arq.write_text(json.dumps(reg, ensure_ascii=False, indent=1, default=str), "utf-8")
+    print(pasta, "->", resultado, classe)
 
 
 def resumo() -> None:
@@ -884,7 +896,7 @@ def pedidos() -> None:
 async def principal() -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
-    ap.add_argument("acao", choices=["preparar", "modelos", "rodar", "resumo", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g"])
+    ap.add_argument("acao", choices=["preparar", "modelos", "rodar", "resumo", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g", "anotar"])
     ap.add_argument("tarefas", nargs="*")
     ap.add_argument("--vezes", type=int, default=3)
     ap.add_argument("--primeira-rodada", type=int, default=1)
@@ -892,6 +904,7 @@ async def principal() -> None:
     ap.add_argument("--resultado", choices=["ok", "parcial", "falhou", "nao_executado"])
     ap.add_argument("--classe", default="")
     ap.add_argument("--prova", default="")
+    ap.add_argument("--nota", default="")
     ap.add_argument("--repetir-429", type=int, default=2, help="repete a execução que terminou só por 429")
     a = ap.parse_args()
     if a.acao == "preparar":
@@ -908,6 +921,8 @@ async def principal() -> None:
         await nova_g(a.tarefas[0].upper(), a.primeira_rodada)
     elif a.acao == "registrar-g":
         await registrar_g(a.tarefas[0], a.primeira_rodada, a.resultado, a.classe, a.prova, a.log_worker)
+    elif a.acao == "anotar":
+        anotar(a.tarefas[0], a.resultado, a.classe, a.nota)
     elif a.acao == "wikipedia":
         for n in range(a.primeira_rodada, a.primeira_rodada + a.vezes):
             await reproduzir_wikipedia(n, a.log_worker)
@@ -919,7 +934,7 @@ async def principal() -> None:
                 for _tentativa in range(a.repetir_429 + 1):
                     reg = await executar(fid, n, a.log_worker)
                     so_429 = reg.get("classe") == "cota_provedor"
-                    if not so_429:
+                    if not so_429 or _tentativa == a.repetir_429:
                         break
                     print(f"  {fid} r{n}: parou por limite do provedor (429); espera 90 s e repete (não conta como falha)")
                     await asyncio.sleep(90)

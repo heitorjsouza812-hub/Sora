@@ -57,14 +57,121 @@ Escolhido em **2026-11-25**, antes da primeira medição:
 
 Fixtures: `docs/benchmarks/fixtures-longas.md`. Executor: `docs/benchmarks/ferramentas/rodar_longas.py`.
 
-_Medições: em andamento._
+### 4.1 BLOQUEIO: o teto de tokens da chave de QA não comporta um único passo de ferramenta
+
+**Resultado das L01–L10: 0 concluídas.** Todas as execuções terminaram como **não executado (`cota_provedor`)**, pelo teto da Groq, antes de qualquer etapa dependente. Pela regra do plano (§3.5), cota do provedor **não** é falha do produto, então estas execuções **não medem** o produto. O baseline das tarefas longas continua em aberto até o limite mudar.
+
+**Medição (2026-11-25, chamada direta à Groq com a chave de QA, sem imprimir a chave):**
+
+| Teste | Resposta da Groq |
+|---|---|
+| Cabeçalhos de uma chamada curta, `qwen/qwen3.8-27b` | `x-ratelimit-limit-tokens: 8000`, `x-ratelimit-limit-requests: 1000` |
+| Mesmo teto nos outros modelos da chave | `openai/gpt-oss-120b` e `openai/gpt-oss-20b`: também `8000` |
+| Pedido com ~7 000 tokens de entrada | **413** "Request too large … on input tokens per minute (ITPM): **Limit 7000**, Requested 7017" |
+| Pedido com ~8 500 tokens | 413, "Limit 7000, Requested 8517" |
+
+Ou seja: **qualquer pedido com mais de 7 000 tokens de entrada é recusado sempre** (esperar não resolve: não é o balde do minuto, é o tamanho do pedido). E o pedido do bot de bancada já nasce perto disso:
+
+- O bot recebe **33 ferramentas** (as 3 do papel + 24 que o produto soma ao papel `individual` + 6 do MCP de bancada); os esquemas mais o prompt do sistema dão **6 705 a 6 936 tokens** no 1º pedido (rastro `SORA_RASTRO=1` e `chamadas_modelo`).
+- Em **L04, L06, L07, L08, L09 e L10** o 1º pedido (prompt + pedido do usuário, e na L10 o anexo) já passa de 7 000: o middleware `limite_provedor` enxuga e repete uma vez, recebe 413 de novo e encerra ("atingiu o limite de uso do provedor… Não troquei de modelo sozinho"). Nenhum pedido aceito.
+- Em **L01, L02, L03 e L05** (rodada 1) o 1º pedido passou com folga de 60 a 300 tokens; a 1ª ferramenta rodou (`ler_anexo`, 5× `lembrar`, `ler_pagina`+`ler_anexo`, `mcp__bancada__ler_estoque`) e o 2º pedido, com o resultado dela, passou do teto. Nas rodadas 2 e 3 a mesma tarefa às vezes já falhou no 1º pedido (o balde do minuto ainda estava cheio da execução anterior, e a variação do texto empurra o pedido por cima do teto).
+- As falhas de modelo, laço e orçamento **não puderam aparecer**: nenhuma execução chegou à 3ª chamada ao modelo.
+
+**Ninguém trocou de modelo:** em todas as execuções `modelos_usados` = `groq/qwen/qwen3.8-27b` (ou vazio, quando nenhum pedido foi aceito).
+
+**O que destrava (decisão do Heitor/Tech Lead, não do Claude):** (1) subir o plano da organização na Groq (o próprio erro oferece o tier "Dev") mantendo o modelo fixo, e refazer as 30 execuções com `rodar_longas.py rodar --vezes 3`; ou (2) trocar o modelo fixo para um com visão e teto maior, o que reabre o §2 deste arquivo. O mesmo teto bloqueia as G01–G10 (§5) e a reprodução da Wikipédia (§6.2) também esbarrou nele.
+
+### 4.2 Execuções
+
+Rodadas 1–3 de cada tarefa (o `L01 r0` é o piloto do executor e não conta; ver `execucoes/L01-r0-*`). Gerado de `execucoes/*/registro.json` + `prova.json`. "Chamadas modelo (ok)" conta só os pedidos aceitos (`chamadas_modelo` no banco); os recusados estão em "Limite".
+
+<!-- TABELA_L -->
+**Execuções: 20 nao_executado=20 | classes: cota_provedor=20**
+
+| Tarefa | Rodada | Resultado | Classe | Duração (s) | Chamadas modelo (ok) / ferramenta / MCP | Tokens in/out | Custo (US$) | Limite | Até onde chegou | Prova (conferida fora do bot) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| L01 | 1 | nao_executado | cota_provedor | 17.5 | 1/1/0 | 6838/59 | 0.0057 | 2 erros (413/429) | 1º pedido ok (6838 tokens); ferramentas: ler_anexo; 2º pedido recusado | ✘ arquivo resumo_L01.json é JSON; ✘ memória com a campeã; ✘ resposta com campeã e total |
+| L01 | 2 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ arquivo resumo_L01.json é JSON; ✘ memória com a campeã; ✘ resposta com campeã e total |
+| L02 | 1 | nao_executado | cota_provedor | 31.8 | 1/5/0 | 6705/222 | 0.0063 | 4 erros (413/429) | 1º pedido ok (6705 tokens); ferramentas: lembrar, lembrar, lembrar, lembrar, lembrar; 2º pedido recusado | ✔ 5 memórias do Ipê; ✘ Bianca guardada; ✘ Caio apagado; ✘ cartão de esquecer_memoria aberto; ✘ arquivo: responsável Bianca; ✘ arquivo: dias_ate_prazo = 56; ✘ arquivo: cliente/orçamento/prazo/cor; ✘ resposta: Bianca |
+| L02 | 2 | nao_executado | cota_provedor | 27.7 | 0/0/0 | 0/0 | 0.0000 | 4 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ 5 memórias do Ipê; ✘ Bianca guardada; ✔ Caio apagado; ✘ cartão de esquecer_memoria aberto; ✘ arquivo: responsável Bianca; ✘ arquivo: dias_ate_prazo = 56; ✘ arquivo: cliente/orçamento/prazo/cor; ✘ resposta: Bianca |
+| L03 | 1 | nao_executado | cota_provedor | 33.6 | 1/2/0 | 6936/154 | 0.0062 | 3 erros (413/429) | 1º pedido ok (6936 tokens); ferramentas: ler_pagina, ler_anexo; 2º pedido recusado | ✘ arquivo fretes_L03.csv; ✘ resposta: total 172,07 e id 305 |
+| L03 | 2 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ arquivo fretes_L03.csv; ✘ resposta: total 172,07 e id 305 |
+| L04 | 1 | nao_executado | cota_provedor | 15.5 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ arquivo estoque_L04.json é JSON; ✘ memória: Mercearia; ✘ resposta: promoções não lidas; ✘ resposta: Mercearia |
+| L04 | 2 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ arquivo estoque_L04.json é JSON; ✘ memória: Mercearia; ✘ resposta: promoções não lidas; ✘ resposta: Mercearia |
+| L05 | 1 | nao_executado | cota_provedor | 31.5 | 1/1/1 | 6922/22 | 0.0056 | 3 erros (413/429) | 1º pedido ok (6922 tokens); ferramentas: mcp__bancada__ler_estoque; 2º pedido recusado | ✘ MCP: pedidos exatamente os esperados (sem repetição); ✘ MCP: P-03 consultado de novo após o erro; ✘ MCP: conferiu os pedidos; ✘ arquivo compras_L05.csv com itens e TOTAL; ✘ resposta: 270,75 |
+| L05 | 2 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ MCP: pedidos exatamente os esperados (sem repetição); ✘ MCP: P-03 consultado de novo após o erro; ✘ MCP: conferiu os pedidos; ✘ arquivo compras_L05.csv com itens e TOTAL; ✘ resposta: 270,75 |
+| L06 | 1 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ arquivo fretes_L06.json é JSON; ✘ MCP: CEP com falha tentado 2 vezes; ✘ pendência criada; ✘ resposta: soma e CEP indisponível |
+| L06 | 2 | nao_executado | cota_provedor | 15.5 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ arquivo fretes_L06.json é JSON; ✘ MCP: CEP com falha tentado 2 vezes; ✘ pendência criada; ✘ resposta: soma e CEP indisponível |
+| L07 | 1 | nao_executado | cota_provedor | 13.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✔ MCP: nada enviado (cartão recusado); ✘ cartão de envio aberto; ✘ arquivo relatorio_L07.md com sexta, 29 e 24,0; ✘ pendência criada; ✘ resposta: sexta |
+| L07 | 2 | nao_executado | cota_provedor | 15.5 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✔ MCP: nada enviado (cartão recusado); ✘ cartão de envio aberto; ✘ arquivo relatorio_L07.md com sexta, 29 e 24,0; ✘ pendência criada; ✘ resposta: sexta |
+| L08 | 1 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ pergunta feita e respondida; ✘ pendências abertas certas; ✘ notas do caminhão com domingo; ✘ Embalar arquivos concluída; ✘ arquivo com as 3 abertas em ordem alfabética; ✘ resposta: 3 |
+| L08 | 2 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ pergunta feita e respondida; ✘ pendências abertas certas; ✘ notas do caminhão com domingo; ✘ Embalar arquivos concluída; ✘ arquivo com as 3 abertas em ordem alfabética; ✘ resposta: 3 |
+| L09 | 1 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ 4 agendamentos ativos com os títulos certos; ✘ módulo 2 remarcado para 01/03/2027; ✘ módulo 2 antigo cancelado; ✘ Revisão geral recorrente 29/02 08:30; ✘ memória do fim do treinamento; ✘ arquivo agenda_L09.md; ✘ resposta: 4 |
+| L09 | 2 | nao_executado | cota_provedor | 15.4 | 0/0/0 | 0/0 | 0.0000 | 2 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ 4 agendamentos ativos com os títulos certos; ✘ módulo 2 remarcado para 01/03/2027; ✘ módulo 2 antigo cancelado; ✘ Revisão geral recorrente 29/02 08:30; ✘ memória do fim do treinamento; ✘ arquivo agenda_L09.md; ✘ resposta: 4 |
+| L10 | 1 | nao_executado | cota_provedor | 27.8 | 0/0/0 | 0/0 | 0.0000 | 4 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ arquivo saldo_L10.csv confere; ✘ arquivo saldo_L10_v2.csv confere; ✘ memória do pior mês = março (antiga apagada); ✘ cartões de esquecer_memoria e criar_habilidade; ✘ habilidade saldo-mensal criada; ✘ resposta: 3.900 e março |
+| L10 | 2 | nao_executado | cota_provedor | 27.8 | 0/0/0 | 0/0 | 0.0000 | 4 erros (413/429) | nenhum pedido aceito (1º pedido > 7 000) | ✘ arquivo saldo_L10.csv confere; ✘ arquivo saldo_L10_v2.csv confere; ✘ memória do pior mês = março (antiga apagada); ✘ cartões de esquecer_memoria e criar_habilidade; ✘ habilidade saldo-mensal criada; ✘ resposta: 3.900 e março |
+<!-- /TABELA_L -->
+
+Contagem (rodadas 1–3): ver o total logo acima da tabela.
 
 ## 5. Tarefas de tela G01–G10
 
 Fixtures: `docs/benchmarks/fixtures-gui.md`. Roteiro da sessão com o Heitor: `docs/benchmarks/roteiro-sessao-heitor.md`.
 
-_Medições: dependem da sessão do Heitor no Windows (a agendar pelo Tech Lead)._
+**0 de 30 executadas.** Dependem da sessão do Heitor no Windows (a agendar pelo Tech Lead) e, antes dela, da decisão sobre o limite de 7 000 tokens de entrada por pedido (§4.1): com a chave como está, o bot de computador passa desse teto no 2º ou 3º passo (a árvore de acessibilidade e a captura somam ao prompt de ~6,8 mil tokens), e a sessão viraria 30 × "não executado (cota)".
+
+**App de desktop para medir:** o instalador (`npm run desktop:build`) não fala com o backend local: sem `VITE_API_URL` o cliente chama a API na própria origem do app, e o CSP de produção do `tauri.conf.json` só libera `https://api.seu-dominio.com.br`. Nada foi mudado (é configuração do produto). A medição usa `npm run desktop` (modo dev: `devCsp` libera `localhost:5173` e `localhost:8000`, e o Vite faz proxy de `/v1` para a 8000). Em 2026-11-25 este worktree recebeu `npm ci` e `cargo build` (perfil dev) para a sessão abrir rápido.
 
 ## 6. Reprodução das 3 falhas reais (logs de 21 e 22/11)
 
-_Em andamento._
+| Falha | Reproduzida? | Classe | Onde |
+|---|---|---|---|
+| R2 — Wikipédia (navegador) | **sim**, pelo Claude, com o modelo fixo e o backend real | **`schema`** (chamada inválida repetida em laço), com `cota_provedor` secundária | §6.2 |
+| R1 — Excel "pensando para sempre" | não: exige o PC do Heitor (roteiro, execução 12) | original `transporte` | §6.1 |
+| R3 — Bloco de Notas "Teste da Sora" | não: exige o PC do Heitor (roteiro, execução 11) | original `executor` (×2) | §6.3 |
+
+### 6.1 R1 — Excel (log/2026-11-21.md)
+
+- **Pedido original:** "acesse meu computador e monte uma tabela simples no meu Excel com cores e títulos sublinhados" (bot liberado no PC, app de desktop).
+- **O que aconteceu:** o bot ficava em "pensando" e não fazia nada. O registro mostrou uma única chamada ao `gemini-3.8-flash` sem resposta; o Google estava sobrecarregado (503) ou levava mais de 2 min, e a chamada dos bots não tinha prazo. As reservas eram todas do Google (só modelos com visão).
+- **Classe:** `transporte` (chamada ao provedor pendurada sem prazo; a interface ficou pensando). Correção de 21/11 (prazo de 45 s, reserva de outro provedor, pausa do provedor), hoje em `a30c98f`.
+- **Reprodução no baseline:** execução 12 do roteiro, com o modelo fixo e sem reserva (escolha explícita). O que conferir: `conferir_g.ps1 excel-tabela` (≥ 2×2, títulos todos sublinhados, ≥ 1 cor), e se a interface ficou "pensando" > 2 min sem passo novo.
+
+### 6.2 R2 — Wikipédia (log/2026-11-22.md) — reproduzida
+
+**Passo a passo para repetir** (de `C:/dev/sora-claude/backend`, com API e worker de §1 e `uv sync --group navegador`):
+
+```bash
+uv run python ../docs/benchmarks/ferramentas/rodar_longas.py wikipedia --vezes 1 --primeira-rodada <n> --log-worker "$LOCALAPPDATA/sora-baseline/logs/worker.log"
+```
+
+O executor manda, na conversa da Sora da conta de QA, o pedido original: "Abra a página inicial da Wikipédia em português, use o campo de busca para procurar Santos Dumont, abra o artigo e me diga o título que apareceu na página." A prova é conferida no banco (`abas_navegador`: URL e título da aba) e no rastro, não na resposta.
+
+**O que aconteceu na reprodução válida (`R2-wikipedia-r4`, 2026-11-26 02:11 UTC):**
+1. `navegador_abrir` → página principal da Wikipédia (ok).
+2. `navegador_procurar(papel=searchbox)` → achou o campo "Pesquisar na Wikipédia" (ok).
+3. `navegador_acao(digitar, "Santos Dumont")` → ok; o resultado (1 698 caracteres, conferido no checkpoint do LangGraph no Postgres) trazia **6 sugestões com ref**, a primeira "Santos Dumont aeronauta e inventor brasileiro (1873–1932)".
+4. Na chamada seguinte ao modelo (a 5ª; **antes** de qualquer enxugamento do histórico, que só aconteceu na 14ª), o modelo mandou `navegador_acao(acao=clicar)` **com `ref` nulo**. O executor respondeu `ERRO ARGUMENTOS_INVALIDOS: A ação clicar precisa de 'ref'`.
+5. O modelo repetiu **a mesma chamada inválida 8 vezes**; nada no laço interrompeu a repetição.
+6. Entre as chamadas, 11 erros de limite da Groq (429 e um 413) com esperas de 13–55 s consumiram o prazo: "Última etapa com retorno: agir no elemento da página. O tempo deste turno acabou antes de eu conseguir concluir o pedido." Aba final: página principal, não o artigo.
+
+**Classe:** `schema` (chamada de ferramenta inválida, repetida sem correção). Sem o limite da Groq, o mesmo laço iria até o orçamento de passos; o limite só encurtou. Comparação com 22/11: naquele dia o modelo (`openai/gpt-oss-120b`) procurou um textbox depois de abrir a lista de sugestões; hoje, com `qwen/qwen3.8-27b`, ele recebe as refs das sugestões e não consegue montar o clique. O passo que falha é o mesmo: **escolher a sugestão depois de digitar**.
+
+**Outras rodadas** (todas em `execucoes/`):
+
+| Rodada | Resultado | Classe | Observação |
+|---|---|---|---|
+| r1 (2026-11-25, sessão anterior) | não executado | `ambiente_bancada` | o venv do worktree estava sem o grupo `navegador`: `navegador_abrir` respondeu "O navegador não está instalado neste servidor"; depois a Sora chamou o catálogo de conectores 5× até o prazo. Não conta |
+| r2 | não executado | `cota_provedor` | 413 da Groq no 1º pedido da Sora ("O pedido excede o limite deste modelo") |
+| r3 | não executado | `ambiente_bancada` | mesmo problema do r1 (navegador não instalado), visto aqui; corrigido com `uv sync --group navegador` e o worker reiniciado |
+| r4 | parcial (1/4) | `schema` | reprodução válida, acima |
+| r5 | parcial (1/4) | `schema` | **mesma falha** do r4: cartão de domínio novo (aprovado pelo executor), `definir_valor` "Santos Dumont", 6 sugestões com ref, depois `clicar` com `ref` nulo 8× seguidas; terminou por 413 ("O pedido excede o limite deste modelo") |
+| r6 | **ok** (4/4) | — | `clicar` na ref da 1ª sugestão; aba final `https://pt.wikipedia.org/wiki/Santos_Dumont`, título "Santos Dumont – Wikipédia…" (banco); resposta cita "Santos Dumont". 145 s, 7 chamadas ao modelo, 6 esperas de limite |
+
+**Resumo R2 (rodadas válidas r4–r6):** 1 ok, 2 parciais pela **mesma** falha (`schema`: clique sem ref em laço depois das sugestões). A falha é intermitente e não depende do limite da Groq (aparece antes de qualquer 413). Dois pontos do produto que ela expõe, para a Fase 1/Fase 4: (a) nada interrompe uma chamada de ferramenta **idêntica e inválida** repetida 8×; (b) o resultado de `digitar`/`definir_valor` traz as refs das sugestões, mas o modelo não as usa no `clicar` seguinte.
+
+### 6.3 R3 — Bloco de Notas (log/2026-11-22.md)
+
+- **Pedido original:** "No meu computador, abra o Bloco de Notas e escreva ‘Teste da Sora’. Deixe a janela aberta para eu conferir. Use um documento novo e preserve qualquer documento já aberto."
+- **O que aconteceu:** (1) digitação parcial no Bloco de Notas novo (WinUI): o documento ficou "Teste dSora" → classe `executor`; (2) com o texto certo, o Windows pôs "Teste da Sora" no título da aba, a palavra "Sora" acionou a proteção da janela do próprio produto e o bot não conseguiu confirmar o que escreveu → classe `executor` (bloqueio por pedaço do título; plano §1 e §6.5). Corrigido em parte no `081bdfd` (Bloco de Notas oficial identificado pelo pacote, leitura por TextPattern, 28 ms por caractere); o bloqueio pelo título continua de propósito.
+- **Reprodução no baseline:** execução 11 do roteiro, com `G04_a.txt` aberto para conferir o "preserve". Prova: `conferir_g.ps1 notepad-texto` mostra um documento com exatamente `Teste da Sora` e `G04_a.txt` intacto; anotar se o bot disse que fez sem conseguir confirmar.

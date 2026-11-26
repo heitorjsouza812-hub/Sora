@@ -1,0 +1,37 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Organize as tarefas da mudança de escritório. Antes de começar, me pergunte (com a ferramenta de pergunta) se a mudança é no sábado ou no domingo. Depois: 1) crie estas 5 pendências: 'Contratar caminhão', 'Embalar arquivos', 'Desligar internet antiga', 'Ligar internet nova', 'Avisar clientes'; 2) nas notas da pendência 'Contratar caminhão', anote o dia que eu escolhi; 3) conclua 'Embalar arquivos'; 4) remova 'Desligar internet antiga' (não precisa mais); 5) liste as pendências abertas; 6) salve mudanca_L08.md com as pendências abertas, uma por linha, em ordem alfabética; 7) responda quantas ficaram abertas.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "agente",
+   "conteudo": "O modelo groq/qwen/qwen3.8-27b, escolhido para esta conversa, atingiu o limite de uso do provedor. Não troquei de modelo sozinho: escolha outro no seletor do campo de mensagem ou volte para Automático.",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {},
+ "chamadas_modelo": [],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 2,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 2,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 2,
+  "ferramentas": []
+ },
+ "memorias": [],
+ "pendencias": [],
+ "rotinas": [],
+ "habilidades": [],
+ "aprovacoes": [],
+ "perguntas": [],
+ "mcp": {
+  "pedidos": [],
+  "enviados": [],
+  "chamadas": []
+ }
+}

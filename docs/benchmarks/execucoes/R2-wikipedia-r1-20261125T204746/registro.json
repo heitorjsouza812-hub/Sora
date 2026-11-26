@@ -1,0 +1,65 @@
+{
+ "tarefa": "R2-wikipedia",
+ "rodada": 1,
+ "inicio": "2026-11-25T20:47:47.773156+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 297.6
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "conversa_id": "44634b73-6833-424b-bd3c-03358f6ba333",
+ "agente_id": "24f62963-2f81-406c-955a-cc921b12deda",
+ "fim": "2026-11-25T20:52:49.110896+00:00",
+ "duracao_s": 301.3,
+ "resultado": "nao_executado",
+ "classe_sugerida": "cota_provedor",
+ "classe": "ambiente_bancada",
+ "prova": "✘ usou o navegador interativo (não só busca); ✘ aba final no artigo Santos_Dumont (banco); ✘ título da aba contém Santos Dumont (banco); ✘ resposta cita o título Santos Dumont",
+ "ferramentas_usadas": [],
+ "abas": [],
+ "chamadas_modelo": 7,
+ "modelos_usados": [
+  "groq/qwen/qwen3.8-27b"
+ ],
+ "tokens_entrada": 34387,
+ "tokens_saida": 350,
+ "chamadas_ferramenta": 6,
+ "rastro": {
+  "modelo.pedido": 12,
+  "ferramenta.inicio": 6,
+  "modelo.erro": 6,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 6,
+  "ferramentas": [
+   "navegador_abrir",
+   "conectores_buscar_ferramentas",
+   "conectores_carregar_ferramenta",
+   "conectores_buscar_ferramentas",
+   "conectores_buscar_ferramentas",
+   "conectores_carregar_ferramenta"
+  ]
+ },
+ "resposta_final": "Última etapa com retorno: abrir a página. O tempo deste turno acabou antes de eu conseguir concluir o pedido.",
+ "pedidos_ao_modelo_rastro": 12,
+ "bateu_limite_429": true,
+ "piloto": false,
+ "revisao": [
+  {
+   "em": "2026-11-26T02:11:00.560541+00:00",
+   "de": [
+    "nao_executado",
+    "cota_provedor"
+   ],
+   "para": [
+    "nao_executado",
+    "ambiente_bancada"
+   ],
+   "nota": "mesma sessão sem o grupo navegador instalado (navegador_abrir falhou), depois 429 até o prazo de 285 s. Não conta"
+  }
+ ]
+}

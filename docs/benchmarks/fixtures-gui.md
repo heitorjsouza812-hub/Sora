@@ -1,6 +1,6 @@
 # Fixtures de tela G01–G10 (e reproduções R1, R3)
 
-Tarefa 0.5 do plano de correções (§3.5, item 1). Tarefas genéricas no Windows real, pelo **app de desktop** compilado deste worktree (`npm run desktop:build`), com o bot no **PC do usuário** e o modelo fixo do `baseline.md`. Quem executa é o **Heitor** (o Claude não opera o PC dele); o roteiro passo a passo está em `roteiro-sessao-heitor.md`.
+Tarefa 0.5 do plano de correções (§3.5, item 1). Tarefas genéricas no Windows real, pelo **app de desktop** deste worktree em **modo dev** (`npm run desktop`, Vite 5173 → API 8000; o instalador do `desktop:build` não fala com o backend local: sem `VITE_API_URL` e com o CSP de produção no domínio de exemplo), com o bot no **PC do usuário** e o modelo fixo do `baseline.md`. Quem executa é o **Heitor** (o Claude não opera o PC dele); o roteiro passo a passo está em `roteiro-sessao-heitor.md`.
 
 **Prova é estado conferido fora do bot**: UI Automation, COM do Excel (só leitura), arquivo salvo e janela em primeiro plano por HWND/processo. A resposta do bot ou um screenshot sozinho **não** contam.
 
@@ -102,7 +102,7 @@ Os pedidos abaixo são **exatamente** os de `fixtures_gui.py` (`PEDIDOS_G`), que
 - **ok** 1 envio exato e protocolo certo · **parcial** 1 envio com 1–2 campos errados, ou protocolo errado · **falhou** nenhum envio, 2+ envios ou 3+ campos errados.
 
 ### G10 — Foco muda e controle aparece tarde; recuperar
-- **Estado inicial:** formulário rodando; Edge aberto **só** com `http://127.0.0.1:8766/g10`, **recarregado (F5) logo antes do envio** (mostra "Carregando o formulário…" por 5 s). No mesmo instante do envio do pedido, rodar `conferir_g.ps1 intruso -Atraso 30` (abre na frente o Bloco de Notas com `G10_intruso.txt` 30 s depois). Ao clicar em Enviar pela 1ª vez, o campo "Código de confirmação" só aparece 3 s depois.
+- **Estado inicial:** formulário rodando; Edge aberto **só** com `http://127.0.0.1:8766/g10`, **recarregado (F5) logo antes do envio** (mostra "Carregando o formulário…" por 5 s). Logo antes do envio do pedido, rodar `conferir_g.ps1 intruso -Atraso 40` e enviar em até 10 s (abre na frente o Bloco de Notas com `G10_intruso.txt` ~30 s depois do envio). Ao clicar em Enviar pela 1ª vez, o campo "Código de confirmação" só aparece 3 s depois.
 - **Pedido:** "No meu computador, no navegador aberto na página 'Cadastro de bancada G10', espere o formulário carregar e preencha: Nome 'Otávio Lins', E-mail 'otavio@exemplo.com.br', Cidade 'Londrina', Quantidade 3, marque 'Aceito os termos' e clique em Enviar. Depois de clicar, vai aparecer o campo 'Código de confirmação': preencha 'K7-42' e clique em Enviar de novo. Se outra janela aparecer na frente, não mexa nela: volte para o navegador. No fim, me diga o protocolo."
 - **Prova obrigatória:** `G10_envios.json` com 1 envio exato (inclui `codigo = K7-42`); `G10_intruso.txt` intacto no disco **e** no Bloco de Notas intruso (`notepad-texto -Titulo G10_intruso` igual ao original, sem `*`); nenhuma ação no app errado.
 - **Conferir:** `fixtures_gui.py conferir G10` + `conferir_g.ps1 notepad-texto -Titulo G10_intruso` + CSV do `vigiar-frente`.

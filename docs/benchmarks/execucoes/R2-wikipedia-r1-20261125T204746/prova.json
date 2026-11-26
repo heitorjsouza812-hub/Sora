@@ -1,0 +1,96 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Abra a página inicial da Wikipédia em português, use o campo de busca para procurar Santos Dumont, abra o artigo e me diga o título que apareceu na página.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "sora",
+   "conteudo": "Última etapa com retorno: abrir a página. O tempo deste turno acabou antes de eu conseguir concluir o pedido.",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {},
+ "chamadas_modelo": [
+  {
+   "papel": "sistema1",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 1092,
+   "tokens_saida": 134,
+   "custo_usd": "0.001410",
+   "latencia_ms": 635
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5165,
+   "tokens_saida": 33,
+   "custo_usd": "0.004264",
+   "latencia_ms": 1363
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5295,
+   "tokens_saida": 36,
+   "custo_usd": "0.004380",
+   "latencia_ms": 1566
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5427,
+   "tokens_saida": 37,
+   "custo_usd": "0.004490",
+   "latencia_ms": 1185
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5494,
+   "tokens_saida": 35,
+   "custo_usd": "0.004535",
+   "latencia_ms": 769
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5551,
+   "tokens_saida": 38,
+   "custo_usd": "0.004593",
+   "latencia_ms": 1299
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6363,
+   "tokens_saida": 37,
+   "custo_usd": "0.005238",
+   "latencia_ms": 1021
+  }
+ ],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 12,
+  "ferramenta.inicio": 6,
+  "modelo.erro": 6,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 6,
+  "ferramentas": [
+   "navegador_abrir",
+   "conectores_buscar_ferramentas",
+   "conectores_carregar_ferramenta",
+   "conectores_buscar_ferramentas",
+   "conectores_buscar_ferramentas",
+   "conectores_carregar_ferramenta"
+  ]
+ },
+ "memorias": [],
+ "pendencias": [],
+ "rotinas": [],
+ "habilidades": [],
+ "aprovacoes": [],
+ "abas": []
+}

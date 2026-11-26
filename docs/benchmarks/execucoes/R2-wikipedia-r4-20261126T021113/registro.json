@@ -1,0 +1,86 @@
+{
+ "tarefa": "R2-wikipedia",
+ "rodada": 4,
+ "inicio": "2026-11-26T02:11:14.548477+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 309.7
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "conversa_id": "9309589a-a790-4354-8812-76ec0a18aff9",
+ "agente_id": "24f62963-2f81-406c-955a-cc921b12deda",
+ "fim": "2026-11-26T02:16:28.188130+00:00",
+ "duracao_s": 313.6,
+ "resultado": "parcial",
+ "classe_sugerida": "cota_provedor",
+ "classe": "schema",
+ "prova": "✔ usou o navegador interativo (não só busca); ✘ aba final no artigo Santos_Dumont (banco); ✘ título da aba contém Santos Dumont (banco); ✘ resposta cita o título Santos Dumont",
+ "ferramentas_usadas": [
+  "navegador_abrir",
+  "navegador_procurar",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao"
+ ],
+ "abas": [
+  {
+   "url": "https://pt.wikipedia.org/wiki/Wikip%C3%A9dia:P%C3%A1gina_principal",
+   "titulo": "Wikipédia, a enciclopédia livre",
+   "usada_em": "2026-11-26 02:15:51.501045+00"
+  }
+ ],
+ "chamadas_modelo": 12,
+ "modelos_usados": [
+  "groq/qwen/qwen3.8-27b"
+ ],
+ "tokens_entrada": 70732,
+ "tokens_saida": 610,
+ "chamadas_ferramenta": 11,
+ "rastro": {
+  "modelo.pedido": 22,
+  "ferramenta.inicio": 11,
+  "modelo.erro": 11,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 11,
+  "ferramentas": [
+   "navegador_abrir",
+   "navegador_procurar",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao"
+  ]
+ },
+ "bateu_limite_429": true,
+ "resposta_final": "Última etapa com retorno: agir no elemento da página. O tempo deste turno acabou antes de eu conseguir concluir o pedido.",
+ "revisao": [
+  {
+   "em": "2026-11-26T02:17:34.773101+00:00",
+   "de": [
+    "nao_executado",
+    "cota_provedor"
+   ],
+   "para": [
+    "parcial",
+    "schema"
+   ],
+   "nota": "Reprodução válida. Chamada 3 digitou 'Santos Dumont'; o resultado (1698 chars, conferido no checkpoint) trazia 6 sugestões com ref (@...:e1 = aeronauta). Chamada 5 (antes de qualquer enxugamento, que só veio na chamada 14) mandou navegador_acao clicar com ref nulo; o executor respondeu ARGUMENTOS_INVALIDOS e o modelo repetiu a mesma chamada inválida 8x. As esperas de 429/ITPM (11 erros de limite) consumiram o prazo de 285 s: 'O tempo deste turno acabou'. Classe primária schema (chamada inválida em laço, sem detector de repetição); secundária cota_provedor."
+  }
+ ]
+}
