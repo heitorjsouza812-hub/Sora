@@ -1,0 +1,37 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Monte o relatório semanal a partir do anexo relatorio_L07.csv: 1) leia o arquivo; 2) some os atendimentos por dia; 3) ache o dia com mais atendimentos; 4) calcule a média diária com 1 casa; 5) escreva um texto curto com esses números; 6) envie o texto pela ferramenta enviar_relatorio do conector bancada para financeiro@exemplo.com.br com o assunto 'Relatório semanal L07'; 7) se o envio for recusado, NÃO envie de outro jeito: salve o texto em relatorio_L07.md e me avise que ficou salvo; 8) adicione a pendência \"Enviar relatório L07 depois\"; 9) responda com o dia de mais atendimentos.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "agente",
+   "conteudo": "O modelo groq/qwen/qwen3.8-27b, escolhido para esta conversa, atingiu o limite de uso do provedor. Não troquei de modelo sozinho: escolha outro no seletor do campo de mensagem ou volte para Automático.",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {},
+ "chamadas_modelo": [],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 2,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 2,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 2,
+  "ferramentas": []
+ },
+ "memorias": [],
+ "pendencias": [],
+ "rotinas": [],
+ "habilidades": [],
+ "aprovacoes": [],
+ "perguntas": [],
+ "mcp": {
+  "pedidos": [],
+  "enviados": [],
+  "chamadas": []
+ }
+}

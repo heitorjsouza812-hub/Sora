@@ -1,0 +1,65 @@
+{
+ "tarefa": "L05",
+ "rodada": 3,
+ "inicio": "2026-11-26T02:35:16.467660+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 12.3
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "8a1f4038-9f3c-45f8-b4ad-6b65a0e32b94",
+ "conversa_id": "d76c1003-fb9d-4469-bc31-f4e500448a72",
+ "fim": "2026-11-26T02:35:31.887821+00:00",
+ "duracao_s": 15.4,
+ "resultado": "nao_executado",
+ "classe_sugerida": "cota_provedor",
+ "classe": "cota_provedor",
+ "prova": "✘ MCP: pedidos exatamente os esperados (sem repetição); ✘ MCP: P-03 consultado de novo após o erro; ✘ MCP: conferiu os pedidos; ✘ arquivo compras_L05.csv com itens e TOTAL; ✘ resposta: 270,75",
+ "criterios": [
+  {
+   "criterio": "MCP: pedidos exatamente os esperados (sem repetição)",
+   "ok": false
+  },
+  {
+   "criterio": "MCP: P-03 consultado de novo após o erro",
+   "ok": false
+  },
+  {
+   "criterio": "MCP: conferiu os pedidos",
+   "ok": false
+  },
+  {
+   "criterio": "arquivo compras_L05.csv com itens e TOTAL",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: 270,75",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 0,
+ "chamadas_por_papel": {},
+ "modelos_usados": [],
+ "tokens_entrada": 0,
+ "tokens_saida": 0,
+ "custo_usd": 0.0,
+ "chamadas_ferramenta": 0,
+ "pedidos_ao_modelo_rastro": 2,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 2,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 2,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 2,
+  "ferramentas": []
+ },
+ "bateu_limite_429": true,
+ "esperas_429_s": 0,
+ "erros_sse": []
+}

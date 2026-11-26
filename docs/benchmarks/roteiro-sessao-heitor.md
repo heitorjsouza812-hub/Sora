@@ -36,6 +36,7 @@ O instalador de `npm run desktop:build` **não serve** para esta medição: sem 
 ### 1.3 Conta e modelo
 - Entrar no app com a **conta de QA do baseline** (`baseline-05-…@bancada.local`; e-mail em `%LOCALAPPDATA%\sora-baseline\estado.json`, senha na constante `SENHA_QA` de `ferramentas/rodar_longas.py`). Não usar a conta pessoal: nela há outros modelos ativos.
 - Conferir em Configurações → Modelos de IA que o único modelo de chat ativo é `groq/qwen/qwen3.8-27b` (ou o modelo decidido no §0, se mudou).
+- **Apagar os bots de bancada antigos** da conta (tela Bots; ficam só a Sora e o bot da execução atual). O prompt de todo bot leva a lista de colegas da conta, e cada execução cria um bot novo: sem limpar, o pedido ao modelo cresce ~30 tokens por bot e a execução 30 não é igual à 1ª (`baseline.md` §4.1). Durante a sessão, apagar o bot de cada execução **depois** do `registrar-g` (passo 10).
 
 ### 1.4 Fixtures
 - Terminal D (de `C:\dev\sora-claude\backend`): `uv run python ..\docs\benchmarks\ferramentas\fixtures_gui.py preparar` → cria `C:\bancada-g\` com os arquivos, `originais\` e `manifesto.json`.

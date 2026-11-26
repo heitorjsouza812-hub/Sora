@@ -1,0 +1,81 @@
+{
+ "tarefa": "L02",
+ "rodada": 3,
+ "inicio": "2026-11-26T02:34:00.621030+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 12.7
+  },
+  {
+   "terminou": true,
+   "segundos": 12.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "01261f2f-95de-40b3-ad89-d82af4a02afb",
+ "conversa_id": "97ed703b-2ba4-4e65-a338-d0a631881735",
+ "fim": "2026-11-26T02:34:28.789310+00:00",
+ "duracao_s": 28.1,
+ "resultado": "nao_executado",
+ "classe_sugerida": "cota_provedor",
+ "classe": "cota_provedor",
+ "prova": "✘ 5 memórias do Ipê; ✘ Bianca guardada; ✔ Caio apagado; ✘ cartão de esquecer_memoria aberto; ✘ arquivo: responsável Bianca; ✘ arquivo: dias_ate_prazo = 56; ✘ arquivo: cliente/orçamento/prazo/cor; ✘ resposta: Bianca",
+ "criterios": [
+  {
+   "criterio": "5 memórias do Ipê",
+   "ok": false
+  },
+  {
+   "criterio": "Bianca guardada",
+   "ok": false
+  },
+  {
+   "criterio": "Caio apagado",
+   "ok": true
+  },
+  {
+   "criterio": "cartão de esquecer_memoria aberto",
+   "ok": false
+  },
+  {
+   "criterio": "arquivo: responsável Bianca",
+   "ok": false
+  },
+  {
+   "criterio": "arquivo: dias_ate_prazo = 56",
+   "ok": false
+  },
+  {
+   "criterio": "arquivo: cliente/orçamento/prazo/cor",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: Bianca",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 0,
+ "chamadas_por_papel": {},
+ "modelos_usados": [],
+ "tokens_entrada": 0,
+ "tokens_saida": 0,
+ "custo_usd": 0.0,
+ "chamadas_ferramenta": 0,
+ "pedidos_ao_modelo_rastro": 4,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 4,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 4,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 4,
+  "ferramentas": []
+ },
+ "bateu_limite_429": true,
+ "esperas_429_s": 0,
+ "erros_sse": []
+}
