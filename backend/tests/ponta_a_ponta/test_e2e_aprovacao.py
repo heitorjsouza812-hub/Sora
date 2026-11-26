@@ -6,7 +6,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from tests.ponta_a_ponta.http import criar_conversa, entrar, ler_ate, sql
+from tests.ponta_a_ponta.http import criar_conversa, entrar, estado_final_da_fila, ler_ate, sql
 
 pytestmark = [pytest.mark.integracao, pytest.mark.asyncio]
 
@@ -84,6 +84,33 @@ async def test_cartao_de_outra_conta_nao_retoma_pedido(cliente_e2e, mundo):
         )
         assert aprovacoes[0].status == "pendente"
         assert await _contar_efeitos(mundo, id_conversa) == 0
+
+
+@pytest.mark.usefixtures("tabela_de_efeitos")
+async def test_permitir_cartao_do_pedido_parado_nao_retoma(cliente_e2e, mundo, aguardar_job):
+    await mundo.iniciar_worker()
+    conversa, cartao = await _pedido(cliente_e2e, mundo)
+    # A fila fecha o item inicial só depois de gravar o checkpoint da pausa.
+    assert await estado_final_da_fila(mundo, conversa) == "concluido"
+    parada = await cliente_e2e.post(f"/v1/conversas/{conversa}/parar")
+    assert parada.status_code == 202, parada.text
+
+    resposta = await _decidir(cliente_e2e, cartao)
+    assert resposta.status_code == 204, resposta.text
+    aprovacao_id = cartao.dados["aprovacao_id"]
+    await aguardar_job(f"aprovacao:{aprovacao_id}")
+    eventos = await ler_ate(
+        cliente_e2e, conversa, lambda evento: evento.nome == "aprovacao.resolvida", cursor=cartao.id
+    )
+    assert eventos[-1].dados["aprovacao_id"] == aprovacao_id
+    assert eventos[-1].dados["status"] == "permitida"
+    assert await _contar_efeitos(mundo, conversa) == 0
+    mensagens = await sql(
+        mundo,
+        "select autor, estado from mensagens where conversa_id = :id and visivel",
+        id=conversa,
+    )
+    assert [(m.autor, m.estado) for m in mensagens] == [("usuario", "interrompida")]
 
 
 @pytest.mark.usefixtures("tabela_de_efeitos")
