@@ -49,7 +49,7 @@ MODELO_ID_GROQ = "qwen/qwen3.8-27b"
 PORTA_MCP = 8765
 SENHA_QA = "baseline-qa-senha-0-5"
 # Páginas fixture: servidas pelo raw do GitHub FIXADO num commit (o ler_pagina recusa 127.0.0.1).
-PAGINAS_SHA = os.environ.get("BASELINE_PAGINAS_SHA", "COLOCAR_SHA")
+PAGINAS_SHA = os.environ.get("BASELINE_PAGINAS_SHA", "54cd737395d79ea4f08b3667fe4e008eaaec8c60")
 URL_PAGINAS = f"https://raw.githubusercontent.com/heitorjsouza812-hub/Sora/{PAGINAS_SHA}/docs/benchmarks/paginas"
 PRAZO_TURNO_S = 900  # o job tem 360 s; 900 s cobre esperas de 429 e retomadas por cartão
 FERRAMENTAS_BOT = ["ler_anexo", "ler_pagina", "escrever_arquivo"]
@@ -406,7 +406,7 @@ async def sql(consulta: str, **params) -> list[dict]:
 
 async def coletar(api: Api, est: dict, conversa_id: str, bot_id: str, t0: datetime, t1: datetime,
                   log_worker: Path | None) -> dict:
-    msgs = await api.json("GET", f"/conversas/{conversa_id}/mensagens", params={"limite": 200})
+    msgs = await api.json("GET", f"/conversas/{conversa_id}/mensagens", params={"limite": 100})
     msgs = msgs if isinstance(msgs, list) else msgs.get("itens", [])
     arquivos: dict[str, str] = {}
     for m in msgs:
@@ -426,13 +426,19 @@ async def coletar(api: Api, est: dict, conversa_id: str, bot_id: str, t0: dateti
                          "WHERE usuario_id = :u AND criado_em BETWEEN :a AND :b", u=u, a=t0, b=t1)
     passos = await sql("SELECT tipo::text AS tipo, ferramenta, status, texto FROM passos WHERE agente_id = :g "
                        "ORDER BY iniciado_em", g=bot_id)
-    rastro = {"modelo.pedido": 0, "ferramenta.inicio": 0, "modelo.erro": 0, "ferramenta.erro": 0, "ferramenta.pausa": 0}
+    rastro = {"modelo.pedido": 0, "ferramenta.inicio": 0, "modelo.erro": 0, "ferramenta.erro": 0, "ferramenta.pausa": 0,
+              "erros_de_limite": 0, "ferramentas": []}
     if log_worker and log_worker.exists():
         for linha in log_worker.read_text("utf-8", errors="replace").splitlines():
             if conversa_id in linha and '"evento"' in linha:
                 m = re.search(r'"evento":\s*"([^"]+)"', linha)
                 if m and m.group(1) in rastro:
                     rastro[m.group(1)] += 1
+                if '"RateLimitError"' in linha:
+                    rastro["erros_de_limite"] += 1
+                if m and m.group(1) == "ferramenta.inicio":
+                    nome = re.search(r'"nome":\s*"([^"]+)"', linha)
+                    rastro["ferramentas"].append(nome.group(1) if nome else "?")
     return {
         "mensagens": [{"autor": m.get("autor"), "conteudo": (m.get("conteudo") or "")[:1500], "estado": m.get("estado")} for m in msgs],
         "arquivos": arquivos,
@@ -605,9 +611,20 @@ def conferir(fid: str, prova: dict, mcp: dict) -> tuple[list[tuple[str, bool]], 
     return ck, texto
 
 
+COTA = ("limite de uso do provedor", "tempo deste turno acabou", "limite do provedor")
+
+
+def por_cota(prova: dict) -> bool:
+    """Parou pelo limite do plano do provedor (429/413 da Groq gratuita): 'não executado', não é falha do produto."""
+    final = sem_acento(_resposta(prova))
+    return prova["rastro"].get("erros_de_limite", 0) > 0 and any(sem_acento(x) in final for x in COTA)
+
+
 def classificar(ck: list[tuple[str, bool]], reg: dict, prova: dict) -> tuple[str, str]:
     passou = sum(1 for _, ok in ck if ok)
     resultado = "ok" if passou == len(ck) else ("parcial" if passou > 0 else "falhou")
+    if resultado != "ok" and por_cota(prova):
+        return "nao_executado", "cota_provedor"
     if not all(t.get("terminou") for t in reg["turnos"]):
         return resultado if resultado != "ok" else "parcial", "estado" if any(t.get("estado_bot") == "trabalhando" for t in reg["turnos"]) else "prazo"
     if resultado == "ok":
@@ -685,10 +702,11 @@ async def executar(fid: str, rodada: int, log_worker: Path | None) -> dict:
             "tokens_entrada": sum(c["tokens_entrada"] for c in prova["chamadas_modelo"]),
             "tokens_saida": sum(c["tokens_saida"] for c in prova["chamadas_modelo"]),
             "custo_usd": float(sum(Decimal(str(c["custo_usd"])) for c in prova["chamadas_modelo"])),
-            "chamadas_ferramenta": sum(1 for p in prova["passos"] if p["tipo"] == "ferramenta"),
+            "chamadas_ferramenta": prova["rastro"]["ferramenta.inicio"] or sum(1 for p in prova["passos"] if p["tipo"] == "ferramenta"),
+            "pedidos_ao_modelo_rastro": prova["rastro"]["modelo.pedido"],
             "chamadas_mcp": len(mcp["chamadas"]),
             "rastro": prova["rastro"],
-            "bateu_limite_429": bool(limite), "esperas_429_s": sum((e["d"]["parametros"] or {}).get("segundos", 0) for e in limite),
+            "bateu_limite_429": bool(limite) or prova["rastro"]["erros_de_limite"] > 0, "esperas_429_s": sum((e["d"]["parametros"] or {}).get("segundos", 0) for e in limite),
             "erros_sse": [e["d"] for e in ouv.eventos if e["ev"] == "erro"],
         })
         (pasta / "eventos.json").write_text(json.dumps(ouv.eventos, ensure_ascii=False, indent=1, default=str), "utf-8")
@@ -700,6 +718,139 @@ async def executar(fid: str, rodada: int, log_worker: Path | None) -> dict:
         await api.fechar()
     (pasta / "registro.json").write_text(json.dumps(reg, ensure_ascii=False, indent=1, default=str), "utf-8")
     print(f"{fid} r{rodada}: {reg.get('resultado')} classe={reg.get('classe') or '-'} {reg.get('duracao_s', '?')} s | {reg.get('prova', reg.get('erro_executor', ''))}")
+    return reg
+
+
+FERRAMENTAS_BOT_PC = ["computador_observar", "computador_agir"]  # computador_abrir_programa vem junto
+
+
+async def criar_bot_pc() -> None:
+    """Bot das tarefas de tela (G01–G10, R1, R3). Depois, no app de desktop: Configurações → Computador → liberar."""
+    api, est = await entrar()
+    bot = await api.json("POST", "/agentes", 201, json={
+        "nome": "BancadaPC", "funcao": "Bot de bancada de tela (baseline 0.5)",
+        "papel": PAPEL_BOT + " Você controla o computador do usuário (alvo pc_usuario).",
+        "ferramentas": FERRAMENTAS_BOT_PC})
+    await api.json("PATCH", f"/agentes/{bot['id']}", json={"provedor_id": est["provedor_id"], "modelo": MODELO_FIXO,
+                                                            "raciocinio": "auto", "permissao": "perguntar"})
+    est["bot_pc_id"] = bot["id"]
+    ESTADO.write_text(json.dumps(est, indent=1), "utf-8")
+    print("bot BancadaPC:", bot["id"], "| ferramentas:", bot.get("ferramentas"), "| modelo fixo:", MODELO_FIXO)
+    await api.fechar()
+
+
+async def nova_g(tarefa: str, rodada: int) -> None:
+    """Uma execução de tela = um bot NOVO (conversa e memória limpas), com o modelo fixo. Copia o pedido exato
+    para a área de transferência; o Heitor libera o bot no PC (Configurações → Computador) e cola no chat dele."""
+    import fixtures_gui as G
+
+    api, est = await entrar()
+    nome = f"{tarefa}r{rodada}x{agora().strftime('%H%M')}"
+    bot = await api.json("POST", "/agentes", 201, json={
+        "nome": nome, "funcao": "Bot de bancada de tela (baseline 0.5)",
+        "papel": PAPEL_BOT + " Você controla o computador do usuário (alvo pc_usuario).",
+        "ferramentas": FERRAMENTAS_BOT_PC})
+    await api.json("PATCH", f"/agentes/{bot['id']}", json={"provedor_id": est["provedor_id"], "modelo": MODELO_FIXO,
+                                                            "raciocinio": "auto", "permissao": "perguntar"})
+    est["bot_g_atual"] = bot["id"]
+    est["tarefa_g_atual"] = f"{tarefa}-r{rodada}"
+    ESTADO.write_text(json.dumps(est, indent=1), "utf-8")
+    pedido = G.PEDIDOS_G[tarefa]
+    tmp = ESTADO.parent / "pedido.txt"
+    tmp.write_text(pedido, "utf-8")
+    subprocess.run(["powershell", "-NoProfile", "-Command",
+                    f"Set-Clipboard -Value (Get-Content -Raw -Encoding UTF8 '{tmp}')"], check=False)
+    print(f"bot {nome} criado ({bot['id']}). Libere-o em Configurações → Computador e cole o pedido (já copiado):")
+    print(pedido)
+    await api.fechar()
+
+
+async def registrar_g(tarefa: str, rodada: int, resultado: str, classe: str, prova: str, log_worker: Path | None) -> None:
+    """Grava a execução G/R feita pelo Heitor no app: lê a ÚLTIMA conversa do BancadaPC (só leitura)."""
+    api, est = await entrar()
+    try:
+        bot_id = est.get("bot_g_atual") or est["bot_pc_id"]
+        conversa = (await sql("SELECT id::text AS id, criada_em FROM conversas WHERE agente_id = :g "
+                              "ORDER BY criada_em DESC LIMIT 1", g=bot_id))[0]
+        msgs = await sql("SELECT autor::text AS autor, criada_em FROM mensagens WHERE conversa_id = :c ORDER BY criada_em",
+                         c=conversa["id"])
+        t0, t1 = min(m["criada_em"] for m in msgs), max(m["criada_em"] for m in msgs)
+        dados = await coletar(api, est, conversa["id"], bot_id, t0, t1, log_worker)
+        reg = {"tarefa": tarefa, "rodada": rodada, "conversa_id": conversa["id"], "inicio": t0.isoformat(),
+               "fim": t1.isoformat(), "duracao_s": round((t1 - t0).total_seconds(), 1), "resultado": resultado,
+               "classe": classe, "prova": prova, "modelo_fixo": MODELO_FIXO,
+               "modelos_usados": sorted({c["modelo"] for c in dados["chamadas_modelo"]}),
+               "chamadas_modelo": len(dados["chamadas_modelo"]), "pedidos_ao_modelo_rastro": dados["rastro"]["modelo.pedido"],
+               "chamadas_ferramenta": dados["rastro"]["ferramenta.inicio"], "ferramentas": dados["rastro"]["ferramentas"],
+               "tokens_entrada": sum(c["tokens_entrada"] for c in dados["chamadas_modelo"]),
+               "tokens_saida": sum(c["tokens_saida"] for c in dados["chamadas_modelo"]),
+               "custo_usd": float(sum(Decimal(str(c["custo_usd"])) for c in dados["chamadas_modelo"])),
+               "bateu_limite_429": dados["rastro"]["erros_de_limite"] > 0,
+               "cartoes": dados["aprovacoes"], "resposta_final": _resposta(dados)[:600]}
+        pasta = EXECUCOES / f"{tarefa}-r{rodada}-{agora().strftime('%Y%m%dT%H%M%S')}"
+        pasta.mkdir(parents=True, exist_ok=True)
+        (pasta / "registro.json").write_text(json.dumps(reg, ensure_ascii=False, indent=1, default=str), "utf-8")
+        (pasta / "prova.json").write_text(json.dumps(dados, ensure_ascii=False, indent=1, default=str), "utf-8")
+        print(json.dumps({k: reg[k] for k in ("tarefa", "rodada", "resultado", "classe", "duracao_s", "chamadas_modelo",
+                                              "chamadas_ferramenta", "tokens_entrada", "bateu_limite_429", "modelos_usados")},
+                         ensure_ascii=False))
+    finally:
+        await api.fechar()
+
+
+PEDIDO_WIKIPEDIA = ("Abra a página inicial da Wikipédia em português, use o campo de busca para procurar Santos "
+                    "Dumont, abra o artigo e me diga o título que apareceu na página.")
+
+
+async def reproduzir_wikipedia(rodada: int, log_worker: Path | None) -> dict:
+    """Falha real R2 (log/2026-11-22.md): pedido exato, na conversa da Sora, com o modelo fixo."""
+    marca = agora().strftime("%Y%m%dT%H%M%S")
+    pasta = EXECUCOES / f"R2-wikipedia-r{rodada}-{marca}"
+    pasta.mkdir(parents=True, exist_ok=True)
+    api, est = await entrar()
+    reg: dict[str, Any] = {"tarefa": "R2-wikipedia", "rodada": rodada, "inicio": agora().isoformat(),
+                           "modelo_fixo": MODELO_FIXO, "turnos": [], "cartoes": [], "perguntas": []}
+    try:
+        sora = await api.json("GET", "/agentes/sora")
+        t0 = agora()
+        conversa = await api.json("POST", "/conversas", 201, json={"agente_id": sora["id"], "texto": PEDIDO_WIKIPEDIA, "anexos": []})
+        reg["conversa_id"], reg["agente_id"] = conversa["id"], sora["id"]
+        ouv = Ouvinte(api, conversa["id"])
+        reg["turnos"].append(await rodar_turno(api, ouv, sora["id"], Turno(PEDIDO_WIKIPEDIA), 0, reg))
+        await asyncio.sleep(3)
+        t1 = agora()
+        ouv.fechar()
+        prova = await coletar(api, est, conversa["id"], sora["id"], t0, t1, log_worker)
+        abas = await sql("SELECT url, titulo, usada_em::text AS usada_em FROM abas_navegador WHERE agente_id = :g "
+                         "AND usada_em >= :a ORDER BY usada_em", g=sora["id"], a=t0)
+        ferramentas = prova["rastro"]["ferramentas"] or [p["ferramenta"] for p in prova["passos"] if p["tipo"] == "ferramenta"]
+        resp = sem_acento(_resposta(prova))
+        ck = [
+            ("usou o navegador interativo (não só busca)", any(f and f.startswith("navegador_") for f in ferramentas)),
+            ("aba final no artigo Santos_Dumont (banco)", any("pt.wikipedia.org/wiki/santos_dumont" in (a["url"] or "").lower() for a in abas)),
+            ("título da aba contém Santos Dumont (banco)", any("santos dumont" in sem_acento(a["titulo"] or "") for a in abas)),
+            ("resposta cita o título Santos Dumont", "santos dumont" in resp),
+        ]
+        resultado, classe = classificar(ck, reg, prova)
+        reg.update({"fim": t1.isoformat(), "duracao_s": round((t1 - t0).total_seconds(), 1), "resultado": resultado,
+                    "classe_sugerida": classe, "classe": classe,
+                    "prova": "; ".join(f"{'✔' if ok else '✘'} {n}" for n, ok in ck),
+                    "ferramentas_usadas": ferramentas, "abas": abas,
+                    "chamadas_modelo": len(prova["chamadas_modelo"]),
+                    "modelos_usados": sorted({c["modelo"] for c in prova["chamadas_modelo"]}),
+                    "tokens_entrada": sum(c["tokens_entrada"] for c in prova["chamadas_modelo"]),
+                    "tokens_saida": sum(c["tokens_saida"] for c in prova["chamadas_modelo"]),
+                    "chamadas_ferramenta": len(ferramentas), "rastro": prova["rastro"],
+                    "resposta_final": _resposta(prova)[:600]})
+        (pasta / "prova.json").write_text(json.dumps({**prova, "abas": abas}, ensure_ascii=False, indent=1, default=str), "utf-8")
+        (pasta / "eventos.json").write_text(json.dumps(ouv.eventos, ensure_ascii=False, indent=1, default=str), "utf-8")
+    except Exception as erro:
+        reg.update({"resultado": "nao_executado", "classe": "transporte", "erro_executor": f"{type(erro).__name__}: {erro}"})
+    finally:
+        await api.fechar()
+    (pasta / "registro.json").write_text(json.dumps(reg, ensure_ascii=False, indent=1, default=str), "utf-8")
+    print(f"R2 wikipedia r{rodada}: {reg.get('resultado')} classe={reg.get('classe') or '-'} {reg.get('duracao_s', '?')} s | "
+          f"{reg.get('prova', reg.get('erro_executor', ''))}")
     return reg
 
 
@@ -731,12 +882,16 @@ def pedidos() -> None:
 
 
 async def principal() -> None:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
-    ap.add_argument("acao", choices=["preparar", "modelos", "rodar", "resumo", "pedidos"])
+    ap.add_argument("acao", choices=["preparar", "modelos", "rodar", "resumo", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g"])
     ap.add_argument("tarefas", nargs="*")
     ap.add_argument("--vezes", type=int, default=3)
     ap.add_argument("--primeira-rodada", type=int, default=1)
     ap.add_argument("--log-worker", type=Path)
+    ap.add_argument("--resultado", choices=["ok", "parcial", "falhou", "nao_executado"])
+    ap.add_argument("--classe", default="")
+    ap.add_argument("--prova", default="")
     ap.add_argument("--repetir-429", type=int, default=2, help="repete a execução que terminou só por 429")
     a = ap.parse_args()
     if a.acao == "preparar":
@@ -747,6 +902,15 @@ async def principal() -> None:
         resumo()
     elif a.acao == "pedidos":
         pedidos()
+    elif a.acao == "bot-pc":
+        await criar_bot_pc()
+    elif a.acao == "nova-g":
+        await nova_g(a.tarefas[0].upper(), a.primeira_rodada)
+    elif a.acao == "registrar-g":
+        await registrar_g(a.tarefas[0], a.primeira_rodada, a.resultado, a.classe, a.prova, a.log_worker)
+    elif a.acao == "wikipedia":
+        for n in range(a.primeira_rodada, a.primeira_rodada + a.vezes):
+            await reproduzir_wikipedia(n, a.log_worker)
     else:
         if "COLOCAR_SHA" in URL_PAGINAS:
             sys.exit("Defina BASELINE_PAGINAS_SHA (commit que tem docs/benchmarks/paginas/).")
@@ -754,8 +918,7 @@ async def principal() -> None:
             for n in range(a.primeira_rodada, a.primeira_rodada + a.vezes):
                 for _tentativa in range(a.repetir_429 + 1):
                     reg = await executar(fid, n, a.log_worker)
-                    so_429 = reg.get("bateu_limite_429") and reg.get("resultado") != "ok" and any(
-                        "limite" in str(e).lower() for e in reg.get("erros_sse", []))
+                    so_429 = reg.get("classe") == "cota_provedor"
                     if not so_429:
                         break
                     print(f"  {fid} r{n}: parou por limite do provedor (429); espera 90 s e repete (não conta como falha)")
@@ -763,4 +926,7 @@ async def principal() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(principal())
+    if sys.platform == "win32":  # psycopg async não roda no ProactorEventLoop
+        asyncio.run(principal(), loop_factory=asyncio.SelectorEventLoop)
+    else:
+        asyncio.run(principal())
