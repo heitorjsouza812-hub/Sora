@@ -22,6 +22,30 @@
 | 0.4 Testes de ponta a ponta | Codex | `feat/ponta-a-ponta` [#6](https://github.com/heitorjsouza812-hub/Sora/pull/6) (`78d578e`); filhos com base temporária `feat/ponta-a-ponta`: `fix/estado-fim-turno` [#7](https://github.com/heitorjsouza812-hub/Sora/pull/7) (`2fe72e4`), `fix/aviso-troca-modelo` [#8](https://github.com/heitorjsouza812-hub/Sora/pull/8) (`8cdefe1`), `feat/grupo-sintese` [#9](https://github.com/heitorjsouza812-hub/Sora/pull/9) (`ee70bfe`) | ver ramos | 13 cenários 20/20, 0 skipped | Codex, local com Docker, `--count=3`: 13 cenários, 42 execuções, 0 falhas, 0 pulados. #6: aprovação 15/15, rotinas 6/6, reconexão SSE 3/3; CI 4/4 verde. #7: Parar e prazo gravavam `concluido` no Postgres; agora `cancelado` e `falhou` (3/3 cada). #8: troca 9/9 (timeout, HTTP 500, modelo fixo sem reserva). #9: grupo 3/3, uma síntese por rodada, a retomada não duplica. Unitários 2250–2253 passam, 0 falham, 2 pulados (link simbólico) | 20/20 no CI: `workflow_dispatch` 45743363565 em `feat/ponta-a-ponta` (2026-11-26) | Revisão cruzada do Claude (#6/#7 e #8/#9). Ordem: #4 (com o #5) → #6 → base dos filhos vira `onda3` → #7, #8, #9 |
 | 0.5 Baseline | Claude (Opus 5.5) + Heitor | `feat/baseline` (`C:/dev/sora-claude`) | `54cd737` | 30 tela + 30 longas com classe de falha | Modelo fixo anotado: Groq `qwen/qwen3.8-27b`, o único da chave de QA com visão e ferramentas (provado por chamada direta). Medições L ainda não registradas | sessão do Heitor no Windows para G01–G10 | Retomada depois da cota: fixtures, L01–L10 ×3, roteiro da sessão, PR em rascunho |
 
+**2026-11-26:** o #4 foi mesclado no `onda3` em `71799ad`, levando o #5 junto (os dois aparecem como MERGED). Na hora do merge:
+- 5/5 checks verdes em `8e29522`;
+- revisão do Codex: APROVADO;
+- revisão do Claude no #5: sem bloqueio além da ordem de merge.
+
+**20/20 no CI** (`workflow_dispatch` 45743363565, `feat/ponta-a-ponta` em `78d578e`):
+
+| Arquivo | Passaram | Falharam | Pulados |
+|---|---|---|---|
+| `test_e2e_aprovacao` | 100 | 0 | 0 |
+| `test_e2e_reconexao_sse` | 20 | 0 | 0 |
+| `test_e2e_rotina` | 40 | 0 | 0 |
+
+Repetido sobre as correções da revisão (`9d9c56e`): rodada 45851679177.
+
+**Correções da revisão do #6** (Codex, antes de ser barrado por um filtro de segurança do provedor; o Tech Lead juntou o `onda3`):
+- `80b2486`: partida a frio;
+- `997e7ef`: reconexão com o socket caindo no meio da resposta;
+- `385bf78`: Parar e depois Permitir não retoma o pedido;
+- `bb5142e`: despachos simultâneos;
+- `049425f`: unitário do modo real.
+
+**Correção do #7:** `02726a5` encerra o item da fila pelo id.
+
 **Ordem de merge dos PRs #4 e #5** (revisões cruzadas de 2026-11-25):
 - O Claude achou, no #5 sem o #4, as meta-ferramentas `conectores_*` duplicadas com 21 ou mais MCP. Isso não abre furo, mas as MCP somem do turno.
 - O Codex pediu, no #4, um caso que só passa com o #5.
