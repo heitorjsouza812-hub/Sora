@@ -782,8 +782,8 @@ async def test_modelo_sem_visao_gera_aviso_no_chat_e_nota_para_o_bot(
     avisos = [m for m in mensagens if m["autor"] == "agente"]
     assert len(avisos) == 1 and avisos[0]["agente_id"] == str(bot_id)
     assert "não enxerga imagens" in avisos[0]["conteudo"] and "foto.png" in avisos[0]["conteudo"]
-    # O aviso conta como fala antes do turno (o worker não responde duas vezes por engano).
-    assert capturado["antes"] >= 2
+    # O aviso entra na contagem inicial de falas do bot. O pedido do usuário fica fora dela.
+    assert capturado["antes"] == len(avisos)
 
 
 async def test_anexo_de_outro_usuario_nunca_chega_ao_modelo(

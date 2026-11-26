@@ -64,3 +64,54 @@ def test_prompt_do_navegador_aponta_para_o_catalogo_que_o_bot_tem() -> None:
     sistema = montar_prompt_de_sistema(_bot_com_navegador())
     secao = sistema[sistema.index("## Como usar o navegador") :]
     assert "navegador_executar_ferramenta" not in secao
+
+
+def _conectores(quantos: int) -> list:
+    from langchain_core.tools import tool
+
+    def criar(i: int):
+        @tool(f"mcp__inventario__get_item_{i}")
+        def ler(alvo: str) -> str:
+            """Lê um item do inventário."""
+            return alvo
+
+        return ler
+
+    return [criar(i) for i in range(quantos)]
+
+
+def _escondidas(contexto: ContextoAgente) -> list:
+    todos = nomes_das_ferramentas(contexto)
+    diretas = set(nomes_diretos(todos, contexto))
+    ferramentas = criar_ferramentas(
+        todos,
+        ContextoFerramenta(
+            usuario_id=contexto.usuario_id,
+            agente_id=contexto.agente_id,
+            conversa_id=contexto.conversa_id,
+        ),
+    )
+    return [f for f in ferramentas if f.name not in diretas]
+
+
+def test_ate_20_conectores_vao_direto_mesmo_com_o_catalogo_do_navegador() -> None:
+    contexto = _bot_com_navegador()
+    nomes = [f.name for f in catalogo_enxuto(_escondidas(contexto), _conectores(20), contexto)]
+    assert sum(n.startswith("mcp__") for n in nomes) == 20
+    assert len(nomes) == len(set(nomes))
+    assert "conectores_executar_ferramenta" in nomes
+
+
+def test_21_conectores_ficam_todos_no_catalogo() -> None:
+    contexto = _bot_com_navegador()
+    nomes = [f.name for f in catalogo_enxuto(_escondidas(contexto), _conectores(21), contexto)]
+    assert not any(n.startswith("mcp__") for n in nomes)
+    assert len(nomes) == len(set(nomes)) == 3
+
+
+def test_pedido_do_navegador_deixa_os_conectores_no_catalogo() -> None:
+    contexto = _bot_com_navegador()
+    contexto.superficie = "navegador"
+    nomes = [f.name for f in catalogo_enxuto(_escondidas(contexto), _conectores(5), contexto)]
+    assert not any(n.startswith("mcp__") for n in nomes)
+    assert len(nomes) == len(set(nomes)) == 3
