@@ -218,7 +218,9 @@ def catalogo_enxuto(escondidas: list, conectores: list, contexto: ContextoAgente
     if not escondidas:
         return catalogo_dos_conectores(conectores, contexto)
     conectores_diretos = []
-    if len(conectores) <= LIMITE_DIRETO:
+    # Pedido que cita o navegador ou o PC (``superficie``) deixa só essas ferramentas direto,
+    # para sobrar contexto para a árvore da página; os conectores ficam no catálogo revisado.
+    if len(conectores) <= LIMITE_DIRETO and not contexto.superficie:
         conectores_diretos, conectores = conectores, []
     for ferramenta in escondidas:
         metadados = dict(getattr(ferramenta, "metadata", None) or {})
