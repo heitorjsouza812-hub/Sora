@@ -10,6 +10,7 @@
 |---|---|
 | 2026-11-25 | Autoriza, de uma vez: `git push -u origin onda3`, push dos ramos `fix/…` e `feat/…` e abertura de PRs com base `onda3`. Merge na `main`, deploy e `alembic upgrade` no servidor continuam pedindo ok separado. |
 | 2026-11-25 | Modelo fixo com visão do baseline e do §8: "o que estiver disponível". Nesta máquina só há a chave de QA da Groq (`backend/.env`); o modelo exato (provedor/modelo/versão) é escolhido e anotado aqui e em `docs/benchmarks/baseline.md` antes da primeira medição da 0.5, e não muda até o Gate. |
+| 2026-11-26 | O modelo fixo deixa de ser o Groq `qwen/qwen3.8-27b`: a chave de QA recusa com 413 qualquer pedido acima de 7 000 tokens de entrada. O novo é **um Gemini da conexão Google da conta do Heitor**, com ID estável, visão e ferramentas, escolhido e anotado no `baseline.md` §2 antes da 1ª medição. Ele vale até o Gate. A chave é copiada para a conta de bancada por script local (decifra e cadastra pela API, sem gravar nem imprimir), sem tocar na conta do Heitor. |
 | 2026-11-25 | Delegados: Codex `gpt-6.2-sol` (raciocínio medium) nas tarefas de backend; Claude Opus 5.5 na 0.5, na Fase 3/4 e nas revisões. |
 
 ## Fase atual: 0 (até 2026-12-02)
