@@ -22,6 +22,28 @@
 | 0.4 Testes de ponta a ponta | Codex | `feat/ponta-a-ponta` (criado em `99f16b3`, sem commits) | — | 13 cenários 20/20, 0 skipped | — | — | Retomada depois da cota: base `origin/onda3` + merge de `origin/fix/ci-integracao`; commit e push por cenário; síntese do `@todos` no PR separado `feat/grupo-sintese` |
 | 0.5 Baseline | Claude (Opus 5.5) + Heitor | `feat/baseline` (`C:/dev/sora-claude`) | `54cd737` | 30 tela + 30 longas com classe de falha | Modelo fixo anotado: Groq `qwen/qwen3.8-27b`, o único da chave de QA com visão e ferramentas (provado por chamada direta). Medições L ainda não registradas | sessão do Heitor no Windows para G01–G10 | Retomada depois da cota: fixtures, L01–L10 ×3, roteiro da sessão, PR em rascunho |
 
+**Ordem de merge dos PRs #4 e #5** (revisões cruzadas de 2026-11-25):
+- O Claude achou, no #5 sem o #4, as meta-ferramentas `conectores_*` duplicadas com 21 ou mais MCP. Isso não abre furo, mas as MCP somem do turno.
+- O Codex pediu, no #4, um caso que só passa com o #5.
+- Por isso o `fix/mcp-aprovacao` recebe merge do `fix/ci-integracao`, e o #4 entra no `onda3` levando os dois. O `onda3` nunca fica com o #5 sozinho.
+- Conferência local dos dois juntos (`d6bef30`, Docker): unitários 2252 passam e 2 pulados (link simbólico no Windows). Na integração:
+
+  | Arquivo | Passam |
+  |---|---|
+  | `test_mcp_aprovacao` | 8 |
+  | `test_relogio_externos` | 6 |
+  | `test_etapa6_ancora4` | 14 |
+  | `test_relogio_rotinas` | 6 |
+  | `test_chave_ferramentas` | 38 |
+  | `test_ferramentas_coordenacao` | 10 |
+
+  Nenhuma falha e nenhum pulado na integração.
+- Achado 2 do Claude no #5: um pedido que cita navegador ou PC deixa os MCP no catálogo, para não desfazer a economia de contexto de `2f7042f`. Corrigido pelo Tech Lead em `8927cb8`, com 3 unitários; os unitários completos dão 2252 passam.
+
+PRs filhos da 0.4 (`fix/estado-fim-turno`, `fix/aviso-troca-modelo`, `feat/grupo-sintese`):
+- Abertos com base temporária `feat/ponta-a-ponta`.
+- O Tech Lead muda a base para o `onda3` quando o PR da 0.4 entrar.
+
 2026-11-25 ~21:05: os três delegados pararam por fim da cota e foram retomados a partir do que já estava commitado (nada perdido).
 
 Código medido pela 0.5: `a30c98f`. O `onda3` em `f2fb882` só muda `.github/workflows/ci.yml`, `STATUS.md` e o grupo dev (`pytest-repeat`); o código que roda é o mesmo.
@@ -44,6 +66,10 @@ PR de teste da 0.2: [#3](https://github.com/heitorjsouza812-hub/Sora/pull/3) (`c
 | `backend/tests/unitarios/test_prazo_aprovacao.py` (novo) | Codex | 2026-11-25 | 0.4 (prazo do cartão só com `SORA_MODELO_FALSO=1`) |
 | `backend/workers/{conversa,equipe}.py` (fim por timeout/Parar gravado com o estado certo; hoje vira `concluido`) | Codex | 2026-11-25 | Correção de produto achada pela 0.4. PR separado `fix/estado-fim-turno` (correção + unitário + cenário), com antes/depois do estado no banco; sem estado novo no modelo de dados |
 | `backend/workers/portas.py` (aviso de troca de modelo no chat direto) | Codex | 2026-11-25 | Correção de produto achada pela 0.4. PR separado `fix/aviso-troca-modelo`: PT-BR sem termo técnico, só quando a troca aconteceu, uma vez por turno; modelo explícito continua sem troca silenciosa |
+| `backend/tests/unitarios/test_estado_fim_turno.py` (novo) | Codex | 2026-11-25 | PR `fix/estado-fim-turno` |
+| `backend/tests/unitarios/test_aviso_troca_modelo.py` (novo) | Codex | 2026-11-25 | PR `fix/aviso-troca-modelo` |
+| `backend/app/canais_equipe/sql.py` (só uma consulta de leitura nova: nomes dos bots da rodada por id, inclusive removidos/desativados, restrita ao `usuario_id` dono) | Codex | 2026-11-25 | PR `feat/grupo-sintese` |
+| `backend/app/llm/troca.py`, `backend/app/agentes/montagem.py`, `backend/app/agentes/middleware/__init__.py` (só avisar no chat direto que uma reserva respondeu) | Codex | 2026-11-25 | PR `fix/aviso-troca-modelo`. Sem mudar política/ordem de troca nem o aviso da cadeia; modelo explícito sem reserva (unitário); `MiddlewareRevisor` sempre montado |
 | `backend/workers/conversa.py` (gatilhos do modelo falso pelo turno real), `backend/workers/equipe.py` (`[falha_bot]`), `backend/app/orquestrador/modelos.py` (reserva falsa), `backend/app/ferramentas/registro.py`, `backend/app/agentes/montagem.py`, `backend/app/revisor/politica.py` (ferramenta de teste) | Codex | 2026-11-25 | 0.4. Condições: tudo o que é de teste só existe com `SORA_MODELO_FALSO=1`; nenhuma regra de `revisor/politica.py` fica mais permissiva para ferramenta real |
 
 ## 0.1 — inventário do trabalho local (2026-11-25, `onda3` sobre `f92a420`)
