@@ -39,6 +39,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     disponivel, motivo = docker_disponivel()
     if disponivel:
         return
+    if os.environ.get("SORA_EXIGIR_DOCKER") == "1":
+        raise pytest.UsageError(motivo)
     pular = pytest.mark.skip(reason=motivo)
     for item in marcados:
         item.add_marker(pular)
