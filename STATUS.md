@@ -17,10 +17,34 @@
 | Tarefa | Dono | Ramo | Commit | Verificação | Resultado real | Bloqueio | Próximo passo |
 |---|---|---|---|---|---|---|---|
 | 0.1 Commitar trabalho de 21–22/11 | Tech Lead | `onda3` | `75434fd`, `081bdfd`, `2f7042f` + commit de docs | ruff check/format + `uv run pytest tests/unitarios -q` por commit (worktree `C:/dev/sora-tl-verifica`); `cargo clippy -D warnings` + `cargo test` | 2242 → 2244 → 2246 passam, 0 falham, 5 pulados; Rust 35 passam, 1 ignorado | Docker Desktop desligado (integração não rodada localmente) | push de `onda3` |
-| 0.2 Religar o CI | Tech Lead | `onda3` | `f2fb882`, `99f16b3` (teste do App no Node 20) | PR de teste #3 contra `onda3` dispara os 4 jobs | Disparou sozinho. Rodada 45694848208: backend ✅, desktop ✅, App ❌ (teste antigo no Node 20; corrigido em `99f16b3`, App verde no PR #4), integração ❌ (2 testes, abaixo) | integração vermelha; proteção da `main`/`onda3` é com o Heitor | Codex: `fix/ci-integracao` |
-| 0.3 Bypass de aprovação do MCP | Codex (`gpt-6.2-sol`, medium) | `fix/mcp-aprovacao` (`C:/dev/sora-codex`) | `397a2fa` ([PR #4](https://github.com/heitorjsouza812-hub/Sora/pull/4)) | caso de 25 ferramentas falha antes / passa depois | unitários 2249 passam, 0 falham; `test_mcp_aprovacao.py` 2 **pulados** (sem Docker) | **Incompleta:** o teste de integração só cobre a listagem do "testar conexão"; falta o caso obrigatório do §3.3 (modelo roteirizado chama `delete_everything` com 25 ferramentas, `pesquisador` e `individual` → cartão aberto e efeito não executado; 5 ferramentas e `sem_supervisao=True` como regressão) e a prova antes/depois desse caso. O Codex devolveu duas vezes sem esse teste | Reatribuído: Claude escreve o teste no `fix/mcp-aprovacao` (worktree `C:/dev/sora-claude-mcp`, só testes); Codex revisa |
-| 0.4 Testes de ponta a ponta | Codex | `feat/ponta-a-ponta` (criado em `99f16b3`, sem commits) | — | 13 cenários 20/20, 0 skipped | — | — | Liberada em paralelo à 0.3 (arquivos disjuntos) logo depois do PR do `fix/ci-integracao`; base = `origin/onda3` + merge de `fix/ci-integracao` até ele entrar no `onda3` |
-| 0.5 Baseline | Claude (Opus 5.5) + Heitor | `feat/baseline` (`C:/dev/sora-claude`) | — | 30 tela + 30 longas com classe de falha | — | Docker; sessão do Heitor no Windows para G01–G10 | em andamento (2026-11-25): fixtures e L01–L10 |
+| 0.2 Religar o CI | Tech Lead | `onda3` | `f2fb882`, `99f16b3` (teste do App no Node 20) | PR de teste #3 contra `onda3` dispara os 4 jobs | Disparou sozinho. Rodada 45694848208: backend ✅, desktop ✅, App ❌ (teste antigo no Node 20; corrigido em `99f16b3`, App verde no PR #4), integração ❌ (2 testes, abaixo) | integração vermelha até o [PR #5](https://github.com/heitorjsouza812-hub/Sora/pull/5) entrar; proteção da `main`/`onda3` é com o Heitor | PR #5 (`fix/ci-integracao`, Codex `05d7b79`, aberto pelo Tech Lead): CI + revisão do Claude → merge no `onda3` → atualizar `ci/teste-pr-onda3` e ver o #3 verde |
+| 0.3 Bypass de aprovação do MCP | Codex (correção) + Claude (teste) | `fix/mcp-aprovacao` | `397a2fa` (correção), `f1d737a` (teste de integração do §3.3, Claude), `b69a91f` (merge do `onda3`) — [PR #4](https://github.com/heitorjsouza812-hub/Sora/pull/4) | `SORA_MODELO_FALSO=1 SORA_EXIGIR_DOCKER=1 uv run pytest tests/integracao/test_mcp_aprovacao.py -q -rs`, Docker local | **Antes** (`onda3` `7635710` + só o teste): 3 falham, 5 passam. `delete_everything` executou sem cartão com 25 ferramentas nos papéis `pesquisador` e `individual` (efeito `[{'alvo': 'tudo'}]`), e a rotina com 5 recebeu as meta-ferramentas (a regressão do PR #5). **Depois** (`f1d737a`): 8 passam, 0 falham, 0 pulados | integração do CI depende do PR #5 | CI do #4 + revisão do Codex; conferência dos #4 e #5 juntos (Tech Lead) |
+| 0.4 Testes de ponta a ponta | Codex | `feat/ponta-a-ponta` [#6](https://github.com/heitorjsouza812-hub/Sora/pull/6) (`78d578e`); filhos com base temporária `feat/ponta-a-ponta`: `fix/estado-fim-turno` [#7](https://github.com/heitorjsouza812-hub/Sora/pull/7) (`2fe72e4`), `fix/aviso-troca-modelo` [#8](https://github.com/heitorjsouza812-hub/Sora/pull/8) (`8cdefe1`), `feat/grupo-sintese` [#9](https://github.com/heitorjsouza812-hub/Sora/pull/9) (`ee70bfe`) | ver ramos | 13 cenários 20/20, 0 skipped | Codex, local com Docker, `--count=3`: 13 cenários, 42 execuções, 0 falhas, 0 pulados. #6: aprovação 15/15, rotinas 6/6, reconexão SSE 3/3; CI 4/4 verde. #7: Parar e prazo gravavam `concluido` no Postgres; agora `cancelado` e `falhou` (3/3 cada). #8: troca 9/9 (timeout, HTTP 500, modelo fixo sem reserva). #9: grupo 3/3, uma síntese por rodada, a retomada não duplica. Unitários 2250–2253 passam, 0 falham, 2 pulados (link simbólico) | 20/20 no CI: `workflow_dispatch` 45743363565 em `feat/ponta-a-ponta` (2026-11-26) | Revisão cruzada do Claude (#6/#7 e #8/#9). Ordem: #4 (com o #5) → #6 → base dos filhos vira `onda3` → #7, #8, #9 |
+| 0.5 Baseline | Claude (Opus 5.5) + Heitor | `feat/baseline` (`C:/dev/sora-claude`) | `54cd737` | 30 tela + 30 longas com classe de falha | Modelo fixo anotado: Groq `qwen/qwen3.8-27b`, o único da chave de QA com visão e ferramentas (provado por chamada direta). Medições L ainda não registradas | sessão do Heitor no Windows para G01–G10 | Retomada depois da cota: fixtures, L01–L10 ×3, roteiro da sessão, PR em rascunho |
+
+**Ordem de merge dos PRs #4 e #5** (revisões cruzadas de 2026-11-25):
+- O Claude achou, no #5 sem o #4, as meta-ferramentas `conectores_*` duplicadas com 21 ou mais MCP. Isso não abre furo, mas as MCP somem do turno.
+- O Codex pediu, no #4, um caso que só passa com o #5.
+- Por isso o `fix/mcp-aprovacao` recebe merge do `fix/ci-integracao`, e o #4 entra no `onda3` levando os dois. O `onda3` nunca fica com o #5 sozinho.
+- Conferência local dos dois juntos (`d6bef30`, Docker): unitários 2252 passam e 2 pulados (link simbólico no Windows). Na integração:
+
+  | Arquivo | Passam |
+  |---|---|
+  | `test_mcp_aprovacao` | 8 |
+  | `test_relogio_externos` | 6 |
+  | `test_etapa6_ancora4` | 14 |
+  | `test_relogio_rotinas` | 6 |
+  | `test_chave_ferramentas` | 38 |
+  | `test_ferramentas_coordenacao` | 10 |
+
+  Nenhuma falha e nenhum pulado na integração.
+- Achado 2 do Claude no #5: um pedido que cita navegador ou PC deixa os MCP no catálogo, para não desfazer a economia de contexto de `2f7042f`. Corrigido pelo Tech Lead em `8927cb8`, com 3 unitários; os unitários completos dão 2252 passam.
+
+PRs filhos da 0.4 (`fix/estado-fim-turno`, `fix/aviso-troca-modelo`, `feat/grupo-sintese`):
+- Abertos com base temporária `feat/ponta-a-ponta`.
+- O Tech Lead muda a base para o `onda3` quando o PR da 0.4 entrar.
+
+2026-11-25 ~21:05: os três delegados pararam por fim da cota e foram retomados a partir do que já estava commitado (nada perdido).
 
 Código medido pela 0.5: `a30c98f`. O `onda3` em `f2fb882` só muda `.github/workflows/ci.yml`, `STATUS.md` e o grupo dev (`pytest-repeat`); o código que roda é o mesmo.
 
@@ -39,6 +63,14 @@ PR de teste da 0.2: [#3](https://github.com/heitorjsouza812-hub/Sora/pull/3) (`c
 | `backend/app/revisor/execucao.py` (só prazo de expiração do cartão configurável, lido apenas com `SORA_MODELO_FALSO=1`; padrão de 10 min intacto) | Codex | 2026-11-25 | 0.4 |
 | `backend/app/canais_equipe/{roteamento,servico}.py` | Codex | 2026-11-25 | PR separado `feat/grupo-sintese`: cenário `test_e2e_grupo.py` + síntese da Sora depois do `@todos` (exigida pelo §3.4/§8.1). `@todos` continua só para os bots (decisão 5); uma síntese por rodada, cita entregas e falhas |
 | `fix/ci-integracao`: `backend/workers/**`, `backend/app/agentes/{montagem,ancora,ferramentas_do_turno}.py`, `backend/app/ferramentas/**`, testes de integração tocados | Codex | 2026-11-25 | conserto do CI (regressão MCP em rotina + `test_etapa6_ancora4`) |
+| `backend/tests/unitarios/test_prazo_aprovacao.py` (novo) | Codex | 2026-11-25 | 0.4 (prazo do cartão só com `SORA_MODELO_FALSO=1`) |
+| `backend/workers/{conversa,equipe}.py` (fim por timeout/Parar gravado com o estado certo; hoje vira `concluido`) | Codex | 2026-11-25 | Correção de produto achada pela 0.4. PR separado `fix/estado-fim-turno` (correção + unitário + cenário), com antes/depois do estado no banco; sem estado novo no modelo de dados |
+| `backend/workers/portas.py` (aviso de troca de modelo no chat direto) | Codex | 2026-11-25 | Correção de produto achada pela 0.4. PR separado `fix/aviso-troca-modelo`: PT-BR sem termo técnico, só quando a troca aconteceu, uma vez por turno; modelo explícito continua sem troca silenciosa |
+| `backend/tests/unitarios/test_estado_fim_turno.py` (novo) | Codex | 2026-11-25 | PR `fix/estado-fim-turno` |
+| `backend/tests/unitarios/test_aviso_troca_modelo.py` (novo) | Codex | 2026-11-25 | PR `fix/aviso-troca-modelo` |
+| `backend/app/filas/__init__.py` (só a transição de encerramento pelo id do item, não pela pista) | Codex | 2026-11-26 | PR #7, achado da revisão do Claude |
+| `backend/app/canais_equipe/sql.py` (só uma consulta de leitura nova: nomes dos bots da rodada por id, inclusive removidos/desativados, restrita ao `usuario_id` dono) | Codex | 2026-11-25 | PR `feat/grupo-sintese` |
+| `backend/app/llm/troca.py`, `backend/app/agentes/montagem.py`, `backend/app/agentes/middleware/__init__.py` (só avisar no chat direto que uma reserva respondeu) | Codex | 2026-11-25 | PR `fix/aviso-troca-modelo`. Sem mudar política/ordem de troca nem o aviso da cadeia; modelo explícito sem reserva (unitário); `MiddlewareRevisor` sempre montado |
 | `backend/workers/conversa.py` (gatilhos do modelo falso pelo turno real), `backend/workers/equipe.py` (`[falha_bot]`), `backend/app/orquestrador/modelos.py` (reserva falsa), `backend/app/ferramentas/registro.py`, `backend/app/agentes/montagem.py`, `backend/app/revisor/politica.py` (ferramenta de teste) | Codex | 2026-11-25 | 0.4. Condições: tudo o que é de teste só existe com `SORA_MODELO_FALSO=1`; nenhuma regra de `revisor/politica.py` fica mais permissiva para ferramenta real |
 
 ## 0.1 — inventário do trabalho local (2026-11-25, `onda3` sobre `f92a420`)
@@ -56,6 +88,16 @@ Varredura de segredos (chaves Groq/OpenAI/Google/Tavily/GitHub/AWS/Slack, chaves
 
 Fica fora: `.claude/launch.json` (configuração local; entra no `.gitignore`).
 `ruff format` aplicado (só espaço e quebra de linha) em `ancora.py`, `middleware/rastro.py` e `navegador/arvore/motor.py`: sem isso o `ruff format --check` do CI reprovava.
+
+## Pendências de produto achadas na Fase 0 (fora dos PRs atuais)
+
+| Achado | Onde | Origem |
+|---|---|---|
+| Parar no chat direto não fecha o cartão "Precisa de você" do pedido. O cartão continua pendente e, se for permitido depois, não tem efeito, porque o pedido já está `interrompida` | `_pedir_parada` só resolve cartões de cadeia | revisão do Claude no #6 |
+| O painel da fila esconde os itens `cancelado`/`falhou` (rótulos e botão Repetir existem, mas o backend não lista), e o worker não avisa o app quando a fila muda | backend da listagem da fila + app | revisão do Claude no #7 |
+| Falha do provedor ainda grava `concluido` no item da fila | `workers/conversa.py` | revisão do Claude no #7 (anterior ao PR) |
+| A marca de conteúdo externo (`contaminacao.py`) não cobre resultado de MCP, nem direto nem pelo catálogo | `app/agentes/contaminacao.py` | revisão do Claude no #5 (anterior) |
+| Testes pulados no CI: 6 do computador virtual (imagem `sora-computador:1` não é construída) e 1 em `test_fase_b_robustez.py:1435` (só Windows) | CI | Tech Lead |
 
 ## Integração no CI (2026-11-25, rodada 45694848208 do PR #3)
 
