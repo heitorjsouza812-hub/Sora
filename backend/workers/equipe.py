@@ -244,6 +244,10 @@ async def _rotear_com_lider(ctx: dict[str, Any], canal_id: UUID) -> None:
 async def _turno_falso(ctx: dict[str, Any], tarefa, revisao: int) -> Mudancas:
     """Turno do modelo falso (desenvolvimento e testes): responde na hora."""
     async with ctx["sessoes"]() as sessao:
+        if "[falha_bot]" in tarefa.instrucao:
+            dono = await sessao.get(Agente, tarefa.dono_id)
+            if dono and "[falha_bot]" in dono.instrucoes:
+                raise RuntimeError("Falha roteirizada do bot de teste.")
         armazem = ArmazemCanaisSQL(sessao)
         async with armazem.transacao_tarefa(tarefa.id):
             mudancas = await ServicoCanais(armazem).registrar_resultado(

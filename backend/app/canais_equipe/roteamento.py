@@ -69,6 +69,7 @@ class Rota:
     """O texto sem as menções do começo (o que vira a instrução da tarefa)."""
     determinista: bool = True
     nota: str = field(default="", compare=False)
+    para_todos: bool = False
 
 
 def _simplificar(texto: str) -> str:
@@ -158,8 +159,8 @@ def rotear(
     mencionados, todos, resto = ler_mencoes(texto, membros)
     if todos:
         # O líder (a Sora, nos grupos) coordena: ``@todos`` é para os outros membros.
-        alvos = [m.id for m in disponiveis if m.id != lider_id] or [m.id for m in disponiveis]
-        return Rota("donos", tuple(alvos), texto=resto)
+        alvos = tuple(m.id for m in disponiveis if m.id != lider_id)
+        return Rota("donos", alvos, texto=resto, para_todos=True)
     mencionados = [a for a in mencionados if a in ids_disponiveis]
     if mencionados:
         return Rota("donos", tuple(mencionados), texto=resto)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from uuid import UUID
@@ -21,7 +21,14 @@ from app.canais_equipe.modelos import (
     TarefaCanal,
     TipoMensagemCanal,
 )
-from app.modelos.tabelas import CanalEquipe, MembroCanal, MensagemCanalTabela, TarefaCanalTabela
+from app.modelos.enumeracoes import TipoAgente
+from app.modelos.tabelas import (
+    Agente,
+    CanalEquipe,
+    MembroCanal,
+    MensagemCanalTabela,
+    TarefaCanalTabela,
+)
 
 
 def _canal(linha: CanalEquipe, membros: list[UUID]) -> Canal:
@@ -83,6 +90,28 @@ def _tarefa(linha: TarefaCanalTabela) -> TarefaCanal:
 class ArmazemCanaisSQL:
     def __init__(self, sessao: AsyncSession) -> None:
         self.sessao = sessao
+
+    async def nomes_dos_bots_da_rodada(
+        self, usuario_id: UUID, lider_id: UUID, bots: Sequence[UUID]
+    ) -> dict[UUID, str]:
+        lider = Agente.__table__.alias("lider_da_rodada")
+        lider_e_sora = (
+            select(lider.c.id)
+            .where(
+                lider.c.id == lider_id,
+                lider.c.usuario_id == usuario_id,
+                lider.c.tipo == TipoAgente.SORA,
+            )
+            .exists()
+        )
+        linhas = await self.sessao.execute(
+            select(Agente.id, Agente.nome).where(
+                Agente.usuario_id == usuario_id,
+                Agente.id.in_(bots),
+                lider_e_sora,
+            )
+        )
+        return {id_bot: nome for id_bot, nome in linhas}
 
     async def _membros(self, canal_id: UUID) -> list[UUID]:
         return list(

@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from app.canais_equipe.modelos import (
     ABERTAS,
@@ -48,6 +48,9 @@ class ArmazemCanais(Protocol):
     async def tarefa(self, tarefa_id: UUID) -> TarefaCanal | None: ...
     async def tarefas(self, canal_id: UUID) -> list[TarefaCanal]: ...
     async def tarefas_abertas(self) -> list[TarefaCanal]: ...
+    async def nomes_dos_bots_da_rodada(
+        self, usuario_id: UUID, lider_id: UUID, bots: Sequence[UUID]
+    ) -> dict[UUID, str]: ...
 
 
 class ArmazemCanaisEmMemoria:
@@ -90,6 +93,11 @@ class ArmazemCanaisEmMemoria:
     async def tarefas_abertas(self) -> list[TarefaCanal]:
         return [t for t in self._tarefas.values() if t.status in ABERTAS]
 
+    async def nomes_dos_bots_da_rodada(
+        self, usuario_id: UUID, lider_id: UUID, bots: Sequence[UUID]
+    ) -> dict[UUID, str]:
+        return {}
+
 
 # ---------- resultados ----------
 
@@ -109,6 +117,11 @@ class Mudancas:
 
 def _agora() -> datetime:
     return datetime.now(UTC)
+
+
+def _id_tarefa_para_todos(pedido_id: UUID, posicao: int) -> UUID:
+    # Identifica a rodada mesmo depois de reatribuir a tarefa.
+    return uuid5(pedido_id, f"@todos:{posicao}")
 
 
 class ServicoCanais:
@@ -290,9 +303,9 @@ class ServicoCanais:
     ) -> None:
         por_id = {t.id: t for t in tarefas}
         if rota.tipo == "donos":
-            for agente_id in rota.agentes:
+            for posicao, agente_id in enumerate(rota.agentes):
                 tarefa = TarefaCanal(
-                    id=uuid4(),
+                    id=_id_tarefa_para_todos(mensagem.id, posicao) if rota.para_todos else uuid4(),
                     canal_id=canal.id,
                     pedido_id=mensagem.id,
                     dono_id=agente_id,
@@ -558,6 +571,7 @@ class ServicoCanais:
         # O dono da tarefa-mãe precisa saber da falha (o pacote mostra "Delegada a …: falhou");
         # sem isso a mãe ficaria em aguardando_filhas para sempre.
         await self._acordar_pai(tarefa, mudancas)
+        await self._sintetizar_rodada(canal, tarefa, mudancas)
         return mudancas
 
     async def recuperar_apos_queda(
@@ -698,7 +712,55 @@ class ServicoCanais:
         await self._armazem.gravar_mensagem(mensagem)
         mudancas = Mudancas(mensagens=[mensagem], tarefas=[tarefa])
         await self._acordar_pai(tarefa, mudancas)
+        await self._sintetizar_rodada(canal, tarefa, mudancas)
         return mudancas
+
+    async def _sintetizar_rodada(
+        self, canal: Canal, tarefa: TarefaCanal, mudancas: Mudancas
+    ) -> None:
+        if not tarefa.raiz or canal.lider_id is None:
+            return
+        ids_da_rodada = {
+            _id_tarefa_para_todos(tarefa.pedido_id, posicao) for posicao in range(MAX_MEMBROS)
+        }
+        if tarefa.id not in ids_da_rodada:
+            return
+        # O resultado ou a atividade anterior já travou a sequência do canal. O último
+        # turno vê os resultados confirmados pelos outros sob o mesmo lock.
+        rodada = [t for t in await self._armazem.tarefas(canal.id) if t.id in ids_da_rodada]
+        if any(t.status in ABERTAS for t in rodada):
+            return
+        sintese_id = uuid5(tarefa.pedido_id, "sintese:@todos")
+        if any(m.id == sintese_id for m in await self._armazem.mensagens(canal.id)):
+            return
+        nomes = await self._armazem.nomes_dos_bots_da_rodada(
+            canal.usuario_id, canal.lider_id, [t.dono_id for t in rodada]
+        )
+        if not nomes:
+            return
+        partes = ["Síntese do pedido"]
+        for item in rodada:
+            nome = nomes.get(item.dono_id, "Bot removido")
+            if item.status is StatusTarefa.CONCLUIDA:
+                texto = item.resultado[:1200].rstrip()
+                sufixo = "…" if len(item.resultado) > 1200 else ""
+                partes.append(f"- **{nome}** entregou: {texto}{sufixo}")
+            elif item.status is StatusTarefa.FALHOU:
+                partes.append(f"- **{nome}** falhou: {item.erro}")
+            else:
+                partes.append(f"- **{nome}** teve a tarefa cancelada.")
+        mensagem = MensagemCanal(
+            id=sintese_id,
+            canal_id=canal.id,
+            seq=await self._armazem.proximo_seq(canal.id),
+            autor=AutorCanal.AGENTE,
+            agente_id=canal.lider_id,
+            texto="\n\n".join(partes),
+            tipo=TipoMensagemCanal.RESULTADO,
+            responde_a=tarefa.pedido_id,
+        )
+        await self._armazem.gravar_mensagem(mensagem)
+        mudancas.mensagens.append(mensagem)
 
     # ---------- controles do usuário ----------
 
@@ -772,6 +834,7 @@ class ServicoCanais:
         mudancas.mensagens.append(
             await self._atividade(canal, "Você cancelou o pedido.", tarefa_id=tarefa.raiz_id)
         )
+        await self._sintetizar_rodada(canal, tarefa, mudancas)
         return mudancas
 
     async def remover_agente_apagado(
