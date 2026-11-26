@@ -71,6 +71,7 @@ Fixtures: `docs/benchmarks/fixtures-longas.md`. Executor: `docs/benchmarks/ferra
 | Mesmo teto nos outros modelos da chave | `openai/gpt-oss-120b` e `openai/gpt-oss-20b`: também `8000` |
 | Pedido com ~7 000 tokens de entrada | **413** "Request too large … on input tokens per minute (ITPM): **Limit 7000**, Requested 7017" |
 | Pedido com ~8 500 tokens | 413, "Limit 7000, Requested 8517" |
+| **Nova sonda, 2026-11-26** (antes de abrir o PR) | sem mudança: chamada curta `x-ratelimit-limit-tokens: 8000`; pedido com ~9 000 tokens → 413 "service tier `on_demand` … ITPM: Limit 7000, Requested 9020". O bloqueio continua; as 30 execuções **não** foram refeitas (dariam o mesmo `cota_provedor`) |
 
 Ou seja: **qualquer pedido com mais de 7 000 tokens de entrada é recusado sempre** (esperar não resolve: não é o balde do minuto, é o tamanho do pedido). E o pedido do bot de bancada já nasce perto disso:
 
