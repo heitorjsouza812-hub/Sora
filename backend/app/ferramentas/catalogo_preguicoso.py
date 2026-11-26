@@ -267,14 +267,14 @@ class CatalogoFerramentas:
         self,
         identificador: str,
         argumentos: dict[str, Any],
-        antes_de_executar: AntesDeExecutar | None = None,
+        *,
+        antes_de_executar: AntesDeExecutar,
     ) -> Any:
         entrada = self.encontrar(identificador)
         if not isinstance(argumentos, dict):
             raise ErroFerramenta("Os argumentos precisam ser um objeto.")
         validar_argumentos(esquema_json(entrada.ferramenta), argumentos)
-        if antes_de_executar is not None:
-            await antes_de_executar(entrada.ferramenta, argumentos)
+        await antes_de_executar(entrada.ferramenta, argumentos)
         return await entrada.ferramenta.ainvoke(argumentos)
 
 
@@ -369,13 +369,14 @@ def montar_catalogo(
     *,
     prefixo: str = "conectores",
     rotulo: str = "dos conectores",
-    antes_de_executar: AntesDeExecutar | None = None,
+    antes_de_executar: AntesDeExecutar | None,
     limite_direto: int = LIMITE_DIRETO,
     grupo_padrao: str = GRUPO_PADRAO,
     guias: Mapping[str, str] | None = None,
 ) -> list[BaseTool]:
     """Devolve as ferramentas direto (até ``limite_direto``, 20) ou as três meta-ferramentas.
 
+    A execução pelo catálogo exige um gancho de revisão em ``antes_de_executar``.
     ``guias`` (id da ferramenta ou nome do grupo → texto) vai junto da primeira carga da
     ferramenta, em vez de ficar no prompt de sistema de todo turno.
     """
@@ -386,6 +387,8 @@ def montar_catalogo(
         raise ValueError("Prefixo do catálogo não pode começar com 'mcp_'.")
     if len(ferramentas) <= limite_direto:
         return list(ferramentas)
+    if antes_de_executar is None:
+        raise ValueError("O catálogo de ferramentas exige um gancho de revisão.")
 
     catalogo = CatalogoFerramentas(ferramentas, grupo_padrao, guias)
     agrupado = catalogo.grupos()
@@ -413,7 +416,7 @@ def montar_catalogo(
         # Erro de ferramenta (id errado, argumento inválido, ação negada) volta ao modelo como
         # texto; a interrupção do cartão (GraphInterrupt) não é ErroFerramenta e passa direto.
         try:
-            return await catalogo.executar(id, argumentos, antes_de_executar)
+            return await catalogo.executar(id, argumentos, antes_de_executar=antes_de_executar)
         except ErroFerramenta as erro:
             return f"Erro: {erro}"
 
