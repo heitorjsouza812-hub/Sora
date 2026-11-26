@@ -186,7 +186,10 @@ async def _abrir_cartao(
     dano: str,
     quem_recebe: str | None,
 ) -> UUID:
-    expira_em = datetime.now(UTC) + VALIDADE_DO_CARTAO
+    from app.llm.falso import prazo_de_teste
+
+    prazo = prazo_de_teste("SORA_PRAZO_APROVACAO_S", VALIDADE_DO_CARTAO.total_seconds())
+    expira_em = datetime.now(UTC) + timedelta(seconds=prazo)
     async with abrir_sessao() as sessao:
         cartao = Aprovacao(
             usuario_id=contexto.usuario_id,

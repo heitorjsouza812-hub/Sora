@@ -15,6 +15,25 @@ async def sql(mundo, consulta: str, **parametros):
         return resultado.mappings().all() if resultado.returns_rows else None
 
 
+async def estado_final_da_fila(mundo, conversa_id: str) -> str:
+    async with asyncio.timeout(10):
+        while True:
+            itens = await sql(
+                mundo,
+                """
+                select f.status from fila_mensagens as f
+                join mensagens as m on f.chave = 'conversa:' || cast(m.id as text)
+                where m.conversa_id = :id and m.autor = 'usuario'
+                """,
+                id=conversa_id,
+            )
+            if itens:
+                assert len(itens) == 1
+                if itens[0].status not in {"na_fila", "iniciando", "rodando"}:
+                    return itens[0].status
+            await asyncio.sleep(0.1)
+
+
 async def entrar(cliente: AsyncClient, mundo, email: str) -> dict[str, str]:
     senha = "Senha-local-dos-testes-42!"
     cadastro = await cliente.post(
@@ -59,13 +78,16 @@ async def eventos(
     cliente: AsyncClient, conversa_id: str, *, cursor: str = "0-0"
 ) -> AsyncIterator[Evento]:
     async with cliente.stream(
-        "GET", f"/v1/conversas/{conversa_id}/eventos", headers={"Last-Event-ID": cursor}
+        "GET",
+        f"/v1/conversas/{conversa_id}/eventos",
+        headers={"Last-Event-ID": cursor},
+        timeout=None,
     ) as resposta:
         assert resposta.status_code == 200
         campos = {}
         async for linha in resposta.aiter_lines():
             if not linha:
-                if "event" in campos:
+                if "event" in campos and campos["event"] != "ping":
                     yield Evento(campos["id"], campos["event"], json.loads(campos["data"]))
                 campos.clear()
             elif not linha.startswith(":"):

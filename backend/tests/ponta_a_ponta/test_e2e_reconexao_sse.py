@@ -8,17 +8,17 @@ pytestmark = [pytest.mark.integracao, pytest.mark.asyncio]
 
 
 async def test_reconecta_sem_repetir_eventos_ou_turno(mundo, cliente_e2e):
-    await mundo.iniciar_worker()
     conversa = await criar_conversa(cliente_e2e, "Olá, Sora!")
 
     def fim(evento):
         return evento.nome == "mensagem.fim"
 
-    completos = await ler_ate(cliente_e2e, conversa, fim)
     primeira_conexao = await ler_ate(
-        cliente_e2e, conversa, lambda evento: evento.nome == "mensagem.inicio"
+        cliente_e2e, conversa, lambda evento: evento.nome == "roteamento"
     )
+    await mundo.iniciar_worker()
     retomada = await ler_ate(cliente_e2e, conversa, fim, cursor=primeira_conexao[-1].id)
+    completos = await ler_ate(cliente_e2e, conversa, fim)
 
     assert retomada
     assert primeira_conexao + retomada == completos

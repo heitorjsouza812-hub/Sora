@@ -31,10 +31,12 @@ mentir. As classes do LangChain só são importadas na primeira vez que o modelo
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
+import os
 import re
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from functools import cache
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -171,6 +173,25 @@ def _triagem_json(*, direto: bool, agente: bool = False) -> str:
             confianca=0.9,
         )
     return saida.model_dump_json()
+
+
+_ATRASO = re.compile(r"\[lento:(\d{1,3})\]")
+_FALHA_PROVEDOR = re.compile(r"\[falha_provedor:(500|timeout)\]")
+GATILHO_EFEITO = "[efeito_teste]"
+
+
+def prazo_de_teste(variavel: str, padrao: float) -> float:
+    """Permite encurtar prazos em execuções locais com o modelo falso."""
+    valor = os.environ.get(variavel)
+    return float(valor) if valor is not None and modelo_falso_ativo() else padrao
+
+
+def usa_modelo_falso_no_turno(texto: str) -> bool:
+    return bool(
+        _ATRASO.search(texto)
+        or _FALHA_PROVEDOR.search(texto)
+        or any(tag in texto for tag in ("[aprovacao]", "[pergunta]", "[grupo]", GATILHO_EFEITO))
+    )
 
 
 GATILHOS = ("pergunta", "aprovacao", "orcamento")
@@ -365,6 +386,18 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
     feitas = {m.name for m in mensagens if isinstance(m, ToolMessage)}
     gatilhos = gatilhos_do_texto(tarefa)
     if papel in ("sora", "agente_individual"):
+        pedido = _pedido_do_prompt(mensagens)
+        if GATILHO_EFEITO in pedido:
+            nome = "registrar_efeito_de_teste"
+            retorno = next(
+                (m for m in reversed(mensagens) if isinstance(m, ToolMessage) and m.name == nome),
+                None,
+            )
+            if retorno is None:
+                return _chamada(nome, {})
+            if retorno.content == "Efeito de teste registrado.":
+                return _texto("A ação foi realizada.")
+            return _texto("A ação não foi realizada.")
         if papel == "sora" and "grupo" in gatilhos and "propor_grupo" not in feitas:
             from app.ferramentas.propor_grupo import ProporGrupo
 
@@ -486,7 +519,11 @@ def _triagem_para(mensagens: list[BaseMessage]) -> AIMessage:
     pedido = _pedido_do_prompt(mensagens)
     curto = len(pedido.split()) <= 8 and pedido.endswith("?")
     gatilhos = gatilhos_do_texto(pedido)
-    if "aprovacao" in gatilhos or "grupo" in gatilhos:
+    if (
+        "aprovacao" in gatilhos
+        or "grupo" in gatilhos
+        or ("[pergunta]" not in pedido and usa_modelo_falso_no_turno(pedido))
+    ):
         return _texto(_triagem_json(direto=True, agente=True))
     return _texto(_triagem_json(direto=aplicar_regras(pedido).saudacao or curto))
 
@@ -529,6 +566,7 @@ def classe_modelo_falso() -> type[BaseChatModel]:
 
         papel: str = ""
         model_name: str = "falso"
+        reserva: bool = False
 
         def bind_tools(self, tools: Any, *, tool_choice: Any = None, **kwargs: Any) -> Any:
             """O roteiro já sabe quais ferramentas chamar; vincular não muda nada."""
@@ -541,6 +579,24 @@ def classe_modelo_falso() -> type[BaseChatModel]:
                 return self | PydanticOutputParser(pydantic_object=schema)
             return self | JsonOutputParser()
 
+        async def _esperar_pedido(self, messages: list[BaseMessage]) -> None:
+            atraso = _ATRASO.search(_pedido_do_prompt(messages))
+            if atraso is not None and self.papel in ("sora", "agente_individual"):
+                await asyncio.sleep(int(atraso[1]))
+
+        async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+            await self._esperar_pedido(messages)
+            return await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
+        async def _astream(
+            self, messages, stop=None, run_manager=None, **kwargs
+        ) -> AsyncIterator[ChatGenerationChunk]:
+            await self._esperar_pedido(messages)
+            async for bloco in super()._astream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            ):
+                yield bloco
+
         def _generate(
             self,
             messages: list[BaseMessage],
@@ -548,6 +604,20 @@ def classe_modelo_falso() -> type[BaseChatModel]:
             run_manager: CallbackManagerForLLMRun | None = None,
             **kwargs: Any,
         ) -> ChatResult:
+            pedido = _pedido_do_prompt(messages)
+            if self.papel in ("sora", "agente_individual"):
+                falha = _FALHA_PROVEDOR.search(pedido)
+                if falha is not None and not self.reserva:
+                    import httpx
+
+                    requisicao = httpx.Request("POST", "https://example.invalid")
+                    if falha[1] == "timeout":
+                        raise httpx.ReadTimeout("Prazo do provedor de teste", request=requisicao)
+                    raise httpx.HTTPStatusError(
+                        "Falha 500 do provedor de teste",
+                        request=requisicao,
+                        response=httpx.Response(500, request=requisicao),
+                    )
             if self.papel == "sistema1":
                 resposta = _triagem_para(messages)
             elif self.papel == "rotina":
@@ -563,6 +633,8 @@ def classe_modelo_falso() -> type[BaseChatModel]:
                 )
             else:
                 resposta = _gatilho_pendente(self.papel, messages)
+                if resposta is None and (_ATRASO.search(pedido) or _FALHA_PROVEDOR.search(pedido)):
+                    resposta = _texto(_TEXTO_PADRAO)
                 if resposta is None:
                     proxima = next(self.messages)
                     resposta = _texto(proxima) if isinstance(proxima, str) else proxima
@@ -604,7 +676,10 @@ def classe_modelo_falso() -> type[BaseChatModel]:
     return ModeloFalso
 
 
-def criar_modelo_falso(papel: str) -> BaseChatModel:
+def criar_modelo_falso(papel: str, *, reserva: bool = False) -> BaseChatModel:
     """``GenericFakeChatModel`` com as respostas do papel, com suporte a ``bind_tools``."""
     classe = classe_modelo_falso()
-    return classe(messages=_ciclo(papel), papel=papel, model_name=f"falso/{papel or 'geral'}")
+    nome = f"falso/{papel or 'geral'}"
+    if reserva:
+        nome += "/reserva"
+    return classe(messages=_ciclo(papel), papel=papel, model_name=nome, reserva=reserva)

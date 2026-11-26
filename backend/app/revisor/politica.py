@@ -271,6 +271,11 @@ def politica_da_ferramenta(nome: str, *, somente_leitura: bool | None = None) ->
     ``somente_leitura`` vem da anotação do MCP (``readOnlyHint``), quando houver; sem ela,
     vale a heurística do nome. Ferramenta desconhecida que não é só leitura → revisor.
     """
+    if nome == "registrar_efeito_de_teste":
+        from app.llm.falso import modelo_falso_ativo
+
+        if modelo_falso_ativo():
+            return Politica.CARTAO_FIXO
     if nome in CARTAO_FIXO:
         return Politica.CARTAO_FIXO
     if nome in REVISADAS or (nome.startswith("navegador_") and nome not in LIVRES):
