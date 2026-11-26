@@ -34,14 +34,26 @@ class Mundo:
         self._worker: Any = None
         self._tarefa: asyncio.Task | None = None
 
-    async def iniciar_worker(self) -> None:
+    async def iniciar_worker(self, **opcoes: Any) -> None:
         self._worker = create_worker(
             WorkerSettings,
             redis_settings=RedisSettings.from_dsn(self.url_redis),
             handle_signals=False,
             poll_delay=0.1,
+            **opcoes,
         )
         self._tarefa = asyncio.create_task(self._worker.async_run())
+        redis = Redis.from_url(self.url_redis)
+        try:
+            async with asyncio.timeout(60):
+                # O ARQ só publica a saúde depois do startup e do primeiro poll.
+                while not await redis.exists(self._worker.health_check_key):
+                    if self._tarefa.done():
+                        self._tarefa.result()
+                        raise RuntimeError("O worker encerrou antes de ficar pronto.")
+                    await asyncio.sleep(0.05)
+        finally:
+            await redis.aclose()
 
     async def parar_worker(self) -> None:
         if self._worker is not None:
