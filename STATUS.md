@@ -68,6 +68,7 @@ PR de teste da 0.2: [#3](https://github.com/heitorjsouza812-hub/Sora/pull/3) (`c
 | `backend/workers/portas.py` (aviso de troca de modelo no chat direto) | Codex | 2026-11-25 | Correção de produto achada pela 0.4. PR separado `fix/aviso-troca-modelo`: PT-BR sem termo técnico, só quando a troca aconteceu, uma vez por turno; modelo explícito continua sem troca silenciosa |
 | `backend/tests/unitarios/test_estado_fim_turno.py` (novo) | Codex | 2026-11-25 | PR `fix/estado-fim-turno` |
 | `backend/tests/unitarios/test_aviso_troca_modelo.py` (novo) | Codex | 2026-11-25 | PR `fix/aviso-troca-modelo` |
+| `backend/app/filas/__init__.py` (só a transição de encerramento pelo id do item, não pela pista) | Codex | 2026-11-26 | PR #7, achado da revisão do Claude |
 | `backend/app/canais_equipe/sql.py` (só uma consulta de leitura nova: nomes dos bots da rodada por id, inclusive removidos/desativados, restrita ao `usuario_id` dono) | Codex | 2026-11-25 | PR `feat/grupo-sintese` |
 | `backend/app/llm/troca.py`, `backend/app/agentes/montagem.py`, `backend/app/agentes/middleware/__init__.py` (só avisar no chat direto que uma reserva respondeu) | Codex | 2026-11-25 | PR `fix/aviso-troca-modelo`. Sem mudar política/ordem de troca nem o aviso da cadeia; modelo explícito sem reserva (unitário); `MiddlewareRevisor` sempre montado |
 | `backend/workers/conversa.py` (gatilhos do modelo falso pelo turno real), `backend/workers/equipe.py` (`[falha_bot]`), `backend/app/orquestrador/modelos.py` (reserva falsa), `backend/app/ferramentas/registro.py`, `backend/app/agentes/montagem.py`, `backend/app/revisor/politica.py` (ferramenta de teste) | Codex | 2026-11-25 | 0.4. Condições: tudo o que é de teste só existe com `SORA_MODELO_FALSO=1`; nenhuma regra de `revisor/politica.py` fica mais permissiva para ferramenta real |
@@ -87,6 +88,16 @@ Varredura de segredos (chaves Groq/OpenAI/Google/Tavily/GitHub/AWS/Slack, chaves
 
 Fica fora: `.claude/launch.json` (configuração local; entra no `.gitignore`).
 `ruff format` aplicado (só espaço e quebra de linha) em `ancora.py`, `middleware/rastro.py` e `navegador/arvore/motor.py`: sem isso o `ruff format --check` do CI reprovava.
+
+## Pendências de produto achadas na Fase 0 (fora dos PRs atuais)
+
+| Achado | Onde | Origem |
+|---|---|---|
+| Parar no chat direto não fecha o cartão "Precisa de você" do pedido. O cartão continua pendente e, se for permitido depois, não tem efeito, porque o pedido já está `interrompida` | `_pedir_parada` só resolve cartões de cadeia | revisão do Claude no #6 |
+| O painel da fila esconde os itens `cancelado`/`falhou` (rótulos e botão Repetir existem, mas o backend não lista), e o worker não avisa o app quando a fila muda | backend da listagem da fila + app | revisão do Claude no #7 |
+| Falha do provedor ainda grava `concluido` no item da fila | `workers/conversa.py` | revisão do Claude no #7 (anterior ao PR) |
+| A marca de conteúdo externo (`contaminacao.py`) não cobre resultado de MCP, nem direto nem pelo catálogo | `app/agentes/contaminacao.py` | revisão do Claude no #5 (anterior) |
+| Testes pulados no CI: 6 do computador virtual (imagem `sora-computador:1` não é construída) e 1 em `test_fase_b_robustez.py:1435` (só Windows) | CI | Tech Lead |
 
 ## Integração no CI (2026-11-25, rodada 45694848208 do PR #3)
 
