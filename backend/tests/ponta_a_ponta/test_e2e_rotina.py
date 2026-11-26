@@ -4,13 +4,15 @@ import asyncio
 import base64
 import hmac
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 
 from tests.ponta_a_ponta.http import sql
 
 pytestmark = [pytest.mark.integracao, pytest.mark.asyncio]
+INSTANTE_DESPACHO = datetime(2026, 1, 1, 12, 0, 10, tzinfo=UTC)
 
 
 async def _criar(cliente, titulo, segundos):
@@ -39,26 +41,58 @@ async def _fim(cliente, rotina):
             await asyncio.sleep(0.2)
 
 
-async def test_dois_despachos_no_mesmo_minuto_geram_um_disparo(cliente_e2e, mundo):
-    # Reserva tempo para dois ticks reais do cron (a cada dez segundos) no mesmo minuto.
-    segundo = datetime.now(UTC).second
-    if segundo >= 35:
-        await asyncio.sleep(60 - segundo)
-    rotina = await _criar(cliente_e2e, "Agendamento", 1)
-    await mundo.iniciar_worker()
-    primeiro = await _fim(cliente_e2e, rotina)
+@pytest.fixture
+async def despachar_rotinas(mundo, fila_arq, monkeypatch):
+    from workers import rotinas
+    from workers.configuracao import WorkerSettings
 
-    # A sentinela só fica vencida depois da primeira execução e comprova o próximo despacho.
-    sentinela = await _criar(cliente_e2e, "Sentinela do próximo tick", 1)
-    segundo_disparo = await _fim(cliente_e2e, sentinela)
-    instantes = [
-        datetime.fromisoformat(disparo["iniciada_em"]) for disparo in (primeiro, segundo_disparo)
-    ]
-    assert instantes[0] < instantes[1]
-    assert instantes[0].replace(second=0, microsecond=0) == instantes[1].replace(
-        second=0, microsecond=0
+    class RelogioFixo(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return (
+                INSTANTE_DESPACHO.astimezone(tz) if tz else INSTANTE_DESPACHO.replace(tzinfo=None)
+            )
+
+    monkeypatch.setattr(rotinas, "datetime", RelogioFixo)
+    barreira = asyncio.Barrier(2)
+
+    async def sincronizar_despachos(ctx):
+        if ctx["job_id"].startswith("despacho-e2e:"):
+            async with asyncio.timeout(15):
+                await barreira.wait()
+
+    await mundo.iniciar_worker(
+        functions=[*WorkerSettings.functions, rotinas.disparar_rotinas],
+        cron_jobs=[
+            cron
+            for cron in WorkerSettings.cron_jobs
+            if cron.coroutine is not rotinas.disparar_rotinas
+        ],
+        on_job_start=sincronizar_despachos,
+        max_jobs=max(2, WorkerSettings.max_jobs),
     )
-    assert [e["id"] for e in await _execucoes(cliente_e2e, rotina)] == [primeiro["id"]]
+
+    async def disparar():
+        job = await fila_arq.enqueue_job("disparar_rotinas", _job_id=f"despacho-e2e:{uuid4()}")
+        assert job is not None
+        return await job.result(timeout=30, poll_delay=0.1)
+
+    return disparar
+
+
+async def test_dois_despachos_simultaneos_geram_um_disparo(cliente_e2e, mundo, despachar_rotinas):
+    rotina = await _criar(cliente_e2e, "Agendamento", 86400)
+    await sql(
+        mundo,
+        "update rotinas set proxima_execucao = :ocorrencia where id = :id",
+        ocorrencia=INSTANTE_DESPACHO - timedelta(seconds=1),
+        id=rotina,
+    )
+    resultados = await asyncio.gather(despachar_rotinas(), despachar_rotinas())
+    assert sorted(resultados) == [0, 1]
+    execucao = await _fim(cliente_e2e, rotina)
+    assert execucao["origem"] == "agenda"
+    assert datetime.fromisoformat(execucao["iniciada_em"]) == INSTANTE_DESPACHO
     linhas = await sql(
         mundo,
         "select count(*) as total from rotina_execucoes where rotina_id = :rotina",
