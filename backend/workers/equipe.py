@@ -41,7 +41,7 @@ from app.eventos.equipe import (
     acoes_da_tarefa,
     publicar_evento_equipe,
 )
-from app.filas import ErroFila, FilaAgente
+from app.filas import ErroFila, FilaAgente, ItemFila, StatusItem
 from app.filas.sql import ArmazemFilaSQL
 from app.llm.estruturada import com_saida_estruturada, instrucoes_json
 from app.llm.falso import modelo_falso_ativo
@@ -588,6 +588,15 @@ async def retomar_tarefa_canal(
         await _concluir_turno(ctx, tarefa.id, canal, tarefa.revisao, turno)
 
 
+async def _encerrar_item_fila(fila: FilaAgente, item: ItemFila, estado: StatusItem | None) -> None:
+    if estado is StatusItem.CANCELADO:
+        await fila.interromper(item.agente_id, item.pista, "cancelado_pelo_usuario")
+    elif estado is StatusItem.FALHOU:
+        await fila.falhar(item.id, item.agente_id, "prazo_do_turno")
+    else:
+        await fila.concluir(item.id, item.agente_id)
+
+
 async def executar_item_fila(ctx: dict[str, Any], item_id: str, agente_id: str) -> None:
     """Reserva o item, roda o turno do agente de verdade e conclui (ou marca a falha)."""
     from workers.conversa import rodar_turno_do_item
@@ -605,7 +614,7 @@ async def executar_item_fila(ctx: dict[str, Any], item_id: str, agente_id: str) 
             await fila.rodando(item.id, item.agente_id)
             await sessao.commit()
         try:
-            await rodar_turno_do_item(ctx, item)
+            estado = await rodar_turno_do_item(ctx, item)
         except BaseException as erro:
             async with ctx["sessoes"]() as sessao:
                 await FilaAgente(ArmazemFilaSQL(sessao)).falhar(
@@ -623,6 +632,6 @@ async def executar_item_fila(ctx: dict[str, Any], item_id: str, agente_id: str) 
                 await enfileirar("despachar_equipe", agente_id=agente_id)
             raise
         async with ctx["sessoes"]() as sessao:
-            await FilaAgente(ArmazemFilaSQL(sessao)).concluir(item.id, item.agente_id)
+            await _encerrar_item_fila(FilaAgente(ArmazemFilaSQL(sessao)), item, estado)
             await sessao.commit()
     await enfileirar("despachar_equipe", agente_id=agente_id)

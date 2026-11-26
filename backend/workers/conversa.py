@@ -20,7 +20,7 @@ from sqlalchemy import func, select, text
 from app.agentes.ferramentas_do_turno import superficie_do_pedido
 from app.eventos.streams import publicar_evento
 from app.eventos.tipos import SugestoesEvento
-from app.filas import FilaAgente, OrigemItem
+from app.filas import FilaAgente, OrigemItem, StatusItem
 from app.filas.sql import ArmazemFilaSQL
 from app.llm.falso import (
     criar_modelo_falso,
@@ -127,22 +127,21 @@ async def responder_direto(ctx: dict[str, Any], mensagem_id: str) -> None:
     await enfileirar("despachar_equipe", agente_id=str(item.agente_id))
 
 
-async def rodar_turno_do_item(ctx: dict[str, Any], item: Any) -> None:
+async def rodar_turno_do_item(ctx: dict[str, Any], item: Any) -> StatusItem | None:
     """Roda o agente para um item da fila. Itens de mensagem trazem ``conversa:<id>`` na chave;
     os demais (Repetir, outras origens) usam a conversa mais recente do agente e o texto do item."""
     chave = item.chave or ""
     if chave.startswith("conversa:"):
-        await _responder_direto_sem_fila(ctx, chave.split(":", 1)[1])
-    else:
-        await _responder_direto_sem_fila(
-            ctx,
-            None,
-            agente_id=item.agente_id,
-            usuario_id=item.usuario_id,
-            texto=item.texto,
-            anexos=item.anexos,
-            item_id=item.id,
-        )
+        return await _responder_direto_sem_fila(ctx, chave.split(":", 1)[1])
+    return await _responder_direto_sem_fila(
+        ctx,
+        None,
+        agente_id=item.agente_id,
+        usuario_id=item.usuario_id,
+        texto=item.texto,
+        anexos=item.anexos,
+        item_id=item.id,
+    )
 
 
 async def _responder_direto_sem_fila(
@@ -154,7 +153,7 @@ async def _responder_direto_sem_fila(
     texto: str | None = None,
     anexos: Any = (),
     item_id: UUID | None = None,
-) -> None:
+) -> StatusItem | None:
     """Roda a Sora (ou o agente individual) e manda o texto pelos eventos
     ``mensagem.*``, terminando com ``sugestoes``. Quem põe na fila: a API."""
     from app.agentes import ContextoAgente
@@ -167,8 +166,10 @@ async def _responder_direto_sem_fila(
     async with ctx["sessoes"]() as sessao:
         if mensagem_id is not None:
             mensagem = await sessao.get(Mensagem, UUID(mensagem_id))
-            if mensagem is None or mensagem.estado == "interrompida":
-                return
+            if mensagem is None:
+                return None
+            if mensagem.estado == "interrompida":
+                return StatusItem.CANCELADO
             conversa = await sessao.get(Conversa, mensagem.conversa_id)
             texto = mensagem.conteudo
         else:
@@ -271,7 +272,7 @@ async def _responder_direto_sem_fila(
             ContextoFerramenta(usuario_id=usuario_id, agente_id=agente_id, conversa_id=conversa_id),
         )
         antes = (antes or 0) + 1
-    await _rodar_e_falar(
+    return await _rodar_e_falar(
         ctx,
         contexto,
         modelos,
@@ -405,7 +406,7 @@ async def _rodar_e_falar(
     antes: int | None,
     entrada: dict[str, Any] | None = None,
     resposta: Any | None = None,
-) -> None:
+) -> StatusItem | None:
     """Roda (ou retoma) o agente da conversa. Se o modelo respondeu em texto puro, o worker
     fala por ele; se o provedor falhar, a conversa recebe um aviso em PT-BR em vez de ficar muda."""
     from app.agentes import montar_e_rodar_agente
@@ -423,10 +424,11 @@ async def _rodar_e_falar(
         # turno retomado não falou nada (antes ele era falado sempre, repetindo o que já saiu).
         async with ctx["sessoes"]() as sessao:
             antes = await _falas_do_bot(sessao, contexto.conversa_id)
+    # O ARQ cancela o job aos 360 s. Reserve tempo para fechar o turno e avisar pelo SSE.
+    prazo = asyncio.timeout(prazo_de_teste("SORA_PRAZO_TURNO_S", 285))
     marca = await _abrir_turno_vivo(contexto.conversa_id)
     try:
-        # O ARQ cancela o job aos 360 s. Reserve tempo para fechar o turno e avisar pelo SSE.
-        async with asyncio.timeout(prazo_de_teste("SORA_PRAZO_TURNO_S", 285)):
+        async with prazo:
             resultado = await montar_e_rodar_agente(
                 contexto=contexto,
                 modelos=modelos,
@@ -439,7 +441,7 @@ async def _rodar_e_falar(
         from app.agentes.middleware.cancelamento import CadeiaCancelada
 
         if isinstance(erro, CadeiaCancelada):
-            return
+            return StatusItem.CANCELADO
         from app.llm.limite import mensagem_de_limite
 
         registro.warning("Conversa %s: %s", contexto.conversa_id, type(erro).__name__)
@@ -453,7 +455,7 @@ async def _rodar_e_falar(
             if estourou_limite_de_passos(erro)
             else texto_da_falha(modelos, erro) or mensagem_de_limite(erro) or MENSAGEM_FALHA
         )
-        if isinstance(erro, TimeoutError):
+        if prazo.expired():
             texto = "O tempo deste turno acabou antes de eu conseguir concluir o pedido."
         await falar(Falar(texto=await _ultima_etapa(ctx, contexto) + texto), ferramenta)
         await _cartao_de_seguranca(ferramenta, pedido_de_equipe, cartoes_antes)
@@ -463,7 +465,7 @@ async def _rodar_e_falar(
             contexto.conversa_id,
             contexto.usuario_id,
         )
-        return
+        return StatusItem.FALHOU if prazo.expired() else None
 
     await _fechar_turno_vivo(contexto.conversa_id, marca)
     if not resultado.get("__interrupt__"):
