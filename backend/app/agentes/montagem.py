@@ -76,6 +76,7 @@ class DependenciasAgente:
 
     esta_cancelada: Callable[[UUID], Awaitable[bool]] | None = None
     ao_trocar_modelo: Callable[[EventoTroca], Awaitable[None]] | None = None
+    anunciar_reserva: Callable[[UUID, UUID], Awaitable[None]] | None = None
     ao_esperar_limite: Callable[[int], Awaitable[None]] | None = None
     orcamento_tokens: int | None = None
     reservar_tokens: Callable[[UUID, int, int], Awaitable[bool]] | None = None

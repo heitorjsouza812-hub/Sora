@@ -29,11 +29,24 @@ def montar_middleware(
     from app.agentes.middleware.limites import middleware_de_limites
     from app.agentes.middleware.loop import MiddlewareLoop
     from app.agentes.middleware.orcamento import MiddlewareOrcamento
-    from app.agentes.middleware.passos import MiddlewarePassos
+    from app.agentes.middleware.passos import MiddlewarePassos, id_do_turno
     from app.agentes.middleware.prazo_ferramenta import MiddlewarePrazoFerramenta
     from app.agentes.middleware.saida_grande import MiddlewareSaidaGrande
     from app.agentes.middleware.troca_provedor import montar_middleware_de_troca
     from app.llm.saude import provedor_falhou, provedor_respondeu
+
+    deps = contexto.dependencias
+    conversa_direta = (
+        contexto.etapa_id is None
+        and contexto.canal_id is None
+        and contexto.papel in {"sora", "individual"}
+        and not contexto.sem_supervisao
+    )
+    etapa_painel = id_do_turno(contexto) if conversa_direta else contexto.etapa_id
+
+    async def anunciar_reserva() -> None:
+        assert etapa_painel is not None and deps.anunciar_reserva is not None
+        await deps.anunciar_reserva(etapa_painel, contexto.agente_id)
 
     itens: list[AgentMiddleware] = list(
         montar_middleware_de_troca(
@@ -41,6 +54,7 @@ def montar_middleware(
             ao_trocar=contexto.dependencias.ao_trocar_modelo,
             ao_falhar=provedor_falhou,
             ao_responder=provedor_respondeu,
+            ao_usar_reserva=anunciar_reserva if conversa_direta and deps.anunciar_reserva else None,
         )
     )
     from app.agentes.middleware.limite_provedor import MiddlewareLimiteDoProvedor
@@ -104,7 +118,6 @@ def montar_middleware(
                 contexto.cadeia_id, esta_cancelada=contexto.dependencias.esta_cancelada
             )
         )
-    deps = contexto.dependencias
     if (
         contexto.cadeia_id is not None
         and deps.orcamento_tokens is not None
@@ -119,7 +132,6 @@ def montar_middleware(
                 corrigir=deps.corrigir_tokens,
             )
         )
-    etapa_painel = contexto.etapa_id
     if (
         contexto.etapa_id is not None
         and deps.iniciar_passo is not None
@@ -142,9 +154,10 @@ def montar_middleware(
     ):
         # Conversa direta (bot 1:1, Sora, grupo): sem etapa de verdade, o painel Trabalho recebe os
         # mesmos eventos ``passo`` sob um id sintético estável por turno (não vai para o banco).
-        from app.agentes.middleware.passos import PASSOS_DA_CONVERSA_IGNORADOS, id_do_turno
+        from app.agentes.middleware.passos import PASSOS_DA_CONVERSA_IGNORADOS
 
-        etapa_painel = id_do_turno(contexto)
+        if etapa_painel is None:
+            etapa_painel = id_do_turno(contexto)
         itens.append(
             MiddlewarePassos(
                 etapa_painel,
