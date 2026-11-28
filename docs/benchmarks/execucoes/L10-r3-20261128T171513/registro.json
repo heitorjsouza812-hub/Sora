@@ -1,0 +1,107 @@
+{
+ "tarefa": "L10",
+ "rodada": 3,
+ "inicio": "2026-11-28T17:15:17.360417+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 16.4
+  },
+  {
+   "terminou": true,
+   "segundos": 33.1
+  }
+ ],
+ "cartoes": [
+  {
+   "resumo": "Apagando uma memória",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  },
+  {
+   "resumo": "Criando a habilidade: saldo-mensal",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  }
+ ],
+ "perguntas": [],
+ "bot_id": "e698ca05-2fa8-4113-8519-d03599c2538f",
+ "conversa_id": "7a2765b1-8490-41ca-9e84-3afb27b6f012",
+ "fim": "2026-11-28T17:16:09.927524+00:00",
+ "duracao_s": 52.5,
+ "resultado": "parcial",
+ "classe_sugerida": "modelo",
+ "classe": "modelo",
+ "prova": "✔ arquivo saldo_L10.csv confere; ✘ arquivo saldo_L10_v2.csv confere; ✘ memória do pior mês = março (antiga apagada); ✔ cartões de esquecer_memoria e criar_habilidade; ✔ habilidade saldo-mensal criada; ✘ resposta: 3.900 e março",
+ "criterios": [
+  {
+   "criterio": "arquivo saldo_L10.csv confere",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo saldo_L10_v2.csv confere",
+   "ok": false
+  },
+  {
+   "criterio": "memória do pior mês = março (antiga apagada)",
+   "ok": false
+  },
+  {
+   "criterio": "cartões de esquecer_memoria e criar_habilidade",
+   "ok": true
+  },
+  {
+   "criterio": "habilidade saldo-mensal criada",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: 3.900 e março",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 11,
+ "chamadas_por_papel": {
+  "agente_individual": 11
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 65832,
+ "tokens_saida": 831,
+ "primeiro_pedido_tokens": 5447,
+ "maior_pedido_tokens": 6585,
+ "custo_usd": 0.021826,
+ "chamadas_ferramenta": 13,
+ "pedidos_ao_modelo_rastro": 11,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 11,
+  "ferramenta.inicio": 13,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 2,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_anexo",
+   "escrever_arquivo",
+   "lembrar",
+   "falar",
+   "falar",
+   "buscar_memoria",
+   "escrever_arquivo",
+   "esquecer_memoria",
+   "esquecer_memoria",
+   "lembrar",
+   "criar_habilidade",
+   "criar_habilidade",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Saldo corrigido de fevereiro: R$ 3.500,00. O pior mês continua sendo fevereiro.",
+ "bot_apagado": true
+}
