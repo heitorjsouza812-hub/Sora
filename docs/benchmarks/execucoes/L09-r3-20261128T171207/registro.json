@@ -1,0 +1,96 @@
+{
+ "tarefa": "L09",
+ "rodada": 3,
+ "inicio": "2026-11-28T17:12:12.030921+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 52.8
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "a88bb218-ec84-4295-8456-4418d620c6ea",
+ "conversa_id": "802d3dfc-e4e3-4b1d-bfbf-19df49b077e2",
+ "fim": "2026-11-28T17:13:08.194043+00:00",
+ "duracao_s": 55.9,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ 4 agendamentos ativos com os títulos certos; ✔ módulo 2 remarcado para 01/03/2027; ✔ módulo 2 antigo cancelado; ✔ Revisão geral recorrente 29/02 08:30; ✔ memória do fim do treinamento; ✔ arquivo agenda_L09.md; ✔ resposta: 4",
+ "criterios": [
+  {
+   "criterio": "4 agendamentos ativos com os títulos certos",
+   "ok": true
+  },
+  {
+   "criterio": "módulo 2 remarcado para 01/03/2027",
+   "ok": true
+  },
+  {
+   "criterio": "módulo 2 antigo cancelado",
+   "ok": true
+  },
+  {
+   "criterio": "Revisão geral recorrente 29/02 08:30",
+   "ok": true
+  },
+  {
+   "criterio": "memória do fim do treinamento",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo agenda_L09.md",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: 4",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 11,
+ "chamadas_por_papel": {
+  "agente_individual": 11
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 71764,
+ "tokens_saida": 521,
+ "primeiro_pedido_tokens": 5478,
+ "maior_pedido_tokens": 7571,
+ "custo_usd": 0.022832,
+ "chamadas_ferramenta": 11,
+ "pedidos_ao_modelo_rastro": 14,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 14,
+  "ferramenta.inicio": 11,
+  "modelo.erro": 3,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "agendar",
+   "agendar",
+   "agendar",
+   "agendar",
+   "listar_agendamentos",
+   "cancelar_agendamento",
+   "agendar",
+   "listar_agendamentos",
+   "lembrar",
+   "escrever_arquivo",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {
+   "MidStreamFallbackError": 3
+  }
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Fiquei com 4 agendamentos ativos.",
+ "bot_apagado": true
+}
