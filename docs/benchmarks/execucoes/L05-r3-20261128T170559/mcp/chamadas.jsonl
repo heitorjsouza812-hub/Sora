@@ -1,0 +1,9 @@
+{"t": 1795885566.987, "ferramenta": "ler_estoque", "argumentos": {}, "ok": true, "resultado": 6}
+{"t": 1795885569.516, "ferramenta": "consultar_preco", "argumentos": {"sku": "P-02"}, "ok": true, "resultado": {"sku": "P-02", "preco_unitario": 4.5}}
+{"t": 1795885569.519, "ferramenta": "consultar_preco", "argumentos": {"sku": "P-03"}, "ok": false, "resultado": "erro temporário 503"}
+{"t": 1795885569.52, "ferramenta": "consultar_preco", "argumentos": {"sku": "P-05"}, "ok": true, "resultado": {"sku": "P-05", "preco_unitario": 7.25}}
+{"t": 1795885570.96, "ferramenta": "consultar_preco", "argumentos": {"sku": "P-03"}, "ok": true, "resultado": {"sku": "P-03", "preco_unitario": 12.9}}
+{"t": 1795885577.204, "ferramenta": "registrar_pedido_compra", "argumentos": {"sku": "P-02", "quantidade": 17}, "ok": true, "resultado": {"pedido": "PC-001", "sku": "P-02", "quantidade": 17}}
+{"t": 1795885579.311, "ferramenta": "registrar_pedido_compra", "argumentos": {"sku": "P-05", "quantidade": 9}, "ok": true, "resultado": {"pedido": "PC-002", "sku": "P-05", "quantidade": 9}}
+{"t": 1795885581.478, "ferramenta": "registrar_pedido_compra", "argumentos": {"sku": "P-03", "quantidade": 10}, "ok": true, "resultado": {"pedido": "PC-003", "sku": "P-03", "quantidade": 10}}
+{"t": 1795885582.978, "ferramenta": "ler_pedidos_registrados", "argumentos": {}, "ok": true, "resultado": 3}

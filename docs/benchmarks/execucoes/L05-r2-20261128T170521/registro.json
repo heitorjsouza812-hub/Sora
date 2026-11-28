@@ -1,0 +1,36 @@
+{
+ "tarefa": "L05",
+ "rodada": 2,
+ "inicio": "2026-11-28T17:05:25.430763+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 30.8
+  }
+ ],
+ "cartoes": [
+  {
+   "resumo": "Usando bancada: registrar_pedido_compra",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  },
+  {
+   "resumo": "Usando bancada: registrar_pedido_compra",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  },
+  {
+   "resumo": "Usando bancada: registrar_pedido_compra",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  }
+ ],
+ "perguntas": [],
+ "bot_id": "50633b39-53ff-4a56-9c01-f53d0b425ec7",
+ "conversa_id": "b11a271f-70a0-481c-9e56-0882c19d8901",
+ "resultado": "nao_executado",
+ "classe": "transporte",
+ "erro_executor": "AttributeError: 'NoneType' object has no attribute 'strip'",
+ "bot_apagado": true
+}

@@ -1,0 +1,107 @@
+{
+ "tarefa": "L05",
+ "rodada": 3,
+ "inicio": "2026-11-28T17:06:03.388847+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 33.1
+  }
+ ],
+ "cartoes": [
+  {
+   "resumo": "Usando bancada: registrar_pedido_compra",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  },
+  {
+   "resumo": "Usando bancada: registrar_pedido_compra",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  },
+  {
+   "resumo": "Usando bancada: registrar_pedido_compra",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  }
+ ],
+ "perguntas": [],
+ "bot_id": "4d6bd91f-b44e-4f47-81c4-50632bdb6492",
+ "conversa_id": "54cdf5de-b0eb-4aea-ab4b-51a8b97c2336",
+ "fim": "2026-11-28T17:06:39.609852+00:00",
+ "duracao_s": 36.2,
+ "resultado": "parcial",
+ "classe_sugerida": "modelo",
+ "classe": "modelo",
+ "prova": "✔ MCP: pedidos exatamente os esperados (sem repetição); ✔ MCP: P-03 consultado de novo após o erro; ✔ MCP: conferiu os pedidos; ✘ arquivo compras_L05.csv com itens e TOTAL; ✔ resposta: 270,75",
+ "criterios": [
+  {
+   "criterio": "MCP: pedidos exatamente os esperados (sem repetição)",
+   "ok": true
+  },
+  {
+   "criterio": "MCP: P-03 consultado de novo após o erro",
+   "ok": true
+  },
+  {
+   "criterio": "MCP: conferiu os pedidos",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo compras_L05.csv com itens e TOTAL",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: 270,75",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 7,
+ "chamadas_por_papel": {
+  "agente_individual": 7
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 43470,
+ "tokens_saida": 369,
+ "primeiro_pedido_tokens": 5346,
+ "maior_pedido_tokens": 6996,
+ "custo_usd": 0.013962,
+ "chamadas_ferramenta": 16,
+ "pedidos_ao_modelo_rastro": 7,
+ "chamadas_mcp": 9,
+ "rastro": {
+  "modelo.pedido": 7,
+  "ferramenta.inicio": 16,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 6,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "mcp__bancada__ler_estoque",
+   "mcp__bancada__consultar_preco",
+   "mcp__bancada__consultar_preco",
+   "mcp__bancada__consultar_preco",
+   "mcp__bancada__consultar_preco",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__registrar_pedido_compra",
+   "mcp__bancada__ler_pedidos_registrados",
+   "escrever_arquivo"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "O total da compra é R$ 270,75.",
+ "bot_apagado": true
+}
