@@ -1,0 +1,85 @@
+{
+ "tarefa": "L04",
+ "rodada": 3,
+ "inicio": "2026-11-28T17:04:24.276204+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 14.3
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "0c343e1b-d9b8-4648-abc0-142fce786f70",
+ "conversa_id": "903847e3-64db-44b9-8447-53e35ae13f6d",
+ "fim": "2026-11-28T17:04:41.646907+00:00",
+ "duracao_s": 17.3,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ arquivo estoque_L04.json é JSON; ✔ totais por categoria; ✔ itens sem estoque; ✔ memória: Mercearia; ✔ resposta: promoções não lidas; ✔ resposta: Mercearia",
+ "criterios": [
+  {
+   "criterio": "arquivo estoque_L04.json é JSON",
+   "ok": true
+  },
+  {
+   "criterio": "totais por categoria",
+   "ok": true
+  },
+  {
+   "criterio": "itens sem estoque",
+   "ok": true
+  },
+  {
+   "criterio": "memória: Mercearia",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: promoções não lidas",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: Mercearia",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 3,
+ "chamadas_por_papel": {
+  "agente_individual": 3
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 19853,
+ "tokens_saida": 517,
+ "primeiro_pedido_tokens": 5588,
+ "maior_pedido_tokens": 7265,
+ "custo_usd": 0.007248,
+ "chamadas_ferramenta": 6,
+ "pedidos_ao_modelo_rastro": 3,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 3,
+  "ferramenta.inicio": 6,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_pagina",
+   "ler_pagina",
+   "ler_pagina",
+   "escrever_arquivo",
+   "lembrar",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "A categoria de maior valor em estoque é Mercearia (R$ 540,00). As promoções não foram lidas (erro 404). O arquivo estoque_L04.json foi salvo com sucesso.",
+ "bot_apagado": true
+}
