@@ -88,7 +88,16 @@ async def modelos_do_papel(
     (no automático, o nível aceito mais próximo de cada modelo).
     """
     if modelo_falso_ativo():
-        return [criar_modelo_falso(_PAPEL_DO_SELETOR.get(papel, papel))]
+        nome = _PAPEL_DO_SELETOR.get(papel, papel)
+        principal = criar_modelo_falso(nome)
+        if nome not in {"sora", "agente_individual"}:
+            return [principal]
+        if escolha is not None and escolha.modelo_fixo:
+            from app.preferencias_conversa import marcar_escolhido
+
+            marcar_escolhido(principal, escolha.modelo, ["ferramentas"])
+            return [principal]
+        return [principal, criar_modelo_falso(nome, reserva=True)]
 
     from app.llm.fabrica import criar_modelos_na_ordem
     from app.llm.raciocinio import nivel_mais_proximo

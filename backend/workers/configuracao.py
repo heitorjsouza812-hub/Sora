@@ -20,7 +20,7 @@ from app.core.config import obter_configuracao
 from app.core.observabilidade import configurar_log, iniciar_sentry
 from app.core.redis import criar_cliente_redis
 from app.emails import criar_enviador
-from app.llm.falso import verificar_modelo_falso_permitido
+from app.llm.falso import prazo_de_teste, verificar_modelo_falso_permitido
 from workers.ancora import compactar_historico
 from workers.aprendizado import aprender_com_correcoes
 from workers.aprovacoes import expirar_aprovacao
@@ -147,5 +147,5 @@ class WorkerSettings:
     on_shutdown = ao_desligar
     max_tries = 3
     max_jobs = obter_configuracao().worker_max_jobs
-    job_timeout = 360
+    job_timeout = prazo_de_teste("SORA_PRAZO_JOB_S", 360)
     """5 minutos da etapa + folga para gravar o erro."""

@@ -161,6 +161,26 @@ def esquemas_das_proximas_fases() -> dict[str, type[BaseModel]]:
     }
 
 
+class RegistrarEfeitoDeTeste(BaseModel):
+    """Registra um efeito contável no banco de teste."""
+
+
+async def _registrar_efeito_de_teste(contexto: ContextoFerramenta) -> str:
+    from sqlalchemy import text
+
+    from app.core.banco import fabrica_sessoes
+    from app.llm.falso import modelo_falso_ativo
+
+    if not modelo_falso_ativo():
+        raise RuntimeError("A ferramenta de teste exige o modelo falso.")
+    async with fabrica_sessoes().begin() as sessao:
+        await sessao.execute(
+            text("insert into efeitos_e2e (conversa_id) values (:conversa_id)"),
+            {"conversa_id": contexto.conversa_id},
+        )
+    return "Efeito de teste registrado."
+
+
 def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[BaseTool]:
     """Monta as ferramentas pedidas como ``@tool`` do LangChain, presas ao contexto.
 
@@ -176,6 +196,20 @@ def criar_ferramentas(nomes: list[str], contexto: ContextoFerramenta) -> list[Ba
     from app.ferramentas.base import ErroFerramenta
 
     def montar(nome: str) -> BaseTool:
+        if nome == "registrar_efeito_de_teste":
+            from app.llm.falso import modelo_falso_ativo
+
+            if modelo_falso_ativo():
+
+                async def executar_efeito() -> str:
+                    return await _registrar_efeito_de_teste(contexto)
+
+                return StructuredTool.from_function(
+                    coroutine=executar_efeito,
+                    name=nome,
+                    description="Registra um efeito contável no banco de teste.",
+                    args_schema=RegistrarEfeitoDeTeste,
+                )
         esquema = ESQUEMAS.get(nome)
         if esquema is None:
             raise ValueError(f"Ferramenta desconhecida: {nome}")

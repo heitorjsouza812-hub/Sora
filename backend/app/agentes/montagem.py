@@ -313,6 +313,14 @@ async def montar_agente(
     else:
         ferramentas = navegador_preguicoso(ferramentas, contexto)
         ferramentas += catalogo_dos_conectores(conectores, contexto)
+    if contexto.papel in {"sora", "individual"} and not contexto.sem_supervisao:
+        from app.llm.falso import modelo_falso_ativo
+
+        if modelo_falso_ativo():
+            ferramentas += criar_ferramentas(
+                ["registrar_efeito_de_teste"],
+                ContextoFerramenta(contexto.usuario_id, contexto.agente_id, contexto.conversa_id),
+            )
     middleware = montar_middleware(contexto, modelos)
     if "computador_agir" in {f.name for f in ferramentas}:
         # Vela-12: não dizer que fez no PC sem conferir; soltar o PC no fim do turno

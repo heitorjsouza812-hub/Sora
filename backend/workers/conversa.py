@@ -22,7 +22,12 @@ from app.eventos.streams import publicar_evento
 from app.eventos.tipos import SugestoesEvento
 from app.filas import FilaAgente, OrigemItem
 from app.filas.sql import ArmazemFilaSQL
-from app.llm.falso import criar_modelo_falso, modelo_falso_ativo
+from app.llm.falso import (
+    criar_modelo_falso,
+    modelo_falso_ativo,
+    prazo_de_teste,
+    usa_modelo_falso_no_turno,
+)
 from app.modelos.enumeracoes import AutorMensagem, TipoAgente
 from app.modelos.tabelas import Agente, Conversa, Mensagem
 from app.orquestrador.modelos import SemModeloDisponivel
@@ -241,9 +246,7 @@ async def _responder_direto_sem_fila(
         else None,
         dependencias=dependencias_da_etapa(ctx, usuario_id=usuario_id, conversa_id=conversa_id),
     )
-    if modelo_falso_ativo() and not any(
-        gatilho in texto for gatilho in ("[aprovacao]", "[pergunta]", "[grupo]")
-    ):
+    if modelo_falso_ativo() and not usa_modelo_falso_no_turno(texto):
         # O roteiro da Sora falsa chama ``falar`` em ciclo para servir outros fluxos do agente.
         # Com ``[aprovacao]``, ``[pergunta]`` ou ``[grupo]`` o agente roda de verdade e abre o
         # cartão (aprovação fixa, pergunta ou proposta de grupo).
@@ -423,7 +426,7 @@ async def _rodar_e_falar(
     marca = await _abrir_turno_vivo(contexto.conversa_id)
     try:
         # O ARQ cancela o job aos 360 s. Reserve tempo para fechar o turno e avisar pelo SSE.
-        async with asyncio.timeout(285):
+        async with asyncio.timeout(prazo_de_teste("SORA_PRAZO_TURNO_S", 285)):
             resultado = await montar_e_rodar_agente(
                 contexto=contexto,
                 modelos=modelos,
