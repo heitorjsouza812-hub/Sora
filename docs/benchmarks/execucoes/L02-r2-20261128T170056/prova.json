@@ -1,0 +1,144 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Guarde na memória, um fato por vez, estes 5 fatos do projeto Ipê: (a) O cliente do projeto Ipê é a Padaria Aurora. (b) O orçamento do projeto Ipê é R$ 18.400. (c) O prazo do projeto Ipê é 12/03/2027. (d) A cor principal do projeto Ipê é verde-musgo. (e) O responsável do projeto Ipê é o Caio. Depois me diga quantos fatos guardou.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "agente",
+   "conteudo": "Guardei 5 fatos.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "usuario",
+   "conteudo": "Mudou uma coisa: o responsável do projeto Ipê agora é a Bianca. Faça nesta ordem: 1) busque na memória os fatos do projeto Ipê; 2) apague a memória antiga do responsável (isso vai pedir minha aprovação); 3) guarde o fato novo do responsável; 4) busque de novo para conferir; 5) calcule quantos dias faltam de 15/01/2027 até o prazo do projeto; 6) salve ipe_L02.md com uma linha por item no formato 'campo: valor', com os campos cliente, orcamento, prazo, cor, responsavel e dias_ate_prazo; 7) responda só com o nome do responsável atual.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "agente",
+   "conteudo": "Bianca",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {
+  "ipe_L02.md": "cliente: Padaria Aurora\norcamento: R$ 18.400\nprazo: 12/03/2027\ncor: verde-musgo\nresponsavel: Bianca\ndias_ate_prazo: 56\n"
+ },
+ "chamadas_modelo": [
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5309,
+   "tokens_saida": 147,
+   "custo_usd": "0.001960",
+   "latencia_ms": 999
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5785,
+   "tokens_saida": 8,
+   "custo_usd": "0.001756",
+   "latencia_ms": 914
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5798,
+   "tokens_saida": 71,
+   "custo_usd": "0.001917",
+   "latencia_ms": 908
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5951,
+   "tokens_saida": 19,
+   "custo_usd": "0.001833",
+   "latencia_ms": 773
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6323,
+   "tokens_saida": 47,
+   "custo_usd": "0.002014",
+   "latencia_ms": 839
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6703,
+   "tokens_saida": 87,
+   "custo_usd": "0.002228",
+   "latencia_ms": 917
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6937,
+   "tokens_saida": 2,
+   "custo_usd": "0.002086",
+   "latencia_ms": 773
+  }
+ ],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 7,
+  "ferramenta.inicio": 12,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 1,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "buscar_memoria",
+   "esquecer_memoria",
+   "esquecer_memoria",
+   "buscar_memoria",
+   "lembrar",
+   "buscar_memoria",
+   "escrever_arquivo"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "memorias": [
+  {
+   "conteudo": "O orçamento do projeto Ipê é R$ 18.400."
+  },
+  {
+   "conteudo": "O prazo do projeto Ipê é 12/03/2027."
+  },
+  {
+   "conteudo": "O cliente do projeto Ipê é a Padaria Aurora."
+  },
+  {
+   "conteudo": "A cor principal do projeto Ipê é verde-musgo."
+  },
+  {
+   "conteudo": "O responsável do projeto Ipê é o Caio."
+  },
+  {
+   "conteudo": "O responsável do projeto Ipê é a Bianca."
+  }
+ ],
+ "pendencias": [],
+ "rotinas": [],
+ "habilidades": [],
+ "aprovacoes": [
+  {
+   "acao": "{\"argumentos\": {\"memoria_id\": \"fa11b564-db67-4168-924f-cbcd8b906692\"}, \"chamada_id\": \"call_13297423286156872187\", \"ferramenta\": \"esquecer_memoria\", \"conversa_id\": \"405d4c6e-c10f-4d10-9a9d-3282a4d2bc29\"}",
+   "status": "permitida"
+  }
+ ],
+ "perguntas": [],
+ "mcp": {
+  "pedidos": [],
+  "enviados": [],
+  "chamadas": []
+ }
+}

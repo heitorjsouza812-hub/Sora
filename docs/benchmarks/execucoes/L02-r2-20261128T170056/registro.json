@@ -1,0 +1,109 @@
+{
+ "tarefa": "L02",
+ "rodada": 2,
+ "inicio": "2026-11-28T17:00:59.785230+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 14.3
+  },
+  {
+   "terminou": true,
+   "segundos": 20.6
+  }
+ ],
+ "cartoes": [
+  {
+   "resumo": "Apagando uma memória",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  }
+ ],
+ "perguntas": [],
+ "bot_id": "0df4b575-239c-42c9-978a-1c46bfe41192",
+ "conversa_id": "405d4c6e-c10f-4d10-9a9d-3282a4d2bc29",
+ "fim": "2026-11-28T17:01:37.849653+00:00",
+ "duracao_s": 38.0,
+ "resultado": "parcial",
+ "classe_sugerida": "orcamento",
+ "classe": "orcamento",
+ "prova": "✘ 5 memórias do Ipê; ✔ Bianca guardada; ✘ Caio apagado; ✔ cartão de esquecer_memoria aberto; ✔ arquivo: responsável Bianca; ✔ arquivo: dias_ate_prazo = 56; ✔ arquivo: cliente/orçamento/prazo/cor; ✔ resposta: Bianca",
+ "criterios": [
+  {
+   "criterio": "5 memórias do Ipê",
+   "ok": false
+  },
+  {
+   "criterio": "Bianca guardada",
+   "ok": true
+  },
+  {
+   "criterio": "Caio apagado",
+   "ok": false
+  },
+  {
+   "criterio": "cartão de esquecer_memoria aberto",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo: responsável Bianca",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo: dias_ate_prazo = 56",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo: cliente/orçamento/prazo/cor",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: Bianca",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 7,
+ "chamadas_por_papel": {
+  "agente_individual": 7
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 42806,
+ "tokens_saida": 381,
+ "primeiro_pedido_tokens": 5309,
+ "maior_pedido_tokens": 6937,
+ "custo_usd": 0.013794,
+ "chamadas_ferramenta": 12,
+ "pedidos_ao_modelo_rastro": 7,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 7,
+  "ferramenta.inicio": 12,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 1,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "buscar_memoria",
+   "esquecer_memoria",
+   "esquecer_memoria",
+   "buscar_memoria",
+   "lembrar",
+   "buscar_memoria",
+   "escrever_arquivo"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Bianca",
+ "bot_apagado": true
+}
