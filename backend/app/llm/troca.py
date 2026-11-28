@@ -227,6 +227,7 @@ def montar_middleware_de_troca(
     espera_inicial_s: float = 0.5,
     ao_falhar: Callable[[Any, BaseException], Awaitable[None]] | None = None,
     ao_responder: Callable[[Any], Awaitable[None]] | None = None,
+    ao_usar_reserva: Callable[[], Awaitable[None]] | None = None,
 ) -> list[Any]:
     """Fábrica ÚNICA do middleware de troca de provedor: ``ModelRetryMiddleware`` +
     ``ModelFallbackMiddleware`` com os modelos na ordem do seletor (o primeiro é o principal).
@@ -257,9 +258,17 @@ def montar_middleware_de_troca(
             initial_delay=espera_inicial_s,
         )
     )
-    if ao_falhar is not None or ao_responder is not None:
-        # Por dentro da nova tentativa: cada chamada de verdade conta na saúde do provedor dela.
-        middleware.append(_criar_monitor_de_saude(ao_falhar, ao_responder))
+
+    async def observar_resposta(modelo: Any) -> None:
+        if ao_responder is not None:
+            await ao_responder(modelo)
+        if ao_usar_reserva is not None and any(modelo is reserva for reserva in modelos[1:]):
+            if _nome_do_modelo(modelo) != _nome_do_modelo(modelos[0]):
+                await ao_usar_reserva()
+
+    if ao_falhar is not None or ao_responder is not None or ao_usar_reserva is not None:
+        # Por dentro da nova tentativa: observa a resposta real, inclusive quando veio da reserva.
+        middleware.append(_criar_monitor_de_saude(ao_falhar, observar_resposta))
     return middleware
 
 

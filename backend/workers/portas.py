@@ -7,6 +7,7 @@ saída grande ficam desligados (``montar_middleware`` só os liga quando a porta
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4, uuid5
@@ -14,7 +15,7 @@ from uuid import UUID, uuid4, uuid5
 from sqlalchemy import update
 
 from app.core.banco import fabrica_sessoes
-from app.eventos.streams import publicar_evento
+from app.eventos.streams import RETENCAO_SEGUNDOS, publicar_evento
 from app.eventos.tipos import PassoEvento
 from app.ferramentas.base import ErroFerramenta
 from app.ferramentas.rotulos import (
@@ -25,6 +26,8 @@ from app.ferramentas.rotulos import (
 from app.modelos.enumeracoes import StatusCadeia, StatusPasso, TipoPasso
 from app.modelos.tabelas import Cadeia, Passo
 from app.orquestrador.cadeia import chave_de_cancelamento
+
+registro = logging.getLogger(__name__)
 
 PRAZO_CONTADOR_S = 2 * 24 * 60 * 60
 
@@ -153,6 +156,33 @@ def construir_dependencias(
         }
         await _emitir(redis, estado, StatusPasso.CONCLUIDO, None, usuario_id, conversa_id)
 
+    async def anunciar_reserva(etapa_painel: UUID, agente: UUID) -> None:
+        passo = {
+            "id": uuid5(etapa_painel, "reserva"),
+            "etapa_id": etapa_painel,
+            "agente_id": agente,
+            "tipo": TipoPasso.PENSAMENTO,
+            "texto": "Continuei com outro modelo de IA.",
+            "ferramenta": None,
+            "acao": None,
+            "parametros": None,
+        }
+        try:
+            novo = await redis.set(
+                f"conversa:aviso-reserva:{etapa_painel}", "1", nx=True, ex=RETENCAO_SEGUNDOS
+            )
+            if novo:
+                await _emitir(
+                    redis,
+                    passo,
+                    StatusPasso.CONCLUIDO,
+                    {"aviso": "troca_de_modelo"},
+                    usuario_id,
+                    conversa_id,
+                )
+        except Exception:
+            registro.warning("Não consegui publicar o aviso de troca na conversa", exc_info=True)
+
     async def salvar_saida(cadeia: UUID | None, texto: str) -> str:
         from app.ferramentas.arquivos import gravar_na_cadeia
         from app.ferramentas.infra import raiz_dos_arquivos
@@ -228,6 +258,7 @@ def construir_dependencias(
         ler_mensagens_pendentes=ambiente.ler_mensagens_pendentes,
         ler_mensagens_do_turno=None if com_cadeia or com_passo else ambiente.ler_mensagens_do_turno,
         ao_trocar_modelo=ao_trocar_modelo if com_passo else None,
+        anunciar_reserva=None if com_cadeia or com_passo else anunciar_reserva,
         ao_esperar_limite=ao_esperar_limite if com_passo else None,
     )
 

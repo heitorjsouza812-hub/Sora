@@ -178,6 +178,7 @@ def _triagem_json(*, direto: bool, agente: bool = False) -> str:
 _ATRASO = re.compile(r"\[lento:(\d{1,3})\]")
 _FALHA_PROVEDOR = re.compile(r"\[falha_provedor:(500|timeout)\]")
 GATILHO_EFEITO = "[efeito_teste]"
+GATILHO_DUAS_FALAS = "[duas_falas]"
 
 
 def prazo_de_teste(variavel: str, padrao: float) -> float:
@@ -190,7 +191,10 @@ def usa_modelo_falso_no_turno(texto: str) -> bool:
     return bool(
         _ATRASO.search(texto)
         or _FALHA_PROVEDOR.search(texto)
-        or any(tag in texto for tag in ("[aprovacao]", "[pergunta]", "[grupo]", GATILHO_EFEITO))
+        or any(
+            tag in texto
+            for tag in ("[aprovacao]", "[pergunta]", "[grupo]", GATILHO_EFEITO, GATILHO_DUAS_FALAS)
+        )
     )
 
 
@@ -387,6 +391,12 @@ def _gatilho_pendente(papel: str, mensagens: list[BaseMessage]) -> AIMessage | N
     gatilhos = gatilhos_do_texto(tarefa)
     if papel in ("sora", "agente_individual"):
         pedido = _pedido_do_prompt(mensagens)
+        if GATILHO_DUAS_FALAS in pedido:
+            final = "falar" in feitas
+            return _chamada(
+                "falar",
+                {"texto": _TEXTO_PADRAO if final else "Vou preparar a resposta.", "final": final},
+            )
         if GATILHO_EFEITO in pedido:
             nome = "registrar_efeito_de_teste"
             retorno = next(

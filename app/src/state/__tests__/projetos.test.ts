@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { aplicarEvento } from '../aplicarEvento';
+import { aplicarEvento, avisosDeTrocaDeModelo } from '../aplicarEvento';
 import { horarioDoEvento, type EventoSse } from '../../api/eventos';
 import type { EstadoProjetos } from '../projetos';
 
@@ -58,6 +58,32 @@ describe('aplicarEvento', () => {
     expect(roteiro.find(p => p.id === 'p-usuario')?.origem).toBe('usuario');
     expect(roteiro.find(p => p.id === 'p-sora')?.origem).toBe('sora');
     expect(roteiro.find(p => p.id === 'p-sem')?.origem).toBeUndefined();
+  });
+
+  it('mostra um aviso marcado por turno, na conversa do evento', () => {
+    const conversaBot = 'conversa-do-bot';
+    const passo = (dados: Record<string, unknown>) => evento('passo', {
+      passo_id: 'aviso-sora', etapa_id: etapaId, agente_id: agenteId, tipo: 'pensamento',
+      status: 'concluido', texto: 'A reserva respondeu.', resultado: { aviso: 'troca_de_modelo' },
+      ...dados,
+    });
+    const avisoSora = passo({});
+    let e = aplicarEvento(estado(), avisoSora);
+    e = aplicarEvento(e, avisoSora);
+    e = aplicarEvento(e, passo({ passo_id: 'segundo-aviso-mesmo-turno' }));
+    e = aplicarEvento(e, passo({ passo_id: 'passo-sem-marcador', etapa_id: 'etapa-da-cadeia', resultado: null }));
+    e = aplicarEvento(e, passo({
+      conversa_id: conversaBot, etapa_id: 'turno-do-bot', passo_id: 'aviso-bot', texto: 'Outro modelo respondeu.',
+    }));
+
+    expect(avisosDeTrocaDeModelo(e, conversaId).map(p => [p.id, p.texto])).toEqual([
+      ['aviso-sora', 'A reserva respondeu.'],
+    ]);
+    expect(avisosDeTrocaDeModelo(e, conversaBot).map(p => [p.id, p.texto])).toEqual([
+      ['aviso-bot', 'Outro modelo respondeu.'],
+    ]);
+    expect(avisosDeTrocaDeModelo(e, 'outra-conversa')).toEqual([]);
+    expect(e.mensagens).toEqual([]);
   });
 
   it('concatena deltas SSE e encerra a mensagem pelo evento fim', () => {
