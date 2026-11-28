@@ -32,7 +32,7 @@
  "duracao_s": 52.5,
  "resultado": "parcial",
  "classe_sugerida": "modelo",
- "classe": "modelo",
+ "classe": "contexto",
  "prova": "✔ arquivo saldo_L10.csv confere; ✘ arquivo saldo_L10_v2.csv confere; ✘ memória do pior mês = março (antiga apagada); ✔ cartões de esquecer_memoria e criar_habilidade; ✔ habilidade saldo-mensal criada; ✘ resposta: 3.900 e março",
  "criterios": [
   {
@@ -103,5 +103,19 @@
  "esperas_429_s": 0,
  "erros_sse": [],
  "resposta_final": "Saldo corrigido de fevereiro: R$ 3.500,00. O pior mês continua sendo fevereiro.",
- "bot_apagado": true
+ "bot_apagado": true,
+ "revisao": [
+  {
+   "em": "2026-11-28T17:17:49.685665+00:00",
+   "de": [
+    "parcial",
+    "modelo"
+   ],
+   "para": [
+    "parcial",
+    "contexto"
+   ],
+   "nota": "2º turno sem o anexo: workers/conversa.py:278 reconstrói as mensagens antigas só com m.conteudo, sem a lista <anexos_do_usuario> (anexo_id) do 1º turno; o bot pede o arquivo, anuncia sem fazer ou inventa os números. O 1º turno passou (saldo_L10.csv confere)."
+  }
+ ]
 }
