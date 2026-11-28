@@ -179,15 +179,25 @@ def _ferramenta(nome: str, descricao: str = "", grupo: str = "notion") -> Struct
     )
 
 
+async def _permitir(ferramenta, argumentos) -> None:
+    pass
+
+
 def test_ate_20_ferramentas_vao_direto() -> None:
     ferramentas = [_ferramenta(f"f{i}") for i in range(LIMITE_DIRETO)]
-    assert montar_catalogo(ferramentas) == ferramentas
+    assert montar_catalogo(ferramentas, antes_de_executar=None) == ferramentas
+
+
+def test_catalogo_acima_do_limite_exige_gancho_de_revisao() -> None:
+    ferramentas = [_ferramenta(f"f{i}") for i in range(25)]
+    with pytest.raises(ValueError, match="gancho de revisão"):
+        montar_catalogo(ferramentas, antes_de_executar=None)
 
 
 async def test_acima_de_20_vira_tres_meta_ferramentas() -> None:
     ferramentas = [_ferramenta(f"mcp__notion__pagina_{i}", f"Página {i}") for i in range(25)]
     ferramentas.append(_ferramenta("mcp__drive__listar_arquivos", "Lista arquivos", "drive"))
-    meta = montar_catalogo(ferramentas)
+    meta = montar_catalogo(ferramentas, antes_de_executar=_permitir)
     assert [m.name for m in meta] == [
         "conectores_buscar_ferramentas",
         "conectores_carregar_ferramenta",
@@ -213,10 +223,10 @@ async def test_catalogo_valida_argumentos_e_chama_gancho() -> None:
 
     catalogo = CatalogoFerramentas([_ferramenta("mcp__a__x")])
     with pytest.raises(ErroFerramenta, match="faltam"):
-        await catalogo.executar("mcp__a__x", {}, gancho)
+        await catalogo.executar("mcp__a__x", {}, antes_de_executar=gancho)
     with pytest.raises(ErroFerramenta, match="desconhecida"):
         catalogo.encontrar("nada")
-    assert await catalogo.executar("x", {"texto": "1"}, gancho) == "mcp__a__x:1"
+    assert await catalogo.executar("x", {"texto": "1"}, antes_de_executar=gancho) == "mcp__a__x:1"
     assert chamados == ["mcp__a__x"]
 
 
@@ -244,7 +254,9 @@ def test_validacao_minima_de_esquema() -> None:
 
 def test_prefixo_mcp_com_um_sublinhado_e_recusado() -> None:
     with pytest.raises(ValueError):
-        montar_catalogo([_ferramenta(f"f{i}") for i in range(30)], prefixo="mcp_x")
+        montar_catalogo(
+            [_ferramenta(f"f{i}") for i in range(30)], prefixo="mcp_x", antes_de_executar=_permitir
+        )
 
 
 # ---------- política de aprovação ----------

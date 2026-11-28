@@ -173,8 +173,10 @@ async def test_carregar_ferramentas_de_varios_servidores() -> None:
         "mcp__drive__listar_arquivos",
     ]
     muitas = _ClienteMCPFalso({"n": [_ferramenta_mcp(f"f{i}") for i in range(25)]})
-    meta = await carregar_ferramentas([ServidorMCP(nome="n", url="https://a.com")], cliente=muitas)
-    assert meta[0].name == "conectores_buscar_ferramentas"
+    ferramentas = await carregar_ferramentas(
+        [ServidorMCP(nome="n", url="https://a.com")], cliente=muitas
+    )
+    assert [f.name for f in ferramentas] == [f"mcp__n__f{i}" for i in range(25)]
     assert await carregar_ferramentas([], cliente=cliente) == []
 
 
