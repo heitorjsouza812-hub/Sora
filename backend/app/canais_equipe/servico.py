@@ -54,11 +54,12 @@ class ArmazemCanais(Protocol):
 
 
 class ArmazemCanaisEmMemoria:
-    def __init__(self) -> None:
+    def __init__(self, *, nomes_por_usuario: dict[UUID, dict[UUID, str]] | None = None) -> None:
         self._canais: dict[UUID, Canal] = {}
         self._mensagens: dict[UUID, list[MensagemCanal]] = {}
         self._tarefas: dict[UUID, TarefaCanal] = {}
         self._seq: dict[UUID, itertools.count[int]] = {}
+        self._nomes_por_usuario = nomes_por_usuario or {}
 
     async def canal(self, canal_id: UUID) -> Canal | None:
         return self._canais.get(canal_id)
@@ -96,7 +97,8 @@ class ArmazemCanaisEmMemoria:
     async def nomes_dos_bots_da_rodada(
         self, usuario_id: UUID, lider_id: UUID, bots: Sequence[UUID]
     ) -> dict[UUID, str]:
-        return {}
+        nomes = self._nomes_por_usuario.get(usuario_id, {})
+        return {bot: nomes[bot] for bot in bots if bot in nomes} if lider_id in nomes else {}
 
 
 # ---------- resultados ----------
@@ -345,6 +347,8 @@ class ServicoCanais:
             if mensagem.id not in canal.pedidos_sem_lider:
                 canal.pedidos_sem_lider.append(mensagem.id)
                 await self._armazem.salvar_canal(canal)
+        elif rota.tipo == "sem_bots":
+            mudancas.mensagens.append(await self._atividade(canal, rota.nota))
         else:  # sem_lider
             canal.pedidos_sem_lider.append(mensagem.id)
             await self._armazem.salvar_canal(canal)
@@ -747,6 +751,8 @@ class ServicoCanais:
                 partes.append(f"- **{nome}** entregou: {texto}{sufixo}")
             elif item.status is StatusTarefa.FALHOU:
                 partes.append(f"- **{nome}** falhou: {item.erro}")
+            elif item.motivo is MotivoParada.DONO_SAIU:
+                partes.append(f"- **{nome}** saiu do grupo e teve a tarefa cancelada.")
             else:
                 partes.append(f"- **{nome}** teve a tarefa cancelada.")
         mensagem = MensagemCanal(
@@ -756,7 +762,7 @@ class ServicoCanais:
             autor=AutorCanal.AGENTE,
             agente_id=canal.lider_id,
             texto="\n\n".join(partes),
-            tipo=TipoMensagemCanal.RESULTADO,
+            tipo=TipoMensagemCanal.MENSAGEM,
             responde_a=tarefa.pedido_id,
         )
         await self._armazem.gravar_mensagem(mensagem)
@@ -834,7 +840,8 @@ class ServicoCanais:
         mudancas.mensagens.append(
             await self._atividade(canal, "Você cancelou o pedido.", tarefa_id=tarefa.raiz_id)
         )
-        await self._sintetizar_rodada(canal, tarefa, mudancas)
+        raiz = tarefa if tarefa.raiz else await self._tarefa(tarefa.raiz_id)
+        await self._sintetizar_rodada(canal, raiz, mudancas)
         return mudancas
 
     async def remover_agente_apagado(
@@ -851,17 +858,18 @@ class ServicoCanais:
             canal.lider_id = None
         await self._armazem.salvar_canal(canal)
         for tarefa in await self._armazem.tarefas(canal.id):
-            if tarefa.dono_id == agente_id and tarefa.status in ABERTAS | {
-                StatusTarefa.PARADA,
-                StatusTarefa.FALHOU,
-            }:
+            if tarefa.dono_id == agente_id and tarefa.status in ABERTAS | {StatusTarefa.FALHOU}:
                 if tarefa.status is StatusTarefa.RODANDO:
                     mudancas.interromper.append(tarefa.id)
                 tarefa.status = StatusTarefa.CANCELADA
+                tarefa.motivo = MotivoParada.DONO_SAIU
                 tarefa.atualizada_em = _agora()
                 await self._armazem.gravar_tarefa(tarefa)
                 mudancas.tarefas.append(tarefa)
         mudancas.mensagens.append(await self._atividade(canal, f"{nome} foi apagado e saiu."))
+        for tarefa in mudancas.tarefas:
+            if tarefa.raiz:
+                await self._sintetizar_rodada(canal, tarefa, mudancas)
         return mudancas
 
     # ---------- leitura ----------

@@ -12,7 +12,7 @@ import pytest
 import uvicorn
 from alembic import command
 from alembic.config import Config
-from arq.connections import RedisSettings
+from arq.connections import ArqRedis, RedisSettings
 from arq.worker import create_worker
 from redis.asyncio import Redis
 from sqlalchemy import text
@@ -24,6 +24,7 @@ from app.ferramentas import ambiente
 from app.main import criar_aplicacao
 from tests.integracao.test_fase_b_pronto import _fechar_worker, _porta_livre
 from workers.configuracao import WorkerSettings
+from workers.fila import configurar_fila
 
 RAIZ = Path(__file__).resolve().parents[2]
 
@@ -112,6 +113,9 @@ async def mundo(
             criar_aplicacao(), host="127.0.0.1", port=porta, log_level="warning", lifespan="on"
         )
     )
+    # A API pode enfileirar antes de o worker subir. O pool da API pertence a este loop.
+    fila_api = ArqRedis.from_url(url_redis)
+    configurar_fila(fila_api)
     tarefa_api = asyncio.create_task(servidor.serve())
     while not servidor.started:  # noqa: ASYNC110
         await asyncio.sleep(0.05)
@@ -122,6 +126,8 @@ async def mundo(
         await m.parar_worker()
         servidor.should_exit = True
         await tarefa_api
+        configurar_fila(None)
+        await fila_api.aclose()
         await motor.dispose()
         obter_configuracao.cache_clear()
         fabrica_sessoes.cache_clear()

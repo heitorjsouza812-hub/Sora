@@ -701,6 +701,72 @@ async def test_pacote_esconde_respostas_dos_colegas_ate_responder() -> None:
     assert any("OPINIAO_DO_ATLAS" in m.texto for m in mensagens_visiveis(mensagens, atlas, ATLAS))
 
 
+@pytest.mark.parametrize("remover_bot", [True, False], ids=["bot-apagado", "cancelar-pela-filha"])
+async def test_sintese_do_grupo_ao_cancelar_a_ultima_tarefa(remover_bot: bool) -> None:
+    usuario, bia = uuid4(), uuid4()
+    nomes = {LUNA: "Sora", ATLAS: "Atlas", bia: "Bia"}
+    if remover_bot:
+        nomes[NINA] = "Nina"
+    servico = ServicoCanais(ArmazemCanaisEmMemoria(nomes_por_usuario={usuario: nomes}))
+    membros = [*MEMBROS, Membro(bia, "Bia")]
+    ids = {membro.id for membro in membros}
+    canal = await servico.criar(
+        usuario_id=usuario,
+        nome="Pesquisa",
+        membros=[m.id for m in membros],
+        lider_id=LUNA,
+        agentes_do_usuario=ids,
+    )
+    rodada = await servico.mensagem_do_usuario(
+        canal.id, usuario, texto="@todos tragam uma contribuição", membros=membros
+    )
+    tarefas = {t.dono_id: t for t in rodada.tarefas}
+    assert set(tarefas) == {ATLAS, NINA, bia}
+    atlas, nina, falha = tarefas[ATLAS], tarefas[NINA], tarefas[bia]
+    await servico.iniciar(atlas.id)
+    await servico.registrar_resultado(
+        atlas.id, atlas.revisao, por_agente=ATLAS, texto="a" * 1200 + "trecho cortado"
+    )
+    await servico.falhar(falha.id, falha.revisao, "Não encontrou referências.")
+
+    async def historico_da_sintese():
+        return [
+            m
+            for m in await servico.historico(canal.id, usuario)
+            if m.agente_id == LUNA and m.responde_a == rodada.mensagens[0].id
+        ]
+
+    assert await historico_da_sintese() == []
+    if remover_bot:
+        mudancas = await servico.remover_agente_apagado(canal.id, usuario, NINA, "Nina")
+        cancelamento = "**Nina** saiu do grupo e teve a tarefa cancelada."
+    else:
+        await servico.iniciar(nina.id)
+        filha = await servico.delegar(
+            nina.id,
+            nina.revisao,
+            por_agente=NINA,
+            para_agente=ATLAS,
+            instrucao="Revise as fontes.",
+            disponiveis=ids,
+        )
+        await servico.parar(filha.id, usuario)
+        mudancas = await servico.cancelar(filha.id, usuario)
+        cancelamento = "**Bot removido** teve a tarefa cancelada."
+    assert nina.status is StatusTarefa.CANCELADA
+    [sintese] = await historico_da_sintese()
+    assert sintese in mudancas.mensagens
+    assert sintese.tipo is TipoMensagemCanal.MENSAGEM
+    assert f"**Atlas** entregou: {'a' * 1200}…" in sintese.texto
+    assert "trecho cortado" not in sintese.texto
+    assert "**Bia** falhou: Não encontrou referências." in sintese.texto
+    assert cancelamento in sintese.texto
+
+    await servico.retomar(falha.id, usuario, disponiveis=ids)
+    await servico.falhar(falha.id, falha.revisao, "Falhou novamente.")
+    assert await historico_da_sintese() == [sintese]
+
+
 # ---------- navegador persistente ----------
 
 

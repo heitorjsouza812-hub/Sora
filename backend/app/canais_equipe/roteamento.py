@@ -57,7 +57,7 @@ class Membro:
     """``False`` quando o agente foi pausado ou escondido: não recebe trabalho novo."""
 
 
-TipoRota = Literal["donos", "seguimento", "retomar", "lider", "sem_lider"]
+TipoRota = Literal["donos", "seguimento", "retomar", "lider", "sem_lider", "sem_bots"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +160,8 @@ def rotear(
     if todos:
         # O líder (a Sora, nos grupos) coordena: ``@todos`` é para os outros membros.
         alvos = tuple(m.id for m in disponiveis if m.id != lider_id)
+        if not alvos:
+            return Rota("sem_bots", nota="Nenhum bot do grupo pode receber trabalho agora.")
         return Rota("donos", alvos, texto=resto, para_todos=True)
     mencionados = [a for a in mencionados if a in ids_disponiveis]
     if mencionados:
