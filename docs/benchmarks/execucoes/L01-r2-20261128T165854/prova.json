@@ -1,0 +1,81 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Anexei vendas_L01.csv. Faça nesta ordem: 1) leia o arquivo; 2) normalize o nome da loja (sem espaços nas pontas, só a primeira letra maiúscula); 3) descarte as linhas com quantidade negativa (são devoluções) e conte quantas descartou; 4) calcule o faturamento de cada linha (quantidade × preço unitário); 5) some o faturamento por loja; 6) arredonde cada total para 2 casas; 7) ordene as lojas do maior para o menor total; 8) calcule a média dos totais das lojas, com 2 casas; 9) salve o arquivo resumo_L01.json exatamente neste formato: {\"lojas\":[{\"loja\":\"Nome\",\"total\":0.00}],\"media\":0.00,\"devolucoes_descartadas\":0}; 10) guarde na memória o fato \"Loja campeã de vendas (L01): <nome da loja>\"; 11) responda só com o nome da loja campeã e o total dela.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "agente",
+   "conteudo": "Centro, R$ 1.077,50",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {
+  "resumo_L01.json": "{\"lojas\":[{\"loja\":\"Centro\",\"total\":1077.5},{\"loja\":\"Norte\",\"total\":892.2},{\"loja\":\"Praia\",\"total\":794.0},{\"loja\":\"Serra\",\"total\":741.0}],\"media\":876.18,\"devolucoes_descartadas\":3}"
+ },
+ "chamadas_modelo": [
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5503,
+   "tokens_saida": 53,
+   "custo_usd": "0.001783",
+   "latencia_ms": 831
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6420,
+   "tokens_saida": 111,
+   "custo_usd": "0.002204",
+   "latencia_ms": 940
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6602,
+   "tokens_saida": 27,
+   "custo_usd": "0.002048",
+   "latencia_ms": 694
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6685,
+   "tokens_saida": 13,
+   "custo_usd": "0.002038",
+   "latencia_ms": 836
+  }
+ ],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 4,
+  "ferramenta.inicio": 3,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_anexo",
+   "escrever_arquivo",
+   "lembrar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "memorias": [
+  {
+   "conteudo": "Loja campeã de vendas (L01): Centro"
+  }
+ ],
+ "pendencias": [],
+ "rotinas": [],
+ "habilidades": [],
+ "aprovacoes": [],
+ "perguntas": [],
+ "mcp": {
+  "pedidos": [],
+  "enviados": [],
+  "chamadas": []
+ }
+}

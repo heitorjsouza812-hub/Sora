@@ -1,0 +1,65 @@
+{
+ "tarefa": "L07",
+ "rodada": 3,
+ "inicio": "2026-11-26T02:35:59.160369+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 10.3
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "e35c1910-09f1-43a2-ae15-c155e2d805a5",
+ "conversa_id": "7cd075a7-e3eb-4c5a-ab10-9a1c8f2047f2",
+ "fim": "2026-11-26T02:36:12.701017+00:00",
+ "duracao_s": 13.4,
+ "resultado": "nao_executado",
+ "classe_sugerida": "cota_provedor",
+ "classe": "cota_provedor",
+ "prova": "✔ MCP: nada enviado (cartão recusado); ✘ cartão de envio aberto; ✘ arquivo relatorio_L07.md com sexta, 29 e 24,0; ✘ pendência criada; ✘ resposta: sexta",
+ "criterios": [
+  {
+   "criterio": "MCP: nada enviado (cartão recusado)",
+   "ok": true
+  },
+  {
+   "criterio": "cartão de envio aberto",
+   "ok": false
+  },
+  {
+   "criterio": "arquivo relatorio_L07.md com sexta, 29 e 24,0",
+   "ok": false
+  },
+  {
+   "criterio": "pendência criada",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: sexta",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 0,
+ "chamadas_por_papel": {},
+ "modelos_usados": [],
+ "tokens_entrada": 0,
+ "tokens_saida": 0,
+ "custo_usd": 0.0,
+ "chamadas_ferramenta": 0,
+ "pedidos_ao_modelo_rastro": 2,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 2,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 2,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 2,
+  "ferramentas": []
+ },
+ "bateu_limite_429": true,
+ "esperas_429_s": 0,
+ "erros_sse": []
+}

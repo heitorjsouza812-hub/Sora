@@ -1,0 +1,98 @@
+{
+ "tarefa": "L08",
+ "rodada": 1,
+ "inicio": "2026-11-28T17:09:34.687422+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 22.7
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [
+  {
+   "texto": "A mudança é no sábado ou no domingo?",
+   "resposta": "domingo",
+   "http": 204
+  }
+ ],
+ "bot_id": "8052b3b0-91bc-45f1-8995-4a11c0964e38",
+ "conversa_id": "a23f6ad0-11ee-4761-a4b3-220e7cd7dad6",
+ "fim": "2026-11-28T17:10:00.437795+00:00",
+ "duracao_s": 25.7,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ pergunta feita e respondida; ✔ pendências abertas certas; ✔ notas do caminhão com domingo; ✔ Embalar arquivos concluída; ✔ arquivo com as 3 abertas em ordem alfabética; ✔ resposta: 3",
+ "criterios": [
+  {
+   "criterio": "pergunta feita e respondida",
+   "ok": true
+  },
+  {
+   "criterio": "pendências abertas certas",
+   "ok": true
+  },
+  {
+   "criterio": "notas do caminhão com domingo",
+   "ok": true
+  },
+  {
+   "criterio": "Embalar arquivos concluída",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo com as 3 abertas em ordem alfabética",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: 3",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 6,
+ "chamadas_por_papel": {
+  "agente_individual": 6
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 36290,
+ "tokens_saida": 469,
+ "primeiro_pedido_tokens": 5372,
+ "maior_pedido_tokens": 6691,
+ "custo_usd": 0.012059,
+ "chamadas_ferramenta": 13,
+ "pedidos_ao_modelo_rastro": 6,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 6,
+  "ferramenta.inicio": 13,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 1,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "perguntar",
+   "perguntar",
+   "adicionar_pendencia",
+   "adicionar_pendencia",
+   "adicionar_pendencia",
+   "adicionar_pendencia",
+   "adicionar_pendencia",
+   "atualizar_pendencia",
+   "concluir_pendencia",
+   "remover_pendencia",
+   "listar_pendencias",
+   "escrever_arquivo",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Ficaram 3 pendências abertas.",
+ "bot_apagado": true
+}

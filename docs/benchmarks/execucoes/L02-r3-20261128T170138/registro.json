@@ -1,0 +1,123 @@
+{
+ "tarefa": "L02",
+ "rodada": 3,
+ "inicio": "2026-11-28T17:01:41.906453+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 14.3
+  },
+  {
+   "terminou": true,
+   "segundos": 20.7
+  }
+ ],
+ "cartoes": [
+  {
+   "resumo": "Apagando uma memória",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  }
+ ],
+ "perguntas": [],
+ "bot_id": "498417fc-58f8-4a56-aa90-2e2325053ac1",
+ "conversa_id": "9d16d63b-87c7-4889-a230-3466cd6f0ff7",
+ "fim": "2026-11-28T17:02:20.075984+00:00",
+ "duracao_s": 38.1,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ 5 memórias do Ipê; ✔ Bianca guardada; ✔ Caio apagado; ✔ cartão de esquecer_memoria aberto; ✔ arquivo: responsável Bianca; ✔ arquivo: dias_ate_prazo = 56; ✔ arquivo: cliente/orçamento/prazo/cor; ✔ resposta: Bianca",
+ "criterios": [
+  {
+   "criterio": "5 memórias do Ipê",
+   "ok": true
+  },
+  {
+   "criterio": "Bianca guardada",
+   "ok": true
+  },
+  {
+   "criterio": "Caio apagado",
+   "ok": true
+  },
+  {
+   "criterio": "cartão de esquecer_memoria aberto",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo: responsável Bianca",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo: dias_ate_prazo = 56",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo: cliente/orçamento/prazo/cor",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: Bianca",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 8,
+ "chamadas_por_papel": {
+  "agente_individual": 8
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 49651,
+ "tokens_saida": 358,
+ "primeiro_pedido_tokens": 5309,
+ "maior_pedido_tokens": 6973,
+ "custo_usd": 0.015789,
+ "chamadas_ferramenta": 11,
+ "pedidos_ao_modelo_rastro": 8,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 8,
+  "ferramenta.inicio": 11,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 1,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "lembrar",
+   "buscar_memoria",
+   "esquecer_memoria",
+   "esquecer_memoria",
+   "lembrar",
+   "buscar_memoria",
+   "escrever_arquivo"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Bianca",
+ "bot_apagado": true,
+ "revisao": [
+  {
+   "em": "2026-11-28T17:05:00.781380+00:00",
+   "de": [
+    "parcial",
+    "orcamento",
+    "✘ 5 memórias do Ipê; ✔ Bianca guardada; ✘ Caio apagado; ✔ cartão de esquecer_memoria aberto; ✔ arquivo: responsável Bianca; ✔ arquivo: dias_ate_prazo = 56; ✔ arquivo: cliente/orçamento/prazo/cor; ✔ resposta: Bianca"
+   ],
+   "para": [
+    "ok",
+    ""
+   ],
+   "nota": "conferidor corrigido: memória apagada (apagada_em) não conta; classe orcamento só por texto do produto"
+  }
+ ]
+}

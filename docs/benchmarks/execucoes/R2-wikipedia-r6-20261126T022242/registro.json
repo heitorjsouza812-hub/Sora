@@ -1,0 +1,62 @@
+{
+ "tarefa": "R2-wikipedia",
+ "rodada": 6,
+ "inicio": "2026-11-26T02:22:43.216087+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 140.8
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "conversa_id": "86121541-aa6f-4344-8782-f8d3d1c31bcd",
+ "agente_id": "24f62963-2f81-406c-955a-cc921b12deda",
+ "fim": "2026-11-26T02:25:08.245197+00:00",
+ "duracao_s": 145.0,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ usou o navegador interativo (não só busca); ✔ aba final no artigo Santos_Dumont (banco); ✔ título da aba contém Santos Dumont (banco); ✔ resposta cita o título Santos Dumont",
+ "ferramentas_usadas": [
+  "navegador_abrir",
+  "navegador_procurar",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_procurar",
+  "falar"
+ ],
+ "abas": [
+  {
+   "url": "https://pt.wikipedia.org/wiki/Santos_Dumont",
+   "titulo": "Santos Dumont – Wikipédia, a enciclopédia livre",
+   "usada_em": "2026-11-26 02:24:41.72378+00"
+  }
+ ],
+ "chamadas_modelo": 7,
+ "modelos_usados": [
+  "groq/qwen/qwen3.8-27b"
+ ],
+ "tokens_entrada": 37379,
+ "tokens_saida": 442,
+ "chamadas_ferramenta": 6,
+ "rastro": {
+  "modelo.pedido": 12,
+  "ferramenta.inicio": 6,
+  "modelo.erro": 6,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 6,
+  "ferramentas": [
+   "navegador_abrir",
+   "navegador_procurar",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_procurar",
+   "falar"
+  ]
+ },
+ "bateu_limite_429": true,
+ "resposta_final": "Abri a Wikipédia em português, busquei por Santos Dumont e cliquei na primeira sugestão. O título que apareceu na página do artigo é: Santos Dumont."
+}

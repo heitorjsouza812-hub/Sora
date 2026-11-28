@@ -1,0 +1,96 @@
+{
+ "tarefa": "R2-wikipedia",
+ "rodada": 5,
+ "inicio": "2026-11-26T02:17:42.127925+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 294.3
+  }
+ ],
+ "cartoes": [
+  {
+   "resumo": "Permitir acesso a wikipedia.org?",
+   "decisao": "permitir_uma_vez",
+   "http": 204
+  }
+ ],
+ "perguntas": [],
+ "conversa_id": "6662704d-1a8b-45f0-aaae-ffbcaa42d539",
+ "agente_id": "24f62963-2f81-406c-955a-cc921b12deda",
+ "fim": "2026-11-26T02:22:40.278417+00:00",
+ "duracao_s": 298.1,
+ "resultado": "parcial",
+ "classe_sugerida": "cota_provedor",
+ "classe": "schema",
+ "prova": "✔ usou o navegador interativo (não só busca); ✘ aba final no artigo Santos_Dumont (banco); ✘ título da aba contém Santos Dumont (banco); ✘ resposta cita o título Santos Dumont",
+ "ferramentas_usadas": [
+  "navegador_abrir",
+  "navegador_abrir",
+  "navegador_abrir",
+  "navegador_procurar",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao",
+  "navegador_acao"
+ ],
+ "abas": [
+  {
+   "url": "https://pt.wikipedia.org/wiki/Wikip%C3%A9dia:P%C3%A1gina_principal",
+   "titulo": "Wikipédia, a enciclopédia livre",
+   "usada_em": "2026-11-26 02:22:28.079921+00"
+  }
+ ],
+ "chamadas_modelo": 13,
+ "modelos_usados": [
+  "groq/qwen/qwen3.8-27b"
+ ],
+ "tokens_entrada": 77225,
+ "tokens_saida": 644,
+ "chamadas_ferramenta": 13,
+ "rastro": {
+  "modelo.pedido": 26,
+  "ferramenta.inicio": 13,
+  "modelo.erro": 14,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 1,
+  "erros_de_limite": 14,
+  "ferramentas": [
+   "navegador_abrir",
+   "navegador_abrir",
+   "navegador_abrir",
+   "navegador_procurar",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao"
+  ]
+ },
+ "bateu_limite_429": true,
+ "resposta_final": "Última etapa com retorno: agir no elemento da página. O pedido excede o limite deste modelo. Compacte a conversa ou escolha outro modelo.",
+ "revisao": [
+  {
+   "em": "2026-11-26T02:25:22.502239+00:00",
+   "de": [
+    "nao_executado",
+    "cota_provedor"
+   ],
+   "para": [
+    "parcial",
+    "schema"
+   ],
+   "nota": "Mesma falha do r4: cartão de domínio novo (aprovado pelo executor), digitou com definir_valor, recebeu 6 sugestões com ref e mandou clicar com ref nulo 8x seguidas. Terminou por 413/ITPM ('O pedido excede o limite deste modelo'), mas o laço inválido veio antes e é a causa."
+  }
+ ]
+}

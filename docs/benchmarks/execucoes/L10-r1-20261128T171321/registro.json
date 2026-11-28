@@ -1,0 +1,102 @@
+{
+ "tarefa": "L10",
+ "rodada": 1,
+ "inicio": "2026-11-28T17:13:26.724752+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 22.4
+  },
+  {
+   "terminou": true,
+   "segundos": 26.5
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "596b4cbd-c1ec-41bb-81e8-ea811cd1cd12",
+ "conversa_id": "db901ce6-3b22-4260-a5f1-3a87ba469e3f",
+ "fim": "2026-11-28T17:14:19.183196+00:00",
+ "duracao_s": 52.1,
+ "resultado": "parcial",
+ "classe_sugerida": "modelo",
+ "classe": "contexto",
+ "prova": "✔ arquivo saldo_L10.csv confere; ✘ arquivo saldo_L10_v2.csv confere; ✘ memória do pior mês = março (antiga apagada); ✘ cartões de esquecer_memoria e criar_habilidade; ✘ habilidade saldo-mensal criada; ✘ resposta: 3.900 e março",
+ "criterios": [
+  {
+   "criterio": "arquivo saldo_L10.csv confere",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo saldo_L10_v2.csv confere",
+   "ok": false
+  },
+  {
+   "criterio": "memória do pior mês = março (antiga apagada)",
+   "ok": false
+  },
+  {
+   "criterio": "cartões de esquecer_memoria e criar_habilidade",
+   "ok": false
+  },
+  {
+   "criterio": "habilidade saldo-mensal criada",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: 3.900 e março",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 5,
+ "chamadas_por_papel": {
+  "agente_individual": 5
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 29094,
+ "tokens_saida": 289,
+ "primeiro_pedido_tokens": 5444,
+ "maior_pedido_tokens": 6137,
+ "custo_usd": 0.009451,
+ "chamadas_ferramenta": 5,
+ "pedidos_ao_modelo_rastro": 6,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 6,
+  "ferramenta.inicio": 5,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_anexo",
+   "escrever_arquivo",
+   "lembrar",
+   "falar",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Processando a correção de fevereiro e gerando o novo arquivo...",
+ "bot_apagado": true,
+ "revisao": [
+  {
+   "em": "2026-11-28T17:17:48.597944+00:00",
+   "de": [
+    "parcial",
+    "modelo"
+   ],
+   "para": [
+    "parcial",
+    "contexto"
+   ],
+   "nota": "2º turno sem o anexo: workers/conversa.py:278 reconstrói as mensagens antigas só com m.conteudo, sem a lista <anexos_do_usuario> (anexo_id) do 1º turno; o bot pede o arquivo, anuncia sem fazer ou inventa os números. O 1º turno passou (saldo_L10.csv confere)."
+  }
+ ]
+}

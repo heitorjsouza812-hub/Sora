@@ -1,0 +1,186 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Crie estes lembretes (fuso de São Paulo): 1) 'Treinamento módulo 1' em 08/02/2027 às 09:00; 2) 'Treinamento módulo 2' em 15/02/2027 às 09:00; 3) 'Treinamento módulo 3' em 22/02/2027 às 09:00; 4) 'Revisão geral' recorrente todo ano em 29 de fevereiro às 08:30 (cron 30 8 29 2 *); 5) liste os agendamentos; 6) cancele o 'Treinamento módulo 2' (foi adiado); 7) crie 'Treinamento módulo 2' de novo em 01/03/2027 às 09:00; 8) liste de novo para conferir; 9) guarde na memória o fato 'Treinamento L09 termina em 01/03/2027'; 10) salve agenda_L09.md com os agendamentos ativos, um por linha; 11) responda quantos agendamentos ativos ficaram.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "agente",
+   "conteudo": "Todos os agendamentos foram criados, ajustados e listados, a memória foi guardada e o arquivo `agenda_L09.md` foi salvo.\n\nFicaram 4 agendamentos ativos.",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {
+  "agenda_L09.md": "Treinamento módulo 1\nTreinamento módulo 3\nRevisão geral\nTreinamento módulo 2\n"
+ },
+ "chamadas_modelo": [
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5478,
+   "tokens_saida": 61,
+   "custo_usd": "0.001796",
+   "latencia_ms": 995
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5694,
+   "tokens_saida": 61,
+   "custo_usd": "0.001861",
+   "latencia_ms": 817
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5841,
+   "tokens_saida": 61,
+   "custo_usd": "0.001905",
+   "latencia_ms": 848
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 5992,
+   "tokens_saida": 42,
+   "custo_usd": "0.001903",
+   "latencia_ms": 938
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6124,
+   "tokens_saida": 12,
+   "custo_usd": "0.001867",
+   "latencia_ms": 728
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6587,
+   "tokens_saida": 52,
+   "custo_usd": "0.002106",
+   "latencia_ms": 756
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6731,
+   "tokens_saida": 61,
+   "custo_usd": "0.002172",
+   "latencia_ms": 819
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 6880,
+   "tokens_saida": 12,
+   "custo_usd": "0.002094",
+   "latencia_ms": 720
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 7344,
+   "tokens_saida": 34,
+   "custo_usd": "0.002288",
+   "latencia_ms": 759
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 7430,
+   "tokens_saida": 55,
+   "custo_usd": "0.002366",
+   "latencia_ms": 916
+  },
+  {
+   "papel": "agente_individual",
+   "modelo": "gemini/gemini-3.5-flash-lite",
+   "tokens_entrada": 7557,
+   "tokens_saida": 101,
+   "custo_usd": "0.002520",
+   "latencia_ms": 916
+  }
+ ],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 11,
+  "ferramenta.inicio": 11,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "agendar",
+   "agendar",
+   "agendar",
+   "agendar",
+   "listar_agendamentos",
+   "cancelar_agendamento",
+   "agendar",
+   "listar_agendamentos",
+   "lembrar",
+   "escrever_arquivo",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "memorias": [
+  {
+   "conteudo": "Treinamento L09 termina em 01/03/2027"
+  }
+ ],
+ "pendencias": [],
+ "rotinas": [
+  {
+   "titulo": "Treinamento módulo 1",
+   "tipo": "unico",
+   "expressao": null,
+   "fuso": "America/Sao_Paulo",
+   "proxima": "2027-02-08 12:00:00+00",
+   "ativa": true
+  },
+  {
+   "titulo": "Treinamento módulo 3",
+   "tipo": "unico",
+   "expressao": null,
+   "fuso": "America/Sao_Paulo",
+   "proxima": "2027-02-22 12:00:00+00",
+   "ativa": true
+  },
+  {
+   "titulo": "Revisão geral",
+   "tipo": "cron",
+   "expressao": "30 8 29 2 *",
+   "fuso": "America/Sao_Paulo",
+   "proxima": "2028-02-29 11:30:00+00",
+   "ativa": true
+  },
+  {
+   "titulo": "Treinamento módulo 2",
+   "tipo": "unico",
+   "expressao": null,
+   "fuso": "America/Sao_Paulo",
+   "proxima": null,
+   "ativa": false
+  },
+  {
+   "titulo": "Treinamento módulo 2",
+   "tipo": "unico",
+   "expressao": null,
+   "fuso": "America/Sao_Paulo",
+   "proxima": "2027-03-01 12:00:00+00",
+   "ativa": true
+  }
+ ],
+ "habilidades": [],
+ "aprovacoes": [],
+ "perguntas": [],
+ "mcp": {
+  "pedidos": [],
+  "enviados": [],
+  "chamadas": []
+ }
+}

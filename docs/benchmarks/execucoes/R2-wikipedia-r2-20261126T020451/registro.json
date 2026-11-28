@@ -1,0 +1,55 @@
+{
+ "tarefa": "R2-wikipedia",
+ "rodada": 2,
+ "inicio": "2026-11-26T02:04:52.460131+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 14.3
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "conversa_id": "1d31c916-7af8-4bb4-a1b7-02e436db5202",
+ "agente_id": "24f62963-2f81-406c-955a-cc921b12deda",
+ "fim": "2026-11-26T02:05:23.940227+00:00",
+ "duracao_s": 31.4,
+ "resultado": "nao_executado",
+ "classe_sugerida": "modelo",
+ "classe": "cota_provedor",
+ "prova": "✘ usou o navegador interativo (não só busca); ✘ aba final no artigo Santos_Dumont (banco); ✘ título da aba contém Santos Dumont (banco); ✘ resposta cita o título Santos Dumont",
+ "ferramentas_usadas": [],
+ "abas": [],
+ "chamadas_modelo": 1,
+ "modelos_usados": [
+  "groq/qwen/qwen3.8-27b"
+ ],
+ "tokens_entrada": 1199,
+ "tokens_saida": 134,
+ "chamadas_ferramenta": 0,
+ "rastro": {
+  "modelo.pedido": 2,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 2,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 2,
+  "ferramentas": []
+ },
+ "resposta_final": "O pedido excede o limite deste modelo. Compacte a conversa ou escolha outro modelo.",
+ "revisao": [
+  {
+   "em": "2026-11-26T02:10:58.421456+00:00",
+   "de": [
+    "falhou",
+    "modelo"
+   ],
+   "para": [
+    "nao_executado",
+    "cota_provedor"
+   ],
+   "nota": "413 da Groq (ITPM 7000): resposta 'O pedido excede o limite deste modelo'; o classificador ainda não tinha esse texto"
+  }
+ ]
+}

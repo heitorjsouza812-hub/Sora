@@ -1,0 +1,63 @@
+{
+ "tarefa": "R2-wikipedia",
+ "rodada": 6,
+ "inicio": "2026-11-28T17:19:48.071362+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 24.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "conversa_id": "c2b5ceea-b6fa-4a4f-ace8-1d67d19a8612",
+ "agente_id": "24f62963-2f81-406c-955a-cc921b12deda",
+ "fim": "2026-11-28T17:20:16.487817+00:00",
+ "duracao_s": 28.4,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ usou o navegador interativo (não só busca); ✔ aba final no artigo Santos_Dumont (banco); ✔ título da aba contém Santos Dumont (banco); ✔ resposta cita o título Santos Dumont",
+ "ferramentas_usadas": [
+  "navegador_abrir",
+  "navegador_procurar",
+  "navegador_procurar",
+  "navegador_acao",
+  "navegador_acao",
+  "falar"
+ ],
+ "abas": [
+  {
+   "url": "https://pt.wikipedia.org/wiki/Santos_Dumont",
+   "titulo": "Santos Dumont – Wikipédia, a enciclopédia livre",
+   "usada_em": "2026-11-28 17:20:01.530808+00"
+  }
+ ],
+ "chamadas_modelo": 7,
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 32235,
+ "tokens_saida": 329,
+ "chamadas_ferramenta": 6,
+ "rastro": {
+  "modelo.pedido": 6,
+  "ferramenta.inicio": 6,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "navegador_abrir",
+   "navegador_procurar",
+   "navegador_procurar",
+   "navegador_acao",
+   "navegador_acao",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "resposta_final": "O título que apareceu na página é \"Santos Dumont – Wikipédia, a enciclopédia livre\"."
+}

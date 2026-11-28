@@ -1,0 +1,147 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Abra a página inicial da Wikipédia em português, use o campo de busca para procurar Santos Dumont, abra o artigo e me diga o título que apareceu na página.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "sora",
+   "conteudo": "Última etapa com retorno: agir no elemento da página. O tempo deste turno acabou antes de eu conseguir concluir o pedido.",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {},
+ "chamadas_modelo": [
+  {
+   "papel": "sistema1",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 1199,
+   "tokens_saida": 134,
+   "custo_usd": "0.001495",
+   "latencia_ms": 631
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5270,
+   "tokens_saida": 33,
+   "custo_usd": "0.004348",
+   "latencia_ms": 968
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5528,
+   "tokens_saida": 33,
+   "custo_usd": "0.004554",
+   "latencia_ms": 487
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 5801,
+   "tokens_saida": 66,
+   "custo_usd": "0.004905",
+   "latencia_ms": 824
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6437,
+   "tokens_saida": 43,
+   "custo_usd": "0.005322",
+   "latencia_ms": 547
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6264,
+   "tokens_saida": 43,
+   "custo_usd": "0.005183",
+   "latencia_ms": 571
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6441,
+   "tokens_saida": 43,
+   "custo_usd": "0.005325",
+   "latencia_ms": 726
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6684,
+   "tokens_saida": 43,
+   "custo_usd": "0.005519",
+   "latencia_ms": 764
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6861,
+   "tokens_saida": 43,
+   "custo_usd": "0.005661",
+   "latencia_ms": 1535
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6620,
+   "tokens_saida": 43,
+   "custo_usd": "0.005468",
+   "latencia_ms": 1069
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6749,
+   "tokens_saida": 43,
+   "custo_usd": "0.005571",
+   "latencia_ms": 1106
+  },
+  {
+   "papel": "sora",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 6878,
+   "tokens_saida": 43,
+   "custo_usd": "0.005674",
+   "latencia_ms": 999
+  }
+ ],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 22,
+  "ferramenta.inicio": 11,
+  "modelo.erro": 11,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 11,
+  "ferramentas": [
+   "navegador_abrir",
+   "navegador_procurar",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao",
+   "navegador_acao"
+  ]
+ },
+ "memorias": [],
+ "pendencias": [],
+ "rotinas": [],
+ "habilidades": [],
+ "aprovacoes": [],
+ "abas": [
+  {
+   "url": "https://pt.wikipedia.org/wiki/Wikip%C3%A9dia:P%C3%A1gina_principal",
+   "titulo": "Wikipédia, a enciclopédia livre",
+   "usada_em": "2026-11-26 02:15:51.501045+00"
+  }
+ ]
+}

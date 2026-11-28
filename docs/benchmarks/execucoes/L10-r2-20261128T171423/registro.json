@@ -1,0 +1,103 @@
+{
+ "tarefa": "L10",
+ "rodada": 2,
+ "inicio": "2026-11-28T17:14:28.551195+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 24.5
+  },
+  {
+   "terminou": true,
+   "segundos": 16.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "b60220bf-90fe-445b-af5f-9e2e5b073077",
+ "conversa_id": "7bd5832d-7920-41a0-85ea-1b647b86bc79",
+ "fim": "2026-11-28T17:15:13.284552+00:00",
+ "duracao_s": 44.2,
+ "resultado": "parcial",
+ "classe_sugerida": "modelo",
+ "classe": "contexto",
+ "prova": "✔ arquivo saldo_L10.csv confere; ✘ arquivo saldo_L10_v2.csv confere; ✘ memória do pior mês = março (antiga apagada); ✘ cartões de esquecer_memoria e criar_habilidade; ✘ habilidade saldo-mensal criada; ✘ resposta: 3.900 e março",
+ "criterios": [
+  {
+   "criterio": "arquivo saldo_L10.csv confere",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo saldo_L10_v2.csv confere",
+   "ok": false
+  },
+  {
+   "criterio": "memória do pior mês = março (antiga apagada)",
+   "ok": false
+  },
+  {
+   "criterio": "cartões de esquecer_memoria e criar_habilidade",
+   "ok": false
+  },
+  {
+   "criterio": "habilidade saldo-mensal criada",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: 3.900 e março",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 8,
+ "chamadas_por_papel": {
+  "agente_individual": 8
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 46318,
+ "tokens_saida": 539,
+ "primeiro_pedido_tokens": 5647,
+ "maior_pedido_tokens": 6137,
+ "custo_usd": 0.015244,
+ "chamadas_ferramenta": 6,
+ "pedidos_ao_modelo_rastro": 6,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 6,
+  "ferramenta.inicio": 6,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_anexo",
+   "escrever_arquivo",
+   "lembrar",
+   "falar",
+   "falar",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Preciso do arquivo `orcamento_L10.xlsx` para recalcular fevereiro com o aluguel corrigido. Por favor, envie-o na próxima mensagem.",
+ "bot_apagado": true,
+ "revisao": [
+  {
+   "em": "2026-11-28T17:17:49.075054+00:00",
+   "de": [
+    "parcial",
+    "modelo"
+   ],
+   "para": [
+    "parcial",
+    "contexto"
+   ],
+   "nota": "2º turno sem o anexo: workers/conversa.py:278 reconstrói as mensagens antigas só com m.conteudo, sem a lista <anexos_do_usuario> (anexo_id) do 1º turno; o bot pede o arquivo, anuncia sem fazer ou inventa os números. O 1º turno passou (saldo_L10.csv confere)."
+  }
+ ]
+}

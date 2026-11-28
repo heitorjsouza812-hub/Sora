@@ -1,0 +1,85 @@
+{
+ "tarefa": "L04",
+ "rodada": 1,
+ "inicio": "2026-11-28T17:03:38.673201+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 16.3
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "9ab3b896-bb3e-4d4f-9690-c22dcbe23482",
+ "conversa_id": "7924f5dc-d331-4e1b-8d47-c6a7f1ac7399",
+ "fim": "2026-11-28T17:03:58.060209+00:00",
+ "duracao_s": 19.3,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ arquivo estoque_L04.json é JSON; ✔ totais por categoria; ✔ itens sem estoque; ✔ memória: Mercearia; ✔ resposta: promoções não lidas; ✔ resposta: Mercearia",
+ "criterios": [
+  {
+   "criterio": "arquivo estoque_L04.json é JSON",
+   "ok": true
+  },
+  {
+   "criterio": "totais por categoria",
+   "ok": true
+  },
+  {
+   "criterio": "itens sem estoque",
+   "ok": true
+  },
+  {
+   "criterio": "memória: Mercearia",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: promoções não lidas",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: Mercearia",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 3,
+ "chamadas_por_papel": {
+  "agente_individual": 3
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 19407,
+ "tokens_saida": 533,
+ "primeiro_pedido_tokens": 5588,
+ "maior_pedido_tokens": 7043,
+ "custo_usd": 0.007154,
+ "chamadas_ferramenta": 6,
+ "pedidos_ao_modelo_rastro": 3,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 3,
+  "ferramenta.inicio": 6,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_pagina",
+   "ler_pagina",
+   "ler_pagina",
+   "escrever_arquivo",
+   "lembrar",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "A categoria de maior valor em estoque é **Mercearia** (R$ 540,00). \n\nAs promoções não foram lidas (a página retornou erro 404) e seguimos sem elas. O arquivo `estoque_L04.json` foi gerado e salvo.",
+ "bot_apagado": true
+}

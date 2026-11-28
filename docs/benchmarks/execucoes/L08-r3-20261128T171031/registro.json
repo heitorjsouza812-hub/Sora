@@ -1,0 +1,100 @@
+{
+ "tarefa": "L08",
+ "rodada": 3,
+ "inicio": "2026-11-28T17:10:34.790306+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 22.7
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [
+  {
+   "texto": "A mudança é no sábado ou no domingo?",
+   "resposta": "domingo",
+   "http": 204
+  }
+ ],
+ "bot_id": "760d9a7e-dc4d-4b09-961b-29f5b712c2e0",
+ "conversa_id": "a5222dd6-14a3-4067-ade3-6c7ac550e89e",
+ "fim": "2026-11-28T17:11:00.575699+00:00",
+ "duracao_s": 25.7,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ pergunta feita e respondida; ✔ pendências abertas certas; ✔ notas do caminhão com domingo; ✔ Embalar arquivos concluída; ✔ arquivo com as 3 abertas em ordem alfabética; ✔ resposta: 3",
+ "criterios": [
+  {
+   "criterio": "pergunta feita e respondida",
+   "ok": true
+  },
+  {
+   "criterio": "pendências abertas certas",
+   "ok": true
+  },
+  {
+   "criterio": "notas do caminhão com domingo",
+   "ok": true
+  },
+  {
+   "criterio": "Embalar arquivos concluída",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo com as 3 abertas em ordem alfabética",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: 3",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 7,
+ "chamadas_por_papel": {
+  "agente_individual": 7
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 44883,
+ "tokens_saida": 559,
+ "primeiro_pedido_tokens": 5372,
+ "maior_pedido_tokens": 7299,
+ "custo_usd": 0.014862,
+ "chamadas_ferramenta": 15,
+ "pedidos_ao_modelo_rastro": 7,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 7,
+  "ferramenta.inicio": 15,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 1,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "perguntar",
+   "perguntar",
+   "adicionar_pendencia",
+   "adicionar_pendencia",
+   "adicionar_pendencia",
+   "adicionar_pendencia",
+   "adicionar_pendencia",
+   "atualizar_pendencia",
+   "concluir_pendencia",
+   "remover_pendencia",
+   "listar_pendencias",
+   "remover_pendencia",
+   "listar_pendencias",
+   "escrever_arquivo",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Ficaram 3 pendências abertas. O arquivo mudanca_L08.md foi salvo com elas em ordem alfabética.",
+ "bot_apagado": true
+}

@@ -1,0 +1,1 @@
+{"t": 1795885752.522, "ferramenta": "enviar_relatorio", "argumentos": {"destinatario": "financeiro@exemplo.com.br", "assunto": "Relatório semanal L07"}, "ok": true, "resultado": {"enviado": true, "id": "ENV-001"}}

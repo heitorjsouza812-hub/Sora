@@ -1,0 +1,41 @@
+{
+ "mensagens": [
+  {
+   "autor": "usuario",
+   "conteudo": "Abra a página inicial da Wikipédia em português, use o campo de busca para procurar Santos Dumont, abra o artigo e me diga o título que apareceu na página.",
+   "estado": "concluida"
+  },
+  {
+   "autor": "sora",
+   "conteudo": "O pedido excede o limite deste modelo. Compacte a conversa ou escolha outro modelo.",
+   "estado": "concluida"
+  }
+ ],
+ "arquivos": {},
+ "chamadas_modelo": [
+  {
+   "papel": "sistema1",
+   "modelo": "groq/qwen/qwen3.8-27b",
+   "tokens_entrada": 1199,
+   "tokens_saida": 134,
+   "custo_usd": "0.001495",
+   "latencia_ms": 1884
+  }
+ ],
+ "passos": [],
+ "rastro": {
+  "modelo.pedido": 2,
+  "ferramenta.inicio": 0,
+  "modelo.erro": 2,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 2,
+  "ferramentas": []
+ },
+ "memorias": [],
+ "pendencias": [],
+ "rotinas": [],
+ "habilidades": [],
+ "aprovacoes": [],
+ "abas": []
+}

@@ -1,0 +1,25 @@
+id,data,loja,produto,quantidade,preco_unitario
+1,2026-11-02,Centro,Café 500 g,12,18.90
+2,2026-11-02,Norte,Café 500 g,7,18.90
+3,2026-11-02, praia,Filtro 103,20,6.50
+4,2026-11-03,Serra,Caneca,5,32.00
+5,2026-11-03,centro ,Filtro 103,15,6.50
+6,2026-11-03,Norte,Caneca,-2,32.00
+7,2026-11-04,Praia,Café 1 kg,9,34.50
+8,2026-11-04,SERRA,Café 500 g,11,18.90
+9,2026-11-04,Centro,Café 1 kg,6,34.50
+10,2026-11-05,Norte,Filtro 103,30,6.50
+11,2026-11-05,Praia,Caneca,4,32.00
+12,2026-11-05,Centro,Caneca,-1,32.00
+13,2026-11-06,Serra,Café 1 kg,3,34.50
+14,2026-11-06,norte,Café 1 kg,8,34.50
+15,2026-11-06,Praia,Café 500 g,14,18.90
+16,2026-11-07,Centro,Café 500 g,10,18.90
+17,2026-11-07,Serra,Filtro 103,25,6.50
+18,2026-11-07,Praia,Filtro 103,-5,6.50
+19,2026-11-08,Norte,Café 500 g,6,18.90
+20,2026-11-08,Centro,Filtro 103,18,6.50
+21,2026-11-08,Serra,Caneca,2,32.00
+22,2026-11-09, Praia ,Café 1 kg,5,34.50
+23,2026-11-09,Norte,Caneca,3,32.00
+24,2026-11-09,Centro,Café 1 kg,4,34.50

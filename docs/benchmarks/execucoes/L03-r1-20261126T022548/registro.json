@@ -1,0 +1,60 @@
+{
+ "tarefa": "L03",
+ "rodada": 1,
+ "inicio": "2026-11-26T02:25:53.898537+00:00",
+ "modelo_fixo": "groq/qwen/qwen3.8-27b",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 30.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "93267903-796c-43a0-846d-2e09ca108cb6",
+ "conversa_id": "8b411244-8a04-4be7-8fdd-c3fb547e1ca6",
+ "fim": "2026-11-26T02:26:28.229511+00:00",
+ "duracao_s": 33.6,
+ "resultado": "nao_executado",
+ "classe_sugerida": "cota_provedor",
+ "classe": "cota_provedor",
+ "prova": "✘ arquivo fretes_L03.csv; ✘ resposta: total 172,07 e id 305",
+ "criterios": [
+  {
+   "criterio": "arquivo fretes_L03.csv",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: total 172,07 e id 305",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 1,
+ "chamadas_por_papel": {
+  "agente_individual": 1
+ },
+ "modelos_usados": [
+  "groq/qwen/qwen3.8-27b"
+ ],
+ "tokens_entrada": 6936,
+ "tokens_saida": 154,
+ "custo_usd": 0.006165,
+ "chamadas_ferramenta": 2,
+ "pedidos_ao_modelo_rastro": 4,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 4,
+  "ferramenta.inicio": 2,
+  "modelo.erro": 3,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 3,
+  "ferramentas": [
+   "ler_pagina",
+   "ler_anexo"
+  ]
+ },
+ "bateu_limite_429": true,
+ "esperas_429_s": 0,
+ "erros_sse": []
+}

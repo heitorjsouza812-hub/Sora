@@ -1,0 +1,75 @@
+{
+ "tarefa": "L03",
+ "rodada": 3,
+ "inicio": "2026-11-28T17:03:13.739876+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 14.3
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "38199448-c49d-49dc-acea-fb02bcf2ceaa",
+ "conversa_id": "b0b3f4d7-762f-4ad8-8513-80bab7f4f42e",
+ "fim": "2026-11-28T17:03:31.152925+00:00",
+ "duracao_s": 17.4,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ arquivo fretes_L03.csv; ✔ 8 linhas na ordem e valores; ✔ linhas certas 8/8; ✔ resposta: total 172,07 e id 305",
+ "criterios": [
+  {
+   "criterio": "arquivo fretes_L03.csv",
+   "ok": true
+  },
+  {
+   "criterio": "8 linhas na ordem e valores",
+   "ok": true
+  },
+  {
+   "criterio": "linhas certas 8/8",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: total 172,07 e id 305",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 3,
+ "chamadas_por_papel": {
+  "agente_individual": 3
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 18922,
+ "tokens_saida": 383,
+ "primeiro_pedido_tokens": 5509,
+ "maior_pedido_tokens": 6824,
+ "custo_usd": 0.006634,
+ "chamadas_ferramenta": 4,
+ "pedidos_ao_modelo_rastro": 3,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 3,
+  "ferramenta.inicio": 4,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_pagina",
+   "ler_anexo",
+   "escrever_arquivo",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Frete total: R$ 172,07\nPedido de maior frete: ID 305",
+ "bot_apagado": true
+}
