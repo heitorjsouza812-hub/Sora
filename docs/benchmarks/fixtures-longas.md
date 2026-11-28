@@ -6,10 +6,10 @@ Tarefa 0.5 do plano de correções (§3.5, item 2). Dez tarefas com **10 ou mais
 
 | Item | Valor |
 |---|---|
-| Conta | conta de QA própria do baseline (`baseline-05-…@bancada.local`), só com o provedor Groq e só o modelo fixo ativo |
+| Conta | conta de QA própria do baseline (`baseline-05-…@bancada.local`), com as conexões Google e Groq, mas só o modelo fixo ativo (`baseline.md` §2); antes de medir, só a Sora na conta (`rodar_longas.py limpar`) |
 | Bot | um bot **novo por execução** (`POST /v1/agentes`): nome `Bancada<Lnn>r<n><hora>`, função "Bot de bancada (baseline 0.5)", ferramentas `ler_anexo`, `ler_pagina`, `escrever_arquivo` (o produto soma `falar`, `perguntar` e as ferramentas de memória, pendências, agenda, habilidades e histórico do papel `individual`) |
 | Instrução do bot | "Você é um bot de bancada de testes. Faça exatamente o que o usuário pedir, na ordem pedida, usando as ferramentas. Nunca invente um resultado: se uma ferramenta falhar, diga qual falhou e o motivo." |
-| Modelo | `PATCH /v1/agentes/{id}`: `provedor_id` da Groq, `modelo = groq/qwen/qwen3.8-27b`, `raciocinio = auto`, `permissao = perguntar` |
+| Modelo | `PATCH /v1/agentes/{id}`: `provedor_id` da conexão Google, `modelo = gemini/gemini-3.5-flash-lite` (até 2026-11-26: Groq `groq/qwen/qwen3.8-27b`), `raciocinio = auto`, `permissao = perguntar`. O bot é apagado (`DELETE /v1/agentes/{id}`) depois de gravada a prova |
 | Conversa | nova a cada execução (`POST /v1/conversas` com o 1º turno e os anexos) |
 | MCP de bancada | conector `bancada` da conta → `http://127.0.0.1:8765/mcp` com `Authorization: Bearer bancada-local`. O executor sobe o servidor (`ferramentas/mcp_bancada.py`) **zerado** em cada execução, com estado na pasta da execução |
 | Páginas fixture | `docs/benchmarks/paginas/*.md`, servidas pelo raw do GitHub **fixado no commit `54cd737`** (o `ler_pagina` recusa 127.0.0.1 por SSRF, de propósito). A página `L04_promocoes.md` **não existe** (404) de propósito |
@@ -34,7 +34,7 @@ O gabarito de cada tarefa é **calculado** pelo mesmo código que confere (`ferr
 | L09 | agenda: criar 4, listar, cancelar, recriar, listar, memória, arquivo | 11 | `rotinas` do bot (ativa, `proxima_execucao`, `expressao`); `memorias`; `agenda_L09.md` | 4 ativos; módulo 2 em 01/03/2027 09:00; "Revisão geral" com cron `30 8 29 2 *` (próxima em 2028, não dispara durante a medição) |
 | L10 | planilha xlsx de 3 abas; 2 turnos com **correção**; memória trocada (cartão fixo); **habilidade** com cartão fixo | 8 + 5 | `saldo_L10.csv` e `saldo_L10_v2.csv`; `memorias`; `habilidades`; 2 cartões em `aprovacoes` | v1: pior fev (1 500); v2: fev 3 900, pior **mar** (3 800) |
 
-Critério de resultado por execução: **ok** = todos os critérios da tarefa passaram; **parcial** = pelo menos um passou; **falhou** = nenhum; **não executado** = o executor não conseguiu rodar ou o provedor recusou por cota (429/413 da Groq: não é falha do produto, regra do plano). Os critérios exatos estão em `ferramentas/rodar_longas.py` (`conferir`).
+Critério de resultado por execução: **ok** = todos os critérios da tarefa passaram; **parcial** = pelo menos um passou; **falhou** = nenhum; **não executado** = o executor não conseguiu rodar ou o provedor recusou por cota (429/413 do provedor, Google ou Groq: não é falha do produto, regra do plano). Os critérios exatos estão em `ferramentas/rodar_longas.py` (`conferir`).
 
 ## Como rodar
 

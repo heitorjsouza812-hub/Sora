@@ -6,15 +6,16 @@ Fixtures, pedidos exatos e critérios: `docs/benchmarks/fixtures-gui.md`. Result
 
 ---
 
-## 0. Bloqueio que tem de ser resolvido ANTES de marcar a sessão
+## 0. Modelo fixo e cota (atualizado em 2026-11-28)
 
-Medido em 2026-11-25 (ver `baseline.md` §4.1): a chave Groq de QA aceita no máximo **7 000 tokens de entrada por pedido por minuto (ITPM)** no modelo fixo `qwen/qwen3.8-27b` (os outros modelos da chave têm o mesmo teto). Pedido acima disso recebe **413 "Request too large"**, que esperar não resolve. O primeiro pedido de um bot comum já tem ~6 800 tokens; um bot de computador ainda soma a árvore de acessibilidade e a captura de tela. Ou seja: com a chave como está, **toda execução G deve parar no 2º ou 3º passo** com "O pedido excede o limite deste modelo" ou "atingiu o limite de uso do provedor", e a sessão de 4 h viraria 30 × "não executado (cota)".
+O bloqueio da Groq (413 acima de 7 000 tokens de entrada por pedido com `qwen/qwen3.8-27b`) **acabou**: por decisão do Heitor (2026-11-26), o modelo fixo do baseline e do Gate passou a ser o **Gemini `gemini-3.5-flash-lite`** da conexão Google, **plano grátis** do Google AI Studio (`baseline.md` §2). As 30 L rodaram com ele em 2026-11-28, sem nenhum 429.
 
-Antes de agendar, o Tech Lead/Heitor decide uma destas (a decisão não é do Claude, e trocar o modelo muda o baseline inteiro, inclusive as L01–L10):
-1. subir o plano da organização na Groq (o próprio erro sugere o tier "Dev") e manter `qwen/qwen3.8-27b`; ou
-2. escolher outro modelo fixo com visão e limite maior (e refazer o `baseline.md` §2 e as L01–L10 com ele).
+O que muda para a sessão:
+- **Cota grátis: 15 pedidos por minuto por modelo** (medido). O bot de computador faz um pedido por passo, com captura de tela; uma execução G longa pode chegar perto disso. Se aparecer "limite por minuto do plano", "atingiu o limite de uso do provedor" ou "A cota diária deste modelo acabou": é `nao_executado` com classe `cota_provedor` (não é falha do produto). Esperar **2 min** e repetir a mesma rodada, até 2 vezes. Se for a **cota diária**, parar a sessão e avisar o Claude (a cota do Google renova à meia-noite do horário do Pacífico).
+- O produto ainda não lê o tempo de espera que o Google manda ("Please retry in 32s"); por isso um 429 pode encerrar o turno antes de a cota voltar (`baseline.md` §4.1, achado 3). Anotar no `--prova` se acontecer.
+- Na prática não há mais limite de tamanho de pedido (contexto de 1 048 576 tokens).
 
-Conferência rápida depois da decisão (de `C:\dev\sora-claude\backend`): uma execução L qualquer (`rodar_longas.py rodar L02 --vezes 1 --primeira-rodada 9`) tem de passar do 2º pedido ao modelo sem 413.
+Conferência rápida antes de marcar a sessão (de `C:\dev\sora-claude\backend`): `uv run python ..\docs\benchmarks\ferramentas\rodar_longas.py modelos` tem de mostrar **só** `gemini/gemini-3.5-flash-lite` com `ativo=True`.
 
 ---
 
@@ -35,8 +36,8 @@ O instalador de `npm run desktop:build` **não serve** para esta medição: sem 
 
 ### 1.3 Conta e modelo
 - Entrar no app com a **conta de QA do baseline** (`baseline-05-…@bancada.local`; e-mail em `%LOCALAPPDATA%\sora-baseline\estado.json`, senha na constante `SENHA_QA` de `ferramentas/rodar_longas.py`). Não usar a conta pessoal: nela há outros modelos ativos.
-- Conferir em Configurações → Modelos de IA que o único modelo de chat ativo é `groq/qwen/qwen3.8-27b` (ou o modelo decidido no §0, se mudou).
-- **Apagar os bots de bancada antigos** da conta (tela Bots; ficam só a Sora e o bot da execução atual). O prompt de todo bot leva a lista de colegas da conta, e cada execução cria um bot novo: sem limpar, o pedido ao modelo cresce ~30 tokens por bot e a execução 30 não é igual à 1ª (`baseline.md` §4.1). Durante a sessão, apagar o bot de cada execução **depois** do `registrar-g` (passo 10).
+- Conferir em Configurações → Modelos de IA que o único modelo de chat ativo é **`gemini/gemini-3.5-flash-lite`** (conexão Google; todos os outros, inclusive os da Groq, desligados). Se algo mudou, rodar `rodar_longas.py preparar` de novo.
+- **Apagar os bots de bancada antigos** da conta: `uv run python ..\docs\benchmarks\ferramentas\rodar_longas.py limpar` (ou pela tela Bots; ficam só a Sora e o bot da execução atual). O prompt de todo bot leva a lista de colegas da conta, e cada execução cria um bot novo: sem limpar, o pedido ao modelo cresce ~30 tokens por bot e a execução 30 não é igual à 1ª (`baseline.md` §4.1). Durante a sessão, apagar o bot de cada execução **depois** do `registrar-g` (passo 10).
 
 ### 1.4 Fixtures
 - Terminal D (de `C:\dev\sora-claude\backend`): `uv run python ..\docs\benchmarks\ferramentas\fixtures_gui.py preparar` → cria `C:\bancada-g\` com os arquivos, `originais\` e `manifesto.json`.
@@ -57,7 +58,7 @@ Comandos a partir de `C:\dev\sora-claude\backend` (terminal D). `$F = '..\docs\b
 
 1. **Restaurar:** `uv run python $F\fixtures_gui.py preparar` e fechar Bloco de Notas, Paint, Calculadora, Excel, Word e Edge **sem salvar**.
 2. **Estado inicial:** abrir só o que a tarefa pede (coluna "Estado inicial" da tabela do §3).
-3. **Bot novo:** `uv run python $F\rodar_longas.py nova-g G01 --primeira-rodada 1` → cria o bot `G01r1x<hora>` com o modelo fixo e permissão "Perguntar", e **copia o pedido exato** para a área de transferência.
+3. **Bot novo:** `uv run python $F\rodar_longas.py nova-g G01 --primeira-rodada 1` → cria o bot `G01r1x<hora>` com o modelo fixo (`gemini/gemini-3.5-flash-lite`, escolha explícita, sem reserva) e permissão "Perguntar", e **copia o pedido exato** para a área de transferência.
 4. **Liberar no PC:** no app, Configurações → Computador → liberar **só** esse bot (desligar o da execução anterior). Abrir o chat dele.
 5. **Vigiar o primeiro plano:** `powershell -ExecutionPolicy Bypass -File $F\conferir_g.ps1 vigiar-frente -Saida C:\bancada-g\G01-r1-frente.csv -Segundos 600` (minimizar esse terminal).
 6. **Enviar:** colar (Ctrl+V) no campo do chat e Enter. Anotar a hora.
@@ -66,7 +67,7 @@ Comandos a partir de `C:\dev\sora-claude\backend` (terminal D). `$F = '..\docs\b
 9. **Conferir fora do bot** (comandos da coluna "Conferir" do §3). Salvar a saída: `... > C:\bancada-g\G01-r1-conferir.json`. **A resposta do bot ou uma captura sozinha não contam.**
 10. **Registrar:** `uv run python $F\rodar_longas.py registrar-g G01 --primeira-rodada 1 --resultado ok|parcial|falhou|nao_executado --classe <classe ou vazio> --prova "<o que o conferidor mostrou>"` (lê do banco, só leitura: duração, chamadas de modelo e ferramenta, tokens, custo, 429, cartões).
 
-**Classes** (`fixtures-gui.md`, final): `modelo` · `schema` · `orcamento` · `prazo` · `contexto` · `aprovacao` · `transporte` · `executor` · `estado` · `ui`. Limite do provedor (429/413, "O pedido excede o limite deste modelo", "atingiu o limite de uso do provedor") = **`nao_executado`** com classe `cota_provedor`: repetir a mesma rodada depois de 2 min, até 2 vezes.
+**Classes** (`fixtures-gui.md`, final): `modelo` · `schema` · `orcamento` · `prazo` · `contexto` · `aprovacao` · `transporte` · `executor` · `estado` · `ui`. Limite do provedor (429 do Google: "limite por minuto do plano", "atingiu o limite de uso do provedor", "A cota diária deste modelo acabou") = **`nao_executado`** com classe `cota_provedor`: repetir a mesma rodada depois de 2 min, até 2 vezes (cota **diária**: parar e avisar, §0). Depois do `registrar-g`, apagar o bot da execução (tela Bots ou `rodar_longas.py limpar`).
 
 **Atenção às falhas graves do Gate (§8):** ação em **app errado** (clique/digitação fora do programa da tarefa) e **"fiz" sem prova** (bot diz que concluiu e o conferidor mostra outra coisa). Anotar sempre no `--prova` com as palavras `APP ERRADO` ou `FIZ SEM PROVA`.
 
