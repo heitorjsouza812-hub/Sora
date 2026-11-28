@@ -1,0 +1,83 @@
+{
+ "tarefa": "L01",
+ "rodada": 1,
+ "inicio": "2026-11-28T16:58:33.572300+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 16.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "29871ec4-521f-47b4-b0fb-9401b9d4f4f7",
+ "conversa_id": "262a5cc3-1071-45d9-869b-2cd971e3203f",
+ "fim": "2026-11-28T16:58:53.254836+00:00",
+ "duracao_s": 19.4,
+ "resultado": "parcial",
+ "classe_sugerida": "modelo",
+ "classe": "modelo",
+ "prova": "✔ arquivo resumo_L01.json é JSON; ✘ lojas e totais na ordem; ✘ média; ✘ devoluções descartadas; ✘ memória com a campeã; ✘ resposta com campeã e total",
+ "criterios": [
+  {
+   "criterio": "arquivo resumo_L01.json é JSON",
+   "ok": true
+  },
+  {
+   "criterio": "lojas e totais na ordem",
+   "ok": false
+  },
+  {
+   "criterio": "média",
+   "ok": false
+  },
+  {
+   "criterio": "devoluções descartadas",
+   "ok": false
+  },
+  {
+   "criterio": "memória com a campeã",
+   "ok": false
+  },
+  {
+   "criterio": "resposta com campeã e total",
+   "ok": false
+  }
+ ],
+ "chamadas_modelo": 4,
+ "chamadas_por_papel": {
+  "agente_individual": 4
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 25208,
+ "tokens_saida": 221,
+ "primeiro_pedido_tokens": 5501,
+ "maior_pedido_tokens": 6686,
+ "custo_usd": 0.008115,
+ "chamadas_ferramenta": 4,
+ "pedidos_ao_modelo_rastro": 4,
+ "chamadas_mcp": 0,
+ "rastro": {
+  "modelo.pedido": 4,
+  "ferramenta.inicio": 4,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_anexo",
+   "escrever_arquivo",
+   "lembrar",
+   "falar"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Centro, 1555.50",
+ "bot_apagado": true
+}

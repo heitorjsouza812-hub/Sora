@@ -742,6 +742,7 @@ async def executar(fid: str, rodada: int, log_worker: Path | None) -> dict:
             "rastro": prova["rastro"],
             "bateu_limite_429": bool(limite) or prova["rastro"]["erros_de_limite"] > 0, "esperas_429_s": sum((e["d"]["parametros"] or {}).get("segundos", 0) for e in limite),
             "erros_sse": [e["d"] for e in ouv.eventos if e["ev"] == "erro"],
+            "resposta_final": _resposta(prova)[:600],
         })
         (pasta / "eventos.json").write_text(json.dumps(ouv.eventos, ensure_ascii=False, indent=1, default=str), "utf-8")
         (pasta / "prova.json").write_text(json.dumps({**prova, "mcp": mcp}, ensure_ascii=False, indent=1, default=str), "utf-8")
@@ -972,6 +973,10 @@ async def principal() -> None:
             for n in range(a.primeira_rodada, a.primeira_rodada + a.vezes):
                 for _tentativa in range(a.repetir_429 + 1):
                     reg = await executar(fid, n, a.log_worker)
+                    if "cota diaria" in sem_acento(str(reg.get("resposta_final", ""))):
+                        # Cota do DIA do plano grátis: repetir hoje só gasta tempo. Para e avisa.
+                        print(f"  {fid} r{n}: COTA DIÁRIA do provedor acabou; parei a rodada (baseline.md §2.1)")
+                        sys.exit(3)
                     so_429 = reg.get("classe") == "cota_provedor"
                     if not so_429 or _tentativa == a.repetir_429:
                         break
