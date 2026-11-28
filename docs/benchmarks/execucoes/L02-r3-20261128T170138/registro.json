@@ -25,14 +25,14 @@
  "conversa_id": "9d16d63b-87c7-4889-a230-3466cd6f0ff7",
  "fim": "2026-11-28T17:02:20.075984+00:00",
  "duracao_s": 38.1,
- "resultado": "parcial",
- "classe_sugerida": "orcamento",
- "classe": "orcamento",
- "prova": "✘ 5 memórias do Ipê; ✔ Bianca guardada; ✘ Caio apagado; ✔ cartão de esquecer_memoria aberto; ✔ arquivo: responsável Bianca; ✔ arquivo: dias_ate_prazo = 56; ✔ arquivo: cliente/orçamento/prazo/cor; ✔ resposta: Bianca",
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ 5 memórias do Ipê; ✔ Bianca guardada; ✔ Caio apagado; ✔ cartão de esquecer_memoria aberto; ✔ arquivo: responsável Bianca; ✔ arquivo: dias_ate_prazo = 56; ✔ arquivo: cliente/orçamento/prazo/cor; ✔ resposta: Bianca",
  "criterios": [
   {
    "criterio": "5 memórias do Ipê",
-   "ok": false
+   "ok": true
   },
   {
    "criterio": "Bianca guardada",
@@ -40,7 +40,7 @@
   },
   {
    "criterio": "Caio apagado",
-   "ok": false
+   "ok": true
   },
   {
    "criterio": "cartão de esquecer_memoria aberto",
@@ -104,5 +104,20 @@
  "esperas_429_s": 0,
  "erros_sse": [],
  "resposta_final": "Bianca",
- "bot_apagado": true
+ "bot_apagado": true,
+ "revisao": [
+  {
+   "em": "2026-11-28T17:05:00.781380+00:00",
+   "de": [
+    "parcial",
+    "orcamento",
+    "✘ 5 memórias do Ipê; ✔ Bianca guardada; ✘ Caio apagado; ✔ cartão de esquecer_memoria aberto; ✔ arquivo: responsável Bianca; ✔ arquivo: dias_ate_prazo = 56; ✔ arquivo: cliente/orçamento/prazo/cor; ✔ resposta: Bianca"
+   ],
+   "para": [
+    "ok",
+    ""
+   ],
+   "nota": "conferidor corrigido: memória apagada (apagada_em) não conta; classe orcamento só por texto do produto"
+  }
+ ]
 }

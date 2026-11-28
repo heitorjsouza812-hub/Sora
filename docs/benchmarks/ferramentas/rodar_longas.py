@@ -476,7 +476,8 @@ async def coletar(api: Api, est: dict, conversa_id: str, bot_id: str, t0: dateti
         "chamadas_modelo": chamadas,
         "passos": passos,
         "rastro": rastro,
-        "memorias": await sql("SELECT conteudo FROM memorias WHERE agente_id = :g", g=bot_id),
+        # esquecer_memoria é exclusão lógica (apagada_em): memória apagada não conta.
+        "memorias": await sql("SELECT conteudo FROM memorias WHERE agente_id = :g AND apagada_em IS NULL", g=bot_id),
         "pendencias": await sql("SELECT titulo, notas, status FROM pendencias WHERE agente_id = :g", g=bot_id),
         "rotinas": await sql("SELECT titulo, tipo, expressao, fuso, proxima_execucao::text AS proxima, ativa FROM rotinas "
                              "WHERE agente_id = :g", g=bot_id),
@@ -661,8 +662,10 @@ def classificar(ck: list[tuple[str, bool]], reg: dict, prova: dict) -> tuple[str
         return resultado if resultado != "ok" else "parcial", "estado" if any(t.get("estado_bot") == "trabalhando" for t in reg["turnos"]) else "prazo"
     if resultado == "ok":
         return resultado, ""
-    textos = " ".join(sem_acento(str(p.get("texto", ""))) for p in prova["passos"]) + " " + " ".join(sem_acento(m["conteudo"]) for m in prova["mensagens"])
-    if any(x in textos for x in ("limite de passos", "limite de chamadas", "orcamento")):
+    # Só textos do produto/bot (o pedido do usuário pode ter "orçamento", como na L02).
+    textos = " ".join(sem_acento(str(p.get("texto", ""))) for p in prova["passos"]) + " " + " ".join(
+        sem_acento(m["conteudo"]) for m in prova["mensagens"] if m.get("autor") != "usuario")
+    if any(x in textos for x in ("limite de passos", "limite de chamadas", "orcamento de passos", "orcamento do turno")):
         return resultado, "orcamento"
     if any(x in textos for x in ("is not a valid tool", "argumentos invalidos", "validation error", "json")) and prova["rastro"].get("ferramenta.erro"):
         return resultado, "schema"
@@ -893,6 +896,26 @@ async def reproduzir_wikipedia(rodada: int, log_worker: Path | None) -> dict:
     return reg
 
 
+async def reconferir(pasta: str) -> None:
+    """Reaplica o conferidor (corrigido) numa execução já gravada, relendo do banco o que mudou de consulta
+    (memórias sem as apagadas). Guarda o resultado anterior em ``revisao``."""
+    arq = EXECUCOES / pasta / "registro.json"
+    reg = json.loads(arq.read_text("utf-8"))
+    prova = json.loads((EXECUCOES / pasta / "prova.json").read_text("utf-8"))
+    prova["memorias"] = await sql("SELECT conteudo FROM memorias WHERE agente_id = :g AND apagada_em IS NULL", g=reg["bot_id"])
+    mcp = prova.pop("mcp", {})
+    ck, texto = conferir(reg["tarefa"], prova, mcp)
+    resultado, classe = classificar(ck, reg, prova)
+    if (resultado, classe, texto) != (reg.get("resultado"), reg.get("classe"), reg.get("prova")):
+        reg.setdefault("revisao", []).append({"em": agora().isoformat(), "de": [reg.get("resultado"), reg.get("classe"), reg.get("prova")],
+                                              "para": [resultado, classe], "nota": "conferidor corrigido: memória apagada (apagada_em) não conta; classe orcamento só por texto do produto"})
+        reg.update({"resultado": resultado, "classe": classe, "classe_sugerida": classe, "prova": texto,
+                    "criterios": [{"criterio": n, "ok": ok} for n, ok in ck]})
+        (EXECUCOES / pasta / "prova.json").write_text(json.dumps({**prova, "mcp": mcp}, ensure_ascii=False, indent=1, default=str), "utf-8")
+        arq.write_text(json.dumps(reg, ensure_ascii=False, indent=1, default=str), "utf-8")
+    print(pasta, "->", resultado, classe or "-", "|", texto)
+
+
 def anotar(pasta: str, resultado: str, classe: str, nota: str) -> None:
     """Revisão humana de uma execução já gravada: guarda o que o executor sugeriu e o motivo da troca."""
     arq = EXECUCOES / pasta / "registro.json"
@@ -916,6 +939,43 @@ def resumo() -> None:
               f"{(r.get('prova') or r.get('erro_executor') or '').replace('|', '/')} |")
 
 
+def _registros_l(modelo: str) -> list[dict]:
+    """Última execução de cada (tarefa, rodada 1–3) feita com ``modelo`` (repetições por 429 ficam de fora)."""
+    ultimos: dict[tuple[str, int], dict] = {}
+    for p in EXECUCOES.glob("L*-r*/registro.json"):
+        r = json.loads(p.read_text("utf-8"))
+        if r.get("modelo_fixo") != modelo or not 1 <= int(r.get("rodada", 0)) <= 3:
+            continue
+        r["_pasta"] = p.parent.name
+        chave = (r["tarefa"], int(r["rodada"]))
+        if chave not in ultimos or r.get("inicio", "") > ultimos[chave].get("inicio", ""):
+            ultimos[chave] = r
+    return [ultimos[k] for k in sorted(ultimos)]
+
+
+def tabela_l(modelo: str) -> str:
+    regs = _registros_l(modelo)
+    from collections import Counter
+
+    res = Counter(r.get("resultado") for r in regs)
+    cls = Counter(r.get("classe") or "—" for r in regs if r.get("resultado") != "ok")
+    linhas = [f"**Execuções: {len(regs)} | " + " ".join(f"{k}={v}" for k, v in sorted(res.items()))
+              + " | classes (fora os ok): " + " ".join(f"{k}={v}" for k, v in sorted(cls.items())) + "**", "",
+              "| Tarefa | Rodada | Resultado | Classe | Duração (s) | Chamadas modelo / ferramenta / MCP | Tokens in/out | 1º pedido (tokens) | Limite / erros do modelo | Prova (conferida fora do bot) |",
+              "|---|---|---|---|---|---|---|---|---|---|"]
+    for r in regs:
+        erros = r.get("rastro", {}).get("erros_modelo_por_tipo") or {}
+        limite = ("429: espera " + str(r.get("esperas_429_s", 0)) + " s" if r.get("bateu_limite_429") else "não")
+        if erros:
+            limite += "; " + ", ".join(f"{k}×{v}" for k, v in erros.items())
+        linhas.append(
+            f"| {r['tarefa']} | {r['rodada']} | {r.get('resultado')} | {r.get('classe') or '—'} | {r.get('duracao_s', '—')} | "
+            f"{r.get('chamadas_modelo', '—')} / {r.get('chamadas_ferramenta', '—')} / {r.get('chamadas_mcp', '—')} | "
+            f"{r.get('tokens_entrada', '—')}/{r.get('tokens_saida', '—')} | {r.get('primeiro_pedido_tokens') or '—'} | {limite} | "
+            f"{(r.get('prova') or r.get('erro_executor') or '').replace('|', '/')} |")
+    return "\n".join(linhas)
+
+
 def pedidos() -> None:
     for fid, fx in FIXTURES.items():
         print(f"\n### {fid} — {fx.titulo}\n")
@@ -934,7 +994,7 @@ def pedidos() -> None:
 async def principal() -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
-    ap.add_argument("acao", choices=["preparar", "limpar", "modelos", "rodar", "resumo", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g", "anotar"])
+    ap.add_argument("acao", choices=["preparar", "limpar", "modelos", "rodar", "resumo", "tabela", "reconferir", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g", "anotar"])
     ap.add_argument("tarefas", nargs="*")
     ap.add_argument("--vezes", type=int, default=3)
     ap.add_argument("--primeira-rodada", type=int, default=1)
@@ -953,6 +1013,11 @@ async def principal() -> None:
         await limpar_bots()
     elif a.acao == "resumo":
         resumo()
+    elif a.acao == "reconferir":
+        for pasta in a.tarefas:
+            await reconferir(pasta)
+    elif a.acao == "tabela":
+        print(tabela_l(a.tarefas[0] if a.tarefas else MODELO_FIXO))
     elif a.acao == "pedidos":
         pedidos()
     elif a.acao == "bot-pc":
