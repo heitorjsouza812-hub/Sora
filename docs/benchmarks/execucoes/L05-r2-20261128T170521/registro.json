@@ -29,8 +29,59 @@
  "perguntas": [],
  "bot_id": "50633b39-53ff-4a56-9c01-f53d0b425ec7",
  "conversa_id": "b11a271f-70a0-481c-9e56-0882c19d8901",
- "resultado": "nao_executado",
- "classe": "transporte",
- "erro_executor": "AttributeError: 'NoneType' object has no attribute 'strip'",
- "bot_apagado": true
+ "resultado": "parcial",
+ "classe": "modelo",
+ "bot_apagado": true,
+ "revisao": [
+  {
+   "em": "2026-11-28T17:09:14.501241+00:00",
+   "de": [
+    "nao_executado",
+    "transporte",
+    "AttributeError: 'NoneType' object has no attribute 'strip'"
+   ],
+   "para": [
+    "parcial",
+    "modelo"
+   ],
+   "nota": "conferidor quebrou depois do fim do turno; prova recolhida do banco e da API (janela até o início da execução seguinte, rastro sem o log do worker)"
+  }
+ ],
+ "fim": "2026-11-28T17:06:03.388847+00:00",
+ "duracao_s": 30.8,
+ "classe_sugerida": "modelo",
+ "prova": "✔ MCP: pedidos exatamente os esperados (sem repetição); ✔ MCP: P-03 consultado de novo após o erro; ✔ MCP: conferiu os pedidos; ✘ arquivo compras_L05.csv com itens e TOTAL; ✔ resposta: 270,75",
+ "criterios": [
+  {
+   "criterio": "MCP: pedidos exatamente os esperados (sem repetição)",
+   "ok": true
+  },
+  {
+   "criterio": "MCP: P-03 consultado de novo após o erro",
+   "ok": true
+  },
+  {
+   "criterio": "MCP: conferiu os pedidos",
+   "ok": true
+  },
+  {
+   "criterio": "arquivo compras_L05.csv com itens e TOTAL",
+   "ok": false
+  },
+  {
+   "criterio": "resposta: 270,75",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 7,
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 43468,
+ "tokens_saida": 368,
+ "primeiro_pedido_tokens": 5346,
+ "custo_usd": 0.01396,
+ "chamadas_ferramenta": null,
+ "chamadas_mcp": 9,
+ "resposta_final": "O total da compra é R$ 270,75."
 }

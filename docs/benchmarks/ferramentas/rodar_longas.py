@@ -208,7 +208,7 @@ def num(valor: Any) -> Decimal | None:
         return None
     if isinstance(valor, (int, float, Decimal)):
         return Decimal(str(valor)).quantize(Decimal("0.01"))
-    texto = str(valor).replace("R$", "").replace(" ", "").strip()
+    texto = str(valor).replace("R$", "").replace("$", "").replace(" ", "").strip()  # símbolo de moeda não muda o valor
     if "," in texto and "." in texto:
         texto = texto.replace(".", "").replace(",", ".")
     elif "," in texto:
@@ -497,7 +497,9 @@ def _arquivo(prova: dict, nome: str) -> str | None:
 def _csv_linhas(texto: str) -> list[dict]:
     texto = texto.strip().lstrip("﻿")
     sep = ";" if texto.splitlines()[0].count(";") > texto.splitlines()[0].count(",") else ","
-    return [{k.strip().lower(): (v or "").strip() for k, v in r.items()} for r in csv.DictReader(io.StringIO(texto), delimiter=sep)]
+    # Campo a mais numa linha vira chave None (restkey) com lista: ignorado em vez de quebrar o conferidor.
+    return [{k.strip().lower(): (v or "").strip() for k, v in r.items() if isinstance(k, str) and not isinstance(v, list)}
+            for r in csv.DictReader(io.StringIO(texto), delimiter=sep)]
 
 
 def _json_de(texto: str | None) -> Any:
@@ -896,6 +898,10 @@ async def reproduzir_wikipedia(rodada: int, log_worker: Path | None) -> dict:
     return reg
 
 
+NOTA_RECONFERIR = ("conferidor corrigido (2026-11-28): memória apagada (apagada_em) não conta; classe orcamento só por "
+                   "texto do produto; símbolo $ aceito como R$; CSV com campo a mais não quebra o conferidor")
+
+
 async def reconferir(pasta: str) -> None:
     """Reaplica o conferidor (corrigido) numa execução já gravada, relendo do banco o que mudou de consulta
     (memórias sem as apagadas). Guarda o resultado anterior em ``revisao``."""
@@ -908,12 +914,51 @@ async def reconferir(pasta: str) -> None:
     resultado, classe = classificar(ck, reg, prova)
     if (resultado, classe, texto) != (reg.get("resultado"), reg.get("classe"), reg.get("prova")):
         reg.setdefault("revisao", []).append({"em": agora().isoformat(), "de": [reg.get("resultado"), reg.get("classe"), reg.get("prova")],
-                                              "para": [resultado, classe], "nota": "conferidor corrigido: memória apagada (apagada_em) não conta; classe orcamento só por texto do produto"})
+                                              "para": [resultado, classe], "nota": NOTA_RECONFERIR})
         reg.update({"resultado": resultado, "classe": classe, "classe_sugerida": classe, "prova": texto,
                     "criterios": [{"criterio": n, "ok": ok} for n, ok in ck]})
         (EXECUCOES / pasta / "prova.json").write_text(json.dumps({**prova, "mcp": mcp}, ensure_ascii=False, indent=1, default=str), "utf-8")
         arq.write_text(json.dumps(reg, ensure_ascii=False, indent=1, default=str), "utf-8")
     print(pasta, "->", resultado, classe or "-", "|", texto)
+
+
+async def recoletar(pasta: str, ate: str) -> None:
+    """Execução cujo CONFERIDOR quebrou depois de o turno acabar: recolhe a prova do banco/API (janela
+    ``inicio`` → ``ate``, o início da execução seguinte) e confere de novo. O produto não é repetido."""
+    arq = EXECUCOES / pasta / "registro.json"
+    reg = json.loads(arq.read_text("utf-8"))
+    api, est = await entrar()
+    try:
+        t0, t1 = datetime.fromisoformat(reg["inicio"]), datetime.fromisoformat(ate)
+        prova = await coletar(api, est, reg["conversa_id"], reg["bot_id"], t0, t1, None)
+        prova["perguntas"] = reg.get("perguntas", [])
+        mcp: dict[str, Any] = {}
+        for nome in ("pedidos.json", "enviados.json"):
+            f = EXECUCOES / pasta / "mcp" / nome
+            mcp[nome.split(".")[0]] = json.loads(f.read_text("utf-8")) if f.exists() else []
+        cham = EXECUCOES / pasta / "mcp" / "chamadas.jsonl"
+        mcp["chamadas"] = [json.loads(x) for x in cham.read_text("utf-8").splitlines()] if cham.exists() else []
+        ck, texto = conferir(reg["tarefa"], prova, mcp)
+        resultado, classe = classificar(ck, reg, prova)
+        cm = prova["chamadas_modelo"]
+        reg.setdefault("revisao", []).append({"em": agora().isoformat(), "de": [reg.get("resultado"), reg.get("classe"), reg.get("erro_executor")],
+                                              "para": [resultado, classe], "nota": "conferidor quebrou depois do fim do turno; prova recolhida do banco e da API "
+                                              "(janela até o início da execução seguinte, rastro sem o log do worker)"})
+        reg.pop("erro_executor", None)
+        reg.update({"fim": ate, "duracao_s": sum(t.get("segundos", 0) for t in reg["turnos"]), "resultado": resultado,
+                    "classe": classe, "classe_sugerida": classe, "prova": texto,
+                    "criterios": [{"criterio": n, "ok": ok} for n, ok in ck], "chamadas_modelo": len(cm),
+                    "modelos_usados": sorted({c["modelo"] for c in cm}),
+                    "tokens_entrada": sum(c["tokens_entrada"] for c in cm), "tokens_saida": sum(c["tokens_saida"] for c in cm),
+                    "primeiro_pedido_tokens": cm[0]["tokens_entrada"] if cm else None,
+                    "custo_usd": float(sum(Decimal(str(c["custo_usd"])) for c in cm)),
+                    "chamadas_ferramenta": sum(1 for p in prova["passos"] if p["tipo"] == "ferramenta") or None,
+                    "chamadas_mcp": len(mcp["chamadas"]), "resposta_final": _resposta(prova)[:600]})
+        (EXECUCOES / pasta / "prova.json").write_text(json.dumps({**prova, "mcp": mcp}, ensure_ascii=False, indent=1, default=str), "utf-8")
+        arq.write_text(json.dumps(reg, ensure_ascii=False, indent=1, default=str), "utf-8")
+        print(pasta, "->", resultado, classe or "-", "|", texto)
+    finally:
+        await api.fechar()
 
 
 def anotar(pasta: str, resultado: str, classe: str, nota: str) -> None:
@@ -994,7 +1039,7 @@ def pedidos() -> None:
 async def principal() -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
-    ap.add_argument("acao", choices=["preparar", "limpar", "modelos", "rodar", "resumo", "tabela", "reconferir", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g", "anotar"])
+    ap.add_argument("acao", choices=["preparar", "limpar", "modelos", "rodar", "resumo", "tabela", "reconferir", "recoletar", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g", "anotar"])
     ap.add_argument("tarefas", nargs="*")
     ap.add_argument("--vezes", type=int, default=3)
     ap.add_argument("--primeira-rodada", type=int, default=1)
@@ -1013,6 +1058,8 @@ async def principal() -> None:
         await limpar_bots()
     elif a.acao == "resumo":
         resumo()
+    elif a.acao == "recoletar":
+        await recoletar(a.tarefas[0], a.tarefas[1])
     elif a.acao == "reconferir":
         for pasta in a.tarefas:
             await reconferir(pasta)

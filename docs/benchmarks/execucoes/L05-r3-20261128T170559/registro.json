@@ -31,10 +31,10 @@
  "conversa_id": "54cdf5de-b0eb-4aea-ab4b-51a8b97c2336",
  "fim": "2026-11-28T17:06:39.609852+00:00",
  "duracao_s": 36.2,
- "resultado": "parcial",
- "classe_sugerida": "modelo",
- "classe": "modelo",
- "prova": "✔ MCP: pedidos exatamente os esperados (sem repetição); ✔ MCP: P-03 consultado de novo após o erro; ✔ MCP: conferiu os pedidos; ✘ arquivo compras_L05.csv com itens e TOTAL; ✔ resposta: 270,75",
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ MCP: pedidos exatamente os esperados (sem repetição); ✔ MCP: P-03 consultado de novo após o erro; ✔ MCP: conferiu os pedidos; ✔ arquivo compras_L05.csv com itens e TOTAL; ✔ resposta: 270,75",
  "criterios": [
   {
    "criterio": "MCP: pedidos exatamente os esperados (sem repetição)",
@@ -50,7 +50,7 @@
   },
   {
    "criterio": "arquivo compras_L05.csv com itens e TOTAL",
-   "ok": false
+   "ok": true
   },
   {
    "criterio": "resposta: 270,75",
@@ -103,5 +103,20 @@
  "esperas_429_s": 0,
  "erros_sse": [],
  "resposta_final": "O total da compra é R$ 270,75.",
- "bot_apagado": true
+ "bot_apagado": true,
+ "revisao": [
+  {
+   "em": "2026-11-28T17:08:47.137344+00:00",
+   "de": [
+    "parcial",
+    "modelo",
+    "✔ MCP: pedidos exatamente os esperados (sem repetição); ✔ MCP: P-03 consultado de novo após o erro; ✔ MCP: conferiu os pedidos; ✘ arquivo compras_L05.csv com itens e TOTAL; ✔ resposta: 270,75"
+   ],
+   "para": [
+    "ok",
+    ""
+   ],
+   "nota": "conferidor corrigido (2026-11-28): memória apagada (apagada_em) não conta; classe orcamento só por texto do produto; símbolo $ aceito como R$; CSV com campo a mais não quebra o conferidor"
+  }
+ ]
 }
