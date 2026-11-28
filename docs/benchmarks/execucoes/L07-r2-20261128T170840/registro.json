@@ -1,0 +1,78 @@
+{
+ "tarefa": "L07",
+ "rodada": 2,
+ "inicio": "2026-11-28T17:08:43.784523+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 16.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "5a9b5781-7ab0-4bfb-b449-70f9c0325e17",
+ "conversa_id": "9cddd543-27e3-4bd1-a093-f3671541bd4f",
+ "fim": "2026-11-28T17:09:03.249035+00:00",
+ "duracao_s": 19.4,
+ "resultado": "parcial",
+ "classe_sugerida": "aprovacao",
+ "classe": "aprovacao",
+ "prova": "✘ MCP: nada enviado (cartão recusado); ✘ cartão de envio aberto; ✘ arquivo relatorio_L07.md com sexta, 29 e 24,0; ✔ pendência criada; ✔ resposta: sexta",
+ "criterios": [
+  {
+   "criterio": "MCP: nada enviado (cartão recusado)",
+   "ok": false
+  },
+  {
+   "criterio": "cartão de envio aberto",
+   "ok": false
+  },
+  {
+   "criterio": "arquivo relatorio_L07.md com sexta, 29 e 24,0",
+   "ok": false
+  },
+  {
+   "criterio": "pendência criada",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: sexta",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 4,
+ "chamadas_por_papel": {
+  "agente_individual": 4
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 23026,
+ "tokens_saida": 224,
+ "primeiro_pedido_tokens": 5440,
+ "maior_pedido_tokens": 5994,
+ "custo_usd": 0.007468,
+ "chamadas_ferramenta": 3,
+ "pedidos_ao_modelo_rastro": 4,
+ "chamadas_mcp": 1,
+ "rastro": {
+  "modelo.pedido": 4,
+  "ferramenta.inicio": 3,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "ler_anexo",
+   "mcp__bancada__enviar_relatorio",
+   "adicionar_pendencia"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Sexta",
+ "bot_apagado": true
+}
