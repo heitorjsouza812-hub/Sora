@@ -1,0 +1,6 @@
+{"t": 1795885620.218, "ferramenta": "consultar_frete", "argumentos": {"cep": "01310-100"}, "ok": true, "resultado": {"cep": "01310-100", "frete": 18.4}}
+{"t": 1795885620.223, "ferramenta": "consultar_frete", "argumentos": {"cep": "30130-010"}, "ok": true, "resultado": {"cep": "30130-010", "frete": 19.75}}
+{"t": 1795885620.225, "ferramenta": "consultar_frete", "argumentos": {"cep": "69900-000"}, "ok": false, "resultado": "indisponível"}
+{"t": 1795885620.229, "ferramenta": "consultar_frete", "argumentos": {"cep": "20040-002"}, "ok": true, "resultado": {"cep": "20040-002", "frete": 22.1}}
+{"t": 1795885620.247, "ferramenta": "consultar_frete", "argumentos": {"cep": "80010-000"}, "ok": true, "resultado": {"cep": "80010-000", "frete": 24.3}}
+{"t": 1795885622.925, "ferramenta": "consultar_frete", "argumentos": {"cep": "69900-000"}, "ok": false, "resultado": "indisponível"}

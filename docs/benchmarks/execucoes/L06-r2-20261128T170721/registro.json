@@ -1,0 +1,95 @@
+{
+ "tarefa": "L06",
+ "rodada": 2,
+ "inicio": "2026-11-28T17:07:25.003104+00:00",
+ "modelo_fixo": "gemini/gemini-3.5-flash-lite",
+ "turnos": [
+  {
+   "terminou": true,
+   "segundos": 18.4
+  }
+ ],
+ "cartoes": [],
+ "perguntas": [],
+ "bot_id": "e8344cfb-527d-47db-a45d-fd11e9b68945",
+ "conversa_id": "382c91d8-69e7-4b52-8492-3470b11225b7",
+ "fim": "2026-11-28T17:07:46.452696+00:00",
+ "duracao_s": 21.4,
+ "resultado": "ok",
+ "classe_sugerida": "",
+ "classe": "",
+ "prova": "✔ arquivo fretes_L06.json é JSON; ✔ 69900-000 marcado INDISPONIVEL (sem valor inventado); ✔ 4 fretes certos; ✔ soma 84,55; ✔ mais caro 80010-000; ✔ MCP: CEP com falha tentado 2 vezes; ✔ pendência criada; ✔ resposta: soma e CEP indisponível",
+ "criterios": [
+  {
+   "criterio": "arquivo fretes_L06.json é JSON",
+   "ok": true
+  },
+  {
+   "criterio": "69900-000 marcado INDISPONIVEL (sem valor inventado)",
+   "ok": true
+  },
+  {
+   "criterio": "4 fretes certos",
+   "ok": true
+  },
+  {
+   "criterio": "soma 84,55",
+   "ok": true
+  },
+  {
+   "criterio": "mais caro 80010-000",
+   "ok": true
+  },
+  {
+   "criterio": "MCP: CEP com falha tentado 2 vezes",
+   "ok": true
+  },
+  {
+   "criterio": "pendência criada",
+   "ok": true
+  },
+  {
+   "criterio": "resposta: soma e CEP indisponível",
+   "ok": true
+  }
+ ],
+ "chamadas_modelo": 4,
+ "chamadas_por_papel": {
+  "agente_individual": 4
+ },
+ "modelos_usados": [
+  "gemini/gemini-3.5-flash-lite"
+ ],
+ "tokens_entrada": 24186,
+ "tokens_saida": 436,
+ "primeiro_pedido_tokens": 5432,
+ "maior_pedido_tokens": 6532,
+ "custo_usd": 0.008346,
+ "chamadas_ferramenta": 8,
+ "pedidos_ao_modelo_rastro": 4,
+ "chamadas_mcp": 6,
+ "rastro": {
+  "modelo.pedido": 4,
+  "ferramenta.inicio": 8,
+  "modelo.erro": 0,
+  "ferramenta.erro": 0,
+  "ferramenta.pausa": 0,
+  "erros_de_limite": 0,
+  "ferramentas": [
+   "mcp__bancada__consultar_frete",
+   "mcp__bancada__consultar_frete",
+   "mcp__bancada__consultar_frete",
+   "mcp__bancada__consultar_frete",
+   "mcp__bancada__consultar_frete",
+   "mcp__bancada__consultar_frete",
+   "escrever_arquivo",
+   "adicionar_pendencia"
+  ],
+  "erros_modelo_por_tipo": {}
+ },
+ "bateu_limite_429": false,
+ "esperas_429_s": 0,
+ "erros_sse": [],
+ "resposta_final": "Soma dos fretes: R$ 84,55\nCEP indisponível: 69900-000",
+ "bot_apagado": true
+}
