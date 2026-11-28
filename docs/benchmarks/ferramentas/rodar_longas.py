@@ -44,8 +44,13 @@ BACKEND = RAIZ.parent.parent / "backend"
 EXECUCOES = RAIZ / "execucoes"
 ESTADO = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "sora-baseline" / "estado.json"
 API = os.environ.get("SORA_QA_API", "http://localhost:8000")
-MODELO_FIXO = "groq/qwen/qwen3.8-27b"
-MODELO_ID_GROQ = "qwen/qwen3.8-27b"
+# Modelo fixo do baseline e do Gate (§8). Trocado em 2026-11-26 por decisão do Heitor (baseline.md §2):
+# o anterior, groq/qwen/qwen3.8-27b, ficou como histórico (a chave de QA recusa com 413 todo pedido
+# acima de 7 000 tokens de entrada).
+MODELO_ANTERIOR = "groq/qwen/qwen3.8-27b"
+MODELO_FIXO = os.environ.get("BASELINE_MODELO", "gemini/gemini-3.5-flash-lite")
+TIPO_PROVEDOR = {"gemini": "google", "groq": "groq"}[MODELO_FIXO.split("/", 1)[0]]
+MODELO_ID_PROVEDOR = MODELO_FIXO.split("/", 1)[1]
 PORTA_MCP = 8765
 SENHA_QA = "baseline-qa-senha-0-5"
 # Páginas fixture: servidas pelo raw do GitHub FIXADO num commit (o ler_pagina recusa 127.0.0.1).
@@ -266,19 +271,26 @@ async def preparar() -> None:
                                                               "senha": SENHA_QA, "convite": codigo})
         ESTADO.write_text(json.dumps(est), "utf-8")
     api, est = await entrar()
-    if "provedor_id" not in est:
+    if est.get("provedor_tipo", "groq") != TIPO_PROVEDOR:  # troca de modelo fixo: guarda o anterior
+        est.setdefault("historico", []).append({k: est.pop(k) for k in ("provedor_id", "modelo_id") if k in est})
+    existentes = [p for p in await api.json("GET", "/provedores") if p.get("tipo") == TIPO_PROVEDOR]
+    if not existentes:
+        if TIPO_PROVEDOR != "groq":
+            # A conexão google da bancada foi copiada da conta do Heitor por um script de uso único
+            # (baseline.md §2); este executor nunca vê nem grava essa chave.
+            sys.exit(f"A conta de bancada não tem conexão {TIPO_PROVEDOR}. Veja baseline.md §2.")
+        await api.json("POST", "/provedores", 201, json={"tipo": "groq", "chave": env["SORA_QA_GROQ_CHAVE"]})
         existentes = [p for p in await api.json("GET", "/provedores") if p.get("tipo") == "groq"]
-        if not existentes:
-            await api.json("POST", "/provedores", 201, json={"tipo": "groq", "chave": env["SORA_QA_GROQ_CHAVE"]})
-            existentes = [p for p in await api.json("GET", "/provedores") if p.get("tipo") == "groq"]
-        est["provedor_id"] = existentes[0].get("id") or existentes[0].get("provedor_id")
+    est["provedor_id"] = existentes[0].get("id") or existentes[0].get("provedor_id")
+    est["provedor_tipo"] = TIPO_PROVEDOR
     modelos = await api.json("GET", "/modelos")
     alvo = next((m for m in modelos if m["modelo"] == MODELO_FIXO), None)
     if alvo is None:
-        alvo = await api.json("POST", f"/provedores/{est['provedor_id']}/modelos", 201, json={"id": MODELO_ID_GROQ})
-    # O catálogo não conhece este modelo: o dono marca as capacidades (CLAUDE.md §7.3). Visão foi
-    # provada antes por chamada direta à Groq (imagem + chamada de ferramenta), ver baseline.md.
-    await api.json("PATCH", f"/modelos/{alvo['id']}", json={"capacidades": ["ferramentas", "json", "visao"], "ativo": True})
+        alvo = await api.json("POST", f"/provedores/{est['provedor_id']}/modelos", 201, json={"id": MODELO_ID_PROVEDOR})
+    # Visão e ferramentas foram provadas por chamada direta (imagem + ferramenta, baseline.md §2); se o
+    # catálogo não as marca, o dono marca as capacidades (CLAUDE.md §7.3).
+    caps = sorted(set(alvo.get("capacidades") or []) | {"ferramentas", "json", "visao"})
+    await api.json("PATCH", f"/modelos/{alvo['id']}", json={"capacidades": caps, "ativo": True})
     desligados = []
     for m in await api.json("GET", "/modelos"):
         if m["modelo"] != MODELO_FIXO and m.get("ativo"):
@@ -295,6 +307,21 @@ async def preparar() -> None:
     ESTADO.write_text(json.dumps(est, indent=1), "utf-8")
     print("conta:", est["email"], "| provedor:", est["provedor_id"], "| modelo fixo:", MODELO_FIXO)
     print("reservas desligadas:", desligados or "nenhuma")
+    await api.fechar()
+
+
+async def limpar_bots() -> None:
+    """Apaga (exclusão lógica, pela API) todos os bots individuais da conta de bancada. A Sora fica."""
+    api, est = await entrar()
+    apagados = 0
+    for a in await api.json("GET", "/agentes"):
+        if a.get("tipo", "individual") == "individual" and a.get("nome") != "Sora":
+            r = await api.req("DELETE", f"/agentes/{a['id']}")
+            apagados += r.status_code == 204
+    est.pop("bot_pc_id", None)
+    ESTADO.write_text(json.dumps(est, indent=1), "utf-8")
+    restantes = [a.get("nome") for a in await api.json("GET", "/agentes")]
+    print(f"bots apagados: {apagados} | restantes: {restantes}")
     await api.fechar()
 
 
@@ -423,11 +450,11 @@ async def coletar(api: Api, est: dict, conversa_id: str, bot_id: str, t0: dateti
                 arquivos[nome] = r.content.decode("utf-8", errors="replace") if not str(nome).endswith(".xlsx") else "<xlsx>"
     u = est["usuario_id"]
     chamadas = await sql("SELECT papel, modelo, tokens_entrada, tokens_saida, custo_usd, latencia_ms FROM chamadas_modelo "
-                         "WHERE usuario_id = :u AND criado_em BETWEEN :a AND :b", u=u, a=t0, b=t1)
+                         "WHERE usuario_id = :u AND criado_em BETWEEN :a AND :b ORDER BY criado_em", u=u, a=t0, b=t1)
     passos = await sql("SELECT tipo::text AS tipo, ferramenta, status, texto FROM passos WHERE agente_id = :g "
                        "ORDER BY iniciado_em", g=bot_id)
     rastro = {"modelo.pedido": 0, "ferramenta.inicio": 0, "modelo.erro": 0, "ferramenta.erro": 0, "ferramenta.pausa": 0,
-              "erros_de_limite": 0, "ferramentas": []}
+              "erros_de_limite": 0, "ferramentas": [], "erros_modelo_por_tipo": {}}
     if log_worker and log_worker.exists():
         for linha in log_worker.read_text("utf-8", errors="replace").splitlines():
             if conversa_id in linha and '"evento"' in linha:
@@ -436,6 +463,10 @@ async def coletar(api: Api, est: dict, conversa_id: str, bot_id: str, t0: dateti
                     rastro[m.group(1)] += 1
                 if '"RateLimitError"' in linha:
                     rastro["erros_de_limite"] += 1
+                if m and m.group(1) == "modelo.erro":
+                    tipo = re.search(r'"tipo":\s*"([^"]+)"', linha)
+                    chave = tipo.group(1) if tipo else "?"
+                    rastro["erros_modelo_por_tipo"][chave] = rastro["erros_modelo_por_tipo"].get(chave, 0) + 1
                 if m and m.group(1) == "ferramenta.inicio":
                     nome = re.search(r'"nome":\s*"([^"]+)"', linha)
                     rastro["ferramentas"].append(nome.group(1) if nome else "?")
@@ -611,7 +642,8 @@ def conferir(fid: str, prova: dict, mcp: dict) -> tuple[list[tuple[str, bool]], 
     return ck, texto
 
 
-COTA = ("limite de uso do provedor", "tempo deste turno acabou", "limite do provedor", "excede o limite deste modelo")
+COTA = ("limite de uso do provedor", "tempo deste turno acabou", "limite do provedor", "excede o limite deste modelo",
+        "cota diaria deste modelo", "limite por minuto do plano")
 
 
 def por_cota(prova: dict) -> bool:
@@ -701,6 +733,8 @@ async def executar(fid: str, rodada: int, log_worker: Path | None) -> dict:
             "modelos_usados": sorted({c["modelo"] for c in prova["chamadas_modelo"]}),
             "tokens_entrada": sum(c["tokens_entrada"] for c in prova["chamadas_modelo"]),
             "tokens_saida": sum(c["tokens_saida"] for c in prova["chamadas_modelo"]),
+            "primeiro_pedido_tokens": prova["chamadas_modelo"][0]["tokens_entrada"] if prova["chamadas_modelo"] else None,
+            "maior_pedido_tokens": max((c["tokens_entrada"] for c in prova["chamadas_modelo"]), default=None),
             "custo_usd": float(sum(Decimal(str(c["custo_usd"])) for c in prova["chamadas_modelo"])),
             "chamadas_ferramenta": prova["rastro"]["ferramenta.inicio"] or sum(1 for p in prova["passos"] if p["tipo"] == "ferramenta"),
             "pedidos_ao_modelo_rastro": prova["rastro"]["modelo.pedido"],
@@ -715,6 +749,9 @@ async def executar(fid: str, rodada: int, log_worker: Path | None) -> dict:
         reg.update({"resultado": "nao_executado", "classe": "transporte", "erro_executor": f"{type(erro).__name__}: {erro}"})
     finally:
         servidor.terminate()
+        if reg.get("bot_id"):  # bancada limpa: o prompt leva a lista de colegas (baseline.md §4.1)
+            r = await api.req("DELETE", f"/agentes/{reg['bot_id']}")
+            reg["bot_apagado"] = r.status_code == 204
         await api.fechar()
     (pasta / "registro.json").write_text(json.dumps(reg, ensure_ascii=False, indent=1, default=str), "utf-8")
     print(f"{fid} r{rodada}: {reg.get('resultado')} classe={reg.get('classe') or '-'} {reg.get('duracao_s', '?')} s | {reg.get('prova', reg.get('erro_executor', ''))}")
@@ -896,7 +933,7 @@ def pedidos() -> None:
 async def principal() -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser()
-    ap.add_argument("acao", choices=["preparar", "modelos", "rodar", "resumo", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g", "anotar"])
+    ap.add_argument("acao", choices=["preparar", "limpar", "modelos", "rodar", "resumo", "pedidos", "wikipedia", "bot-pc", "nova-g", "registrar-g", "anotar"])
     ap.add_argument("tarefas", nargs="*")
     ap.add_argument("--vezes", type=int, default=3)
     ap.add_argument("--primeira-rodada", type=int, default=1)
@@ -911,6 +948,8 @@ async def principal() -> None:
         await preparar()
     elif a.acao == "modelos":
         await listar_modelos()
+    elif a.acao == "limpar":
+        await limpar_bots()
     elif a.acao == "resumo":
         resumo()
     elif a.acao == "pedidos":
