@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.ponta_a_ponta.http import criar_conversa, ler_ate, sql
+from tests.ponta_a_ponta.http import criar_conversa, estado_final_da_fila, ler_ate, sql
 
 pytestmark = [pytest.mark.integracao, pytest.mark.asyncio]
 
@@ -14,7 +14,12 @@ def _fim(evento):
 
 
 def _avisos(eventos):
-    return [evento for evento in eventos if evento.dados.get("texto") == AVISO]
+    return [
+        evento
+        for evento in eventos
+        if evento.nome == "passo"
+        and (evento.dados.get("resultado") or {}).get("aviso") == "troca_de_modelo"
+    ]
 
 
 def _resposta(eventos):
@@ -28,9 +33,36 @@ async def test_reserva_responde_com_um_aviso(cliente_e2e, mundo, falha):
     eventos = await ler_ate(cliente_e2e, conversa, _fim)
     avisos = _avisos(eventos)
     assert len(avisos) == 1
-    assert avisos[0].nome == "passo"
+    assert avisos[0].dados["texto"] == AVISO
     assert avisos[0].dados["status"] == "concluido"
     assert "resposta de exemplo" in _resposta(eventos)
+
+
+@pytest.mark.parametrize("com_bot", [False, True], ids=["sora", "bot"])
+async def test_duas_respostas_da_reserva_no_mesmo_turno_emitem_um_aviso(
+    cliente_e2e, mundo, com_bot
+):
+    await mundo.iniciar_worker()
+    dados = {"texto": "Responda ao pedido [falha_provedor:500] [duas_falas]"}
+    if com_bot:
+        bot = await cliente_e2e.post(
+            "/v1/agentes", json={"descricao": "Bot para responder dúvidas."}
+        )
+        assert bot.status_code == 201, bot.text
+        dados["agente_id"] = bot.json()["id"]
+    criada = await cliente_e2e.post("/v1/conversas", json=dados)
+    assert criada.status_code == 201, criada.text
+    conversa = criada.json()["id"]
+    primeira = await ler_ate(cliente_e2e, conversa, _fim)
+    segunda = await ler_ate(cliente_e2e, conversa, _fim, cursor=primeira[-1].id)
+    assert _resposta(primeira) == "Vou preparar a resposta."
+    assert "resposta de exemplo" in _resposta(segunda)
+    assert primeira[-1].dados["mensagem_id"] != segunda[-1].dados["mensagem_id"]
+    [aviso] = _avisos(primeira + segunda)
+    assert aviso.dados["texto"] == AVISO
+    assert aviso.dados["agente_id"] == criada.json()["agente_id"]
+    assert aviso in primeira
+    assert await estado_final_da_fila(mundo, conversa) == "concluido"
 
 
 async def test_modelo_fixo_sem_reserva_falha_com_aviso_claro(cliente_e2e, mundo):

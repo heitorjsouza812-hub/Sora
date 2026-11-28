@@ -32,9 +32,11 @@ import { IrParaFim } from '../components/ui/IrParaFim';
 import { HistoricoConversa } from '../components/ui/HistoricoConversa';
 import { TelaCarregando } from '../components/sessao';
 import { MensagemChat } from '../components/ui/MensagemChat';
+import { AvisoTrocaModelo } from '../components/ui/AvisoTrocaModelo';
 import { useRolagemFim } from '../components/ui/useRolagemFim';
 import { useIrParaMensagemDaConversa } from '../components/ui/useIrParaMensagem';
 import { usePrecisaDeVoce } from '../state/atencao';
+import { avisosDeTrocaDeModelo } from '../state/aplicarEvento';
 import { AvisosMemoria, PainelMemoria } from '../components/memoria';
 import { PainelRotinas } from '../components/rotinas/PainelRotinas';
 import {
@@ -107,7 +109,9 @@ export default function AgentChat() {
   const verTrabalho = () => { painel.setAba('trabalho'); painel.setRecolhido(false); setFolha(true); };
 
   const erroModelo = useErroSimulado() === 'modelo';
+  const avisos = avisosDeTrocaDeModelo(e, a?.conversaId);
   const itens: Item[] = [];
+  avisos.forEach(aviso => itens.push({ t: aviso.inicio, key: aviso.id, node: <AvisoTrocaModelo texto={aviso.texto} /> }));
   if (a) {
     const xs = execucoesDoAgente(e, a.id).filter(x => x.inicio <= agora);
     // quem entregou para este agente (handoff na equipe)
@@ -176,7 +180,7 @@ export default function AgentChat() {
   }
   itens.sort((x, y) => x.t - y.t);
   const gerando = !!a && !erroModelo && gerandoNa(e, a.id, agora);
-  const assinatura = a ? mensagensDa(e, a.id, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0;
+  const assinatura = avisos.length + (a ? mensagensDa(e, a.id, agora).reduce((n, m) => n + textoVisivel(m, agora).texto.length, 0) : 0);
   const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(i => i.key), assinatura);
 
   useIrParaMensagemDaConversa(a?.conversaId);

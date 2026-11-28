@@ -36,6 +36,15 @@ function garantirExecucao(estado: EstadoProjetos, conversaId: string, etapaId: s
   return { ...estado, execucoes: [...estado.execucoes, nova] };
 }
 
+export function avisosDeTrocaDeModelo(estado: EstadoProjetos, conversaId: string | undefined): PassoTrabalho[] {
+  if (!conversaId) return [];
+  return estado.execucoes.filter(x => x.projetoId === conversaId).flatMap(({ roteiro }) => {
+    const aviso = roteiro.find(passo => passo.tipo === 'pensamento' && passo.status === 'concluido'
+      && passo.resultado && 'aviso' in passo.resultado && passo.resultado.aviso === 'troca_de_modelo');
+    return aviso ? [aviso] : [];
+  });
+}
+
 export const PREFIXO_PREVIA = 'previa:';
 const SEM_PREVIA = (conversaId: string) => (m: { conversaId: string; previa?: boolean }) => !(m.previa && m.conversaId === conversaId);
 

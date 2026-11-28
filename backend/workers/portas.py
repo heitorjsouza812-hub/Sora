@@ -172,7 +172,14 @@ def construir_dependencias(
                 f"conversa:aviso-reserva:{etapa_painel}", "1", nx=True, ex=RETENCAO_SEGUNDOS
             )
             if novo:
-                await _emitir(redis, passo, StatusPasso.CONCLUIDO, None, usuario_id, conversa_id)
+                await _emitir(
+                    redis,
+                    passo,
+                    StatusPasso.CONCLUIDO,
+                    {"aviso": "troca_de_modelo"},
+                    usuario_id,
+                    conversa_id,
+                )
         except Exception:
             registro.warning("Não consegui publicar o aviso de troca na conversa", exc_info=True)
 

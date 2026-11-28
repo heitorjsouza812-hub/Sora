@@ -18,7 +18,9 @@ import { useRolagemFim } from '../components/ui/useRolagemFim';
 import { useCelular } from '../components/ui/useMedia';
 import { useIrParaMensagemDaConversa } from '../components/ui/useIrParaMensagem';
 import { MensagemChat } from '../components/ui/MensagemChat';
+import { AvisoTrocaModelo } from '../components/ui/AvisoTrocaModelo';
 import { ZonaSoltar } from '../components/anexos';
+import { avisosDeTrocaDeModelo } from '../state/aplicarEvento';
 import { usePrecisaDeVoce } from '../state/atencao';
 import { useSoraId } from '../state/bots';
 import { carregarPropostasPendentes, carregarRascunhosPendentes, useCartoesSora } from '../state/sora';
@@ -61,13 +63,18 @@ export default function SoraChat() {
   }, [estado.carregando, estado.projetos, projeto]);
 
   const mensagens = projeto ? mensagensDa(estado, projeto.id, agora) : [];
+  const avisos = avisosDeTrocaDeModelo(estado, projeto?.id);
+  const itens = [
+    ...mensagens.map(mensagem => ({ id: mensagem.id, instante: mensagem.criadoEm, mensagem })),
+    ...avisos.map(aviso => ({ id: aviso.id, instante: aviso.inicio, aviso })),
+  ].sort((a, b) => a.instante - b.instante);
   // Pergunta/aprovação da própria Sora chega com agente_id = id dela; fora de grupo, é deste chat.
   // Cartões da cadeia (aprovação, pergunta, domínio) chegam com `conversa_id` e valem aqui mesmo que o pedido seja de um especialista.
   const pendencias = projeto ? pendenciasDa(estado, projeto.id) : [];
   const idsPendencias = new Set(pendencias.map(x => x.id));
   const pedidosDaSora = atencao.lista.filter(pedido => !pedido.grupoId && (!pedido.botId || pedido.botId === soraId) && !idsPendencias.has(pedido.id));
   const assinatura = mensagens.map(mensagem => `${mensagem.id}:${textoVisivel(mensagem, agora).texto.length}`).join('|');
-  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(mensagens.map(m => m.id), assinatura + ':' + cartoes.rascunhos.length + ':' + cartoes.propostas.length + ':' + pedidosDaSora.length + ':' + pendencias.length);
+  const { ref: rolagemRef, onScroll: aoRolar, noFim, novas, irParaFim, seguirFim } = useRolagemFim(itens.map(item => item.id), assinatura + ':' + avisos.length + ':' + cartoes.rascunhos.length + ':' + cartoes.propostas.length + ':' + pedidosDaSora.length + ':' + pendencias.length);
 
   useIrParaMensagemDaConversa(projeto?.id);
   const gerando = !!projeto && gerandoNa(estado, projeto.id, agora);
@@ -77,7 +84,7 @@ export default function SoraChat() {
   const ultimaRespostaId = [...mensagens].reverse().find(m => m.autor !== 'usuario')?.id;
 
   // Estado vazio: orb e compositor juntos no centro. Depois do 1º envio o compositor desce (FLIP).
-  const vazio = !estado.carregando && !mensagens.length && !pensando && !cartoes.rascunhos.length && !cartoes.propostas.length && !pedidosDaSora.length && !pendencias.length;
+  const vazio = !estado.carregando && !itens.length && !pensando && !cartoes.rascunhos.length && !cartoes.propostas.length && !pedidosDaSora.length && !pendencias.length;
   const compositor = useRef<HTMLDivElement>(null);
   const hero = useRef<HTMLElement>(null);
   const rodapeVazio = useRef<HTMLDivElement>(null);
@@ -116,9 +123,15 @@ export default function SoraChat() {
           <div className="conversation-scroll" ref={rolagemRef} onScroll={aoRolar} aria-live="polite" aria-relevant="additions">
             <HistoricoConversa conversaId={projeto?.id} />
             {estado.carregando && <p role="status" className="sr-only">Carregando conversa…</p>}
-            {mensagens.map(mensagem => <div className="chat-item" data-chave={mensagem.id} key={mensagem.id}>
-              <MensagemChat m={mensagem} agora={agora} ultima={mensagem.id === ultimaRespostaId} respostaDe={{ nome: 'Sora', avatar: <SoraOrb size={24} color="#E2ECFF" state="idle" glow={false} decorative seed={31} /> }} nome={mensagem.autor === 'usuario' ? undefined : 'Sora'} avatar={mensagem.autor === 'usuario' ? undefined : <SoraOrb size={24} color="#E2ECFF" state={textoVisivel(mensagem, agora).gerando ? 'thinking' : 'idle'} glow={false} decorative seed={31} />} />
-            </div>)}
+            {itens.map(item => {
+              if ('aviso' in item) return <div className="chat-item" data-chave={item.id} key={item.id}>
+                <AvisoTrocaModelo texto={item.aviso.texto} />
+              </div>;
+              const { mensagem } = item;
+              return <div className="chat-item" data-chave={item.id} key={item.id}>
+                <MensagemChat m={mensagem} agora={agora} ultima={mensagem.id === ultimaRespostaId} respostaDe={{ nome: 'Sora', avatar: <SoraOrb size={24} color="#E2ECFF" state="idle" glow={false} decorative seed={31} /> }} nome={mensagem.autor === 'usuario' ? undefined : 'Sora'} avatar={mensagem.autor === 'usuario' ? undefined : <SoraOrb size={24} color="#E2ECFF" state={textoVisivel(mensagem, agora).gerando ? 'thinking' : 'idle'} glow={false} decorative seed={31} />} />
+              </div>;
+            })}
             {pensando && <div className="pensando-linha"><SoraThinking size={28} color="#E2ECFF" label="Sora está pensando…" /></div>}
             {cartoes.rascunhos.map(rascunho => <CartaoRascunhoBot key={rascunho.id} rascunho={rascunho} />)}
             {cartoes.propostas.map(proposta => <CartaoPropostaGrupo key={proposta.id} proposta={proposta} />)}
