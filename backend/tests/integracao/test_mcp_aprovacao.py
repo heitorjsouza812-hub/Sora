@@ -220,7 +220,11 @@ def _roteirizar(
     registro = Registro()
     original = modulo.criar_modelo_falso
 
-    def criar(papel: str) -> Any:
+    def criar(papel: str, *, reserva: bool = False) -> Any:
+        # A reserva (``modelos_do_papel`` da Sora e do bot) segue sendo o falso comum: o
+        # roteiro vale só para o modelo principal, que é o que responde enquanto não falha.
+        if reserva:
+            return original(papel, reserva=True)
         return _roteirizado(papel, roteiro, registro) if papel in papeis else original(papel)
 
     monkeypatch.setattr(modulo, "criar_modelo_falso", criar)
